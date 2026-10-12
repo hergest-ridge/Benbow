@@ -5,6 +5,7 @@ import app.benbow.core.api.PairResponse
 import app.benbow.core.api.Protocol
 import app.benbow.core.api.PushRequest
 import app.benbow.core.api.PushResponse
+import app.benbow.core.api.RevisionInfo
 import app.benbow.core.api.ServerInfo
 import app.benbow.core.sync.CreateEntry
 import app.benbow.core.sync.OpStatus
@@ -16,7 +17,6 @@ import app.benbow.server.api.benbowModule
 import app.benbow.server.storage.Database
 import app.benbow.server.storage.Devices
 import app.benbow.server.storage.PairingCodes
-import app.benbow.server.storage.RevisionInfo
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation

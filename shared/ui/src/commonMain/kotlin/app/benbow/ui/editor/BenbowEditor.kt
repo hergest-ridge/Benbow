@@ -58,9 +58,9 @@ import app.benbow.core.text.Mark
 import app.benbow.core.text.RichText
 import kotlinx.coroutines.launch
 
-/** Seamless rich text editor: one text field, formatting drawn from [EditorState.model]. */
+/** Seamless rich text editor: one text field, formatting drawn from [EditorState.model]. [readOnly] is for viewing old versions. */
 @Composable
-fun BenbowEditor(state: EditorState, modifier: Modifier = Modifier) {
+fun BenbowEditor(state: EditorState, modifier: Modifier = Modifier, readOnly: Boolean = false) {
     val colors = MaterialTheme.colorScheme
     val styles = remember(colors) { EditorStyles(colors, dark = colors.background.luminance() < 0.5f) }
     val textStyle = MaterialTheme.typography.bodyLarge.copy(
@@ -116,7 +116,7 @@ fun BenbowEditor(state: EditorState, modifier: Modifier = Modifier) {
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                             val index = layout?.let { checkboxAt(it, state.model, styles, down.position) }
-                            if (index != null) {
+                            if (index != null && !readOnly) {
                                 down.consume()
                                 val up = waitForUpOrCancellation(PointerEventPass.Initial)
                                 if (up != null) {
@@ -140,6 +140,7 @@ fun BenbowEditor(state: EditorState, modifier: Modifier = Modifier) {
                     .drawBehind { layout?.let { drawDecorations(it, state.model, styles, measurer, textStyle) } },
                 inputTransformation = state.inputTransformation,
                 outputTransformation = state.outputTransformation,
+                readOnly = readOnly,
                 textStyle = textStyle,
                 keyboardOptions = KeyboardOptions(
                     capitalization = KeyboardCapitalization.Sentences,

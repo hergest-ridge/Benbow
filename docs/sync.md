@@ -6,11 +6,14 @@ Single owner, several devices, server on LAN, often unreachable. Goal: offline-f
 Conflicts are rare with one human. CRDTs (Automerge, Loro, Yjs) add opaque binary state, bindings that aren't mature on every KMP target, and harder export and debugging. An append-only revision DAG + 3-way merge gives the same "never lose" guarantee with plain, inspectable data. We can revisit this for real-time co-editing, which is a non-goal.
 
 ## Client local state
-- `cache` tables: mirror of server entities (head revision body included).
-- `draft`: in-progress editor text per entry, autosaved on a debounce. Not synced.
-- `outbox`: ordered pending ops `(op_id, local_seq, type, entity_id, payload, created_at, attempts, last_error, state)`.
-- `sync_state`: `store_id`, `epoch`, `cursor`, `protocol`.
-- A local write = cache update + outbox insert in one transaction.
+Implemented in `shared/client` (SQLDelight `BenbowDb`, `Benbow.sq`):
+- `entry`: mirror of server entries (head revision id + body, LWW fields as JSON, conflict heads).
+- `draft (entry_id, body, base_rev)`: in-progress editor text, autosaved. Not synced. The base is fixed when the draft starts, so the revision made from it has the right parent.
+- `outbox (seq, op_id, entry_id, op, state pending|rejected, last_error)`: ordered ops as JSON. Acknowledged ops are removed; rejected ops stay for the user (never dropped silently).
+- `kv`: connection (url, fingerprint, token, store id, epoch, device id), pull cursor, persisted HLC.
+- A local write = cache update + outbox insert in one transaction (`JournalRepository`).
+- `SyncEngine.sync()`: checks `/info` (store id, protocol) first, pushes in batches of 200, then pulls pages in transactions. Pull skips entries with pending ops (pending wins until acknowledged) and never touches drafts.
+- Trash is the LWW field `deleted = "true"`; restore clears it.
 
 ## Revisions from drafts
 A draft becomes a revision on: editor close, app backgrounded, 30 s idle, or every 2 min of continuous typing. Op: `entry.revision.put {entry_id, rev_id, parents:[base_rev_id], title, body, body_v, body_sha256}` (body = canonical Document JSON).
@@ -56,9 +59,12 @@ When `parents[0] != head`:
 
 ## Sync triggers
 App start and foreground, connectivity change, local change (debounced 2 s), periodic WorkManager (15 min, network required), manual pull-to-refresh. Exponential backoff with jitter.
+Implemented (`SyncController`): request (start/foreground, pull-to-refresh, after pairing), local change after 2 s, every 2 min while in the foreground, backoff 5 s → 5 min with ±20% jitter. Not yet: connectivity change, WorkManager.
 
 ## Implemented endpoints (server 0.2.0)
 `GET /api/v1/info` · `POST /api/v1/pair` (code from the admin page) · bearer-protected: `POST /api/v1/sync/push` (max 500 ops, 409 on protocol mismatch), `GET /api/v1/sync/pull?cursor=&limit=` (≤500), `GET /api/v1/entries/{id}/revisions`, `GET /api/v1/revisions/{id}`. Admin (`/`, `/admin/*`) only from loopback and same-origin. Rules: `SyncRules` in `shared/core` over `SqliteSyncStore`; the shared simulation (`shared/testing`) runs against both the in-memory and the SQLite store.
+
+Client side (`shared/client`): `Pairing.probe(host, port)` connects with first-contact trust and shows the certificate fingerprint for the user to compare with the admin page; `Pairing.pair` then talks only to that pinned fingerprint and refuses a different store. Covered by `server/.../EndToEndTest` (real HTTPS: pair, sync, wrong certificate refused with the outbox intact).
 
 ## Pairing and security
 - Manual: enter `host:port` in the app plus a one-time 6-digit code shown on the admin page (TTL 5 min, single use, burned after 5 wrong guesses). The admin page with codes and devices is served **only to the server PC itself** (loopback), and admin POSTs must be same-origin (CSRF).

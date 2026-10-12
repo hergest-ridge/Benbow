@@ -1,0 +1,140 @@
+-- Local cache + client-owned data (docs/sync.md#client-local-state).
+-- The outbox is the only data the client owns: a row is deleted only after the server acknowledged it (data-safety S5).
+
+CREATE TABLE entry (
+    id TEXT NOT NULL PRIMARY KEY,
+    kind TEXT NOT NULL,
+    day TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    head_rev TEXT,
+    body TEXT NOT NULL,
+    -- Derived from body on every write, so lists never parse documents.
+    title TEXT NOT NULL DEFAULT '',
+    preview TEXT NOT NULL DEFAULT '',
+    conflict_heads TEXT NOT NULL DEFAULT '[]',
+    fields TEXT NOT NULL DEFAULT '{}',
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX entry_by_day ON entry(day, created_at);
+
+CREATE TABLE draft (
+    entry_id TEXT NOT NULL PRIMARY KEY,
+    body TEXT NOT NULL,
+    base_rev TEXT,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE outbox (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    op_id TEXT NOT NULL UNIQUE,
+    entry_id TEXT NOT NULL,
+    op TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    state TEXT NOT NULL DEFAULT 'pending',
+    last_error TEXT
+);
+
+CREATE INDEX outbox_by_entry ON outbox(entry_id, state);
+
+CREATE TABLE kv (
+    key TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+selectEntry:
+SELECT * FROM entry WHERE id = ?;
+
+-- Trash is the LWW field "deleted" (JournalRepository.TRASH_FIELD).
+journal:
+SELECT id, day, created_at, title, preview, conflict_heads FROM entry
+WHERE json_extract(fields, '$.deleted') IS NOT 'true'
+ORDER BY day DESC, created_at;
+
+entriesForDay:
+SELECT id, day, created_at, title, preview, conflict_heads FROM entry
+WHERE day = ? AND json_extract(fields, '$.deleted') IS NOT 'true'
+ORDER BY created_at;
+
+trash:
+SELECT id, day, created_at, title, preview, conflict_heads FROM entry
+WHERE json_extract(fields, '$.deleted') IS 'true'
+ORDER BY updated_at DESC;
+
+upsertEntry:
+INSERT INTO entry(id, kind, day, created_at, head_rev, body, title, preview, conflict_heads, fields, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(id) DO UPDATE SET
+    kind = excluded.kind,
+    day = excluded.day,
+    head_rev = excluded.head_rev,
+    body = excluded.body,
+    title = excluded.title,
+    preview = excluded.preview,
+    conflict_heads = excluded.conflict_heads,
+    fields = excluded.fields,
+    updated_at = excluded.updated_at;
+
+updateHead:
+UPDATE entry SET head_rev = ?, body = ?, title = ?, preview = ?, updated_at = ? WHERE id = ?;
+
+clearConflicts:
+UPDATE entry SET conflict_heads = '[]' WHERE id = ?;
+
+draftCount:
+SELECT COUNT(*) FROM draft;
+
+deleteAllEntries:
+DELETE FROM entry;
+
+updateFields:
+UPDATE entry SET fields = ?, updated_at = ? WHERE id = ?;
+
+selectDraft:
+SELECT * FROM draft WHERE entry_id = ?;
+
+upsertDraft:
+INSERT INTO draft(entry_id, body, base_rev, updated_at) VALUES (?, ?, ?, ?)
+ON CONFLICT(entry_id) DO UPDATE SET body = excluded.body, updated_at = excluded.updated_at;
+
+deleteDraft:
+DELETE FROM draft WHERE entry_id = ?;
+
+allDrafts:
+SELECT entry_id FROM draft;
+
+rejectedCount:
+SELECT COUNT(*) FROM outbox WHERE state = 'rejected';
+
+enqueue:
+INSERT INTO outbox(op_id, entry_id, op, created_at) VALUES (?, ?, ?, ?);
+
+pendingOps:
+SELECT * FROM outbox WHERE state = 'pending' ORDER BY seq LIMIT ?;
+
+acknowledge:
+DELETE FROM outbox WHERE op_id = ? AND state = 'pending';
+
+reject:
+UPDATE outbox SET state = 'rejected', last_error = ? WHERE op_id = ?;
+
+pendingCountFor:
+SELECT COUNT(*) FROM outbox WHERE entry_id = ? AND state = 'pending';
+
+pendingCount:
+SELECT COUNT(*) FROM outbox WHERE state = 'pending';
+
+rejectedOps:
+SELECT * FROM outbox WHERE state = 'rejected' ORDER BY seq;
+
+retryRejected:
+UPDATE outbox SET state = 'pending', last_error = NULL WHERE state = 'rejected';
+
+getValue:
+SELECT value FROM kv WHERE key = ?;
+
+putValue:
+INSERT INTO kv(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+
+deleteValue:
+DELETE FROM kv WHERE key = ?;

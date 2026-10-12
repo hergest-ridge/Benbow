@@ -26,3 +26,7 @@ data class PushResponse(val results: List<OpResult>)
 
 @Serializable
 data class ApiError(val error: String, val message: String)
+
+/** One item of `GET /api/v1/entries/{id}/revisions` (newest first, no body). */
+@Serializable
+data class RevisionInfo(val id: String, val parents: List<String>, val origin: String, val createdAt: Long, val bodySha256: String)

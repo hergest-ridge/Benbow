@@ -1,20 +1,17 @@
 package app.benbow.server.storage
 
+import app.benbow.core.api.RevisionInfo
 import app.benbow.core.sync.EntryState
 import app.benbow.core.sync.LwwValue
 import app.benbow.core.sync.OpResult
 import app.benbow.core.sync.OpStatus
 import app.benbow.core.sync.RevisionRecord
 import app.benbow.core.sync.SyncStore
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.security.MessageDigest
 import java.sql.Connection
 import java.sql.ResultSet
 import java.util.UUID
-
-@Serializable
-data class RevisionInfo(val id: String, val parents: List<String>, val origin: String, val createdAt: Long, val bodySha256: String)
 
 /** [SyncStore] on the server database; one instance per request so applied ops record the device. */
 class SqliteSyncStore(private val db: Database, private val deviceId: String? = null) : SyncStore {

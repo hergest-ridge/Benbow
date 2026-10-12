@@ -36,6 +36,8 @@ include(
     ":shared:core",
     ":shared:ui",
     ":shared:testing",
+    ":shared:client",
+    ":shared:app",
     ":apps:android",
     ":apps:desktop",
     ":apps:web",

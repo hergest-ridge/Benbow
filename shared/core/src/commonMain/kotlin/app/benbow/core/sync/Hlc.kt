@@ -12,8 +12,11 @@ data class Hlc(val wall: Long, val counter: Int, val node: String) : Comparable<
     }
 }
 
-class HlcClock(private val node: String, private val now: () -> Long) {
-    private var last = Hlc(0, 0, node)
+/** [initial] restores the last issued timestamp after a restart, so time never runs backwards. */
+class HlcClock(private val node: String, initial: Hlc? = null, private val now: () -> Long) {
+    private var last = initial?.copy(node = node) ?: Hlc(0, 0, node)
+
+    val current: Hlc get() = last
 
     /** Timestamp for a local event. */
     fun next(): Hlc {

@@ -11,7 +11,8 @@ kotlin {
 }
 
 dependencies {
-    implementation(project(":shared:ui"))
+    implementation(project(":shared:app"))
+    implementation(libs.sqldelight.sqlite.driver)
     implementation(compose.desktop.currentOs)
     implementation(libs.kotlinx.coroutines.swing)
 }
@@ -22,6 +23,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi)
             packageName = "Benbow"
+            modules("java.sql")
             packageVersion = "0.1.0"
         }
     }

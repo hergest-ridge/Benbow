@@ -39,6 +39,8 @@ dependencies {
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.ktor.client.content.negotiation)
     testImplementation(project(":shared:testing"))
+    testImplementation(project(":shared:client"))
+    testImplementation(libs.sqldelight.sqlite.driver)
     testImplementation(libs.kotest.property)
     testImplementation(libs.kotlinx.coroutines.test)
 }

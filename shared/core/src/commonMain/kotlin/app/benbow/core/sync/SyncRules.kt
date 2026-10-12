@@ -60,8 +60,10 @@ class SyncRules(
             val current = entry.fields[op.field]
             if (current == null || op.hlc > current.hlc) {
                 store.putEntry(entry.copy(fields = entry.fields + (op.field to LwwValue(op.value, op.hlc))))
-                store.appendChange(op.entryId)
             }
+            // Always logged, even when the write lost: the device skipped this entry while its op was
+            // pending and must re-pull the winning value.
+            store.appendChange(op.entryId)
             OpResult(op.opId, OpStatus.Applied)
         }
 

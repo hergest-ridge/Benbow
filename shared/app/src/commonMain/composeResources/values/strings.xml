@@ -1,0 +1,97 @@
+<resources>
+    <string name="journal_title">Дневник</string>
+    <string name="today">Сегодня</string>
+    <string name="yesterday">Вчера</string>
+    <string-array name="months_genitive">
+        <item>января</item>
+        <item>февраля</item>
+        <item>марта</item>
+        <item>апреля</item>
+        <item>мая</item>
+        <item>июня</item>
+        <item>июля</item>
+        <item>августа</item>
+        <item>сентября</item>
+        <item>октября</item>
+        <item>ноября</item>
+        <item>декабря</item>
+    </string-array>
+    <string-array name="weekdays">
+        <item>Понедельник</item>
+        <item>Вторник</item>
+        <item>Среда</item>
+        <item>Четверг</item>
+        <item>Пятница</item>
+        <item>Суббота</item>
+        <item>Воскресенье</item>
+    </string-array>
+    <string name="journal_empty_title">Здесь будет ваш дневник</string>
+    <string name="journal_empty_text">Напишите пару строк о сегодняшнем дне — внизу, или откройте большую запись.</string>
+    <string name="quick_note_hint">Заметка…</string>
+    <string name="new_entry">Новая запись</string>
+    <string name="send">Сохранить заметку</string>
+    <string name="menu">Меню</string>
+    <string name="back">Назад</string>
+    <string name="trash">Корзина</string>
+    <string name="server">Сервер и синхронизация</string>
+    <string name="history">История версий</string>
+    <string name="move_to_trash">В корзину</string>
+    <string name="restore">Восстановить</string>
+    <string name="untitled">Без названия</string>
+    <string name="conflict_badge">Две версии</string>
+    <string name="conflict_banner">Запись изменили на двух устройствах одновременно. Обе версии сохранены — выберите нужную.</string>
+    <string name="conflict_choose">Выбрать</string>
+    <string name="in_trash_banner">Запись в корзине.</string>
+    <string name="entry_broken">Эту запись не удалось открыть. Она не изменена; её версии есть на сервере.</string>
+
+    <string name="sync_syncing">Синхронизация…</string>
+    <string name="sync_done">Синхронизировано</string>
+    <string name="sync_not_paired">Не подключено</string>
+    <string name="sync_offline">Нет связи</string>
+    <plurals name="sync_waiting">
+        <item quantity="one">%1$d изменение ждёт</item>
+        <item quantity="few">%1$d изменения ждут</item>
+        <item quantity="many">%1$d изменений ждут</item>
+        <item quantity="other">%1$d изменения ждут</item>
+    </plurals>
+    <string name="sync_wrong_server">Другой сервер</string>
+    <string name="sync_incompatible">Нужно обновление</string>
+    <string name="sync_attention">Требует внимания</string>
+
+    <string name="trash_empty">Корзина пуста</string>
+    <string name="trash_hint">Записи из корзины не удаляются: их можно вернуть в любой момент.</string>
+
+    <string name="history_offline">История версий хранится на сервере. Сейчас он недоступен: %1$s</string>
+    <string name="history_empty">Версий пока нет — запись ещё не дошла до сервера.</string>
+    <string name="retry">Повторить</string>
+    <string name="revision_current">текущая</string>
+    <string name="revision_conflict">параллельная</string>
+    <string name="revision_merge">слияние</string>
+    <string name="revision_restore">Сделать текущей</string>
+    <string name="revision_title">Версия от %1$s</string>
+
+    <string name="server_intro">Benbow хранит записи на вашем компьютере. Откройте админ-страницу сервера на нём (https://localhost:8765), там будет адрес и код подключения.</string>
+    <string name="server_host">Адрес компьютера</string>
+    <string name="server_port">Порт</string>
+    <string name="server_connect">Подключиться</string>
+    <string name="server_connecting">Подключение…</string>
+    <string name="server_fingerprint_check">Сверьте отпечаток сертификата с админ-страницей. Если он отличается, не продолжайте: это чужой сервер.</string>
+    <string name="server_version">Сервер %1$s</string>
+    <string name="server_code">Код с админ-страницы</string>
+    <string name="server_device_name">Имя этого устройства</string>
+    <string name="server_pair">Подключить</string>
+    <string name="server_cancel">Отмена</string>
+    <string name="server_error">Не получилось: %1$s</string>
+    <string name="server_paired">Подключено к %1$s</string>
+    <string name="server_fingerprint">Отпечаток сертификата</string>
+    <string name="server_last_sync">Последняя синхронизация: %1$s</string>
+    <string name="server_never">ещё не было</string>
+    <string name="server_sync_now">Синхронизировать</string>
+    <string name="server_wrong_store">По этому адресу отвечает другое хранилище. Синхронизация остановлена, ваши изменения сохранены на устройстве.</string>
+    <string name="server_incompatible">Версии приложения и сервера несовместимы. Обновите то, что старее; изменения ждут на устройстве.</string>
+    <string name="server_rejected_title">Сервер не принял изменения</string>
+    <string name="server_rejected_hint">Они сохранены на устройстве. Повторите после обновления сервера.</string>
+    <string name="server_forget">Отключить сервер</string>
+    <string name="server_forget_confirm">Устройство забудет сервер и очистит локальную копию записей. На сервере всё останется.</string>
+    <string name="server_forget_blocked">Нельзя отключить, пока есть несинхронизированные изменения.</string>
+</resources>

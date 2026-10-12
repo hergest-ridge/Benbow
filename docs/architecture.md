@@ -31,16 +31,18 @@
 The server being unreachable is normal: clients keep working and sync later.
 
 ## Module layout (start small, split when a module exceeds ~15k LOC or build times hurt)
-Scaffolded so far: `shared/core`, `shared/ui`, `apps/{android,desktop,web}`, `server`. `shared/client` arrives with Phase 2. `build-logic/` arrives only once duplication between build scripts starts to hurt.
+Scaffolded so far: `shared/core`, `shared/ui`, `shared/client`, `shared/app`, `shared/testing`, `apps/{android,desktop,web}`, `server`. `build-logic/` arrives only once duplication between build scripts starts to hurt.
 JVM toolchain 17 for all modules (foojay auto-provisioning). Namespace `app.benbow`.
 ```
 build-logic/        Gradle convention plugins (later)
 gradle/libs.versions.toml
 shared/core/        KMP, all targets incl. server JVM. Pure Kotlin: ids (UUIDv7), time/day logic, domain
                     model, Document codec + canonicalizer + exporters/importers, sync protocol DTOs, diff3 merge, HLC, validation
-shared/client/      KMP android/jvm/wasm: Ktor API client, repository interfaces.
-                    `nonWebMain`: SQLDelight cache, outbox, sync engine. `wasmJsMain`: remote-only repositories
-shared/ui/          CMP android/jvm/wasm: BenbowTheme/design system, editor, screens, navigation, ViewModels
+shared/client/      KMP android/jvm: SQLDelight cache + drafts + outbox, JournalRepository, DraftSession,
+                    SyncEngine + SyncController, pairing, pinned-TLS Ktor/OkHttp API client
+shared/ui/          CMP android/jvm/wasm: BenbowTheme/design system, editor
+shared/app/         CMP android/jvm: screens, navigation, ViewModels, AppServices (the web client stays on shared/ui)
+shared/testing/     sync simulation + in-memory store shared by core, client and server tests
 apps/android/       Android entry, platform services (WorkManager, notifications, media capture, widgets,
                     QS tile, share target), baseline profiles
 apps/desktop/       Compose Desktop entry + MSI packaging
@@ -48,12 +50,14 @@ apps/web/           wasmJs entry. Build output is embedded into the server distr
 server/             Ktor app: routes, storage, blob store, backups, mirror export, admin page, packaging
 docs/
 ```
-Dependency rule: `apps/* → shared/ui → shared/client → shared/core`; `server → shared/core`. Nothing depends on apps.
+Dependency rule: `apps/{android,desktop} → shared/app → shared/{ui,client} → shared/core`; `apps/web → shared/ui`; `server → shared/core`. Nothing depends on apps.
 
 ## Client architecture
 - Unidirectional data flow: ViewModel (androidx lifecycle KMP) exposes `StateFlow<UiState>`. UI sends intents. Repositories are the single source of truth backed by the local DB (Flow queries).
 - Optimistic local writes: write to the DB and outbox in one transaction, update the UI instantly, then the sync engine pushes in the background.
-- DI: Koin (simple, KMP, well known). Navigation: Navigation 3 (CMP 1.10+). Images: Coil 3.
+- DI: a plain `AppServices` object created by the platform app (enough for one process-wide graph; Koin if it grows). Navigation: Navigation 3 with a ViewModel store per entry. Images: Coil 3.
+- Editor screen: typing goes to a `DraftSession` (draft within 400 ms, revision after 30 s idle / 2 min typing / leaving / app stop). Text arriving from sync or a restored version replaces the editor content only if the user hasn't typed since it was loaded or last committed.
+- UI smoke test: `shared/app` jvmTest drives the whole app headless and writes screenshots to `shared/app/build/screens`.
 - Performance: immutable UI models, stable keys and `contentType` in lazy lists, paging by cursor, prefetch of adjacent entries, baseline profiles, R8 full mode.
 
 ## Server internals

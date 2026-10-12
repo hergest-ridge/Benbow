@@ -2,5 +2,6 @@
     <string name="app_name">Benbow</string>
     <string name="home_greeting">Добро пожаловать в «Адмирал Бенбоу»</string>
     <string name="home_tagline">Тёплое место, откуда начинается каждая история.</string>
+    <string name="editor_spike_title">Редактор · прототип</string>
     <string name="home_placeholder">Здесь скоро появятся записи, лента и быстрые заметки.</string>
 </resources>

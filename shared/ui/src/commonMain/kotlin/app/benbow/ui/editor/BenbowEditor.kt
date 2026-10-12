@@ -1,0 +1,332 @@
+package app.benbow.ui.editor
+
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import app.benbow.core.text.BlockStyle
+import app.benbow.core.text.ListKind
+import app.benbow.core.text.Mark
+import app.benbow.core.text.RichText
+import kotlinx.coroutines.launch
+
+/** Seamless rich text editor: one text field, formatting drawn from [EditorState.model]. */
+@Composable
+fun BenbowEditor(state: EditorState, modifier: Modifier = Modifier) {
+    val colors = MaterialTheme.colorScheme
+    val styles = remember(colors) { EditorStyles(colors, dark = colors.background.luminance() < 0.5f) }
+    val textStyle = MaterialTheme.typography.bodyLarge.copy(
+        color = colors.onSurface,
+        fontSize = styles.baseSize,
+        lineHeight = TextUnit.Unspecified,
+    )
+    val measurer = rememberTextMeasurer()
+    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+
+    SideEffect { state.styles = styles }
+    LaunchedEffect(state) {
+        // Moving the cursor without typing drops pending toggles (e.g. bold armed at the old position).
+        var lastModel = state.model
+        var lastSelection = state.selection
+        snapshotFlow { state.model to state.selection }.collect { (model, selection) ->
+            if (model === lastModel) state.typingMarks = null
+            state.noteSelection(selection, lastSelection)
+            lastModel = model
+            lastSelection = selection
+        }
+    }
+
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
+    val clipboardActions = remember(state, clipboard, scope) {
+        ClipboardActions(
+            copy = {
+                val text = state.selectedText()
+                val entry = text?.let(::plainTextClipEntry)
+                if (entry != null) scope.launch { clipboard.setClipEntry(entry) }
+                entry != null
+            },
+            cut = {
+                val text = state.selectedText()
+                val entry = text?.let(::plainTextClipEntry)
+                if (entry != null) {
+                    scope.launch { clipboard.setClipEntry(entry) }
+                    state.replaceSelection("")
+                }
+                entry != null
+            },
+        )
+    }
+
+    EditorClipboardFix(recentlySelected = state::recentlyHadRangeSelection) {
+    EditorImeBridge {
+    BasicTextField(
+        state = state.textFieldState,
+        modifier = modifier
+            .onPreviewKeyEvent { state.handleShortcut(it, clipboardActions) }
+            .pointerInput(state, styles) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    val index = layout?.let { checkboxAt(it, state.model, styles, down.position) }
+                    if (index != null) {
+                        down.consume()
+                        val up = waitForUpOrCancellation(PointerEventPass.Initial)
+                        if (up != null) {
+                            up.consume()
+                            state.toggleChecked(index)
+                        }
+                        return@awaitEachGesture
+                    }
+                    // Let the text field place the cursor first (Final pass runs after it), then fix it up.
+                    while (true) {
+                        val change = awaitPointerEvent(PointerEventPass.Final).changes.firstOrNull { it.id == down.id } ?: break
+                        if (change.changedToUpIgnoreConsumed()) {
+                            val isTap = change.uptimeMillis - down.uptimeMillis < viewConfiguration.longPressTimeoutMillis
+                            if (isTap) layout?.let { state.fixCursorAfterTap(it, change.position) }
+                            break
+                        }
+                        if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) break
+                    }
+                }
+            }
+            .drawBehind { layout?.let { drawDecorations(it, state.model, styles, measurer, textStyle) } },
+        inputTransformation = state.inputTransformation,
+        outputTransformation = state.outputTransformation,
+        textStyle = textStyle,
+        keyboardOptions = KeyboardOptions(
+            capitalization = KeyboardCapitalization.Sentences,
+            autoCorrectEnabled = true,
+            keyboardType = KeyboardType.Text,
+        ),
+        cursorBrush = SolidColor(colors.primary),
+        lineLimits = TextFieldLineLimits.MultiLine(),
+        onTextLayout = { getResult -> layout = getResult() },
+    )
+    }
+    }
+}
+
+/** Copy/cut of model text; each returns false when it didn't handle the action (platform default runs). */
+private class ClipboardActions(val copy: () -> Boolean, val cut: () -> Boolean)
+
+/** The displayed text may carry one extra [TAIL_GLYPH]; anything else means the layout is stale. */
+private fun TextLayoutResult.matches(model: RichText): Boolean =
+    layoutInput.text.length.let { it == model.text.length || it == model.text.length + 1 }
+
+/**
+ * A tap right of a line's end lands after the paragraph-break glyph, i.e. at the start of the next
+ * paragraph. If the tap was on the glyph's own line, move the cursor back before the glyph.
+ */
+private fun EditorState.fixCursorAfterTap(layout: TextLayoutResult, position: Offset) {
+    val m = model
+    if (!layout.matches(m)) return
+    val offset = layout.getOffsetForPosition(position)
+    val index = m.paragraphIndexAt(offset)
+    if (index == 0 || offset != m.paragraphStarts[index] || selection != TextRange(offset)) return
+    val glyphLine = layout.getLineForOffset(offset - 1)
+    if (position.y in layout.getLineTop(glyphLine)..layout.getLineBottom(glyphLine)) {
+        textFieldState.edit { selection = TextRange(offset - 1) }
+    }
+}
+
+private fun EditorState.handleShortcut(event: KeyEvent, clipboard: ClipboardActions): Boolean {
+    if (event.type != KeyEventType.KeyDown) return false
+    if (event.key == Key.Tab && currentParagraph.list != null) {
+        indent(if (event.isShiftPressed) -1 else 1)
+        return true
+    }
+    if (!event.isCtrlPressed && !event.isMetaPressed) return false
+    when (event.key) {
+        Key.Z -> if (event.isShiftPressed) redo() else undo()
+        Key.Y -> redo()
+        Key.B -> toggleMark(Mark.Bold)
+        Key.I -> toggleMark(Mark.Italic)
+        Key.U -> toggleMark(Mark.Underline)
+        Key.E -> toggleMark(Mark.Code)
+        Key.C -> return clipboard.copy()
+        Key.X -> return clipboard.cut()
+        else -> return false
+    }
+    return true
+}
+
+private fun Density.checkboxAt(layout: TextLayoutResult, model: RichText, styles: EditorStyles, position: Offset): Int? {
+    if (!layout.matches(model)) return null
+    val index = model.paragraphIndexAt(layout.getOffsetForPosition(position))
+    val paragraph = model.paragraphs[index]
+    if (paragraph.list != ListKind.Check) return null
+    val line = layout.getLineForOffset(model.paragraphStarts[index])
+    if (position.y < layout.getLineTop(line) || position.y > layout.getLineBottom(line)) return null
+    val right = styles.indent(paragraph).toPx()
+    return if (position.x in (right - 36.dp.toPx())..right) index else null
+}
+
+private fun DrawScope.drawDecorations(
+    layout: TextLayoutResult,
+    model: RichText,
+    styles: EditorStyles,
+    measurer: TextMeasurer,
+    textStyle: TextStyle,
+) {
+    if (!layout.matches(model)) return
+    val paragraphs = model.paragraphs
+    val starts = model.paragraphStarts
+    fun firstLine(i: Int) = layout.getLineForOffset(starts[i])
+    fun top(i: Int) = layout.getLineTop(firstLine(i))
+    fun bottom(i: Int) = layout.getLineBottom(layout.getLineForOffset(model.paragraphEnd(i)))
+    val colors = styles.colors
+    val pad = 4.dp.toPx()
+
+    forEachGroup(paragraphs.size, { paragraphs[it].callout?.key }) { from, to ->
+        val callout = paragraphs[from].callout!!
+        drawRoundRect(
+            color = styles.calloutBackground(callout.tone),
+            topLeft = Offset(0f, top(from) - pad),
+            size = Size(size.width, bottom(to) - top(from) + 2 * pad),
+            cornerRadius = CornerRadius(12.dp.toPx()),
+        )
+        val icon = measurer.measure(callout.icon, textStyle)
+        val lineHeight = layout.getLineBottom(firstLine(from)) - top(from)
+        drawText(icon, topLeft = Offset(10.dp.toPx(), top(from) + (lineHeight - icon.size.height) / 2))
+    }
+    forEachGroup(paragraphs.size, { if (paragraphs[it].style == BlockStyle.Code) "code" else null }) { from, to ->
+        val left = styles.calloutIndent(paragraphs[from]).sp.toPx()
+        drawRoundRect(
+            color = colors.surfaceVariant,
+            topLeft = Offset(left, top(from) - pad),
+            size = Size(size.width - left, bottom(to) - top(from) + 2 * pad),
+            cornerRadius = CornerRadius(8.dp.toPx()),
+        )
+    }
+    forEachGroup(paragraphs.size, { if (paragraphs[it].style == BlockStyle.Quote) "quote" else null }) { from, to ->
+        val x = styles.calloutIndent(paragraphs[from]).sp.toPx() + 4.dp.toPx()
+        drawRoundRect(
+            color = colors.primary.copy(alpha = 0.6f),
+            topLeft = Offset(x, top(from)),
+            size = Size(3.dp.toPx(), bottom(to) - top(from)),
+            cornerRadius = CornerRadius(2.dp.toPx()),
+        )
+    }
+
+    val numbers = listNumbers(model)
+    paragraphs.forEachIndexed { i, p ->
+        val kind = p.list ?: return@forEachIndexed
+        val line = firstLine(i)
+        val centerY = (layout.getLineTop(line) + layout.getLineBottom(line)) / 2
+        val right = styles.indent(p).toPx() - 8.dp.toPx()
+        when (kind) {
+            ListKind.Bullet -> {
+                val radius = 3.dp.toPx()
+                val center = Offset(right - 5.dp.toPx(), centerY)
+                if (p.level % 2 == 1) {
+                    drawCircle(colors.onSurfaceVariant, radius, center)
+                } else {
+                    drawCircle(colors.onSurfaceVariant, radius, center, style = Stroke(1.5.dp.toPx()))
+                }
+            }
+            ListKind.Number -> {
+                val label = measurer.measure("${numbers[i]}.", textStyle.copy(color = colors.onSurfaceVariant))
+                drawText(label, topLeft = Offset(right - label.size.width, centerY - label.size.height / 2))
+            }
+            ListKind.Check -> drawCheckbox(Offset(right - 18.dp.toPx(), centerY - 9.dp.toPx()), p.checked, colors.primary, colors.onPrimary, colors.onSurfaceVariant)
+        }
+    }
+}
+
+private fun DrawScope.drawCheckbox(topLeft: Offset, checked: Boolean, fill: Color, mark: Color, outline: Color) {
+    val side = 18.dp.toPx()
+    val corner = CornerRadius(4.dp.toPx())
+    if (!checked) {
+        drawRoundRect(outline, topLeft, Size(side, side), corner, style = Stroke(1.6.dp.toPx()))
+        return
+    }
+    drawRoundRect(fill, topLeft, Size(side, side), corner)
+    val path = Path().apply {
+        moveTo(topLeft.x + side * 0.25f, topLeft.y + side * 0.52f)
+        lineTo(topLeft.x + side * 0.43f, topLeft.y + side * 0.70f)
+        lineTo(topLeft.x + side * 0.76f, topLeft.y + side * 0.32f)
+    }
+    drawPath(path, mark, style = Stroke(2.dp.toPx()))
+}
+
+/** Calls [block] for each run of consecutive indices sharing a non-null group key. */
+private inline fun forEachGroup(count: Int, key: (Int) -> Any?, block: (from: Int, to: Int) -> Unit) {
+    var i = 0
+    while (i < count) {
+        val k = key(i)
+        if (k == null) {
+            i++
+            continue
+        }
+        var j = i
+        while (j + 1 < count && key(j + 1) == k) j++
+        block(i, j)
+        i = j + 1
+    }
+}
+
+private fun listNumbers(model: RichText): IntArray {
+    val result = IntArray(model.paragraphs.size)
+    val counters = IntArray(RichText.MAX_LEVEL + 2)
+    model.paragraphs.forEachIndexed { i, p ->
+        when (p.list) {
+            null -> counters.fill(0)
+            ListKind.Number -> {
+                counters[p.level]++
+                counters.fill(0, p.level + 1)
+                result[i] = counters[p.level]
+            }
+            else -> counters.fill(0, p.level)
+        }
+    }
+    return result
+}
+

@@ -1,0 +1,91 @@
+package app.benbow.core.text
+
+import kotlin.random.Random
+
+/** Inline formatting (decorators and annotations of docs/content-format.md). */
+sealed interface Mark {
+    /** Marks of the same group never overlap: applying one replaces the other in that range. */
+    val group: String? get() = null
+
+    /** Whether text typed right after the mark continues it. */
+    val inclusive: Boolean get() = true
+
+    data object Bold : Mark
+    data object Italic : Mark
+    data object Underline : Mark
+    data object Strike : Mark
+    data object Code : Mark
+    data object Spoiler : Mark
+
+    data class Color(val token: String) : Mark {
+        override val group get() = "color"
+    }
+
+    data class Highlight(val token: String) : Mark {
+        override val group get() = "highlight"
+    }
+
+    data class Size(val step: SizeStep) : Mark {
+        override val group get() = "size"
+    }
+
+    data class Link(val href: String) : Mark {
+        override val group get() = "link"
+        override val inclusive get() = false
+    }
+
+    data class EntryLink(val entryId: String, val blockKey: String? = null) : Mark {
+        override val group get() = "link"
+        override val inclusive get() = false
+    }
+}
+
+enum class SizeStep { Small, Large, XLarge }
+
+/** [mark] applied to text offsets `[start, end)`. */
+data class MarkSpan(val mark: Mark, val start: Int, val end: Int)
+
+enum class BlockStyle { Normal, H1, H2, H3, Quote, Code }
+
+enum class ListKind { Bullet, Number, Check }
+
+enum class Align { Start, Center, End }
+
+/** Paragraphs sharing a callout [key] render as one box. */
+data class Callout(val key: String, val tone: String, val icon: String)
+
+/** Attributes of one `\n`-separated paragraph. [key] is the stable block identity. */
+data class Paragraph(
+    val key: String,
+    val style: BlockStyle = BlockStyle.Normal,
+    val list: ListKind? = null,
+    val level: Int = 1,
+    val checked: Boolean = false,
+    val align: Align = Align.Start,
+    val callout: Callout? = null,
+) {
+    val isHeading: Boolean get() = style == BlockStyle.H1 || style == BlockStyle.H2 || style == BlockStyle.H3
+
+    /** Attributes for a paragraph created by splitting this one. */
+    internal fun continuation(newKey: String) =
+        copy(key = newKey, style = if (isHeading) BlockStyle.Normal else style, checked = false)
+
+    /** Peels one layer of block formatting (used by Enter on an empty item and Backspace at start). */
+    internal fun exitOneLevel(): Paragraph = when {
+        list != null && level > 1 -> copy(level = level - 1)
+        list != null -> copy(list = null, level = 1, checked = false)
+        style != BlockStyle.Normal -> copy(style = BlockStyle.Normal)
+        callout != null -> copy(callout = null)
+        else -> this
+    }
+}
+
+/** Generates 8-char base62 block keys. */
+class BlockKeys(private val random: Random = Random.Default) {
+    fun next(): String = buildString(KEY_LENGTH) { repeat(KEY_LENGTH) { append(ALPHABET[random.nextInt(ALPHABET.length)]) } }
+
+    private companion object {
+        const val KEY_LENGTH = 8
+        const val ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    }
+}

@@ -29,6 +29,7 @@ dependencies {
     implementation(libs.ktor.server.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.ktor.network.tls.certificates)
+    implementation(libs.ktor.server.auth)
     implementation(libs.ktor.server.swagger)
     implementation(libs.ktor.server.routing.openapi)
     implementation(libs.sqlite.jdbc)
@@ -37,6 +38,9 @@ dependencies {
     testImplementation(libs.kotlin.test)
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.ktor.client.content.negotiation)
+    testImplementation(project(":shared:testing"))
+    testImplementation(libs.kotest.property)
+    testImplementation(libs.kotlinx.coroutines.test)
 }
 
 // ---- Packaging (docs/architecture.md#packaging-and-deployment-windows) ----
@@ -86,7 +90,22 @@ tasks.register<Sync>("packageServer") {
     dependsOn(tasks.named("installDist"))
     val winswDir = layout.projectDirectory.dir("packaging/winsw")
     val expectedSha = winswSha256
+    val packageDir = layout.buildDirectory.dir("package/benbow-server")
+    val onWindows = windows
     doFirst {
+        // Refuse to overwrite a service that runs straight from this folder (older installs did that);
+        // install-service.cmd now installs into Program Files.
+        if (onWindows) {
+            val service = ProcessBuilder(
+                "sc",
+                "qc",
+                "BenbowServer",
+            ).redirectErrorStream(true).start().inputStream.bufferedReader().readText()
+            check(!service.contains(packageDir.get().asFile.absolutePath, ignoreCase = true)) {
+                "The BenbowServer service runs from ${packageDir.get().asFile}. Run its uninstall-service.cmd (as admin) first, " +
+                    "then rebuild and use install-service.cmd, which installs into Program Files."
+            }
+        }
         winswDir.asFile.listFiles { f -> f.name.startsWith("WinSW") && f.name.endsWith(".exe") }.orEmpty().forEach { exe ->
             val actual = MessageDigest.getInstance("SHA-256").digest(exe.readBytes()).joinToString("") { "%02x".format(it) }
             check(actual == expectedSha) { "${exe.name} has SHA-256 $actual, expected $expectedSha (WinSW v2.12.0). Re-download it." }

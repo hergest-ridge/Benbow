@@ -21,12 +21,14 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation(libs.kotlinx.serialization.json)
+            // api: core's public types are @Serializable, so consumers need the runtime too.
+            api(libs.kotlinx.serialization.json)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
             implementation(libs.kotest.property)
             implementation(libs.kotlinx.coroutines.test)
+            implementation(project(":shared:testing"))
         }
     }
 }

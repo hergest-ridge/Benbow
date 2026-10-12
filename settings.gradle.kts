@@ -35,6 +35,7 @@ dependencyResolutionManagement {
 include(
     ":shared:core",
     ":shared:ui",
+    ":shared:testing",
     ":apps:android",
     ":apps:desktop",
     ":apps:web",

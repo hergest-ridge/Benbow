@@ -12,7 +12,14 @@ import kotlin.io.path.inputStream
 import kotlin.io.path.outputStream
 
 /** Settings from `<data>/benbow.properties`, created with defaults on first run. */
-data class ServerConfig(val host: String, val port: Int, val tlsPassword: String) {
+data class ServerConfig(
+    val host: String,
+    val port: Int,
+    val tlsPassword: String,
+    /** Second location for backup copies (e.g. another disk); empty = disabled (data-safety.md#backups). */
+    val backupMirror: Path? = null,
+    val backupIntervalMinutes: Long = 60,
+) {
     companion object {
         const val FILE_NAME = "benbow.properties"
 
@@ -33,6 +40,8 @@ data class ServerConfig(val host: String, val port: Int, val tlsPassword: String
                 "host" to "0.0.0.0",
                 "port" to DEFAULT_PORT.toString(),
                 "tls.password" to randomSecret(),
+                "backup.mirror" to "",
+                "backup.intervalMinutes" to "60",
             )
             val missing = defaults.filterKeys { props.getProperty(it) == null }
             if (missing.isNotEmpty()) {
@@ -43,6 +52,8 @@ data class ServerConfig(val host: String, val port: Int, val tlsPassword: String
                 host = props.getProperty("host"),
                 port = props.getProperty("port").toInt(),
                 tlsPassword = props.getProperty("tls.password"),
+                backupMirror = props.getProperty("backup.mirror").trim().takeIf { it.isNotEmpty() }?.let(Path::of),
+                backupIntervalMinutes = props.getProperty("backup.intervalMinutes").toLong().coerceIn(5, 24 * 60),
             )
         }
 

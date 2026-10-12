@@ -42,6 +42,8 @@ Media paths are human-readable on purpose: if the app ever dies, the files can s
 - **Export mirror:** periodic export of every entry to `export/YYYY/MM/YYYY-MM-DD HHmm <title>.md` (rich Markdown with YAML front matter: id, kind, day, tags, mood, favorite, attachments as relative links) **plus** a `.json` sidecar with the canonical Document and metadata (lossless). This is the disaster-recovery format that needs no app. Optionally a local git repo for free history.
 - **Status visible:** the admin page and the client settings show last backup time, last verification, and last mirror sync. The UI warns if the latest backup is older than 48 hours.
 
+Implemented (server 0.2.0): `Backups` (VACUUM INTO + reopen + integrity_check + row-count match, manifest.json), `BackupJobs` (snapshot on change every `backup.intervalMinutes`, `Retention` GFS pruning, verified SHA-256 copy to `backup.mirror`, Markdown mirror in `<data>/export`), pre-migration and pre-update snapshots in `Database.open`, revisions protected by SQLite triggers (no UPDATE/DELETE). Config paths in `benbow.properties` must use `/` (Java properties treat `\` as an escape); a relative mirror path is rejected.
+
 ## Integrity checks
 - On startup: `PRAGMA quick_check`. Nightly: `PRAGMA integrity_check` + `foreign_key_check` + a blob scrub over a rolling subset (all files over 7 days).
 - On failure: switch to read-only mode, alert in admin page and clients, keep serving reads. Never auto-repair destructively.
@@ -57,7 +59,7 @@ Media paths are human-readable on purpose: if the app ever dies, the files can s
 - Exclude the DB from Android Auto Backup. Restoring a stale cache onto a new phone would confuse sync. Device recovery happens through a fresh pull.
 - Every device cache doubles as a partial backup. After a server restore, clients can re-upload what the server lacks (see `sync.md`).
 
-## Disaster recovery runbook (to be expanded with the implementation)
-1. Server DB corrupt → stop service → restore the latest verified snapshot → start → server bumps `epoch` → clients reconcile and re-push newer data.
+## Disaster recovery runbook
+1. Server DB corrupt → stop the service → copy the newest verified snapshot from `<data>/backups/db` (or the mirror) over `<data>/db/benbow.sqlite` and delete `benbow.sqlite-wal`/`-shm` → start. (Epoch bump and client reconciliation arrive with the client sync engine; until then, clients re-push their outboxes and the server dedupes by op id.)
 2. PC dead → install the server on a new PC → point it at the backup target → restore → re-pair devices.
 3. App unusable → the Markdown mirror plus the media folder are readable as plain files.

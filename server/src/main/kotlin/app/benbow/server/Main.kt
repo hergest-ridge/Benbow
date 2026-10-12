@@ -1,5 +1,11 @@
 package app.benbow.server
 
+import app.benbow.server.api.ServerContext
+import app.benbow.server.api.benbowModule
+import app.benbow.server.backup.BackupJobs
+import app.benbow.server.storage.Database
+import app.benbow.server.storage.Devices
+import app.benbow.server.storage.PairingCodes
 import io.ktor.server.engine.applicationEnvironment
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.engine.sslConnector
@@ -12,7 +18,7 @@ import java.nio.file.StandardOpenOption
 import kotlin.io.path.createDirectories
 import kotlin.system.exitProcess
 
-const val SERVER_VERSION = "0.1.0"
+const val SERVER_VERSION = "0.2.0"
 const val DEFAULT_PORT = 8765
 
 fun main(args: Array<String>) {
@@ -29,12 +35,14 @@ fun main(args: Array<String>) {
         exitProcess(2)
     }
     val config = ServerConfig.load(dataDir)
-    val store = Store.open(dataDir)
+    val db = Database.open(dataDir, SERVER_VERSION)
     val tls = TlsMaterial.ensure(dataDir, config.tlsPassword)
-    log.info("Benbow server {} | data {} | store {} epoch {}", SERVER_VERSION, dataDir, store.storeId, store.epoch)
+    log.info("Benbow server {} | data {} | store {} epoch {}", SERVER_VERSION, dataDir, db.storeId, db.epoch)
     log.info("HTTPS on {}:{} | certificate SHA-256 {}", config.host, config.port, tls.fingerprint)
 
-    val context = ServerContext(store, tls.fingerprint, dataDir)
+    val backupJobs = BackupJobs(db, dataDir, config.backupMirror).also { it.start(config.backupIntervalMinutes) }
+    val context =
+        ServerContext(db, Devices(db), PairingCodes(), tls.fingerprint, dataDir, config.port, backupStatus = { backupJobs.status })
     val server = embeddedServer(
         factory = Netty,
         environment = applicationEnvironment { this.log = log },
@@ -55,7 +63,8 @@ fun main(args: Array<String>) {
         Thread {
             log.info("Stopping")
             server.stop(gracePeriodMillis = 1_000, timeoutMillis = 5_000)
-            store.close()
+            backupJobs.stop()
+            db.close()
             lock.release()
         },
     )

@@ -57,8 +57,11 @@ When `parents[0] != head`:
 ## Sync triggers
 App start and foreground, connectivity change, local change (debounced 2 s), periodic WorkManager (15 min, network required), manual pull-to-refresh. Exponential backoff with jitter.
 
+## Implemented endpoints (server 0.2.0)
+`GET /api/v1/info` · `POST /api/v1/pair` (code from the admin page) · bearer-protected: `POST /api/v1/sync/push` (max 500 ops, 409 on protocol mismatch), `GET /api/v1/sync/pull?cursor=&limit=` (≤500), `GET /api/v1/entries/{id}/revisions`, `GET /api/v1/revisions/{id}`. Admin (`/`, `/admin/*`) only from loopback and same-origin. Rules: `SyncRules` in `shared/core` over `SqliteSyncStore`; the shared simulation (`shared/testing`) runs against both the in-memory and the SQLite store.
+
 ## Pairing and security
-- Manual: enter `host:port` in the app plus a one-time 6-digit code shown on the admin page (TTL 5 min).
+- Manual: enter `host:port` in the app plus a one-time 6-digit code shown on the admin page (TTL 5 min, single use, burned after 5 wrong guesses). The admin page with codes and devices is served **only to the server PC itself** (loopback), and admin POSTs must be same-origin (CSRF).
 - QR: admin page shows `benbow://pair?h=<host>&p=<port>&c=<code>&fp=<cert sha256>`.
 - `POST /api/v1/pair {code, device_name, platform}` → long-lived device token (stored hashed on the server, in Keystore-backed storage on Android). `Authorization: Bearer <token>`. Devices can be revoked on the admin page.
 - Transport (ADR-012): HTTPS only. The server generates a self-signed certificate on first run. Clients pin its SHA-256 fingerprint from pairing (QR `fp` or shown next to the manual code) and reject any other certificate. A certificate rotation flow re-pairs or confirms the new fingerprint on the admin page.

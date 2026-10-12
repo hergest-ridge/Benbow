@@ -1,0 +1,21 @@
+<!-- WinSW service definition. install-service.cmd fills @DATA_DIR@ and writes benbow-server-service.xml. -->
+<service>
+  <id>BenbowServer</id>
+  <name>Benbow Server</name>
+  <description>Benbow journal server: LAN HTTPS API, storage and backups.</description>
+  <executable>%BASE%\runtime\bin\java.exe</executable>
+  <arguments>-Xmx512m -Dfile.encoding=UTF-8 -cp "%BASE%\lib\*" app.benbow.server.MainKt --data "@DATA_DIR@"</arguments>
+  <startmode>Automatic</startmode>
+  <delayedAutoStart>true</delayedAutoStart>
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="30 sec"/>
+  <onfailure action="restart" delay="60 sec"/>
+  <resetfailure>1 hour</resetfailure>
+  <!-- Ctrl+C first so shutdown hooks close the database cleanly, then a hard stop after the timeout. -->
+  <stoptimeout>20 sec</stoptimeout>
+  <logpath>%BASE%\service-logs</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>5</keepFiles>
+  </log>
+</service>

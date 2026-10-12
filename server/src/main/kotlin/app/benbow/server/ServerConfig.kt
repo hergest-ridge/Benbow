@@ -1,0 +1,62 @@
+package app.benbow.server
+
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardCopyOption
+import java.security.SecureRandom
+import java.util.Base64
+import java.util.Properties
+import kotlin.io.path.createDirectories
+import kotlin.io.path.exists
+import kotlin.io.path.inputStream
+import kotlin.io.path.outputStream
+
+/** Settings from `<data>/benbow.properties`, created with defaults on first run. */
+data class ServerConfig(val host: String, val port: Int, val tlsPassword: String) {
+    companion object {
+        const val FILE_NAME = "benbow.properties"
+
+        /** `--data <dir>`, then `BENBOW_DATA`, then `%LOCALAPPDATA%\Benbow` (or `~/.benbow`). */
+        fun resolveDataDir(args: Array<String>): Path {
+            val flag = args.indexOf("--data")
+            if (flag >= 0 && flag + 1 < args.size) return Path.of(args[flag + 1])
+            System.getenv("BENBOW_DATA")?.let { return Path.of(it) }
+            val local = System.getenv("LOCALAPPDATA")
+            return if (local != null) Path.of(local, "Benbow") else Path.of(System.getProperty("user.home"), ".benbow")
+        }
+
+        fun load(dataDir: Path): ServerConfig {
+            val file = dataDir.resolve(FILE_NAME)
+            val props = Properties()
+            if (file.exists()) file.inputStream().use(props::load)
+            val defaults = mapOf(
+                "host" to "0.0.0.0",
+                "port" to DEFAULT_PORT.toString(),
+                "tls.password" to randomSecret(),
+            )
+            val missing = defaults.filterKeys { props.getProperty(it) == null }
+            if (missing.isNotEmpty()) {
+                missing.forEach { (k, v) -> props.setProperty(k, v) }
+                writeAtomically(file, props)
+            }
+            return ServerConfig(
+                host = props.getProperty("host"),
+                port = props.getProperty("port").toInt(),
+                tlsPassword = props.getProperty("tls.password"),
+            )
+        }
+
+        private fun writeAtomically(file: Path, props: Properties) {
+            file.parent.createDirectories()
+            val tmp = file.resolveSibling("$FILE_NAME.tmp")
+            tmp.outputStream().use {
+                props.store(it, "Benbow server settings")
+                (it as? java.io.FileOutputStream)?.fd?.sync()
+            }
+            Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        }
+
+        private fun randomSecret(): String =
+            Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(24).also(SecureRandom()::nextBytes))
+    }
+}

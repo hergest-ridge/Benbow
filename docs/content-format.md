@@ -7,7 +7,7 @@ Markdown, plain text, HTML and PDF are **exports** (lossy except HTML). This fil
 ```json
 {"v":1,"blocks":[ ... ]}
 ```
-- `v` is the format version. A reader that sees `v` greater than it supports opens the document **read-only** and never re-saves it.
+- `v` is the format version. A reader that sees `v` greater than it supports, or unknown envelope fields, opens the document **read-only** and never re-saves it.
 - `blocks` is a flat array (PT style). Nesting is expressed by `level` and by a shared container `_key` (callouts).
 
 ## Text block (`_type: "block"`)
@@ -24,7 +24,7 @@ Markdown, plain text, HTML and PDF are **exports** (lossy except HTML). This fil
 | `markDefs` | annotation objects | only defs that are referenced |
 
 ### Spans
-`{"_type":"span","text":"...","marks":["strong","m1"]}`. A soft line break inside a block is `\n` in the text. Text is stored exactly as typed: no Unicode normalization, no trimming.
+`{"_type":"span","text":"...","marks":["strong","m1"]}`. A soft line break inside a block is **U+2028** (LINE SEPARATOR). `\n` never appears in span text, because the editor model treats every `\n` as a block boundary; the decoder maps a stray `\n` to U+2028. Otherwise text is stored exactly as typed: no Unicode normalization, no trimming.
 
 ### Decorators (string marks)
 `strong`, `em`, `underline`, `strike-through`, `code`, `spoiler`. Names follow PT conventions where they exist.
@@ -41,10 +41,12 @@ Markdown, plain text, HTML and PDF are **exports** (lossy except HTML). This fil
 ## Other block types
 | `_type` | Fields | Editor behaviour |
 |---|---|---|
-| `code` | `_key`, `language?`, `code` (string, may contain `\n`) | monospace region with background |
+| `code` | `_key`, `language?`, `code` (string, may contain `\n`), `callout?` | monospace region with background. Plain text only (no marks). The editor merges directly adjacent code blocks with the same callout |
 | `divider` | `_key`, `variant?` (`line` · `dots` · `wave`) | atomic placeholder line |
 | `attachment` | `_key`, `ref` (attachment id), `width?` (0..1), `caption?` | **later** (inline media). v1 media lives in the entry gallery |
 | any unknown | preserved verbatim | atomic read-only chip. Never dropped or altered |
+
+**Unknown-content rule:** a block with an unknown `_type`, an unknown field, an unknown mark/markDef or an invalid value is kept **verbatim as an unknown block** (read-only chip). The rest of the document stays editable. Structurally broken JSON (no `_key`/`_type`, not an object) fails decoding, and the revision history is the fallback.
 Later atomic embeds (tables, toggles) are new `_type`s that follow the same rules.
 
 ## Theme tokens

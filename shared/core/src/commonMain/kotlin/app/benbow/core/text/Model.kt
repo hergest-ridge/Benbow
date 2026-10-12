@@ -54,6 +54,17 @@ enum class Align { Start, Center, End }
 /** Paragraphs sharing a callout [key] render as one box. */
 data class Callout(val key: String, val tone: String, val icon: String)
 
+/** Non-text block occupying one paragraph whose text is exactly [ATOM_CHAR]. */
+sealed interface Atom {
+    data class Divider(val variant: String? = null) : Atom
+    data class Attachment(val ref: String, val width: Double? = null, val caption: String? = null) : Atom
+
+    /** A block this build doesn't understand, kept verbatim (canonical JSON of the block). */
+    data class Unknown(val json: String) : Atom
+}
+
+const val ATOM_CHAR = '￼'
+
 /** Attributes of one `\n`-separated paragraph. [key] is the stable block identity. */
 data class Paragraph(
     val key: String,
@@ -63,12 +74,15 @@ data class Paragraph(
     val checked: Boolean = false,
     val align: Align = Align.Start,
     val callout: Callout? = null,
+    val atom: Atom? = null,
+    /** Code-block language; meaningful on the first paragraph of a code block. */
+    val language: String? = null,
 ) {
     val isHeading: Boolean get() = style == BlockStyle.H1 || style == BlockStyle.H2 || style == BlockStyle.H3
 
     /** Attributes for a paragraph created by splitting this one. */
     internal fun continuation(newKey: String) =
-        copy(key = newKey, style = if (isHeading) BlockStyle.Normal else style, checked = false)
+        copy(key = newKey, style = if (isHeading) BlockStyle.Normal else style, checked = false, atom = null)
 
     /** Peels one layer of block formatting (used by Enter on an empty item and Backspace at start). */
     internal fun exitOneLevel(): Paragraph = when {

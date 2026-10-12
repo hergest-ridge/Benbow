@@ -9,10 +9,13 @@ object Protocol {
     const val MAX = 1
 }
 
-/** Response of `GET /api/v1/info`. Store identity fields join once the server has storage. */
+/** Response of `GET /api/v1/info`; store identity per docs/sync.md#store-identity. */
 @Serializable
 data class ServerInfo(
     @SerialName("server_version") val serverVersion: String,
     @SerialName("protocol_min") val protocolMin: Int,
     @SerialName("protocol_max") val protocolMax: Int,
+    @SerialName("store_id") val storeId: String,
+    val epoch: Long,
+    @SerialName("schema_version") val schemaVersion: Int,
 )

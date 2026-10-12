@@ -34,3 +34,6 @@ Thumbs.db
 
 # Local temp (Java unix-domain sockets workaround)
 /.tmp/
+
+# Third-party binaries fetched locally
+/server/packaging/winsw/*.exe

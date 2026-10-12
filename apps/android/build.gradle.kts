@@ -17,6 +17,17 @@ android {
 
     buildFeatures { compose = true }
 
+    buildTypes {
+        // Non-debuggable build for performance checks; installs next to debug as app.benbow.bench.
+        create("benchmark") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            applicationIdSuffix = ".bench"
+            isDebuggable = false
+            matchingFallbacks += "release"
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

@@ -1,0 +1,74 @@
+package app.benbow.core.content
+
+import kotlinx.serialization.json.JsonObject
+
+/** Benbow Document (docs/content-format.md): canonical storage of entry bodies. */
+data class Document(val blocks: List<Block>, val version: Int = CURRENT_VERSION) {
+    /** Documents from a newer format are shown but never re-saved (data-safety S13). */
+    val isEditable: Boolean get() = version <= CURRENT_VERSION
+
+    companion object {
+        const val CURRENT_VERSION = 1
+    }
+}
+
+sealed interface Block {
+    val key: String
+}
+
+data class TextBlock(
+    override val key: String,
+    val style: String = STYLE_NORMAL,
+    val listItem: String? = null,
+    val level: Int? = null,
+    val checked: Boolean? = null,
+    val align: String? = null,
+    val callout: CalloutRef? = null,
+    val children: List<Span> = listOf(Span("")),
+    val markDefs: List<MarkDef> = emptyList(),
+) : Block
+
+data class CalloutRef(val key: String, val tone: String, val icon: String)
+
+data class Span(val text: String, val marks: List<String> = emptyList())
+
+sealed interface MarkDef {
+    val key: String
+
+    data class Link(override val key: String, val href: String) : MarkDef
+    data class EntryLink(override val key: String, val entryId: String, val blockKey: String? = null) : MarkDef
+    data class Color(override val key: String, val token: String) : MarkDef
+    data class Highlight(override val key: String, val token: String) : MarkDef
+    data class Size(override val key: String, val step: String) : MarkDef
+}
+
+data class CodeBlock(
+    override val key: String,
+    val code: String,
+    val language: String? = null,
+    val callout: CalloutRef? = null,
+) : Block
+
+data class DividerBlock(override val key: String, val variant: String? = null) : Block
+
+data class AttachmentBlock(
+    override val key: String,
+    val ref: String,
+    val width: Double? = null,
+    val caption: String? = null,
+) : Block
+
+/** Anything this build doesn't understand, kept verbatim (unknown-content rule). */
+data class UnknownBlock(override val key: String, val raw: JsonObject) : Block
+
+const val STYLE_NORMAL = "normal"
+const val SOFT_BREAK = ' '
+
+internal val TEXT_STYLES = setOf(STYLE_NORMAL, "h1", "h2", "h3", "blockquote")
+internal val LIST_ITEMS = setOf("bullet", "number", "check")
+internal val ALIGNS = setOf("start", "center", "end")
+internal val DECORATORS = setOf("strong", "em", "underline", "strike-through", "code", "spoiler")
+internal val SIZE_STEPS = setOf("small", "large", "xlarge")
+internal val DIVIDER_VARIANTS = setOf("line", "dots", "wave")
+
+class DocumentFormatException(message: String) : IllegalArgumentException(message)

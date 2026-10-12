@@ -196,9 +196,15 @@ class EditorState(initial: RichText, private val keys: BlockKeys = BlockKeys()) 
     }
 
     /**
-     * Compose starts a new layout paragraph at every paragraph-style boundary *and* at every '\n',
-     * so styled paragraphs separated by '\n' would show an extra empty line. The displayed text
-     * therefore swaps each '\n' for a zero-width glyph (same length, offsets map 1:1).
+     * Compose starts a new layout paragraph at every paragraph-style boundary *and* at every '
+',
+     * so a '
+' right at a style boundary would show an extra empty line. Consecutive paragraphs with
+     * equal styles therefore share one style range (their '
+' stay real, and fewer layout paragraphs
+     * keep typing fast); only the '
+' between groups is displayed as a zero-width glyph (same
+     * length, offsets map 1:1).
      */
     private fun render(buffer: TextFieldBuffer) {
         val st = styles ?: return
@@ -206,16 +212,27 @@ class EditorState(initial: RichText, private val keys: BlockKeys = BlockKeys()) 
         if (buffer.length != m.text.length) return
         val starts = m.paragraphStarts
         val last = starts.size - 1
-        for (i in 1..last) buffer.replace(starts[i] - 1, starts[i], PARAGRAPH_BREAK_GLYPH.toString())
-        if (starts[last] == m.text.length) buffer.append(TAIL_GLYPH)
+        val sizeMarks = m.marks.filter { it.mark is Mark.Size }
+        val paragraphStyles = m.paragraphs.mapIndexed { i, p ->
+            val s = starts[i]
+            val e = m.paragraphEnd(i)
+            val maxSize = sizeMarks.filter { it.start < e && it.end > s }
+                .maxOfOrNull { st.sizeFactor((it.mark as Mark.Size).step) } ?: 1f
+            st.paragraphStyle(p, maxSize)
+        }
+        var groupStart = 0
+        for (i in 0..last) {
+            if (i < last && paragraphStyles[i + 1] == paragraphStyles[i]) continue
+            if (i < last) buffer.replace(starts[i + 1] - 1, starts[i + 1], PARAGRAPH_BREAK_GLYPH.toString())
+            if (i == last && groupStart == last && starts[last] == m.text.length) buffer.append(TAIL_GLYPH)
+            val end = if (i < last) starts[i + 1] else buffer.length
+            buffer.addStyle(paragraphStyles[i], starts[groupStart], end)
+            groupStart = i + 1
+        }
         m.paragraphs.forEachIndexed { i, p ->
             val s = starts[i]
-            val end = if (i < last) starts[i + 1] else buffer.length
-            val textEnd = m.paragraphEnd(i)
-            val maxSize = m.marks.filter { it.start < textEnd && it.end > s }
-                .maxOfOrNull { (it.mark as? Mark.Size)?.let { size -> st.sizeFactor(size.step) } ?: 1f } ?: 1f
-            buffer.addStyle(st.paragraphStyle(p, maxSize), s, end)
-            if (textEnd > s) st.blockSpan(p)?.let { buffer.addStyle(it, s, textEnd) }
+            val e = m.paragraphEnd(i)
+            if (e > s) st.blockSpan(p)?.let { buffer.addStyle(it, s, e) }
         }
         m.markRuns().forEach { buffer.addStyle(st.runStyle(it.marks), it.start, it.end) }
     }

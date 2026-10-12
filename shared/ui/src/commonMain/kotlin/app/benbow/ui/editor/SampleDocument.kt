@@ -58,3 +58,26 @@ internal fun sampleDocument(): RichText = buildRichText {
     paragraph(style = BlockStyle.Code) { text("val treasure = map.find(\"X\")") }
     paragraph { text("Попробуй в начале строки «# », «- », «[] », «> », а в тексте — **жирный**, *курсив*, `код`.") }
 }
+
+/** About [targetChars] characters of mixed content for performance checks. */
+internal fun longSampleDocument(targetChars: Int): RichText = buildRichText {
+    var chars = 0
+    var i = 0
+    while (chars < targetChars) {
+        when (i % 10) {
+            0 -> paragraph(style = BlockStyle.H2) { text("Глава ${i / 10 + 1}") }
+            3 -> paragraph(list = ListKind.Check, checked = i % 20 == 3) { text("Пункт списка дел номер $i") }
+            4 -> paragraph(list = ListKind.Bullet) { text("Маркированный пункт с ") ; text("выделением", Mark.Highlight("yellow")) }
+            7 -> paragraph(style = BlockStyle.Quote) { text("Цитата: море шумело всю ночь, и фонарь у двери трактира качался на ветру.") }
+            else -> paragraph {
+                text("Абзац $i. Сегодня было ")
+                text("тихо", Mark.Bold)
+                text(", за окном шумело ")
+                text("море", Mark.Italic)
+                text(", а в камине потрескивали дрова. Джим смотрел на карту и думал о далёком острове, о сундуке и о том, что ждёт впереди.")
+            }
+        }
+        chars += 120
+        i++
+    }
+}

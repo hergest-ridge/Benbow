@@ -5,6 +5,9 @@ CMP for all clients (ADR-002) · desktop-first, Android ASAP (ADR-003) · Window
 
 Content format: Portable Text-based JSON + exporters, palette tokens, full v1 formatting list (ADR-015/017).
 
+## Before real use (Phase 2)
+- **Release signing key:** Android only installs updates signed with the same key. Changing keys forces an uninstall, which would wipe unsynced local data. Create a dedicated release keystore once, keep it outside the repo and back it up on both disks.
+
 ## Later
 13. Existing data to import (Day One, Keep, Telegram, Notion, Obsidian)? Affects importer priority.
 15. Encryption at rest (DB, media) beyond BitLocker and Android file-based encryption? Biometric app lock?

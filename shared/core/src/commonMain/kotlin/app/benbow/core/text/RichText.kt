@@ -67,7 +67,7 @@ data class RichText(
             text = text.substring(0, start) + inserted + text.substring(end),
             paragraphs = replaceParagraphs(start, end, inserted, keys),
             marks = replaceMarks(start, end, inserted.length, insertedMarks),
-        )
+        ).withoutCodeMarks()
     }
 
     private fun replaceParagraphs(start: Int, end: Int, inserted: String, keys: BlockKeys): List<Paragraph> {
@@ -121,12 +121,22 @@ data class RichText(
         return copy(paragraphs = paragraphs.mapIndexed { i, p -> if (i in range) transform(p) else p })
     }
 
-    /** Adds [mark] to `[start, end)`, replacing other marks of the same group there. */
+    /** Adds [mark] to `[start, end)`, replacing other marks of the same group there. Code paragraphs are skipped. */
     fun addMark(start: Int, end: Int, mark: Mark): RichText {
         if (end <= start) return this
         val group = mark.group
         val base = if (group != null) marks.subtract(start, end) { it.group == group } else marks
-        return copy(marks = normalize(base + MarkSpan(mark, start, end)))
+        return copy(marks = normalize(base + MarkSpan(mark, start, end))).withoutCodeMarks()
+    }
+
+    /** Code blocks are plain text (content-format.md): marks never survive inside code paragraphs. */
+    internal fun withoutCodeMarks(): RichText {
+        if (marks.isEmpty() || paragraphs.none { it.style == BlockStyle.Code }) return this
+        var result = marks
+        paragraphs.forEachIndexed { i, p ->
+            if (p.style == BlockStyle.Code) result = result.subtract(paragraphStarts[i], paragraphEnd(i)) { true }
+        }
+        return if (result.size == marks.size && result == marks) this else copy(marks = normalize(result))
     }
 
     fun removeMark(start: Int, end: Int, mark: Mark): RichText =
@@ -139,10 +149,11 @@ data class RichText(
     fun toggleBlockStyle(start: Int, end: Int, style: BlockStyle): RichText {
         val all = paragraphIndices(start, end).all { paragraphs[it].style == style }
         val target = if (all) BlockStyle.Normal else style
-        return updateParagraphs(start, end) { p ->
+        val updated = updateParagraphs(start, end) { p ->
             val dropsList = target == BlockStyle.Code || target == BlockStyle.H1 || target == BlockStyle.H2 || target == BlockStyle.H3
             p.copy(style = target, list = if (dropsList) null else p.list)
         }
+        return updated.withoutCodeMarks()
     }
 
     fun toggleList(start: Int, end: Int, kind: ListKind): RichText {

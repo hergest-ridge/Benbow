@@ -20,8 +20,8 @@ Server: WAL, `synchronous=FULL`, single writer + read pool (Monbooru pattern, bu
 ### ADR-005 Canonical content = restricted Markdown subset [S → ADR-015]
 The owner rejected limiting formatting to what Markdown can express (2026-10-12).
 
-### ADR-006 Editor = single rich `BasicTextField` (Compose 1.12 styles API) [P, gated by spike]
-Seamless selection, native IME, works on all targets. Fallbacks in editor.md. WebView/ProseMirror rejected.
+### ADR-006 Editor = single rich `BasicTextField` (Compose 1.12 styles API) [A, 2026-10-12]
+Seamless selection, native IME, works on all targets. The spike passed on the S24+ (editor.md "Spike findings"). Architecture: model-first (`RichText` + own undo), styles rendered in `OutputTransformation`, zero-width glyphs at style boundaries, IME bridge and clipboard repair. **Scale limit:** smooth up to ~5k chars; long-form text (writer module) will need a chunked or `EditText`-based engine.
 
 ### ADR-007 Sync = outbox ops + append-only revision DAG + server diff3 merge + HLC LWW metadata [A]
 No CRDT. Conflicts keep both heads. Store identity and epoch protect against restores and wrong servers.

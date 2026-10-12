@@ -36,7 +36,7 @@ Media paths are human-readable on purpose: if the app ever dies, the files can s
 ## Backups
 - **DB snapshots** via the SQLite online backup API or `VACUUM INTO` into `backups/db/benbow-YYYYMMDD-HHMMSS.sqlite`. Triggers: hourly while there have been changes, daily, before migrations and updates, and on demand.
 - **Retention (GFS):** 24 hourly, 14 daily, 8 weekly, 12 monthly, plus all pre-migration snapshots for 90 days.
-- **Second location:** a mirror target configured by the owner (another disk, NAS or a cloud-synced folder). It gets copied DB snapshots plus an incremental media mirror (immutable files, so copying by hash is enough). Encrypt if the target is cloud (see open-questions).
+- **Second location:** a second local disk (owner's choice, ADR-010). It gets copied DB snapshots plus an incremental media mirror (immutable files, so copying by hash is enough). Warn loudly if the target disk is missing or full. Cloud targets come later, and they must be encrypted.
 - **Markdown mirror:** periodic export of every entry to `export/YYYY/MM/YYYY-MM-DD HHmm <title>.md` with YAML front matter (id, kind, day, tags, mood, favorite, attachments as relative links). This is the disaster-recovery format that needs no app. Optionally a local git repo for free history.
 - **Status visible:** the admin page and the client settings show last backup time, last verification, and last mirror sync. The UI warns if the latest backup is older than 48 hours.
 

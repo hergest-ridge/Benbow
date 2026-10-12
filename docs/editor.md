@@ -20,6 +20,8 @@ Use one `BasicTextField(TextFieldState)` per entry body, with **Compose 1.12 ric
 Inline runs carry marks `Bold | Italic | Strike | Code | Highlight | Link(url)`.
 Pipelines: `Markdown ⇄ RichDoc` (codec in `shared/core`, pure, heavily tested) and `RichDoc ⇄ TextFieldState` (in `shared/ui/editor`). **Storage is Markdown only.** RichDoc is transient.
 
+> **Under review:** the owner rejected Markdown-limited formatting. ADR-015 proposes a Portable Text-based JSON as canonical, with Markdown as an export. The sections below (subset, round-trip) will be rewritten once ADR-015 is confirmed.
+
 ## Markdown subset (canonical serialization)
 | Element | Syntax emitted |
 |---|---|
@@ -65,7 +67,7 @@ Diary entries are small, so one text field is fine. The writer module (P3) may n
 3. Enter/Backspace at list boundaries (continue list, exit on empty item, unindent).
 4. Markdown shortcuts while typing.
 5. Select-all → copy → paste into another app (plain and rich).
-6. Russian IME: composition, autocorrect, swipe typing, no style bleeding at span edges.
+6. Russian IME on Samsung Keyboard and Gboard: composition, autocorrect, swipe typing, no style bleeding at span edges.
 7. Undo/redo including style changes.
 8. Round-trip: load MD → edit → save keeps untouched parts intact.
 9. 20k-char document: no dropped frames while typing on a mid-range device, open <100 ms.

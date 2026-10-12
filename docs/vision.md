@@ -16,7 +16,7 @@ P0 = MVP (Phases 2–3), P1 = soon after, P2 = later, P3 = maybe. Numbers refer 
 |---|---|---|---|
 | 3 | Journal entries tied to a day, several per day | P0 | Configurable "day starts at" offset |
 | 5 | High-quality rich editor (WYSIWYG, seamless text, no visible syntax) | P0 | Biggest technical risk. Spike first (`editor.md`) |
-| 6 | Markdown as the portable storage format (restricted subset) | P0 | Metadata kept in DB, front matter on export |
+| 6 | Portable storage + exporters (Markdown, plain text, HTML, PDF), formatting not bound by Markdown | P0 | ADR-015 under review. Metadata kept in DB, front matter on MD export |
 | 8b | Quick note (capture in seconds) | P0 | Composer bar, widget, QS tile, share target, shortcut |
 | — | Offline-first Android + LAN sync + revisions + backups | P0 | Core of the product |
 | — | Server: Windows autostart, standalone, API v1 + docs page | P0 | |

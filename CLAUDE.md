@@ -3,12 +3,12 @@
 Personal journal / life-feed app ("my feed of everything"). Single user, many devices.
 Android app (primary), desktop + web clients, self-hosted LAN server on Windows (standalone, autostart, no Docker).
 
-**Status:** Phase 0 – docs and decisions only, no code yet. Decisions in `docs/decisions.md` are *Proposed* until the user confirms them.
+**Status:** Phase 0, docs only, no code yet. Most ADRs are accepted. The content format (ADR-015) is under discussion.
 
 ## Non-negotiables
 1. **No data loss or corruption, ever.** Read `docs/data-safety.md` before touching storage, sync, migrations, deletion or backups. Never weaken an invariant to make something pass. Ask instead.
 2. **UX quality is a core feature.** It should feel native, instant and smooth (Telegram-level). See `docs/ux.md`.
-3. **Portability.** Content is a restricted Markdown subset and can be exported without the app. No proprietary content format.
+3. **Portability.** Content is stored in an open, documented, versioned format, and the export mirror (Markdown + raw) is always readable without the app. No lock-in.
 
 ## Docs map (read only what the task needs)
 | File | Contents |

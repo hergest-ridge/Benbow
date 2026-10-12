@@ -61,7 +61,7 @@ App start and foreground, connectivity change, local change (debounced 2 s), per
 - Manual: enter `host:port` in the app plus a one-time 6-digit code shown on the admin page (TTL 5 min).
 - QR: admin page shows `benbow://pair?h=<host>&p=<port>&c=<code>&fp=<cert sha256>`.
 - `POST /api/v1/pair {code, device_name, platform}` → long-lived device token (stored hashed on the server, in Keystore-backed storage on Android). `Authorization: Bearer <token>`. Devices can be revoked on the admin page.
-- Transport (pending decision, see open-questions): self-signed TLS generated on first run, clients pin its fingerprint from pairing (TOFU). The alternative for v1 is HTTP + token on LAN only, with Android `networkSecurityConfig` allowing cleartext for private ranges.
+- Transport (ADR-012): HTTPS only. The server generates a self-signed certificate on first run. Clients pin its SHA-256 fingerprint from pairing (QR `fp` or shown next to the manual code) and reject any other certificate. A certificate rotation flow re-pairs or confirms the new fingerprint on the admin page.
 - Outside the LAN: recommend Tailscale (no code needed).
 
 ## API versioning and docs

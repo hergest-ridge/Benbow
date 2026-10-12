@@ -6,8 +6,8 @@ Vertical slices. Each phase ends with a usable, tested increment. **Current phas
 Docs, research, proposed ADRs, open questions. **Exit:** owner answers open-questions and ADRs move to Accepted.
 
 ## Phase 1: Scaffold + de-risking spikes
-1. Gradle multi-module KMP skeleton (modules from architecture.md), version catalog, convention plugins, `./gradlew check`, formatting/lint (ktlint or detekt), `.editorconfig`, fill the CLAUDE.md "Commands" section.
-2. **Editor spike** (editor.md checklist) on Android + Desktop, then a Web sanity check.
+1. Gradle multi-module KMP skeleton (modules from architecture.md), version catalog, convention plugins, `./gradlew check`, formatting/lint (ktlint or detekt), `.editorconfig`, fill the CLAUDE.md "Commands" section. Android app shell installable on the S24+ from the first scaffold (ADR-003).
+2. **Editor spike** (editor.md checklist) on Desktop + Android (S24+, Samsung Keyboard and Gboard), then a Web sanity check. Scope depends on ADR-015 and the must-have formatting list.
 3. **Server packaging spike:** Ktor + SQLite hello-world → jlink/jpackage app-image → WinSW service. Survives reboot, restarts on crash, serves `/api/v1/info` and `/api/docs`.
 4. **Sync core:** `shared/core` HLC, diff3 merge, op model + the deterministic simulation test harness (no UI).
 5. Markdown codec + property tests.

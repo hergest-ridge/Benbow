@@ -107,7 +107,9 @@ class SyncSimulationTest {
             val blocks = doc.blocks.toMutableList()
             when (rnd.nextInt(3)) {
                 0 -> blocks.add(rnd.nextInt(blocks.size + 1), TextBlock(id("k"), children = listOf(Span("new $name"))))
+
                 1 -> if (blocks.size > 1) blocks.removeAt(rnd.nextInt(blocks.size))
+
                 else -> if (blocks.isNotEmpty()) {
                     val i = rnd.nextInt(blocks.size)
                     blocks[i] = TextBlock(blocks[i].key, children = listOf(Span("edit $name ${counter++}")))

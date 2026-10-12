@@ -35,8 +35,7 @@ data class EditorStyles(val colors: ColorScheme, val dark: Boolean, val baseSize
     }
 
     /** Left text indent in sp; list markers are drawn in the space just before it. */
-    fun indent(p: Paragraph): TextUnit =
-        (calloutIndent(p) + blockIndent(p) + if (p.list != null) 28f * p.level else 0f).sp
+    fun indent(p: Paragraph): TextUnit = (calloutIndent(p) + blockIndent(p) + if (p.list != null) 28f * p.level else 0f).sp
 
     private fun headingFactor(p: Paragraph): Float = when (p.style) {
         BlockStyle.H1 -> 1.6f
@@ -70,12 +69,16 @@ data class EditorStyles(val colors: ColorScheme, val dark: Boolean, val baseSize
             fontSize = headingFactor(p).em,
             fontWeight = if (p.style == BlockStyle.H1) FontWeight.Bold else FontWeight.SemiBold,
         )
+
         p.style == BlockStyle.Code -> SpanStyle(fontFamily = FontFamily.Monospace, fontSize = 0.92f.em)
+
         p.style == BlockStyle.Quote -> SpanStyle(color = colors.onSurfaceVariant)
+
         p.list == ListKind.Check && p.checked -> SpanStyle(
             color = colors.onSurfaceVariant,
             textDecoration = TextDecoration.LineThrough,
         )
+
         else -> null
     }
 
@@ -90,17 +93,26 @@ data class EditorStyles(val colors: ColorScheme, val dark: Boolean, val baseSize
         for (mark in marks) {
             when (mark) {
                 Mark.Bold -> weight = FontWeight.Bold
+
                 Mark.Italic -> fontStyle = FontStyle.Italic
+
                 Mark.Underline -> decorations += TextDecoration.Underline
+
                 Mark.Strike -> decorations += TextDecoration.LineThrough
+
                 Mark.Code -> {
                     family = FontFamily.Monospace
                     if (background == Color.Unspecified) background = colors.surfaceVariant
                 }
+
                 Mark.Spoiler -> background = colors.onSurface.copy(alpha = 0.16f)
+
                 is Mark.Color -> color = BenbowPalette.text(mark.token, dark) ?: Color.Unspecified
+
                 is Mark.Highlight -> background = BenbowPalette.highlight(mark.token, dark) ?: Color.Unspecified
+
                 is Mark.Size -> size = sizeFactor(mark.step).em
+
                 is Mark.Link, is Mark.EntryLink -> {
                     if (color == Color.Unspecified) color = colors.primary
                     decorations += TextDecoration.Underline

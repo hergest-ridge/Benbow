@@ -17,6 +17,11 @@ const val DEFAULT_PORT = 8765
 
 fun main(args: Array<String>) {
     val dataDir = ServerConfig.resolveDataDir(args).createDirectories()
+    // Java's NIO selector uses a unix-domain socket in %TEMP%, which fails on some Windows profiles
+    // ("Unable to establish loopback connection"). Must be set before any networking code runs.
+    if (System.getProperty("jdk.net.unixdomain.tmpdir") == null) {
+        System.setProperty("jdk.net.unixdomain.tmpdir", dataDir.resolve("tmp").createDirectories().toString())
+    }
     System.setProperty("benbow.logDir", dataDir.resolve("logs").toString()) // before the first logger
     val log = LoggerFactory.getLogger("benbow")
     val lock = lockDataDir(dataDir) ?: run {

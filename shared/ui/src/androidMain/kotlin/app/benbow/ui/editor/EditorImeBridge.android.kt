@@ -76,8 +76,7 @@ private fun EditorInfo.useRealInitialText() {
 }
 
 /** Same length as the input except a trailing [TAIL_GLYPH], which only ever sits at the very end. */
-private fun CharSequence.toRealText(): String =
-    toString().replace(PARAGRAPH_BREAK_GLYPH, '\n').removeSuffix(TAIL_GLYPH.toString())
+private fun CharSequence.toRealText(): String = toString().replace(PARAGRAPH_BREAK_GLYPH, '\n').removeSuffix(TAIL_GLYPH.toString())
 
 private const val CAPS_CONTEXT = 256
 private const val INITIAL_CONTEXT = 2048

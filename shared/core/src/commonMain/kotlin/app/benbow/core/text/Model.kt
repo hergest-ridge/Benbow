@@ -63,7 +63,7 @@ sealed interface Atom {
     data class Unknown(val json: String) : Atom
 }
 
-const val ATOM_CHAR = '￼'
+val ATOM_CHAR: Char = Char(0xFFFC) // OBJECT REPLACEMENT CHARACTER
 
 /** Attributes of one `\n`-separated paragraph. [key] is the stable block identity. */
 data class Paragraph(

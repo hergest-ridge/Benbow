@@ -42,7 +42,11 @@ class MergeTest {
     @Test
     fun duplicateKeysAreAConflict() {
         val base = doc("k1" to "a")
-        assertNull(mergeDocumentBodies(base, doc("k1" to "a", "k2" to "x"), doc("k1" to "a", "k2" to "y", "k3" to "z")).also { assertTrue(it == null) })
+        assertNull(
+            mergeDocumentBodies(base, doc("k1" to "a", "k2" to "x"), doc("k1" to "a", "k2" to "y", "k3" to "z")).also {
+                assertTrue(it == null)
+            },
+        )
     }
 
     @Test

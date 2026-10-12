@@ -10,6 +10,7 @@ WinSW
   The service wrapper is WinSW v2.12.0 (https://github.com/winsw/winsw/releases/tag/v2.12.0).
   Put WinSW.NET461.exe into server\packaging\winsw\ before `gradlew :server:packageServer`;
   it is copied here as benbow-server-service.exe. It uses the .NET Framework built into Windows 10/11.
+  Expected SHA-256 (checked by the build): b5066b7bbdfba1293e5d15cda3caaea88fbeab35bd5b38c41c913d492aadfc4f
 
 Service
   install-service.cmd [data folder]   default data folder: %ProgramData%\Benbow

@@ -1,10 +1,12 @@
 package app.benbow.core.content
 
+import app.benbow.core.text.ATOM_CHAR
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlin.random.Random
 
-private val alphabet = listOf("a", "Я", "ю", " ", "*", "_", "#", "\\", "\"", "<", "`", "1.", "😀", SOFT_BREAK.toString(), "￼")
+private val alphabet =
+    listOf("a", "Я", "ю", " ", "*", "_", "#", "\\", "\"", "<", "`", "1.", "😀", SOFT_BREAK.toString(), ATOM_CHAR.toString())
 private val defPool = listOf(
     MarkDef.Link("", "https://example.com/a b"),
     MarkDef.EntryLink("", "entry-1", "blk"),
@@ -22,6 +24,7 @@ internal fun randomDocument(rnd: Random): Document {
         val previousCode = blocks.lastOrNull() as? CodeBlock
         when (rnd.nextInt(12)) {
             in 0..6 -> blocks.add(randomText(rnd, key))
+
             7, 8 -> {
                 val callout = callouts.random(rnd)
                 if (previousCode != null && previousCode.callout == callout) {
@@ -31,9 +34,21 @@ internal fun randomDocument(rnd: Random): Document {
                     blocks.add(CodeBlock(key, lines.joinToString("\n"), listOf(null, "kotlin").random(rnd), callout))
                 }
             }
+
             9 -> blocks.add(DividerBlock(key, listOf(null, "dots").random(rnd)))
+
             10 -> blocks.add(AttachmentBlock(key, "att-$i", listOf(null, 0.5, 0.3333).random(rnd), listOf(null, "фото").random(rnd)))
-            else -> blocks.add(UnknownBlock(key, buildJsonObject { put("_key", key); put("_type", "future"); put("x", rnd.nextInt(100)) }))
+
+            else -> blocks.add(
+                UnknownBlock(
+                    key,
+                    buildJsonObject {
+                        put("_key", key)
+                        put("_type", "future")
+                        put("x", rnd.nextInt(100))
+                    },
+                ),
+            )
         }
     }
     return DocumentCodec.canonicalize(Document(blocks))

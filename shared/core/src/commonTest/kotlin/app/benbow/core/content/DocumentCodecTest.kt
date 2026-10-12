@@ -72,7 +72,9 @@ class DocumentCodecTest {
 
     @Test
     fun strayNewlinesBecomeSoftBreaks() {
-        val doc = DocumentCodec.decode("""{"v":1,"blocks":[{"_key":"k","_type":"block","style":"normal","children":[{"_type":"span","text":"a\nb","marks":[]}],"markDefs":[]}]}""")
+        val doc = DocumentCodec.decode(
+            """{"v":1,"blocks":[{"_key":"k","_type":"block","style":"normal","children":[{"_type":"span","text":"a\nb","marks":[]}],"markDefs":[]}]}""",
+        )
         assertEquals("a${SOFT_BREAK}b", (doc.blocks.single() as TextBlock).children.single().text)
     }
 

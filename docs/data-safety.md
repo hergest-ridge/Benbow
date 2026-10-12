@@ -20,7 +20,8 @@ Losing or corrupting data is unacceptable from v1. Every storage, sync, migratio
 ## Server storage layout
 ```
 <data root>/                 (default %LOCALAPPDATA%\Benbow, user-configurable e.g. D:\Benbow)
-  benbow.toml                config
+  benbow.properties          config (host, port, TLS keystore password)
+  tls/server.keystore        self-signed certificate (back it up: clients pin its fingerprint)
   db/benbow.sqlite(-wal,-shm)
   tmp/uploads/               in-progress resumable uploads
   thumbs/                    derived previews (regenerable, not backed up)

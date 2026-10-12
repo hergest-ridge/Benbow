@@ -107,50 +107,50 @@ fun BenbowEditor(state: EditorState, modifier: Modifier = Modifier) {
     }
 
     EditorClipboardFix(recentlySelected = state::recentlyHadRangeSelection) {
-    EditorImeBridge {
-    BasicTextField(
-        state = state.textFieldState,
-        modifier = modifier
-            .onPreviewKeyEvent { state.handleShortcut(it, clipboardActions) }
-            .pointerInput(state, styles) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                    val index = layout?.let { checkboxAt(it, state.model, styles, down.position) }
-                    if (index != null) {
-                        down.consume()
-                        val up = waitForUpOrCancellation(PointerEventPass.Initial)
-                        if (up != null) {
-                            up.consume()
-                            state.toggleChecked(index)
+        EditorImeBridge {
+            BasicTextField(
+                state = state.textFieldState,
+                modifier = modifier
+                    .onPreviewKeyEvent { state.handleShortcut(it, clipboardActions) }
+                    .pointerInput(state, styles) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                            val index = layout?.let { checkboxAt(it, state.model, styles, down.position) }
+                            if (index != null) {
+                                down.consume()
+                                val up = waitForUpOrCancellation(PointerEventPass.Initial)
+                                if (up != null) {
+                                    up.consume()
+                                    state.toggleChecked(index)
+                                }
+                                return@awaitEachGesture
+                            }
+                            // Let the text field place the cursor first (Final pass runs after it), then fix it up.
+                            while (true) {
+                                val change = awaitPointerEvent(PointerEventPass.Final).changes.firstOrNull { it.id == down.id } ?: break
+                                if (change.changedToUpIgnoreConsumed()) {
+                                    val isTap = change.uptimeMillis - down.uptimeMillis < viewConfiguration.longPressTimeoutMillis
+                                    if (isTap) layout?.let { state.fixCursorAfterTap(it, change.position) }
+                                    break
+                                }
+                                if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) break
+                            }
                         }
-                        return@awaitEachGesture
                     }
-                    // Let the text field place the cursor first (Final pass runs after it), then fix it up.
-                    while (true) {
-                        val change = awaitPointerEvent(PointerEventPass.Final).changes.firstOrNull { it.id == down.id } ?: break
-                        if (change.changedToUpIgnoreConsumed()) {
-                            val isTap = change.uptimeMillis - down.uptimeMillis < viewConfiguration.longPressTimeoutMillis
-                            if (isTap) layout?.let { state.fixCursorAfterTap(it, change.position) }
-                            break
-                        }
-                        if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) break
-                    }
-                }
-            }
-            .drawBehind { layout?.let { drawDecorations(it, state.model, styles, measurer, textStyle) } },
-        inputTransformation = state.inputTransformation,
-        outputTransformation = state.outputTransformation,
-        textStyle = textStyle,
-        keyboardOptions = KeyboardOptions(
-            capitalization = KeyboardCapitalization.Sentences,
-            autoCorrectEnabled = true,
-            keyboardType = KeyboardType.Text,
-        ),
-        cursorBrush = SolidColor(colors.primary),
-        lineLimits = TextFieldLineLimits.MultiLine(),
-        onTextLayout = { getResult -> layout = getResult() },
-    )
-    }
+                    .drawBehind { layout?.let { drawDecorations(it, state.model, styles, measurer, textStyle) } },
+                inputTransformation = state.inputTransformation,
+                outputTransformation = state.outputTransformation,
+                textStyle = textStyle,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Sentences,
+                    autoCorrectEnabled = true,
+                    keyboardType = KeyboardType.Text,
+                ),
+                cursorBrush = SolidColor(colors.primary),
+                lineLimits = TextFieldLineLimits.MultiLine(),
+                onTextLayout = { getResult -> layout = getResult() },
+            )
+        }
     }
 }
 
@@ -272,11 +272,19 @@ private fun DrawScope.drawDecorations(
                     drawCircle(colors.onSurfaceVariant, radius, center, style = Stroke(1.5.dp.toPx()))
                 }
             }
+
             ListKind.Number -> {
                 val label = measurer.measure("${numbers[i]}.", textStyle.copy(color = colors.onSurfaceVariant))
                 drawText(label, topLeft = Offset(right - label.size.width, centerY - label.size.height / 2))
             }
-            ListKind.Check -> drawCheckbox(Offset(right - 18.dp.toPx(), centerY - 9.dp.toPx()), p.checked, colors.primary, colors.onPrimary, colors.onSurfaceVariant)
+
+            ListKind.Check -> drawCheckbox(
+                Offset(right - 18.dp.toPx(), centerY - 9.dp.toPx()),
+                p.checked,
+                colors.primary,
+                colors.onPrimary,
+                colors.onSurfaceVariant,
+            )
         }
     }
 }
@@ -319,14 +327,15 @@ private fun listNumbers(model: RichText): IntArray {
     model.paragraphs.forEachIndexed { i, p ->
         when (p.list) {
             null -> counters.fill(0)
+
             ListKind.Number -> {
                 counters[p.level]++
                 counters.fill(0, p.level + 1)
                 result[i] = counters[p.level]
             }
+
             else -> counters.fill(0, p.level)
         }
     }
     return result
 }
-

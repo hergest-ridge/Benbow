@@ -1,3 +1,5 @@
+import java.security.MessageDigest
+
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.serialization)
@@ -62,18 +64,34 @@ val jlinkRuntime = tasks.register<Exec>("jlinkRuntime") {
     argumentProviders.add(
         CommandLineArgumentProvider {
             listOf(
-                "--add-modules", modules,
-                "--strip-debug", "--no-man-pages", "--no-header-files", "--compress=zip-6",
-                "--output", output.get().asFile.absolutePath,
+                "--add-modules",
+                modules,
+                "--strip-debug",
+                "--no-man-pages",
+                "--no-header-files",
+                "--compress=zip-6",
+                "--output",
+                output.get().asFile.absolutePath,
             )
         },
     )
 }
 
+// SHA-256 of WinSW.NET461.exe v2.12.0 as downloaded from the official GitHub release (655872 bytes).
+val winswSha256 = "b5066b7bbdfba1293e5d15cda3caaea88fbeab35bd5b38c41c913d492aadfc4f"
+
 tasks.register<Sync>("packageServer") {
     group = "distribution"
     description = "Self-contained server folder: bundled runtime, jars, WinSW service config and scripts."
     dependsOn(tasks.named("installDist"))
+    val winswDir = layout.projectDirectory.dir("packaging/winsw")
+    val expectedSha = winswSha256
+    doFirst {
+        winswDir.asFile.listFiles { f -> f.name.startsWith("WinSW") && f.name.endsWith(".exe") }.orEmpty().forEach { exe ->
+            val actual = MessageDigest.getInstance("SHA-256").digest(exe.readBytes()).joinToString("") { "%02x".format(it) }
+            check(actual == expectedSha) { "${exe.name} has SHA-256 $actual, expected $expectedSha (WinSW v2.12.0). Re-download it." }
+        }
+    }
     into(layout.buildDirectory.dir("package/benbow-server"))
     from(jlinkRuntime) { into("runtime") }
     from(layout.buildDirectory.dir("install/server/lib")) { into("lib") }

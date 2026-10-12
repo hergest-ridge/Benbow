@@ -28,7 +28,11 @@ fun RichText.toDocument(): Document {
             i++
         } else if (p.style == BlockStyle.Code) {
             var j = i
-            while (j + 1 < paragraphs.size && paragraphs[j + 1].let { it.style == BlockStyle.Code && it.atom == null && it.callout == p.callout }) j++
+            while (j + 1 < paragraphs.size &&
+                paragraphs[j + 1].let { it.style == BlockStyle.Code && it.atom == null && it.callout == p.callout }
+            ) {
+                j++
+            }
             blocks.add(CodeBlock(p.key, (i..j).joinToString("\n") { paragraphText(it) }, p.language, p.callout?.toRef()))
             i = j + 1
         } else {
@@ -60,6 +64,7 @@ fun Document.toRichText(keys: BlockKeys = BlockKeys()): RichText {
                     span.marks.forEach { name -> markFor(name, defs)?.let { marks.add(MarkSpan(it, from, text.length)) } }
                 }
             }
+
             is CodeBlock -> block.code.split('\n').forEachIndexed { line, code ->
                 start(
                     Paragraph(
@@ -71,8 +76,11 @@ fun Document.toRichText(keys: BlockKeys = BlockKeys()): RichText {
                 )
                 text.append(code)
             }
+
             is DividerBlock -> atomParagraph(block.key, Atom.Divider(block.variant), ::start, text)
+
             is AttachmentBlock -> atomParagraph(block.key, Atom.Attachment(block.ref, block.width, block.caption), ::start, text)
+
             is UnknownBlock -> atomParagraph(block.key, Atom.Unknown(block.raw.toString()), ::start, text)
         }
     }
@@ -172,11 +180,17 @@ private fun decoratorName(mark: Mark): String? = when (mark) {
 
 private fun markFor(name: String, defs: Map<String, MarkDef>): Mark? = when (name) {
     "strong" -> Mark.Bold
+
     "em" -> Mark.Italic
+
     "underline" -> Mark.Underline
+
     "strike-through" -> Mark.Strike
+
     "code" -> Mark.Code
+
     "spoiler" -> Mark.Spoiler
+
     else -> when (val def = defs[name]) {
         is MarkDef.Link -> Mark.Link(def.href)
         is MarkDef.EntryLink -> Mark.EntryLink(def.entryId, def.blockKey)

@@ -69,7 +69,8 @@ private fun <T> lcsMatches(a: List<T>, b: List<T>): Map<Int, Int> {
 fun mergeDocumentBodies(base: String, ours: String, theirs: String): String? {
     val merged = diff3(blockLines(base) ?: return null, blockLines(ours) ?: return null, blockLines(theirs) ?: return null)
         ?: return null
-    val text = if (merged.isEmpty()) "{\"v\":${Document.CURRENT_VERSION},\"blocks\":[]}" else "{\"v\":${Document.CURRENT_VERSION},\"blocks\":[\n${merged.joinToString(",\n")}\n]}"
+    val header = "{\"v\":${Document.CURRENT_VERSION},\"blocks\":["
+    val text = if (merged.isEmpty()) "$header]}" else "$header\n${merged.joinToString(",\n")}\n]}"
     val document = try {
         DocumentCodec.decode(text)
     } catch (_: DocumentFormatException) {

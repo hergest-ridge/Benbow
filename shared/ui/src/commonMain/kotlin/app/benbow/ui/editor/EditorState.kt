@@ -22,10 +22,10 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
 /** Displayed in place of each paragraph break; restored to '\n' on copy (see [EditorClipboard]). */
-internal const val PARAGRAPH_BREAK_GLYPH = '​'
+internal val PARAGRAPH_BREAK_GLYPH: Char = Char(0x200B) // ZERO WIDTH SPACE
 
 /** Displayed after an empty last paragraph so it can carry a paragraph style; dropped on copy. */
-internal const val TAIL_GLYPH = '⁠'
+internal val TAIL_GLYPH: Char = Char(0x2060) // WORD JOINER
 
 /**
  * Editor state. [model] is the source of truth; [textFieldState] holds the same plain text.
@@ -79,7 +79,14 @@ class EditorState(initial: RichText, private val keys: BlockKeys = BlockKeys()) 
         val sel = selection
         if (sel.collapsed) {
             val current = typingMarks ?: model.marksForInsertion(sel.min, sel.min)
-            typingMarks = if (mark in current) current - mark else current.filterTo(mutableSetOf()) { it.group == null || it.group != mark.group } + mark
+            typingMarks =
+                if (mark in
+                    current
+                ) {
+                    current - mark
+                } else {
+                    current.filterTo(mutableSetOf()) { it.group == null || it.group != mark.group } + mark
+                }
             return
         }
         apply { m, s -> m.toggleMark(s.min, s.max, mark) }

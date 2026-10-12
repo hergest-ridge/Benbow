@@ -12,8 +12,10 @@ interface SyncStore {
     fun putEntry(entry: EntryState)
     fun revision(id: String): RevisionRecord?
     fun putRevision(revision: RevisionRecord)
+
     /** Appends to the change log and returns the new sequence number. */
     fun appendChange(entryId: String): Long
+
     /** Entity ids changed after [cursor], oldest first, as (seq, entryId). */
     fun changesSince(cursor: Long, limit: Int): List<Pair<Long, String>>
     fun newRevisionId(): String
@@ -52,6 +54,7 @@ class SyncRules(
             }
             OpResult(op.opId, OpStatus.Applied)
         }
+
         is SetField -> {
             val entry = store.entry(op.entryId) ?: return OpResult(op.opId, OpStatus.Rejected, "unknown entry")
             val current = entry.fields[op.field]
@@ -61,6 +64,7 @@ class SyncRules(
             }
             OpResult(op.opId, OpStatus.Applied)
         }
+
         is PutRevision -> putRevision(op)
     }
 
@@ -75,6 +79,7 @@ class SyncRules(
                 store.putEntry(entry.copy(head = op.revisionId, conflictHeads = entry.conflictHeads - op.parents.toSet()))
                 OpResult(op.opId, OpStatus.Applied)
             }
+
             else -> mergeConcurrent(entry, head, op)
         }
         store.appendChange(op.entryId)

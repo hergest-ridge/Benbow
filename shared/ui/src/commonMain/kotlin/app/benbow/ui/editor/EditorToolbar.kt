@@ -73,7 +73,15 @@ fun EditorToolbar(state: EditorState, modifier: Modifier = Modifier) {
                 Tool("</>", active = Mark.Code in marks) { state.toggleMark(Mark.Code) }
                 Tool("||", active = Mark.Spoiler in marks) { state.toggleMark(Mark.Spoiler) }
                 Tool("A", active = marks.any { it is Mark.Color }) { picker = if (picker == Picker.Color) null else Picker.Color }
-                Tool("▰", active = marks.any { it is Mark.Highlight }) { picker = if (picker == Picker.Highlight) null else Picker.Highlight }
+                Tool("▰", active = marks.any { it is Mark.Highlight }) {
+                    picker = if (picker ==
+                        Picker.Highlight
+                    ) {
+                        null
+                    } else {
+                        Picker.Highlight
+                    }
+                }
                 Tool("A+", active = marks.any { it is Mark.Size }) { state.cycleSize(marks) }
                 Divider()
                 Tool("H1", active = paragraph.style == BlockStyle.H1) { state.toggleBlockStyle(BlockStyle.H1) }

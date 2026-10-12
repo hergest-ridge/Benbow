@@ -133,27 +133,34 @@ object DocumentCodec {
                 block.checked?.let { field("checked", it.toString()) }
                 block.align?.let { field("align", q(it)) }
                 block.callout?.let { field("callout", calloutJson(it)) }
-                field("children", block.children.joinToString(",", "[", "]") { span ->
-                    "{\"_type\":\"span\",\"text\":${q(span.text)},\"marks\":${span.marks.joinToString(",", "[", "]", transform = ::q)}}"
-                })
+                field(
+                    "children",
+                    block.children.joinToString(",", "[", "]") { span ->
+                        "{\"_type\":\"span\",\"text\":${q(span.text)},\"marks\":${span.marks.joinToString(",", "[", "]", transform = ::q)}}"
+                    },
+                )
                 field("markDefs", block.markDefs.joinToString(",", "[", "]", transform = ::markDefJson))
             }
+
             is CodeBlock -> {
                 field("_type", q("code"))
                 block.language?.let { field("language", q(it)) }
                 field("code", q(block.code))
                 block.callout?.let { field("callout", calloutJson(it)) }
             }
+
             is DividerBlock -> {
                 field("_type", q("divider"))
                 block.variant?.let { field("variant", q(it)) }
             }
+
             is AttachmentBlock -> {
                 field("_type", q("attachment"))
                 field("ref", q(block.ref))
                 block.width?.let { field("width", formatDecimal(it)) }
                 block.caption?.let { field("caption", q(it)) }
             }
+
             is UnknownBlock -> error("handled above")
         }
         append('}')
@@ -169,19 +176,23 @@ object DocumentCodec {
                 field("_type", q("link"))
                 field("href", q(def.href))
             }
+
             is MarkDef.EntryLink -> {
                 field("_type", q("entryLink"))
                 field("entryId", q(def.entryId))
                 def.blockKey?.let { field("blockKey", q(it)) }
             }
+
             is MarkDef.Color -> {
                 field("_type", q("color"))
                 field("token", q(def.token))
             }
+
             is MarkDef.Highlight -> {
                 field("_type", q("highlight"))
                 field("token", q(def.token))
             }
+
             is MarkDef.Size -> {
                 field("_type", q("size"))
                 field("step", q(def.step))
@@ -247,34 +258,50 @@ object DocumentCodec {
                 obj.allow("_key", "_type", "href")
                 MarkDef.Link(key, (obj["href"] ?: unrecognized()).str())
             }
+
             "entryLink" -> {
                 obj.allow("_key", "_type", "entryId", "blockKey")
                 MarkDef.EntryLink(key, (obj["entryId"] ?: unrecognized()).str(), obj["blockKey"]?.str())
             }
+
             "color" -> {
                 obj.allow("_key", "_type", "token")
                 MarkDef.Color(key, (obj["token"] ?: unrecognized()).str())
             }
+
             "highlight" -> {
                 obj.allow("_key", "_type", "token")
                 MarkDef.Highlight(key, (obj["token"] ?: unrecognized()).str())
             }
+
             "size" -> {
                 obj.allow("_key", "_type", "step")
                 MarkDef.Size(key, (obj["step"] ?: unrecognized()).str().also { if (it !in SIZE_STEPS) unrecognized() })
             }
+
             else -> unrecognized()
         }
     }
 
     private fun decodeCallout(obj: JsonObject): CalloutRef {
         obj.allow("_key", "tone", "icon")
-        return CalloutRef((obj["_key"] ?: unrecognized()).str(), (obj["tone"] ?: unrecognized()).str(), (obj["icon"] ?: unrecognized()).str())
+        return CalloutRef(
+            (obj["_key"] ?: unrecognized()).str(),
+            (obj["tone"] ?: unrecognized()).str(),
+            (obj["icon"] ?: unrecognized()).str(),
+        )
     }
 
     private fun decodeCode(key: String, obj: JsonObject): CodeBlock {
         obj.allow("_key", "_type", "language", "code", "callout")
-        return CodeBlock(key, (obj["code"] ?: unrecognized()).str(), obj["language"]?.str(), obj["callout"]?.let { decodeCallout(it.obj()) })
+        return CodeBlock(
+            key,
+            (obj["code"] ?: unrecognized()).str(),
+            obj["language"]?.str(),
+            obj["callout"]?.let {
+                decodeCallout(it.obj())
+            },
+        )
     }
 
     private fun decodeDivider(key: String, obj: JsonObject): DividerBlock {

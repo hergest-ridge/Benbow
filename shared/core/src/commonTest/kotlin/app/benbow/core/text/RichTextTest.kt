@@ -16,12 +16,17 @@ import kotlin.test.assertTrue
 class RichTextTest {
     private val keys = BlockKeys(Random(42))
 
-    private fun RichText.type(at: Int, s: String, end: Int = at): EditResult =
-        applyUserEdit(at, end, s, marksForInsertion(at, end), keys)
+    private fun RichText.type(at: Int, s: String, end: Int = at): EditResult = applyUserEdit(at, end, s, marksForInsertion(at, end), keys)
 
     @Test
     fun typingInsideAndAtEndOfBoldExtendsIt() {
-        val doc = buildRichText(keys) { paragraph { text("a"); text("bold", Mark.Bold); text("z") } }
+        val doc = buildRichText(keys) {
+            paragraph {
+                text("a")
+                text("bold", Mark.Bold)
+                text("z")
+            }
+        }
         val inside = doc.type(3, "X").text
         assertEquals(listOf(MarkSpan(Mark.Bold, 1, 6)), inside.marks)
         val atEnd = doc.type(5, "Y").text

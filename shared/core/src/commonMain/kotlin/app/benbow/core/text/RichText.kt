@@ -4,11 +4,7 @@ package app.benbow.core.text
  * Editor document model: plain [text] with `\n` between paragraphs, one [Paragraph] per line and
  * normalized [marks]. The UI renders it; the codec maps it to Benbow Document JSON.
  */
-data class RichText(
-    val text: String,
-    val paragraphs: List<Paragraph>,
-    val marks: List<MarkSpan> = emptyList(),
-) {
+data class RichText(val text: String, val paragraphs: List<Paragraph>, val marks: List<MarkSpan> = emptyList()) {
     init {
         require(paragraphs.size == text.count { it == '\n' } + 1) {
             "Expected ${text.count { it == '\n' } + 1} paragraphs, got ${paragraphs.size}"
@@ -33,15 +29,13 @@ data class RichText(
     }
 
     /** End offset of paragraph [index], excluding its trailing `\n`. */
-    fun paragraphEnd(index: Int): Int =
-        if (index + 1 < paragraphs.size) paragraphStarts[index + 1] - 1 else text.length
+    fun paragraphEnd(index: Int): Int = if (index + 1 < paragraphs.size) paragraphStarts[index + 1] - 1 else text.length
 
     fun paragraphText(index: Int): String = text.substring(paragraphStarts[index], paragraphEnd(index))
 
     fun paragraphIndices(start: Int, end: Int): IntRange = paragraphIndexAt(start)..paragraphIndexAt(end)
 
-    fun marksCovering(offset: Int): Set<Mark> =
-        marks.filter { it.start <= offset && offset < it.end }.mapTo(mutableSetOf()) { it.mark }
+    fun marksCovering(offset: Int): Set<Mark> = marks.filter { it.start <= offset && offset < it.end }.mapTo(mutableSetOf()) { it.mark }
 
     /** Marks that text typed over `[start, end)` should get, before any explicit user toggles. */
     fun marksForInsertion(start: Int, end: Int): Set<Mark> {
@@ -139,8 +133,7 @@ data class RichText(
         return if (result.size == marks.size && result == marks) this else copy(marks = normalize(result))
     }
 
-    fun removeMark(start: Int, end: Int, mark: Mark): RichText =
-        copy(marks = normalize(marks.subtract(start, end) { it == mark }))
+    fun removeMark(start: Int, end: Int, mark: Mark): RichText = copy(marks = normalize(marks.subtract(start, end) { it == mark }))
 
     fun toggleMark(start: Int, end: Int, mark: Mark): RichText =
         if (hasMark(start, end, mark)) removeMark(start, end, mark) else addMark(start, end, mark)
@@ -206,33 +199,31 @@ data class RichText(
 data class MarkRun(val start: Int, val end: Int, val marks: Set<Mark>)
 
 /** Removes `[start, end)` from spans matching [predicate]. */
-internal fun List<MarkSpan>.subtract(start: Int, end: Int, predicate: (Mark) -> Boolean): List<MarkSpan> =
-    flatMap { span ->
-        if (!predicate(span.mark) || span.end <= start || span.start >= end) {
-            listOf(span)
-        } else {
-            listOfNotNull(
-                MarkSpan(span.mark, span.start, start).takeIf { it.end > it.start },
-                MarkSpan(span.mark, end, span.end).takeIf { it.end > it.start },
-            )
-        }
+internal fun List<MarkSpan>.subtract(start: Int, end: Int, predicate: (Mark) -> Boolean): List<MarkSpan> = flatMap { span ->
+    if (!predicate(span.mark) || span.end <= start || span.start >= end) {
+        listOf(span)
+    } else {
+        listOfNotNull(
+            MarkSpan(span.mark, span.start, start).takeIf { it.end > it.start },
+            MarkSpan(span.mark, end, span.end).takeIf { it.end > it.start },
+        )
     }
+}
 
 /** Merges overlapping or touching spans of equal marks, drops empty ones, sorts deterministically. */
-internal fun normalize(spans: List<MarkSpan>): List<MarkSpan> =
-    spans.filter { it.end > it.start }
-        .groupBy { it.mark }
-        .flatMap { (mark, group) ->
-            val sorted = group.sortedBy { it.start }
-            val merged = ArrayList<MarkSpan>()
-            for (span in sorted) {
-                val last = merged.lastOrNull()
-                if (last != null && span.start <= last.end) {
-                    merged[merged.size - 1] = MarkSpan(mark, last.start, maxOf(last.end, span.end))
-                } else {
-                    merged.add(span)
-                }
+internal fun normalize(spans: List<MarkSpan>): List<MarkSpan> = spans.filter { it.end > it.start }
+    .groupBy { it.mark }
+    .flatMap { (mark, group) ->
+        val sorted = group.sortedBy { it.start }
+        val merged = ArrayList<MarkSpan>()
+        for (span in sorted) {
+            val last = merged.lastOrNull()
+            if (last != null && span.start <= last.end) {
+                merged[merged.size - 1] = MarkSpan(mark, last.start, maxOf(last.end, span.end))
+            } else {
+                merged.add(span)
             }
-            merged
         }
-        .sortedWith(compareBy<MarkSpan>({ it.start }, { it.end }, { it.mark.toString() }))
+        merged
+    }
+    .sortedWith(compareBy<MarkSpan>({ it.start }, { it.end }, { it.mark.toString() }))

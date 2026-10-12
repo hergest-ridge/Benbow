@@ -42,27 +42,19 @@ sealed interface MarkDef {
     data class Size(override val key: String, val step: String) : MarkDef
 }
 
-data class CodeBlock(
-    override val key: String,
-    val code: String,
-    val language: String? = null,
-    val callout: CalloutRef? = null,
-) : Block
+data class CodeBlock(override val key: String, val code: String, val language: String? = null, val callout: CalloutRef? = null) : Block
 
 data class DividerBlock(override val key: String, val variant: String? = null) : Block
 
-data class AttachmentBlock(
-    override val key: String,
-    val ref: String,
-    val width: Double? = null,
-    val caption: String? = null,
-) : Block
+data class AttachmentBlock(override val key: String, val ref: String, val width: Double? = null, val caption: String? = null) : Block
 
 /** Anything this build doesn't understand, kept verbatim (unknown-content rule). */
 data class UnknownBlock(override val key: String, val raw: JsonObject) : Block
 
 const val STYLE_NORMAL = "normal"
-const val SOFT_BREAK = ' '
+
+/** U+2028 LINE SEPARATOR. Written as a code point: invisible characters must never be literal in sources. */
+val SOFT_BREAK: Char = Char(0x2028)
 
 internal val TEXT_STYLES = setOf(STYLE_NORMAL, "h1", "h2", "h3", "blockquote")
 internal val LIST_ITEMS = setOf("bullet", "number", "check")

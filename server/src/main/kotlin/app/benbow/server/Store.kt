@@ -14,11 +14,10 @@ class Store private constructor(private val connection: Connection) : AutoClosea
     val storeId: String = meta("store_id")
     val epoch: Long = meta("epoch").toLong()
 
-    private fun meta(key: String): String =
-        connection.prepareStatement("SELECT value FROM store_meta WHERE key = ?").use { st ->
-            st.setString(1, key)
-            st.executeQuery().use { rs -> if (rs.next()) rs.getString(1) else error("store_meta.$key missing") }
-        }
+    private fun meta(key: String): String = connection.prepareStatement("SELECT value FROM store_meta WHERE key = ?").use { st ->
+        st.setString(1, key)
+        st.executeQuery().use { rs -> if (rs.next()) rs.getString(1) else error("store_meta.$key missing") }
+    }
 
     override fun close() {
         connection.createStatement().use { it.execute("PRAGMA wal_checkpoint(TRUNCATE)") }
@@ -44,14 +43,21 @@ class Store private constructor(private val connection: Connection) : AutoClosea
         }
 
         private fun migrate(connection: Connection) {
-            val version = connection.createStatement().use { st -> st.executeQuery("PRAGMA user_version").use { it.next(); it.getInt(1) } }
+            val version = connection.createStatement().use { st ->
+                st.executeQuery("PRAGMA user_version").use {
+                    it.next()
+                    it.getInt(1)
+                }
+            }
             check(version <= SCHEMA_VERSION) { "Database schema $version is newer than this server ($SCHEMA_VERSION). Update the server." }
             if (version == SCHEMA_VERSION) return
             connection.autoCommit = false
             try {
                 connection.createStatement().use { st ->
                     st.execute("CREATE TABLE store_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-                    st.execute("INSERT INTO store_meta(key, value) VALUES ('store_id', '${UUID.randomUUID()}'), ('epoch', '1'), ('created_at', '${System.currentTimeMillis()}')")
+                    st.execute(
+                        "INSERT INTO store_meta(key, value) VALUES ('store_id', '${UUID.randomUUID()}'), ('epoch', '1'), ('created_at', '${System.currentTimeMillis()}')",
+                    )
                     st.execute("PRAGMA user_version = $SCHEMA_VERSION")
                 }
                 connection.commit()

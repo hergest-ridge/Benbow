@@ -12,8 +12,7 @@ import androidx.compose.ui.platform.ClipEntry
 
 internal fun String.hasDisplayGlyphs(): Boolean = PARAGRAPH_BREAK_GLYPH in this || TAIL_GLYPH in this
 
-internal fun restoreParagraphBreaks(text: String): String =
-    text.replace(PARAGRAPH_BREAK_GLYPH, '\n').replace(TAIL_GLYPH.toString(), "")
+internal fun restoreParagraphBreaks(text: String): String = text.replace(PARAGRAPH_BREAK_GLYPH, '\n').replace(TAIL_GLYPH.toString(), "")
 
 /**
  * Repairs text the editor's default Copy/Cut put on the clipboard. [recentlySelected] is true while

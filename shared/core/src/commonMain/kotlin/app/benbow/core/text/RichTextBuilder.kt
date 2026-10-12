@@ -34,5 +34,4 @@ class RichTextBuilder(private val keys: BlockKeys) {
     }
 }
 
-fun buildRichText(keys: BlockKeys = BlockKeys(), block: RichTextBuilder.() -> Unit): RichText =
-    RichTextBuilder(keys).apply(block).build()
+fun buildRichText(keys: BlockKeys = BlockKeys(), block: RichTextBuilder.() -> Unit): RichText = RichTextBuilder(keys).apply(block).build()

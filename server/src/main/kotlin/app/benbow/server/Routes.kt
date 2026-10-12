@@ -19,6 +19,8 @@ import java.nio.file.Path
 
 class ServerContext(val store: Store, val tlsFingerprint: String, val dataDir: Path)
 
+// KDoc on routes feeds the generated OpenAPI summaries, so ktlint's "no KDoc in blocks" rule is off here.
+@Suppress("ktlint:standard:kdoc")
 fun Application.benbowModule(context: ServerContext) {
     install(ContentNegotiation) { json() }
     routing {

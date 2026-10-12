@@ -3,12 +3,16 @@ package app.benbow.core.content
 /** Plain text for search, previews and notifications (content-format.md#derived-forms). */
 fun Document.toPlainText(includeSpoilers: Boolean = true): String = blocks.joinToString("\n") { block ->
     when (block) {
-        is TextBlock -> block.children
-            .filter { includeSpoilers || "spoiler" !in it.marks }
-            .joinToString("") { it.text }
-            .replace(SOFT_BREAK, '\n')
+        is TextBlock ->
+            block.children
+                .filter { includeSpoilers || "spoiler" !in it.marks }
+                .joinToString("") { it.text }
+                .replace(SOFT_BREAK, '\n')
+
         is CodeBlock -> block.code
+
         is AttachmentBlock -> block.caption.orEmpty()
+
         is DividerBlock, is UnknownBlock -> ""
     }
 }

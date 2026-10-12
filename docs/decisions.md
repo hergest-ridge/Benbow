@@ -26,7 +26,8 @@ Seamless selection, native IME, works on all targets. The spike passed on the S2
 ### ADR-007 Sync = outbox ops + append-only revision DAG + server diff3 merge + HLC LWW metadata [A]
 No CRDT. Conflicts keep both heads. Store identity and epoch protect against restores and wrong servers.
 
-### ADR-008 Server = jlink/jpackage app-image + WinSW Windows service [A]
+### ADR-008 Server = jlink runtime + WinSW Windows service [A]
+Refined in the spike: runtime is Temurin 25 LTS via jlink (JBR has no jmods; jpackage is unnecessary), and WinSW v2.12.0 (NET461, SHA-256 pinned in the build) starts `java.exe`. The server sets `jdk.net.unixdomain.tmpdir` itself (some Windows profiles break NIO in %TEMP%).
 Autostart before login, restart on failure, no Docker, no system JRE. GraalVM native-image optional later.
 
 ### ADR-009 Attachments = immutable files with human-readable paths in a user-chosen folder [A]

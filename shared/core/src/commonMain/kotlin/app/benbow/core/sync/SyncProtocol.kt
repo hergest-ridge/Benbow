@@ -12,13 +12,8 @@ sealed interface SyncOp {
 
 @Serializable
 @SerialName("entry.create")
-data class CreateEntry(
-    override val opId: String,
-    override val entryId: String,
-    val kind: String,
-    val day: String,
-    val createdAt: Long,
-) : SyncOp
+data class CreateEntry(override val opId: String, override val entryId: String, val kind: String, val day: String, val createdAt: Long) :
+    SyncOp
 
 @Serializable
 @SerialName("entry.revision.put")
@@ -32,13 +27,7 @@ data class PutRevision(
 
 @Serializable
 @SerialName("entry.meta.set")
-data class SetField(
-    override val opId: String,
-    override val entryId: String,
-    val field: String,
-    val value: String?,
-    val hlc: Hlc,
-) : SyncOp
+data class SetField(override val opId: String, override val entryId: String, val field: String, val value: String?, val hlc: Hlc) : SyncOp
 
 @Serializable
 enum class OpStatus { Applied, Duplicate, Merged, Conflict, Rejected }

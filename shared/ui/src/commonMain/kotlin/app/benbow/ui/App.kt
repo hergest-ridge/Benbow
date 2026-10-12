@@ -54,8 +54,20 @@ private fun EditorSpikeScreen() {
                     modifier = Modifier.weight(1f),
                 )
                 // Spike-only switch for performance checks: sample → 5k → 20k characters.
-                TextButton(onClick = { size = when (size) { 0 -> 5_000; 5_000 -> 20_000; else -> 0 } }) {
-                    Text(when (size) { 0 -> "5k"; 5_000 -> "20k"; else -> "1k" })
+                TextButton(onClick = {
+                    size = when (size) {
+                        0 -> 5_000
+                        5_000 -> 20_000
+                        else -> 0
+                    }
+                }) {
+                    Text(
+                        when (size) {
+                            0 -> "5k"
+                            5_000 -> "20k"
+                            else -> "1k"
+                        },
+                    )
                 }
             }
         },

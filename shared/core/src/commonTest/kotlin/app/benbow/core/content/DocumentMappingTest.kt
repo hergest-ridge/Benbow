@@ -70,7 +70,9 @@ class DocumentMappingTest {
         val code = doc.blocks[1] as CodeBlock
         assertEquals("val x = 1\nval y = 2", code.code)
         assertEquals("c", code.callout?.key)
-        val divider = DocumentCodec.decode("""{"v":1,"blocks":[{"_key":"d","_type":"divider","variant":"wave"},{"_key":"u","_type":"x","y":1}]}""")
+        val divider = DocumentCodec.decode(
+            """{"v":1,"blocks":[{"_key":"d","_type":"divider","variant":"wave"},{"_key":"u","_type":"x","y":1}]}""",
+        )
         assertEquals(divider, divider.toRichText(keys).toDocument())
     }
 
@@ -81,10 +83,9 @@ class DocumentMappingTest {
         return result.copy(marks = app.benbow.core.text.normalize(result.marks))
     }
 
-    private fun split(span: app.benbow.core.text.MarkSpan, at: Int) =
-        if (at < span.start || at >= span.end) {
-            listOf(span)
-        } else {
-            listOfNotNull(span.copy(end = at).takeIf { it.end > it.start }, span.copy(start = at + 1).takeIf { it.end > it.start })
-        }
+    private fun split(span: app.benbow.core.text.MarkSpan, at: Int) = if (at < span.start || at >= span.end) {
+        listOf(span)
+    } else {
+        listOfNotNull(span.copy(end = at).takeIf { it.end > it.start }, span.copy(start = at + 1).takeIf { it.end > it.start })
+    }
 }

@@ -25,7 +25,7 @@ Soft delete via `deleted_at`. Metadata fields carry `hlc` for LWW. The server is
 Why one entity: posts, notes, journal entries and comments share editing, revisions, attachments, tags and search. The feed, day and calendar views are queries over `kind`/`day`. A quick note can later be "promoted" by changing `kind`.
 
 ## revision — immutable
-`id, entry_id, parents (JSON, 1 normally, 2 for merges), title, body_md, body_sha256, created_at, device_id, origin (edit|merge|restore|import)`.
+`id, entry_id, parents (JSON, 1 normally, 2 for merges), title, body (canonical Document JSON, see content-format.md), body_v (format version), body_sha256, created_at, device_id, origin (edit|merge|restore|import)`.
 The server denormalizes the head into `entry_text(entry_id, title, plain_text)` for FTS5.
 
 ## Tags
@@ -47,7 +47,7 @@ The server denormalizes the head into `entry_text(entry_id, title, plain_text)` 
 - `reminder(id, target_type (entry|event|none), target_id?, fire_at?, rrule?, message, done_at?, deleted_at)`. Scheduled locally on each device (no server push).
 
 ## Templates (P1)
-`template(id, name, kind, body_md with placeholders {{date}} {{weekday}} {{prompt}} {{month}}, default_tags, suggest_rule?)`.
+`template(id, name, kind, body (Document JSON, placeholders such as {{date}} {{weekday}} {{prompt}} {{month}} inside span text), default_tags, suggest_rule?)`.
 
 ## Ink (P2)
 `ink_layer(id, entry_id, head_ink_rev)`, `ink_revision(id, layer_id, parents, format_version, strokes_blob)` (see editor.md).

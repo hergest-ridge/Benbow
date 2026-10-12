@@ -2,6 +2,9 @@
 
 An interactive diary, life timeline and living notebook built for one person (the owner). None of the existing apps fit, so we borrow small pieces from many and build our own.
 
+## Identity
+The name comes from the **Admiral Benbow inn** in *Treasure Island* (Stevenson, public domain) and the Benbow Inn in *Treasure Planet*: Jim Hawkins's home, a cozy starting point for adventures. Jim tells the story as his own written account, which is where the journal comes from. Mood: a warm inn by the sea, lantern light, a hearth, parchment and ink, maps, a compass, brass, a ship's log. *Treasure Planet*'s retro-futurism (solar sails, nebulae) can serve as an occasional accent. It informs the app icon and light touches of the visual style (see ux.md#visual-language). Use only original artwork, no Disney assets.
+
 ## Pillars (in priority order)
 1. **Data is sacred.** Versioned, backed up, verifiable, exportable from v1 (see `data-safety.md`).
 2. **Pleasant, fast, native UX.** Instant open, smooth scrolling, seamless text editing (see `ux.md`).
@@ -16,7 +19,7 @@ P0 = MVP (Phases 2–3), P1 = soon after, P2 = later, P3 = maybe. Numbers refer 
 |---|---|---|---|
 | 3 | Journal entries tied to a day, several per day | P0 | Configurable "day starts at" offset |
 | 5 | High-quality rich editor (WYSIWYG, seamless text, no visible syntax) | P0 | Biggest technical risk. Spike first (`editor.md`) |
-| 6 | Portable storage + exporters (Markdown, plain text, HTML, PDF), formatting not bound by Markdown | P0 | ADR-015 under review. Metadata kept in DB, front matter on MD export |
+| 6 | Portable Text-based storage + exporters (Markdown, plain text, HTML, PDF). Formatting not bound by Markdown | P0 | ADR-015/017, content-format.md. Metadata in DB, front matter on MD export |
 | 8b | Quick note (capture in seconds) | P0 | Composer bar, widget, QS tile, share target, shortcut |
 | — | Offline-first Android + LAN sync + revisions + backups | P0 | Core of the product |
 | — | Server: Windows autostart, standalone, API v1 + docs page | P0 | |

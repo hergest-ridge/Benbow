@@ -13,7 +13,7 @@ Conflicts are rare with one human. CRDTs (Automerge, Loro, Yjs) add opaque binar
 - A local write = cache update + outbox insert in one transaction.
 
 ## Revisions from drafts
-A draft becomes a revision on: editor close, app backgrounded, 30 s idle, or every 2 min of continuous typing. Op: `entry.revision.put {entry_id, rev_id, parents:[base_rev_id], title, body_md, body_sha256}`.
+A draft becomes a revision on: editor close, app backgrounded, 30 s idle, or every 2 min of continuous typing. Op: `entry.revision.put {entry_id, rev_id, parents:[base_rev_id], title, body, body_v, body_sha256}` (body = canonical Document JSON).
 
 ## Op types (v1)
 `entry.create`, `entry.meta.set {field, value, hlc}` (day, kind, favorite, pinned, mood, appearance, space),
@@ -29,7 +29,7 @@ Per-op result: `applied | duplicate | merged | conflict | rejected(reason)`. `re
 ## Revision conflicts (server)
 When `parents[0] != head`:
 1. Store the incoming revision anyway (DAG sibling). It is never lost.
-2. Try a diff3 merge (base = parent, ours = head, theirs = incoming) at the paragraph/line level, using the shared code in `shared/core`.
+2. Try a diff3 merge (base = parent, ours = head, theirs = incoming) over the canonical serialization, where one line = one block (content-format.md), using the shared code in `shared/core`. Then validate: the result must decode, and `_key`s must be unique (a duplicate counts as a conflict).
 3. Clean merge → new merge revision with two parents, result `merged`.
 4. Overlapping changes → entry gets `conflict_heads=[head, incoming]`, result `conflict`. Clients show a banner with both versions side by side. The user's resolution becomes a revision whose parents are both heads.
 

@@ -27,6 +27,12 @@ Go, AGPL-3.0, v1.9.3 (May 2026), Linux-only, repo moved to `github.com/monbooru/
 - Distribution: single binary ("lite") or bundled with ffmpeg + ONNX Runtime. Docker optional. REST API under `/api/v1` (off by default), **OpenAPI spec + built-in docs**, optional password, LAN-only (not hardened for the internet).
 - **What we take:** standalone binary model, SQLite WAL + single writer, separating data dir from media, files kept as ordinary files, SHA-256, user_version migrations, built-in API docs. **Where we differ:** `synchronous=FULL`, append-only revisions, verified backups, Windows service, sync protocol.
 
+## Pinned in the scaffold (2026-10-12, see gradle/libs.versions.toml)
+Gradle 9.8.1 · Kotlin 2.4.21 · AGP 9.4.1 (compileSdk 37) · CMP 1.12.1 (material3 1.12.0-alpha03, Hot Reload bundled: `hotRun`, `hotDev`, `hotMcpServer`) · Ktor 3.6.0 · kotlinx-serialization 1.11.0 · coroutines 1.11.0 · kotest 6.2.5 · logback 1.6.5 · JVM toolchain 17.
+Available but not yet used: SQLDelight 2.4.1, Koin 4.2.2, kotlinx-datetime 0.8.0, Okio 3.18.2, sqlite-jdbc 3.53.4.0, CMP lifecycle 2.11.0, CMP navigation3 1.1.2, Roborazzi 1.76.0, androidx.sqlite bundled 2.7.1, WorkManager 2.12.0.
+AGP 9 notes: KMP libraries use `com.android.kotlin.multiplatform.library` with `kotlin { android { ... } }`. The Android app module uses built-in Kotlin (no `kotlin-android` plugin).
+Web observation: Cyrillic text renders on wasm through the font fallback, but that downloads fonts. Bundle fonts for offline LAN use.
+
 ## Sources
 - https://blog.jetbrains.com/kotlin/2026/06/kotlin-2-4-0-released/
 - https://kotlinlang.org/docs/multiplatform/compose-compatibility-and-versioning.html

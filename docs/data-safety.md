@@ -15,6 +15,7 @@ Losing or corrupting data is unacceptable from v1. Every storage, sync, migratio
 - **S10 Safe migrations.** Automatic backup before every schema migration. Migrations are forward-only and tested on fixtures. The server refuses to open a DB with a newer schema than it knows.
 - **S11 Store identity.** Each data store has a `store_id` and `epoch`. Clients detect a different or restored server and never mix data blindly (see `sync.md#store-identity`).
 - **S12 Drafts survive crashes.** The editor persists drafts locally on a debounce (≤500 ms) and on lifecycle stop. Killing the app loses at most the last half-second of typing.
+- **S13 Format safety.** Unknown block types and fields survive every read/write byte-for-byte. A document with a newer format `v` opens read-only. Old revisions are never rewritten into a new format version (readers support every version). The codec is property-tested (content-format.md).
 
 ## Server storage layout
 ```
@@ -37,7 +38,7 @@ Media paths are human-readable on purpose: if the app ever dies, the files can s
 - **DB snapshots** via the SQLite online backup API or `VACUUM INTO` into `backups/db/benbow-YYYYMMDD-HHMMSS.sqlite`. Triggers: hourly while there have been changes, daily, before migrations and updates, and on demand.
 - **Retention (GFS):** 24 hourly, 14 daily, 8 weekly, 12 monthly, plus all pre-migration snapshots for 90 days.
 - **Second location:** a second local disk (owner's choice, ADR-010). It gets copied DB snapshots plus an incremental media mirror (immutable files, so copying by hash is enough). Warn loudly if the target disk is missing or full. Cloud targets come later, and they must be encrypted.
-- **Markdown mirror:** periodic export of every entry to `export/YYYY/MM/YYYY-MM-DD HHmm <title>.md` with YAML front matter (id, kind, day, tags, mood, favorite, attachments as relative links). This is the disaster-recovery format that needs no app. Optionally a local git repo for free history.
+- **Export mirror:** periodic export of every entry to `export/YYYY/MM/YYYY-MM-DD HHmm <title>.md` (rich Markdown with YAML front matter: id, kind, day, tags, mood, favorite, attachments as relative links) **plus** a `.json` sidecar with the canonical Document and metadata (lossless). This is the disaster-recovery format that needs no app. Optionally a local git repo for free history.
 - **Status visible:** the admin page and the client settings show last backup time, last verification, and last mirror sync. The UI warns if the latest backup is older than 48 hours.
 
 ## Integrity checks

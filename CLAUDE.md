@@ -3,12 +3,12 @@
 Personal journal / life-feed app ("my feed of everything"). Single user, many devices.
 Android app (primary), desktop + web clients, self-hosted LAN server on Windows (standalone, autostart, no Docker).
 
-**Status:** Phase 0, docs only, no code yet. Most ADRs are accepted. The content format (ADR-015) is under discussion.
+**Status:** Phase 1 (scaffold + spikes). All Phase 0 ADRs are accepted. ADR-006 (editor) is gated by the spike.
 
 ## Non-negotiables
 1. **No data loss or corruption, ever.** Read `docs/data-safety.md` before touching storage, sync, migrations, deletion or backups. Never weaken an invariant to make something pass. Ask instead.
 2. **UX quality is a core feature.** It should feel native, instant and smooth (Telegram-level). See `docs/ux.md`.
-3. **Portability.** Content is stored in an open, documented, versioned format, and the export mirror (Markdown + raw) is always readable without the app. No lock-in.
+3. **Portability.** Content is stored as Benbow Document (Portable Text-based JSON, `docs/content-format.md`), and the export mirror (Markdown + JSON) is always readable without the app. No lock-in.
 
 ## Docs map (read only what the task needs)
 | File | Contents |
@@ -18,7 +18,8 @@ Android app (primary), desktop + web clients, self-hosted LAN server on Windows 
 | `docs/data-model.md` | Entities and fields (draft) |
 | `docs/data-safety.md` | Invariants, storage layout, revisions, backups, migrations, recovery |
 | `docs/sync.md` | Offline outbox, push/pull protocol, conflicts, blobs, pairing, API versioning |
-| `docs/editor.md` | Editor approach, Markdown subset, round-trip rules, ink-layer plan, spike checklist |
+| `docs/content-format.md` | **Canonical content format** (Portable Text-based JSON): schema, tokens, canonical serialization, exports |
+| `docs/editor.md` | Editor approach, formatting scope, text mapping, ink-layer plan, spike checklist |
 | `docs/ux.md` | UX principles, screens, motion, journaling psychology |
 | `docs/decisions.md` | ADR log. Check it before re-deciding anything |
 | `docs/roadmap.md` | Phases, current phase, exit criteria |
@@ -35,4 +36,15 @@ Android app (primary), desktop + web clients, self-hosted LAN server on Windows 
 - Use subagents only for broad searches. Keep the main context lean.
 
 ## Commands
-_To be filled in after the scaffold (Phase 1)._
+- `./gradlew check`: the single gate (tests for all modules + Android lint).
+- `./gradlew :apps:desktop:run`: desktop app. `./gradlew :apps:desktop:hotRun`: desktop app with Compose Hot Reload. `hotMcpServer`: MCP server so an agent can screenshot and drive the running app.
+- `./gradlew :apps:android:installDebug`: install on a connected phone.
+- `./gradlew :apps:web:wasmJsBrowserDevelopmentRun`: web client dev server.
+- `./gradlew :server:run`: server on port 8765 (`GET /api/v1/info`).
+
+## Environment gotchas (this machine)
+- If a JVM fails with "Unable to establish loopback connection", Java can't create unix sockets in `%TEMP%`. Run with `JAVA_TOOL_OPTIONS=-Djdk.net.unixdomain.tmpdir=C:\projects\Benbow\.tmp` (gitignored dir).
+- `GRADLE_USER_HOME=C:\Android\.gradle`. `ANDROID_HOME` points to a missing path, so `local.properties` (gitignored) sets `sdk.dir`.
+- `curl` (schannel) can't reach `dl.google.com`, but Java can. Use Java/Gradle for Google Maven lookups.
+- Stopping a background `:server:run` or `wasmJsBrowserDevelopmentRun` leaves the app process (java/node) alive. Free ports 8765/8080 with `netstat -ano` + `taskkill //PID <pid> //F //T`.
+- On a clean build, `kotlinWasmStoreYarnLock` may fail with "yarn.lock doesn't exist". Run `./gradlew kotlinWasmNpmInstall` once, then retry.

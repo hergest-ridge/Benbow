@@ -1,16 +1,16 @@
 # Roadmap
 
-Vertical slices. Each phase ends with a usable, tested increment. **Current phase: 0.**
+Vertical slices. Each phase ends with a usable, tested increment. **Current phase: 1.**
 
-## Phase 0: Foundations (docs) ✅ in progress
-Docs, research, proposed ADRs, open questions. **Exit:** owner answers open-questions and ADRs move to Accepted.
+## Phase 0: Foundations (docs) ✅ done 2026-10-12
+Docs, research, ADRs accepted by the owner.
 
 ## Phase 1: Scaffold + de-risking spikes
-1. Gradle multi-module KMP skeleton (modules from architecture.md), version catalog, convention plugins, `./gradlew check`, formatting/lint (ktlint or detekt), `.editorconfig`, fill the CLAUDE.md "Commands" section. Android app shell installable on the S24+ from the first scaffold (ADR-003).
-2. **Editor spike** (editor.md checklist) on Desktop + Android (S24+, Samsung Keyboard and Gboard), then a Web sanity check. Scope depends on ADR-015 and the must-have formatting list.
+1. ✅ (2026-10-12, lint/format still pending) Gradle multi-module KMP skeleton (modules from architecture.md), version catalog, convention plugins, `./gradlew check`, formatting/lint (ktlint or detekt), `.editorconfig`, fill the CLAUDE.md "Commands" section. Android app shell installable on the S24+ from the first scaffold (ADR-003).
+2. **Editor spike** (editor.md checklist) on Desktop + Android (S24+, Samsung Keyboard and Gboard), then a Web sanity check. Scope: ADR-017 (editor.md).
 3. **Server packaging spike:** Ktor + SQLite hello-world → jlink/jpackage app-image → WinSW service. Survives reboot, restarts on crash, serves `/api/v1/info` and `/api/docs`.
 4. **Sync core:** `shared/core` HLC, diff3 merge, op model + the deterministic simulation test harness (no UI).
-5. Markdown codec + property tests.
+5. Document codec (content-format.md): decode/encode, canonicalizer, plain-text + Markdown exporters, property tests.
 **Exit:** spikes pass or fallbacks are chosen. ADR-006 and ADR-008 move to Accepted or get revised.
 
 ## Phase 2: Safe core MVP (text only, dogfood-ready)

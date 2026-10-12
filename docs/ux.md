@@ -25,7 +25,7 @@ Desktop and web: navigation rail + adaptive list-detail panes (Material 3 adapti
 Composer on Home/Feed, launcher app shortcut, home-screen widget (Glance), Quick Settings tile, share target (text, links, media → note), notification action from reminders. Voice: hold-to-record like Telegram. Transcription is P2 (on-device only).
 
 ## Visual language
-Material 3 + Expressive components and motion, behind our `BenbowTheme` tokens. Optional dynamic color, curated warm palettes. Bundled fonts with full Cyrillic (e.g. a UI sans like Onest/Manrope/Inter and a reading serif like Literata/Lora for journal text; final pick in the design pass). Fonts must be bundled for offline use, including on web. Note backgrounds are theme-aware color pairs + optional illustration/texture.
+The identity is the "Admiral Benbow" inn (vision.md#identity): a cozy home base, warm light, parchment, ink, maps. Apply it lightly through the palette (warm neutrals, lantern amber, sea blue), paper textures, the icon, empty states and small illustrations. Avoid pirate kitsch and themed chrome that gets in the way. Material 3 + Expressive components and motion, behind our `BenbowTheme` tokens. Optional dynamic color, curated warm palettes. Bundled fonts with full Cyrillic (e.g. a UI sans like Onest/Manrope/Inter and a reading serif like Literata/Lora for journal text; final pick in the design pass). Fonts must be bundled for offline use, including on web. Note backgrounds are theme-aware color pairs + optional illustration/texture.
 
 ## Psychology
 Evidence-informed practices exposed as **optional** templates, prompts and features. Never forced.

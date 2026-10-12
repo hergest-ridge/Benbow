@@ -3,9 +3,10 @@
 ## Stack summary
 | Layer | Choice | Why |
 |---|---|---|
-| Language | Kotlin 2.4 everywhere (clients and server) | One language and shared types: models, Markdown codec, sync and merge logic, API DTOs. Less AI context |
+| Language | Kotlin 2.4 everywhere (clients and server) | One language and shared types: models, content codec, sync and merge logic, API DTOs. Less AI context |
 | UI | Compose Multiplatform 1.12.x: Android, Desktop (JVM), Web (wasmJs) | One UI codebase for three targets. Android is the primary target. Web is Beta (see research.md) |
 | Design | Material 3 + Expressive APIs (experimental opt-in), wrapped in our own `BenbowTheme` tokens | Expressive is still alpha in CMP. Our wrapper absorbs API churn |
+| Content | Benbow Document v1 = Portable Text-based JSON (content-format.md), exporters to MD/HTML/text/PDF | Rich formatting, lossless 1:1 storage, stable block keys |
 | Client DB | SQLite via SQLDelight 2.x (Android and JVM) | SQL-first and transparent. Migrations verified by tooling. FTS5 |
 | Web client | Thin, online-only, served by the server | Web SQLite persistence is immature. On LAN the server is always next to the browser |
 | Server | Ktor 3.x on JVM, SQLite (xerial sqlite-jdbc) via SQLDelight | Shares code with clients. Stable and well known |
@@ -30,11 +31,13 @@
 The server being unreachable is normal: clients keep working and sync later.
 
 ## Module layout (start small, split when a module exceeds ~15k LOC or build times hurt)
+Scaffolded so far: `shared/core`, `shared/ui`, `apps/{android,desktop,web}`, `server`. `shared/client` arrives with Phase 2. `build-logic/` arrives only once duplication between build scripts starts to hurt.
+JVM toolchain 17 for all modules (foojay auto-provisioning). Namespace `app.benbow`.
 ```
-build-logic/        Gradle convention plugins
+build-logic/        Gradle convention plugins (later)
 gradle/libs.versions.toml
 shared/core/        KMP, all targets incl. server JVM. Pure Kotlin: ids (UUIDv7), time/day logic, domain
-                    model, Markdown codec (RichDoc <-> MD), sync protocol DTOs, diff3 merge, HLC, validation
+                    model, Document codec + canonicalizer + exporters/importers, sync protocol DTOs, diff3 merge, HLC, validation
 shared/client/      KMP android/jvm/wasm: Ktor API client, repository interfaces.
                     `nonWebMain`: SQLDelight cache, outbox, sync engine. `wasmJsMain`: remote-only repositories
 shared/ui/          CMP android/jvm/wasm: BenbowTheme/design system, editor, screens, navigation, ViewModels

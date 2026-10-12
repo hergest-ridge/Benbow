@@ -1,0 +1,33 @@
+# Gradle / Kotlin
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+.kotlin/
+local.properties
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.fleet/
+
+# Android
+captures/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Runtime data (never commit real journal data)
+/data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.log
+
+# Claude Code local settings
+.claude/settings.local.json

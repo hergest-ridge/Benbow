@@ -1,0 +1,42 @@
+# Research snapshot (2026-10-12)
+
+Re-verify exact versions at scaffold time. Facts below were gathered from web sources on the date above.
+
+## Kotlin / Compose
+- **Kotlin 2.4.0** (June 2026): context parameters, explicit backing fields stable, stable `Uuid` API, Wasm incremental compilation on by default.
+- **Compose Multiplatform 1.12.1** (latest stable as of Sept 2026) maps to Jetpack Compose 1.12.1. Platforms: Android API 21+, Windows 10+, macOS 13+, Linux, web (WasmGC browsers), iOS 14+.
+- **Web target is Beta** (since CMP 1.9.0, Sept 2025). No stable announcement found. CMP 1.11 reworked web touch scrolling and renamed `WebElementView` → `HtmlElementView` (DOM interop). CMP 1.12 added automatic web font fallback that **downloads Noto subsets on demand**, so bundle fonts for offline LAN use.
+- CMP 1.10: common `@Preview`, Navigation 3 on all targets, **Compose Hot Reload stable**.
+- CMP 1.12: **experimental MCP server in Compose Hot Reload** (AI agents can reload, take screenshots, inspect the semantics tree, simulate input, read logs on desktop) and desktop Window API v2 (experimental).
+- **Material 3 in CMP:** CMP 1.12 ships `org.jetbrains.compose.material3:1.12.0-alpha03` (based on Jetpack Material3 1.5.0-alpha22). `MaterialExpressiveTheme`, `MotionScheme.expressive()` and others exist behind `@ExperimentalMaterial3ExpressiveApi`. Expect API churn, so wrap them.
+- **Jetpack Compose 1.12** (BOM 2026.08.00, Aug 2026): **rich text editing in `BasicTextField`**: `TextFieldBuffer.addStyle(SpanStyle|ParagraphStyle)`, `getSpanStyles()/getParagraphStyles()` → `TrackedRange`, `TextFieldState.textStyles`, `originalTextStyles`. Formatting and custom annotations persist across config changes. Also `SelectionState` for `SelectionContainer`. Requires compileSdk 37, AGP 9.1.1+. Not stated: undo of styles, inline content in text fields (verify in the spike).
+- Rich editor libraries: **compose-rich-editor** (MohamedRejeb) 1.0.0-rc14 (Compose 1.10.3), `RichTextState`, Markdown/HTML import/export, CMP. **ComposeTextEditor** (Wavesonics/Darkrock) reimplements text entry from scratch because `BasicTextField` used to be too limited.
+
+## Persistence (KMP)
+- Room 3.0 alpha: wasmJs runtime resolves, but room-paging lacks wasmJs.
+- SQLDelight web worker driver is in-memory by default. OPFS persistence is community-maintained (May 2026). Teams report moving web to thin clients. → Web = thin client (ADR-003).
+
+## Ktor
+- Ktor 3.4.x docs: OpenAPI generation through the **compiler extension in the Ktor Gradle plugin** (`ktor { openApi { ... } }`) + runtime annotations `ktor-server-routing-openapi`. Swagger UI plugin can serve the spec built from routing (`OpenApiDocSource.Routing`).
+
+## Monbooru (reference for standalone LAN apps)
+Go, AGPL-3.0, v1.9.3 (May 2026), Linux-only, repo moved to `github.com/monbooru/monbooru`.
+- Pure-Go SQLite (`modernc.org/sqlite`), **one SQLite file per gallery**, DB + thumbnails in a separate data dir. **Media stays as ordinary files in place** (removing the app leaves images intact). SHA-256 dedup.
+- Pragmas (`internal/db/db.go`): `busy_timeout(5000)`, `foreign_keys(on)`, `journal_mode(wal)`, `synchronous(normal)`, `cache_size(-1024)`, `temp_store(memory)`, `mmap_size(64MB)`. **Single write connection + read pool** ("WAL serialises writers").
+- Idempotent bootstrap migrations tracked with `PRAGMA user_version`, `PRAGMA optimize` at startup, `VACUUM` + `wal_checkpoint(TRUNCATE)`.
+- Distribution: single binary ("lite") or bundled with ffmpeg + ONNX Runtime. Docker optional. REST API under `/api/v1` (off by default), **OpenAPI spec + built-in docs**, optional password, LAN-only (not hardened for the internet).
+- **What we take:** standalone binary model, SQLite WAL + single writer, separating data dir from media, files kept as ordinary files, SHA-256, user_version migrations, built-in API docs. **Where we differ:** `synchronous=FULL`, append-only revisions, verified backups, Windows service, sync protocol.
+
+## Sources
+- https://blog.jetbrains.com/kotlin/2026/06/kotlin-2-4-0-released/
+- https://kotlinlang.org/docs/multiplatform/compose-compatibility-and-versioning.html
+- https://kotlinlang.org/docs/multiplatform/whats-new-compose-112.html
+- https://kotlinlang.org/docs/multiplatform/whats-new-compose-111.html
+- https://kotlinlang.org/docs/multiplatform/whats-new-compose-110.html
+- https://blog.jetbrains.com/kotlin/2025/09/compose-multiplatform-1-9-0-compose-for-web-beta/
+- https://android-developers.googleblog.com/2026/08/jetpack-compose-august-2026-release.html
+- https://kotlinlang.org/api/compose-multiplatform/material3/androidx.compose.material3/-material-expressive-theme.html
+- https://ktor.io/docs/openapi-spec-generation.html
+- https://github.com/monbooru/monbooru (redirect from leqwin/monbooru), https://pkg.go.dev/github.com/leqwin/monbooru@v1.9.3
+- https://slack-chats.kotlinlang.org/t/33164808/room-3-0-wasmjs-room3-paging-missing-wasmjs-target-how-to-us
+- https://klibs.io/project/Wavesonics/ComposeTextEditorLibrary

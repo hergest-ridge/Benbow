@@ -13,7 +13,9 @@ CREATE TABLE entry (
     preview TEXT NOT NULL DEFAULT '',
     conflict_heads TEXT NOT NULL DEFAULT '[]',
     fields TEXT NOT NULL DEFAULT '{}',
-    updated_at INTEGER NOT NULL
+    updated_at INTEGER NOT NULL,
+    -- HLC of each field value, so a re-push after a server restore keeps last-writer-wins correct.
+    field_clocks TEXT NOT NULL DEFAULT '{}'
 );
 
 CREATE INDEX entry_by_day ON entry(day, created_at);
@@ -62,8 +64,8 @@ WHERE json_extract(fields, '$.deleted') IS 'true'
 ORDER BY updated_at DESC;
 
 upsertEntry:
-INSERT INTO entry(id, kind, day, created_at, head_rev, body, title, preview, conflict_heads, fields, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO entry(id, kind, day, created_at, head_rev, body, title, preview, conflict_heads, fields, updated_at, field_clocks)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
     kind = excluded.kind,
     day = excluded.day,
@@ -73,7 +75,12 @@ ON CONFLICT(id) DO UPDATE SET
     preview = excluded.preview,
     conflict_heads = excluded.conflict_heads,
     fields = excluded.fields,
-    updated_at = excluded.updated_at;
+    updated_at = excluded.updated_at,
+    field_clocks = excluded.field_clocks;
+
+-- Everything a device knows, for reconciliation after a server restore.
+allEntries:
+SELECT id, kind, day, created_at, head_rev, body, fields, field_clocks FROM entry;
 
 updateHead:
 UPDATE entry SET head_rev = ?, body = ?, title = ?, preview = ?, updated_at = ? WHERE id = ?;
@@ -88,7 +95,7 @@ deleteAllEntries:
 DELETE FROM entry;
 
 updateFields:
-UPDATE entry SET fields = ?, updated_at = ? WHERE id = ?;
+UPDATE entry SET fields = ?, field_clocks = ?, updated_at = ? WHERE id = ?;
 
 selectDraft:
 SELECT * FROM draft WHERE entry_id = ?;

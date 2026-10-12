@@ -14,7 +14,7 @@ Docs, research, ADRs accepted by the owner.
 **Exit:** ✅ spikes passed, ADR-006 and ADR-008 accepted (with refinements).
 
 ## Phase 2: Safe core MVP (text only, dogfood-ready)
-Slices: **2.1 server storage + sync + pairing ✅** · **2.2 backups ✅** · **2.3 client data layer (local DB, outbox, sync engine, pinned TLS) ✅** · **2.4 screens (connect, journal by day, editor autosave, quick note, history, trash) ✅** · 2.5 drills (kill/airplane/restore).
+Slices: **2.1 server storage + sync + pairing ✅** · **2.2 backups ✅** · **2.3 client data layer (local DB, outbox, sync engine, pinned TLS) ✅** · **2.4 screens (connect, journal by day, editor autosave, quick note, history, trash) ✅** · **2.5 drills (kill/airplane/restore), restore + reconciliation, background sync, Keystore token ✅**.
 Server: entries, revisions, tags (basic), change_log, push/pull, pairing, backups (snapshots + verification + retention + Markdown mirror), integrity checks, admin page, OpenAPI docs.
 Android: connect/pair, journal by day, editor with autosave drafts, quick-note composer, offline outbox, sync status, revision history (view/restore), trash.
 Desktop: same screens via shared UI.

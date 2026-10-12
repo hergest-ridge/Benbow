@@ -49,6 +49,7 @@ When `parents[0] != head`:
 - Different `store_id` → the client refuses to sync and asks the user (new server? re-pair, keep local cache).
 - `epoch` increased (server restored from backup) → client runs reconciliation: it sends the IDs and revision IDs it knows, the server answers with what it lacks, and the client re-pushes those. This is how device caches heal a restored server.
 - Server cursor lower than client cursor without an epoch change → treat as a restore and reconcile.
+- Implemented (server 0.3.0): `info.cursor`, `POST /api/v1/sync/reconcile {entries:[{id, head}]}` → `{missing_entries, missing_revisions}`. The client then pushes `entry.create` for missing entries, its head revision without parents for missing heads (if the server has an older head, both are kept as a conflict; heads still in the outbox go with their real parents) and every field value with its original HLC (stored locally in `entry.field_clocks`), then resets the cursor to 0 for a full pull. Restores bump the epoch past every epoch the data folder has seen (`--restore`, or the startup high-water check for hand-copied files).
 
 ## Blobs (attachments)
 1. Client copies the media to private storage, computes SHA-256, creates the attachment row (`local`) and links it to the entry. The entry can sync before the blob arrives.
@@ -59,10 +60,10 @@ When `parents[0] != head`:
 
 ## Sync triggers
 App start and foreground, connectivity change, local change (debounced 2 s), periodic WorkManager (15 min, network required), manual pull-to-refresh. Exponential backoff with jitter.
-Implemented (`SyncController`): request (start/foreground, pull-to-refresh, after pairing), local change after 2 s, every 2 min while in the foreground, backoff 5 s → 5 min with ±20% jitter. Not yet: connectivity change, WorkManager.
+Implemented (`SyncController`): request (start/foreground, pull-to-refresh, after pairing), local change after 2 s, every 2 min while in the foreground, backoff 5 s → 5 min with ±20% jitter. Android: default-network callback (back online → sync), WorkManager periodic sync (15 min, network required) and a one-off sync 5 s after leaving the app, which also survives the process being killed.
 
-## Implemented endpoints (server 0.2.0)
-`GET /api/v1/info` · `POST /api/v1/pair` (code from the admin page) · bearer-protected: `POST /api/v1/sync/push` (max 500 ops, 409 on protocol mismatch), `GET /api/v1/sync/pull?cursor=&limit=` (≤500), `GET /api/v1/entries/{id}/revisions`, `GET /api/v1/revisions/{id}`. Admin (`/`, `/admin/*`) only from loopback and same-origin. Rules: `SyncRules` in `shared/core` over `SqliteSyncStore`; the shared simulation (`shared/testing`) runs against both the in-memory and the SQLite store.
+## Implemented endpoints (server 0.3.0)
+`GET /api/v1/info` · `POST /api/v1/pair` (code from the admin page) · bearer-protected: `POST /api/v1/sync/push` (max 500 ops, 409 on protocol mismatch), `GET /api/v1/sync/pull?cursor=&limit=` (≤500), `GET /api/v1/entries/{id}/revisions`, `GET /api/v1/revisions/{id}`, `POST /api/v1/sync/reconcile` (≤2000 entries). Admin (`/`, `/admin/*`) only from loopback and same-origin. Rules: `SyncRules` in `shared/core` over `SqliteSyncStore`; the shared simulation (`shared/testing`) runs against both the in-memory and the SQLite store.
 
 Client side (`shared/client`): `Pairing.probe(host, port)` connects with first-contact trust and shows the certificate fingerprint for the user to compare with the admin page; `Pairing.pair` then talks only to that pinned fingerprint and refuses a different store. Covered by `server/.../EndToEndTest` (real HTTPS: pair, sync, wrong certificate refused with the outbox intact).
 

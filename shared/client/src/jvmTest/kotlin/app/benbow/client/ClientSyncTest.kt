@@ -1,8 +1,10 @@
 package app.benbow.client
 
 import app.benbow.client.db.BenbowDb
+import app.benbow.core.api.KnownEntry
 import app.benbow.core.api.PairResponse
 import app.benbow.core.api.PushResponse
+import app.benbow.core.api.ReconcileResponse
 import app.benbow.core.api.RevisionInfo
 import app.benbow.core.api.ServerInfo
 import app.benbow.core.content.Document
@@ -27,26 +29,33 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class ClientSyncTest {
-    private class FakeServer(val storeId: String = "store-1") {
+    private class FakeServer(val storeId: String = "store-1", val epoch: Long = 1) {
         val store = InMemorySyncStore()
         val rules = SyncRules(store)
+        val log = mutableListOf<SyncOp>()
+
+        /** A copy of this server as a backup would have it now, restored under a new epoch. */
+        fun restoredCopy(epoch: Long) = FakeServer(storeId, epoch).also { it.rules.push(log) }
     }
 
-    private class FakeApi(private val server: FakeServer, var serverStore: String = server.storeId) : BenbowApi {
+    private class FakeApi(var server: FakeServer, var serverStore: String = server.storeId) : BenbowApi {
         var dropRequest = false
         var dropResponse = false
 
-        override suspend fun info() = ServerInfo("test", 1, 1, serverStore, 1, 2)
+        override suspend fun info() =
+            ServerInfo("test", 1, 1, serverStore, server.epoch, 2, server.store.changesSince(0, Int.MAX_VALUE).lastOrNull()?.first ?: 0)
         override suspend fun pair(code: String, deviceName: String, platform: String): PairResponse = error("not used")
         override suspend fun push(ops: List<SyncOp>): PushResponse {
             if (dropRequest) throw IOException("request lost")
             val results = server.rules.push(ops)
+            server.log += ops
             if (dropResponse) throw IOException("response lost")
             return PushResponse(results)
         }
         override suspend fun pull(cursor: Long, limit: Int): PullResponse = server.rules.pull(cursor, limit)
         override suspend fun revisions(entryId: String): List<RevisionInfo> = error("not used")
         override suspend fun revision(id: String): RevisionRecord = error("not used")
+        override suspend fun reconcile(entries: List<KnownEntry>): ReconcileResponse = server.rules.reconcile(entries)
     }
 
     private var time = 1_000L
@@ -188,6 +197,48 @@ class ClientSyncTest {
         assertTrue(server.store.entry(id)!!.conflictHeads.isEmpty())
         assertEquals(doc("k1" to "Утро на телефоне"), phone.repo.entry(id).first()!!.body)
         assertTrue(phone.repo.entry(id).first()!!.conflictHeads.isEmpty())
+    }
+
+    @Test
+    fun restoredServerIsHealedFromTheDeviceCache() = runTest {
+        val server = FakeServer()
+        val phone = Device(server, "phone")
+        val before = phone.repo.createEntry("2026-10-12", body = doc("k1" to "Вчера"))
+        phone.engine.sync()
+        val backup = server.restoredCopy(epoch = 2) // what last night's backup holds
+
+        val after = phone.repo.createEntry("2026-10-13", body = doc("k1" to "Сегодня"))
+        phone.repo.saveDraft(before, doc("k1" to "Вчера, дописано утром"))
+        phone.repo.commitDraft(before)
+        phone.repo.moveToTrash(after)
+        phone.engine.sync()
+        assertEquals(0, phone.outbox(), "everything was acknowledged by the server that then died")
+
+        phone.api.server = backup
+        assertIs<SyncResult.Done>(phone.engine.sync())
+        assertEquals(2L, Settings(phone.db).connection!!.epoch)
+        assertEquals(doc("k1" to "Сегодня"), backup.store.revision(backup.store.entry(after)!!.head!!)!!.body, "a lost entry came back")
+        assertEquals("true", backup.store.entry(after)!!.fields["deleted"]!!.value, "with its trash flag")
+        val heads = backup.store.entry(before)!!.conflictHeads
+        assertTrue(phone.repo.entry(before).first()!!.headRevision in heads, "the lost edit is back, shown next to the old head")
+
+        val desktop = Device(backup, "desktop")
+        desktop.engine.sync()
+        assertTrue(desktop.repo.entry(after).first()!!.inTrash)
+        assertEquals(2, desktop.repo.entry(before).first()!!.conflictHeads.size)
+        assertIs<SyncResult.Done>(phone.engine.sync())
+        assertEquals(0, phone.outbox())
+    }
+
+    @Test
+    fun cursorAheadOfTheServerMeansARestoreEvenWithoutANewEpoch() = runTest {
+        val server = FakeServer()
+        val phone = Device(server, "phone")
+        phone.repo.createEntry("2026-10-13", body = doc("k1" to "a"))
+        phone.engine.sync()
+        phone.api.server = FakeServer() // same store and epoch, empty: a database copied back by hand
+        phone.engine.sync()
+        assertEquals(1, phone.api.server.store.changesSince(0, 100).map { it.second }.distinct().size)
     }
 
     @Test

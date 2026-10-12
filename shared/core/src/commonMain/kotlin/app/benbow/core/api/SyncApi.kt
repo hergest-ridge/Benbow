@@ -24,6 +24,22 @@ data class PushRequest(val protocol: Int, val ops: List<SyncOp>)
 @Serializable
 data class PushResponse(val results: List<OpResult>)
 
+/**
+ * `POST /api/v1/sync/reconcile`, after a server restore (docs/sync.md#store-identity): the client lists
+ * the entries and head revisions it knows, the server answers with what it lacks, the client re-pushes.
+ */
+@Serializable
+data class ReconcileRequest(val entries: List<KnownEntry>)
+
+@Serializable
+data class KnownEntry(val id: String, val head: String?)
+
+@Serializable
+data class ReconcileResponse(
+    @SerialName("missing_entries") val missingEntries: List<String>,
+    @SerialName("missing_revisions") val missingRevisions: List<String>,
+)
+
 @Serializable
 data class ApiError(val error: String, val message: String)
 

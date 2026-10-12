@@ -6,12 +6,14 @@ import app.benbow.core.api.PairResponse
 import app.benbow.core.api.Protocol
 import app.benbow.core.api.PushRequest
 import app.benbow.core.api.PushResponse
+import app.benbow.core.api.ReconcileRequest
 import app.benbow.core.api.ServerInfo
 import app.benbow.core.sync.SyncRules
 import app.benbow.server.SERVER_VERSION
 import app.benbow.server.backup.BackupStatus
 import app.benbow.server.storage.Database
 import app.benbow.server.storage.Devices
+import app.benbow.server.storage.HighWater
 import app.benbow.server.storage.Migrations
 import app.benbow.server.storage.PairingCodes
 import app.benbow.server.storage.SqliteSyncStore
@@ -46,14 +48,19 @@ class ServerContext(
     val dataDir: Path?,
     val port: Int,
     val backupStatus: () -> BackupStatus? = { null },
+    /** Takes a verified snapshot now (skipped when nothing changed since the last one). */
+    val backupNow: () -> Unit = {},
     /** Admin actions and pairing codes are only for requests from the server PC itself. */
     val isLoopback: (ApplicationCall) -> Boolean = ::fromLoopback,
+    /** Updated after every push so a database copied back by hand is noticed at the next start. */
+    val highWater: HighWater? = null,
 )
 
 data class DevicePrincipal(val deviceId: String)
 
 private const val MAX_OPS_PER_PUSH = 500
 private const val MAX_PULL_LIMIT = 500
+private const val MAX_RECONCILE = 2_000
 
 // KDoc on routes feeds the generated OpenAPI summaries, so ktlint's "no KDoc in blocks" rule is off here.
 @Suppress("ktlint:standard:kdoc")
@@ -73,7 +80,15 @@ fun Application.benbowModule(ctx: ServerContext) {
              */
             get("/info") {
                 call.respond(
-                    ServerInfo(SERVER_VERSION, Protocol.MIN, Protocol.MAX, ctx.db.storeId, ctx.db.epoch, Migrations.SCHEMA_VERSION),
+                    ServerInfo(
+                        SERVER_VERSION,
+                        Protocol.MIN,
+                        Protocol.MAX,
+                        ctx.db.storeId,
+                        ctx.db.epoch,
+                        Migrations.SCHEMA_VERSION,
+                        ctx.db.latestCursor(),
+                    ),
                 )
             }
 
@@ -105,7 +120,25 @@ fun Application.benbowModule(ctx: ServerContext) {
                         return@post
                     }
                     val device = call.principal<DevicePrincipal>()!!.deviceId
-                    call.respond(PushResponse(SyncRules(SqliteSyncStore(ctx.db, device)).push(request.ops)))
+                    val results = SyncRules(SqliteSyncStore(ctx.db, device)).push(request.ops)
+                    ctx.highWater?.record(ctx.db)
+                    call.respond(PushResponse(results))
+                }
+
+                /**
+                 * After a server restore: which of the device's entries and head revisions this store lacks.
+                 * The device re-pushes them (docs/sync.md#store-identity).
+                 */
+                post("/sync/reconcile") {
+                    val request = call.receive<ReconcileRequest>()
+                    if (request.entries.size > MAX_RECONCILE) {
+                        call.respond(
+                            HttpStatusCode.PayloadTooLarge,
+                            ApiError("too_many_entries", "At most $MAX_RECONCILE entries per request"),
+                        )
+                        return@post
+                    }
+                    call.respond(SyncRules(SqliteSyncStore(ctx.db)).reconcile(request.entries))
                 }
 
                 /**

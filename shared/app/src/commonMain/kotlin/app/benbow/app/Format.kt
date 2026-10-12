@@ -50,7 +50,8 @@ internal fun timeLabel(millis: Long): String {
 
 @Composable
 internal fun dateTimeLabel(millis: Long): String {
-    val date = Instant.fromEpochMilliseconds(millis).toLocalDateTime(TimeZone.currentSystemDefault()).date
+    // The day part follows the journal day, so 01:30 tonight still reads "Сегодня".
+    val date = Instant.fromEpochMilliseconds(millis).minus(DAY_START_HOUR.hours).toLocalDateTime(TimeZone.currentSystemDefault()).date
     return "${dayLabel(date.toString())}, ${timeLabel(millis)}"
 }
 

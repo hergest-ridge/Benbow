@@ -76,19 +76,24 @@ class SyncController(
                     else -> Duration.INFINITE
                 }
                 withTimeoutOrNull(wait) { requests.receive() }
-                state.update { it.copy(syncing = true) }
-                val result = sync()
-                failures = if (result is SyncResult.Failed) failures + 1 else 0
-                state.update {
-                    it.copy(
-                        syncing = false,
-                        completed = it.completed + 1,
-                        last = result,
-                        lastSuccessAt = if (result is SyncResult.Done) now() else it.lastSuccessAt,
-                    )
-                }
+                failures = if (syncNow() is SyncResult.Failed) failures + 1 else 0
             }
         }
+    }
+
+    /** One sync right away, e.g. from a background job; overlapping calls wait for each other. */
+    suspend fun syncNow(): SyncResult {
+        state.update { it.copy(syncing = true) }
+        val result = sync()
+        state.update {
+            it.copy(
+                syncing = false,
+                completed = it.completed + 1,
+                last = result,
+                lastSuccessAt = if (result is SyncResult.Done) now() else it.lastSuccessAt,
+            )
+        }
+        return result
     }
 
     private fun backoff(failures: Int): Duration {

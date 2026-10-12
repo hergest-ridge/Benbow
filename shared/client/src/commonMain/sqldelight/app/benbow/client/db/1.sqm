@@ -1,0 +1,2 @@
+-- v1 -> v2 (2.5): field clocks for reconciliation after a server restore.
+ALTER TABLE entry ADD COLUMN field_clocks TEXT NOT NULL DEFAULT '{}';

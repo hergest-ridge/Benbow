@@ -27,6 +27,12 @@ internal fun Route.adminRoutes(ctx: ServerContext) {
         call.respondRedirect("/")
     }
 
+    post("/admin/backup") {
+        if (!adminAllowed(call, ctx)) return@post call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
+        ctx.backupNow()
+        call.respondRedirect("/")
+    }
+
     post("/admin/devices/{id}/revoke") {
         if (!adminAllowed(call, ctx)) return@post call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
         ctx.devices.revoke(call.parameters["id"]!!)
@@ -122,6 +128,7 @@ private fun statusPage(ctx: ServerContext, admin: Boolean): String = buildString
         }
         append("</table>")
     }
+    if (admin) append("<form method=\"post\" action=\"/admin/backup\"><button>Сделать копию сейчас</button></form>")
     ctx.dataDir?.let { append("<p>Данные: <code>${esc(it.toString())}</code></p>") }
     append("</section></body></html>")
 }

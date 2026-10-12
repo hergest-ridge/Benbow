@@ -1,11 +1,14 @@
 package app.benbow.client
 
 import app.benbow.core.api.ApiError
+import app.benbow.core.api.KnownEntry
 import app.benbow.core.api.PairRequest
 import app.benbow.core.api.PairResponse
 import app.benbow.core.api.Protocol
 import app.benbow.core.api.PushRequest
 import app.benbow.core.api.PushResponse
+import app.benbow.core.api.ReconcileRequest
+import app.benbow.core.api.ReconcileResponse
 import app.benbow.core.api.RevisionInfo
 import app.benbow.core.api.ServerInfo
 import app.benbow.core.sync.PullResponse
@@ -33,6 +36,7 @@ interface BenbowApi {
     suspend fun pull(cursor: Long, limit: Int): PullResponse
     suspend fun revisions(entryId: String): List<RevisionInfo>
     suspend fun revision(id: String): RevisionRecord
+    suspend fun reconcile(entries: List<KnownEntry>): ReconcileResponse
 }
 
 /** A non-2xx answer from the server; [error] carries the API error code when the body had one. */
@@ -69,6 +73,12 @@ class KtorBenbowApi(private val client: HttpClient, private val baseUrl: String,
         client.get("$baseUrl/api/v1/entries/$entryId/revisions") { auth() }.ok().body()
 
     override suspend fun revision(id: String): RevisionRecord = client.get("$baseUrl/api/v1/revisions/$id") { auth() }.ok().body()
+
+    override suspend fun reconcile(entries: List<KnownEntry>): ReconcileResponse = client.post("$baseUrl/api/v1/sync/reconcile") {
+        auth()
+        contentType(ContentType.Application.Json)
+        setBody(ReconcileRequest(entries))
+    }.ok().body()
 
     private fun io.ktor.client.request.HttpRequestBuilder.auth() {
         token()?.let { bearerAuth(it) }

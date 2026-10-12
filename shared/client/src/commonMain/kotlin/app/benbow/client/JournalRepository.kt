@@ -54,6 +54,8 @@ internal const val TRASH_FIELD = "deleted"
 
 private val fieldsSerializer = MapSerializer(String.serializer(), String.serializer().nullable)
 
+internal val clocksSerializer = MapSerializer(String.serializer(), Hlc.serializer())
+
 /**
  * Offline-first journal data. Every write is one local transaction that also queues the sync op
  * (docs/sync.md#client-local-state), so nothing typed is lost when the server is unreachable.
@@ -104,7 +106,7 @@ class JournalRepository(
         val revision = newId()
         val (title, preview) = summarize(body)
         db.transaction {
-            q.upsertEntry(id, kind, day, time, revision, body, title, preview, "[]", "{}", time)
+            q.upsertEntry(id, kind, day, time, revision, body, title, preview, "[]", "{}", time, "{}")
             enqueue(CreateEntry(newId(), id, kind, day, time))
             enqueue(PutRevision(newId(), id, revision, emptyList(), body))
         }
@@ -150,8 +152,14 @@ class JournalRepository(
     fun setField(id: String, field: String, value: String?) {
         db.transaction {
             val entry = q.selectEntry(id).executeAsOneOrNull() ?: return@transaction
-            enqueue(SetField(newId(), id, field, value, clock.next()))
-            q.updateFields(ClientJson.encodeToString(fieldsSerializer, decodeFields(entry.fields) + (field to value)), now(), id)
+            val hlc = clock.next()
+            enqueue(SetField(newId(), id, field, value, hlc))
+            q.updateFields(
+                ClientJson.encodeToString(fieldsSerializer, decodeFields(entry.fields) + (field to value)),
+                ClientJson.encodeToString(clocksSerializer, decodeClocks(entry.field_clocks) + (field to hlc)),
+                now(),
+                id,
+            )
         }
     }
 
@@ -221,6 +229,8 @@ private const val TITLE_MAX = 120
 private const val PREVIEW_MAX = 200
 
 internal fun decodeFields(json: String): Map<String, String?> = ClientJson.decodeFromString(fieldsSerializer, json)
+
+internal fun decodeClocks(json: String): Map<String, Hlc> = ClientJson.decodeFromString(clocksSerializer, json)
 
 /** HLC whose last value survives restarts (kept in the local settings). */
 internal class ClientClock(private val db: BenbowDb, now: () -> Long) {

@@ -18,4 +18,6 @@ data class ServerInfo(
     @SerialName("store_id") val storeId: String,
     val epoch: Long,
     @SerialName("schema_version") val schemaVersion: Int,
+    /** Latest change-log sequence (server 0.3.0+). Lower than a client's cursor means the store went back in time. */
+    val cursor: Long? = null,
 )

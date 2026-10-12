@@ -39,7 +39,7 @@
     <string name="restore">Восстановить</string>
     <string name="untitled">Без названия</string>
     <string name="conflict_badge">Две версии</string>
-    <string name="conflict_banner">Запись изменили на двух устройствах одновременно. Обе версии сохранены — выберите нужную.</string>
+    <string name="conflict_banner">У записи две версии: её правили одновременно на разных устройствах или сервер восстанавливали из копии. Обе сохранены — выберите нужную.</string>
     <string name="conflict_choose">Выбрать</string>
     <string name="in_trash_banner">Запись в корзине.</string>
     <string name="entry_broken">Эту запись не удалось открыть. Она не изменена; её версии есть на сервере.</string>

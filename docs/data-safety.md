@@ -56,10 +56,20 @@ Implemented (server 0.2.0): `Backups` (VACUUM INTO + reopen + integrity_check + 
 ## Client-side safety
 - The local DB is a cache + outbox + drafts. The outbox is the only client-owned data, and it is deleted only after the server acknowledges it.
 - Captured media is copied into app-private storage immediately, so deleting the source in the gallery can't lose it. The local copy is evicted only after upload is confirmed (and, if available, after the server reports it as backed up).
+- The local DB runs WAL + `synchronous=FULL` (drafts and the outbox exist nowhere else). The device token is sealed with a key in the Android Keystore.
 - Exclude the DB from Android Auto Backup. Restoring a stale cache onto a new phone would confuse sync. Device recovery happens through a fresh pull.
 - Every device cache doubles as a partial backup. After a server restore, clients can re-upload what the server lacks (see `sync.md`).
 
 ## Disaster recovery runbook
-1. Server DB corrupt → stop the service → copy the newest verified snapshot from `<data>/backups/db` (or the mirror) over `<data>/db/benbow.sqlite` and delete `benbow.sqlite-wal`/`-shm` → start. (Epoch bump and client reconciliation arrive with the client sync engine; until then, clients re-push their outboxes and the server dedupes by op id.)
+1. Server DB corrupt or a bad change → run `restore-backup.cmd` as Administrator (default: newest verified snapshot; or `restore-backup.cmd <file>`; snapshots from the mirror work too). It stops the service, moves the current DB to `<data>/db/replaced-<time>` (nothing is deleted), puts the snapshot in place with a new epoch and starts the service. Paired devices see the new epoch and reconcile: they re-upload entries, head revisions and field values the snapshot lacks; a lost edit of an entry that exists in the snapshot comes back as a second head (conflict) for the user to pick. Copying a snapshot by hand also works: `db/high-water.properties` lets the server notice the regression at startup and bump the epoch itself.
 2. PC dead → install the server on a new PC → point it at the backup target → restore → re-pair devices.
 3. App unusable → the Markdown mirror plus the media folder are readable as plain files.
+
+## Drills
+Automated (run by `./gradlew check`): client kill mid-typing (`DraftSessionTest`), leftover drafts at startup, lost request/response (`ClientSyncTest`), server restore healed by device caches (`ClientSyncTest`, `EndToEndTest.restoredServerIsHealedByThePhone` over real HTTPS), restore tool and hand-copied DB detection (`RestoreTest`).
+Manual, on the S24+ against a dev server (2026-10-13, all passed):
+- Kill: force-stop 1 s after typing a new entry, and 0.7 s after editing an existing one → text present after restart, committed and synced.
+- Server off: notes written while the server is down show "N изменений ждут"; synced on their own ~25 s after it came back.
+- Background: note written with the server down, app sent home, process killed → WorkManager delivered it ~30 s after the server came back, without opening the app.
+- Restore: snapshot, then a new note + an edit, then `--restore` of the snapshot → after pull-to-refresh the server had the note back and the edit as a second head; picking it in History resolved the conflict.
+- Still to do by hand: airplane mode on/off (adb over Wi-Fi drops, so not automated).

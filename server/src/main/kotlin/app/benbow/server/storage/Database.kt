@@ -15,7 +15,10 @@ class Database private constructor(private val connection: Connection, val backu
     private val lock = ReentrantLock()
 
     val storeId: String = locked { meta(it, "store_id") }
-    val epoch: Long = locked { meta(it, "epoch").toLong() }
+
+    @Volatile
+    var epoch: Long = locked { meta(it, "epoch").toLong() }
+        private set
 
     fun <T> locked(block: (Connection) -> T): T = lock.withLock { block(connection) }
 
@@ -31,6 +34,23 @@ class Database private constructor(private val connection: Connection, val backu
         } finally {
             c.autoCommit = true
         }
+    }
+
+    /** Latest change-log sequence (0 for an empty store). */
+    fun latestCursor(): Long = locked { c ->
+        c.createStatement().use { st ->
+            st.executeQuery("SELECT COALESCE(MAX(seq), 0) FROM change_log").use { rs ->
+                rs.next()
+                rs.getLong(1)
+            }
+        }
+    }
+
+    /** A new epoch tells devices the store went back in time and must be reconciled (docs/sync.md#store-identity). */
+    fun bumpEpoch(to: Long) = transaction { c ->
+        require(to > epoch) { "Epoch can only grow ($epoch -> $to)" }
+        setMeta(c, "epoch", to.toString())
+        epoch = to
     }
 
     override fun close() = locked { c ->

@@ -1,5 +1,8 @@
 package app.benbow.core.sync
 
+import app.benbow.core.api.KnownEntry
+import app.benbow.core.api.ReconcileResponse
+
 /**
  * Server-side storage the sync rules run on. The real server implements it over SQLite with each
  * [transaction] being one SQL transaction (data-safety S2); tests use an in-memory version.
@@ -44,6 +47,12 @@ class SyncRules(
             EntrySnapshot(entry, entry.head?.let { store.revision(it)?.body })
         }
         return PullResponse(snapshots, page.lastOrNull()?.first ?: cursor, changes.size > limit)
+    }
+
+    /** What of [known] this store lacks: whole entries, and head revisions of entries it has. */
+    fun reconcile(known: List<KnownEntry>): ReconcileResponse = store.transaction {
+        val (present, absent) = known.partition { store.entry(it.id) != null }
+        ReconcileResponse(absent.map { it.id }, present.mapNotNull { e -> e.head?.takeIf { store.revision(it) == null } })
     }
 
     private fun apply(op: SyncOp): OpResult = when (op) {

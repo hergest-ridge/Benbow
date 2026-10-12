@@ -11,7 +11,9 @@ import app.benbow.server.api.ServerContext
 import app.benbow.server.api.benbowModule
 import app.benbow.server.storage.Database
 import app.benbow.server.storage.Devices
+import app.benbow.server.storage.HighWater
 import app.benbow.server.storage.PairingCodes
+import app.benbow.server.storage.Restore
 import app.benbow.server.storage.SqliteSyncStore
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import io.ktor.server.engine.applicationEnvironment
@@ -34,26 +36,43 @@ class EndToEndTest {
 {"_key":"k1","_type":"block","style":"normal","children":[{"_type":"span","text":"Первая запись с телефона","marks":[]}],"markDefs":[]}
 ]}"""
 
-    @Test
-    fun phonePairsOverPinnedHttpsAndSyncs() = runBlocking {
-        val dir = Files.createTempDirectory("benbow-e2e")
+    private val dir = Files.createTempDirectory("benbow-e2e")
+    private val port = ServerSocket(0).use { it.localPort }
+
+    /** The server as Main runs it: data folder, TLS, high-water mark. */
+    private inner class RunningServer : AutoCloseable {
         val db = Database.open(dir, "test")
         val tls = TlsMaterial.ensure(dir, "secret")
-        val port = ServerSocket(0).use { it.localPort }
-        val ctx = ServerContext(db, Devices(db), PairingCodes(), tls.fingerprint, dir, port)
-        val server = embeddedServer(
+        val highWater = HighWater(dir).also { it.check(db) }
+        val ctx = ServerContext(db, Devices(db), PairingCodes(), tls.fingerprint, dir, port, highWater = highWater)
+        private val engine = embeddedServer(
             factory = Netty,
             environment = applicationEnvironment {},
             configure = {
                 sslConnector(tls.keyStore, TlsMaterial.ALIAS, { "secret".toCharArray() }, { "secret".toCharArray() }) {
                     host = "127.0.0.1"
-                    this.port = port
+                    port = this@EndToEndTest.port
                 }
             },
             module = { benbowModule(ctx) },
         ).start(wait = false)
-        try {
-            val phoneDb = BenbowDb(JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), BenbowDb.Schema))
+
+        override fun close() {
+            engine.stop(gracePeriodMillis = 100, timeoutMillis = 2_000)
+            highWater.record(db)
+            db.close()
+        }
+    }
+
+    private fun phone() = BenbowDb(JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), BenbowDb.Schema))
+
+    @Test
+    fun phonePairsOverPinnedHttpsAndSyncs() = runBlocking {
+        RunningServer().use { running ->
+            val db = running.db
+            val tls = running.tls
+            val ctx = running.ctx
+            val phoneDb = phone()
             val pairing = Pairing(phoneDb)
             val probe = pairing.probe("127.0.0.1", port)
             assertEquals(tls.fingerprint, probe.fingerprint, "the user compares this with the admin page")
@@ -74,9 +93,45 @@ class EndToEndTest {
             repo.createEntry("2026-10-13")
             assertIs<SyncResult.Failed>(engine.sync())
             assertEquals(2L, phoneDb.benbowQueries.pendingCount().executeAsOne(), "nothing left the phone")
-        } finally {
-            server.stop(gracePeriodMillis = 100, timeoutMillis = 2_000)
-            db.close()
+        }
+    }
+
+    /** Restore drill (data-safety runbook): the PC's database is restored from last night's backup. */
+    @Test
+    fun restoredServerIsHealedByThePhone() = runBlocking<Unit> {
+        val phoneDb = phone()
+        val repo = JournalRepository(phoneDb, System::currentTimeMillis)
+        val engine = SyncEngine(phoneDb, { apiFor(it) }, System::currentTimeMillis)
+        val yesterday: String
+        val today: String
+        val lostEdit: String
+        RunningServer().use { running ->
+            val pairing = Pairing(phoneDb)
+            pairing.pair(pairing.probe("127.0.0.1", port), running.ctx.pairing.issue().first, "Galaxy S24+", "android")
+            yesterday = repo.createEntry("2026-10-12", body = body)
+            assertIs<SyncResult.Done>(engine.sync())
+            running.db.locked { running.db.backups!!.snapshot(it, "nightly", running.db.latestCursor()) }
+
+            today = repo.createEntry("2026-10-13")
+            repo.saveDraft(yesterday, body.replace("Первая запись", "Дописанная запись"))
+            repo.commitDraft(yesterday)
+            assertIs<SyncResult.Done>(engine.sync())
+            assertEquals(0L, phoneDb.benbowQueries.pendingCount().executeAsOne(), "all acknowledged, then the PC's disk dies")
+            lostEdit = repo.entry(yesterday).first()!!.headRevision!!
+        }
+
+        assertEquals(2, Restore.run(dir, "latest").epoch)
+
+        RunningServer().use { running ->
+            assertEquals(2, running.db.epoch)
+            assertIs<SyncResult.Done>(engine.sync())
+            val store = SqliteSyncStore(running.db)
+            assertTrue(store.entry(today)?.head != null, "the entry written after the backup is back")
+            assertEquals(body.replace("Первая запись", "Дописанная запись"), store.revision(lostEdit)!!.body, "so is the lost edit")
+            assertTrue(lostEdit in store.entry(yesterday)!!.conflictHeads, "kept next to the backup's head for the user to pick")
+            assertEquals(2, repo.entry(yesterday).first()!!.conflictHeads.size, "and the phone shows the choice")
+            assertEquals(2L, Settings(phoneDb).connection!!.epoch)
+            assertIs<SyncResult.Done>(engine.sync())
         }
     }
 }

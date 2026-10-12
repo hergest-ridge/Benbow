@@ -19,6 +19,10 @@ Service (run the scripts as Administrator)
                                       installed copy, starts it. The server backs up the database
                                       (verified) before its first start on a new version.
   uninstall-service.cmd               removes the service and the firewall rule; data stays.
+  restore-backup.cmd [latest|<file>] [data folder]
+                                      stops the service, puts a verified snapshot back as the live
+                                      database (the old one is kept in dbeplaced-<time>), starts it.
+                                      Paired devices re-upload what the snapshot lacks.
   - starts automatically (delayed) after boot, restarts on failure
   - opens TCP 8765 in the Windows firewall for private networks
   - logs: <data folder>\logs (server), <install folder>\service-logs (wrapper)

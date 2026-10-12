@@ -60,3 +60,6 @@ Inline: bold, italic, underline, strike, code, highlight, text color, size steps
 
 ### ADR-018 Identity: the "Admiral Benbow" inn [A]
 A cozy home base and Jim Hawkins's journal (Treasure Island, public domain). It shapes the icon and light visual accents. Original art only, no Disney assets. See vision.md#identity.
+
+### ADR-019 Server restore = new epoch + reconciliation from device caches [A]
+Restoring a snapshot (`--restore`, or a hand-copied file noticed via `db/high-water.properties`) moves the store to an epoch past every one this data folder has seen. Devices that see a new epoch (or a server cursor below theirs) ask which of their entries and heads the server lacks and re-push them, then pull from 0. A re-pushed head goes without parents: if the server kept an older head, both stay as a conflict and the user picks. Devices don't keep revision ancestry, and a silent fast-forward could hide edits made after the restore.

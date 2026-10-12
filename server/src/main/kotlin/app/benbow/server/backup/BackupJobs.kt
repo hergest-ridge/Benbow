@@ -35,7 +35,7 @@ class BackupJobs(private val db: Database, private val dataDir: Path, private va
         private set
 
     fun start(intervalMinutes: Long) {
-        executor.scheduleWithFixedDelay(::runSafely, 1, intervalMinutes, TimeUnit.MINUTES)
+        executor.scheduleWithFixedDelay({ runSafely() }, 1, intervalMinutes, TimeUnit.MINUTES)
     }
 
     fun stop() {
@@ -43,9 +43,13 @@ class BackupJobs(private val db: Database, private val dataDir: Path, private va
         executor.awaitTermination(30, TimeUnit.SECONDS)
     }
 
-    private fun runSafely() {
+    /** One pass now (admin page button); failures show up in [status] like scheduled runs. */
+    fun runNow() = runSafely(reason = "manual")
+
+    @Synchronized // the button and the schedule never run the jobs at the same time
+    private fun runSafely(reason: String = "scheduled") {
         try {
-            runOnce()
+            runOnce(reason = reason)
         } catch (e: Exception) {
             log.error("Backup run failed", e)
             status = status.copy(lastError = "${e::class.simpleName}: ${e.message}")
@@ -53,7 +57,7 @@ class BackupJobs(private val db: Database, private val dataDir: Path, private va
     }
 
     /** One pass of all jobs; returns true when a new snapshot was taken. */
-    fun runOnce(now: Long = System.currentTimeMillis()): Boolean {
+    fun runOnce(now: Long = System.currentTimeMillis(), reason: String = "scheduled"): Boolean {
         val backups = db.backups ?: return false
         val taken = db.locked { c ->
             val seq = c.createStatement().use { st ->
@@ -66,7 +70,7 @@ class BackupJobs(private val db: Database, private val dataDir: Path, private va
             if (last != null && last.seq >= seq) {
                 null
             } else {
-                backups.snapshot(c, "scheduled", seq)
+                backups.snapshot(c, reason, seq)
             }
         }
         if (taken != null) log.info("Snapshot {} verified ({} rows)", taken.file, taken.rows.values.sum())

@@ -12,4 +12,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent { BenbowApp((application as BenbowApplication).services) }
     }
+
+    override fun onStop() {
+        super.onStop()
+        SyncWorker.scheduleSoon(this)
+    }
 }

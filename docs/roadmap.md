@@ -22,7 +22,7 @@ Desktop: same screens via shared UI.
 
 ## Phase 3: Attachments
 Photo/video picker, camera, voice recorder (hold-to-record), resumable background upload, server blob store in a user-chosen folder, client previews, gallery in entries, basic cache policy, media viewer.
-Slices: **3.1 server blob store (content-addressed, resumable chunked upload, verified placement S7, Range download, media mirror + scrub) ✅** · **3.2 attachment metadata in sync (protocol 2) + client attachment store and upload/download engine ✅** · **3.3 Android capture and UI (Photo Picker, camera, voice, gallery strip, viewer, Media3) ✅** (owner checked picker, camera, voice on the S24+; video pick still to try) · 3.4 desktop attach/view, cache policy, drills (kill mid-upload, resume, disk full).
+Slices: **3.1 server blob store (content-addressed, resumable chunked upload, verified placement S7, Range download, media mirror + scrub) ✅** · **3.2 attachment metadata in sync (protocol 2) + client attachment store and upload/download engine ✅** · **3.3 Android capture and UI (Photo Picker, camera, voice, gallery strip, viewer, Media3) ✅** (owner checked picker, camera, voice on the S24+; video pick still to try) · **3.4 desktop attach/view, cache policy, drills (kill mid-upload, resume, disk full) ✅**.
 
 ## Phase 4: Feed, metadata, search, home
 Feed with composer, comments (threads), reactions, favorites, tag categories, FTS search with filters, Home v1 (Today, On this day, drafts, favorites resurfacing), share/copy actions.

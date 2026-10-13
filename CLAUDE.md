@@ -3,7 +3,7 @@
 Personal journal / life-feed app ("my feed of everything"). Single user, many devices.
 Android app (primary), desktop + web clients, self-hosted LAN server on Windows (standalone, autostart, no Docker).
 
-**Status:** Phase 2 (safe core MVP) done: 2.1 server storage/sync/pairing, 2.2 backups, 2.3 client data layer (`shared/client`), 2.4 screens (`shared/app`), 2.5 done. Phase 3 (attachments): 3.1 server blob store and 3.2 sync + client media engine done. 3.3 Android capture and UI done. Next: 3.4 desktop, cache policy, drills.
+**Status:** Phases 2 (safe core MVP) and 3 (attachments) done: 2.1 server storage/sync/pairing, 2.2 backups, 2.3 client data layer (`shared/client`), 2.4 screens (`shared/app`), 2.5 done. Phase 3 (attachments): 3.1 server blob store and 3.2 sync + client media engine done. 3.3 Android capture/UI, 3.4 cache policy + drills done. Next: Phase 4 (feed, metadata, search, home).
 **Privacy:** never pick, open or copy the owner's photos, camera or microphone for testing; ask the owner to do hands-on media checks.
 
 ## Non-negotiables

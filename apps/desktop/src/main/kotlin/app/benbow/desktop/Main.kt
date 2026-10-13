@@ -23,6 +23,7 @@ fun main() {
         mediaDir = File(dir, "media"),
         platform = "desktop",
         deviceName = System.getenv("COMPUTERNAME") ?: InetAddress.getLocalHost().hostName,
+        mediaCacheBytes = 10L * 1024 * 1024 * 1024, // the PC has room; originals open without waiting
     )
     application {
         Window(onCloseRequest = ::exitApplication, title = "Benbow") {

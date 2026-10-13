@@ -33,7 +33,8 @@ CREATE TABLE media (
     uploaded INTEGER NOT NULL DEFAULT 0,
     name TEXT,
     captured_at INTEGER,
-    last_access_at INTEGER NOT NULL
+    last_access_at INTEGER NOT NULL,
+    uploaded_at INTEGER
 );
 
 CREATE INDEX entry_by_day ON entry(day, created_at);
@@ -125,7 +126,17 @@ pendingUploadCount:
 SELECT COUNT(*) FROM media WHERE origin = 'captured' AND uploaded = 0;
 
 markUploaded:
-UPDATE media SET uploaded = 1 WHERE sha256 = ?;
+UPDATE media SET uploaded = 1, uploaded_at = ? WHERE sha256 = ?;
+
+-- Files the server already holds, least recently viewed first: downloads, and captured files confirmed
+-- before :settledBefore (the server's backup job has had time to copy them). Small files (previews) stay.
+evictable:
+SELECT sha256, path, size FROM media
+WHERE size >= :minSize AND (origin = 'downloaded' OR (origin = 'captured' AND uploaded = 1 AND uploaded_at < :settledBefore))
+ORDER BY last_access_at;
+
+forgetMedia:
+DELETE FROM media WHERE sha256 = ? AND (origin = 'downloaded' OR uploaded = 1);
 
 -- After a server restore the server may lack files it once confirmed; the uploader asks again (dedup makes it cheap).
 recheckUploads:

@@ -91,6 +91,49 @@ class MediaTest {
     }
 
     @Test
+    fun theCacheNeverDropsWhatTheServerHasNotSafelyGot() = runTest {
+        val server = FakeServer()
+        val phone = Device(server, "phone")
+        val video = Random(9).nextBytes(1_500_000)
+        val entry = phone.repo.createEntry("2026-10-13")
+        val file = phone.media.import(video.inputStream(), "video/mp4", "VID.mp4", null)
+        phone.repo.attach(entry, file, "video", preview = phone.media.import(photo.inputStream(), "image/jpeg", null, null))
+        assertEquals(0, phone.media.evict(capBytes = 0), "not on the server yet")
+
+        phone.engine.sync()
+        phone.media.uploadPending()
+        assertEquals(0, phone.media.evict(capBytes = 0), "confirmed, but the server's backup may not have copied it yet")
+        assertEquals(video.size.toLong(), phone.media.evict(capBytes = 0, settleMs = 0))
+        assertEquals(null, phone.media.localFile(file.sha256))
+        assertTrue(phone.media.localFile(sha256(photo)) != null, "previews stay so lists never wait")
+        assertContentEquals(video, phone.media.file(file.sha256).readBytes(), "fetched again when needed")
+    }
+
+    @Test
+    fun downloadsGoLeastRecentlyViewedFirst() = runTest {
+        val server = FakeServer()
+        val big = List(2) { Random(it).nextBytes(1_200_000) }
+        big.forEach { server.blobs[sha256(it)] = it }
+        val desktop = Device(server, "desktop")
+        val (old, recent) = big.map { desktop.media.file(sha256(it)) }
+        desktop.media.localFile(recent.name) // viewed again
+        assertEquals(1_200_000L, desktop.media.evict(capBytes = 1_500_000))
+        assertTrue(!old.exists() && recent.exists())
+    }
+
+    @Test
+    fun aServerOutOfSpaceKeepsTheFileAndTriesAgain() = runTest {
+        val server = FakeServer()
+        val phone = Device(server, "phone")
+        phone.attachPhoto(phone.repo.createEntry("2026-10-13"))
+        phone.api.uploadsRefused = ApiException(507, "no_space", "Not enough space")
+        assertFailsWith<ApiException> { phone.media.uploadPending() }
+        assertEquals(1, phone.waitingFiles())
+        phone.api.uploadsRefused = null
+        assertEquals(1, phone.media.uploadPending())
+    }
+
+    @Test
     fun removingHidesTheAttachmentEverywhere() = runTest {
         val server = FakeServer()
         val phone = Device(server, "phone")

@@ -1,0 +1,2 @@
+-- v3 -> v4 (3.4): when the server confirmed a captured file (cache eviction waits for its backup).
+ALTER TABLE media ADD COLUMN uploaded_at INTEGER;

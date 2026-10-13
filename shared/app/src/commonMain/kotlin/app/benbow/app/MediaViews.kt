@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -22,6 +23,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -87,6 +89,11 @@ internal fun MediaThumb(media: MediaStore, attachment: AttachmentState, size: Dp
             (load as? MediaLoad.Ready)?.let { AsyncImage(it.file, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
         }
         val meta = attachment.meta
+        val awaiting by remember(meta.sha256) { media.awaitingUpload(meta.sha256) }.collectAsState(false)
+        if (awaiting) {
+            // Not on the server yet: a small amber dot, gone once the server confirmed the file.
+            Box(Modifier.align(Alignment.TopEnd).padding(6.dp).size(10.dp).background(MaterialTheme.colorScheme.tertiary, CircleShape))
+        }
         when (meta.kind) {
             "video" -> Badge(Icons.Play, meta.durationMs)
 

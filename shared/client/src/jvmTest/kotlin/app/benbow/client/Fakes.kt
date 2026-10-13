@@ -42,6 +42,9 @@ internal class FakeApi(var server: FakeServer, var serverStore: String = server.
     /** Fail after this many accepted chunks (the network dies mid-upload). */
     var failAfterChunks: Int? = null
     var corruptDownloads = false
+
+    /** e.g. the server's disk is full (HTTP 507). */
+    var uploadsRefused: ApiException? = null
     var chunksAccepted = 0
 
     override suspend fun info() = ServerInfo(
@@ -73,6 +76,7 @@ internal class FakeApi(var server: FakeServer, var serverStore: String = server.
     override suspend fun reconcile(entries: List<KnownEntry>): ReconcileResponse = server.rules.reconcile(entries)
 
     override suspend fun startUpload(file: UploadStart): UploadStatus {
+        uploadsRefused?.let { throw it }
         server.blobs[file.sha256]?.let { return UploadStatus(null, it.size.toLong(), complete = true) }
         val open = server.uploads.entries.firstOrNull { it.value.first.sha256 == file.sha256 }
         if (open != null) return UploadStatus(open.key, open.value.second.size().toLong(), complete = false)

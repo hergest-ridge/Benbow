@@ -8,6 +8,7 @@ import app.benbow.client.SyncEngine
 import app.benbow.client.SyncResult
 import app.benbow.client.apiFor
 import app.benbow.client.db.BenbowDb
+import app.benbow.core.api.UploadStart
 import app.benbow.server.api.ServerContext
 import app.benbow.server.api.benbowModule
 import app.benbow.server.storage.BlobStore
@@ -118,8 +119,13 @@ class EndToEndTest {
             )
             val repo = JournalRepository(phoneDb, System::currentTimeMillis)
             val entry = repo.createEntry("2026-10-13")
-            repo.attach(entry, media.import(bytes.inputStream(), "video/mp4", "VID_1.mp4", null), "video")
+            val video = media.import(bytes.inputStream(), "video/mp4", "VID_1.mp4", null)
+            repo.attach(entry, video, "video")
             assertIs<SyncResult.Done>(SyncEngine(phoneDb, { apiFor(it) }, System::currentTimeMillis).sync())
+            // A previous run was cut off after the first chunk (app killed, Wi-Fi lost): the next one resumes there.
+            val api = apiFor(Settings(phoneDb).connection!!)
+            val open = api.startUpload(UploadStart(video.sha256, video.size, video.mime, video.name))
+            assertEquals(1_000_000, api.uploadChunk(open.id!!, 0, bytes.copyOfRange(0, 1_000_000)).offset)
             assertEquals(1, media.uploadPending())
             val sha = repo.entry(entry).first()!!.attachments.single().meta.sha256
             assertContentEquals(bytes, running.blobs.file(running.blobs.blob(sha)!!).readBytes())

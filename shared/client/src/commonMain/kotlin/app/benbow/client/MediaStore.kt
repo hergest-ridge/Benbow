@@ -4,9 +4,11 @@ import app.benbow.client.db.BenbowDb
 import app.benbow.core.api.UploadStart
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToOne
+import app.cash.sqldelight.coroutines.mapToOneOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -70,6 +72,31 @@ class MediaStore(
         }
     }
 
+    /** True while a file captured here hasn't been confirmed by the server ("not safe yet"). */
+    fun awaitingUpload(sha256: String): Flow<Boolean> = q.selectMedia(sha256).asFlow().mapToOneOrNull(Dispatchers.Default).map {
+        it != null && it.origin == "captured" && it.uploaded == 0L
+    }
+
+    /**
+     * Keeps large local files under [capBytes], least recently viewed first. Only files the server holds
+     * may go: downloads, and captured files confirmed more than [settleMs] ago. Previews (small) stay so
+     * lists never wait. Returns the bytes freed; an evicted file is downloaded again when needed.
+     */
+    fun evict(capBytes: Long, settleMs: Long = SETTLE_MS): Long {
+        val candidates = q.evictable(SMALL_FILE, now() - settleMs).executeAsList()
+        var total = candidates.sumOf { it.size }
+        var freed = 0L
+        for (file in candidates) {
+            if (total <= capBytes) break
+            val local = File(file.path)
+            if (local.exists() && !local.delete()) continue // in use (e.g. playing on Windows); next time
+            q.forgetMedia(file.sha256)
+            total -= file.size
+            freed += file.size
+        }
+        return freed
+    }
+
     /** Files captured here that the server hasn't confirmed yet. */
     fun pendingCount(): Flow<Long> = q.pendingUploadCount().asFlow().mapToOne(Dispatchers.Default)
 
@@ -85,7 +112,7 @@ class MediaStore(
             val file = File(media.path)
             if (!file.exists()) continue // never expected; the row stays so it isn't forgotten
             upload(api, UploadStart(media.sha256, media.size, media.mime, media.name, media.captured_at), file)
-            q.markUploaded(media.sha256)
+            q.markUploaded(now(), media.sha256)
             finished++
         }
         finished
@@ -157,4 +184,10 @@ class MediaStore(
     }
 
     private fun ByteArray.toHex() = joinToString("") { "%02x".format(it) }
+
+    companion object {
+        /** A week after the server confirmed a file, its hourly backup job has copied it to the mirror. */
+        const val SETTLE_MS = 7L * 24 * 3_600_000
+        const val SMALL_FILE = 1024L * 1024
+    }
 }

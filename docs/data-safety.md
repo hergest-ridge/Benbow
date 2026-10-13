@@ -56,7 +56,7 @@ Implemented (server 0.2.0): `Backups` (VACUUM INTO + reopen + integrity_check + 
 
 ## Client-side safety
 - The local DB is a cache + outbox + drafts. The outbox is the only client-owned data, and it is deleted only after the server acknowledges it.
-- Captured media is copied into app-private storage immediately, so deleting the source in the gallery can't lose it. The local copy is evicted only after upload is confirmed (and, if available, after the server reports it as backed up).
+- Captured media is copied into app-private storage immediately, so deleting the source in the gallery can't lose it. The local copy is evicted only after upload is confirmed (and, if available, after the server reports it as backed up). As built: a captured file may be evicted only 7 days after the server verified it (the backup job runs hourly), and only when the media cache is over its cap.
 - The local DB runs WAL + `synchronous=FULL` (drafts and the outbox exist nowhere else). The device token is sealed with a key in the Android Keystore.
 - Exclude the DB from Android Auto Backup. Restoring a stale cache onto a new phone would confuse sync. Device recovery happens through a fresh pull.
 - Every device cache doubles as a partial backup. After a server restore, clients can re-upload what the server lacks (see `sync.md`).

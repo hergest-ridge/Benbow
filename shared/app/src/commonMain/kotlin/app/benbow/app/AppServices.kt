@@ -28,7 +28,14 @@ sealed interface AppMessage {
  * Everything the screens need, created once per process by the platform app (it supplies the SQLite
  * driver). Writes run in [scope], which outlives screens, so a closing editor still gets its commit.
  */
-class AppServices(driver: SqlDriver, mediaDir: File, val platform: String, val deviceName: String) {
+class AppServices(
+    driver: SqlDriver,
+    mediaDir: File,
+    val platform: String,
+    val deviceName: String,
+    /** Large media files kept on this device beyond what still has to reach the server. */
+    private val mediaCacheBytes: Long = 2L * 1024 * 1024 * 1024,
+) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     val now: () -> Long = { Clock.System.now().toEpochMilliseconds() }
     private val db = BenbowDb(driver)
@@ -62,6 +69,7 @@ class AppServices(driver: SqlDriver, mediaDir: File, val platform: String, val d
         if (result !is SyncResult.Done) return result
         return try {
             media.uploadPending()
+            media.evict(mediaCacheBytes)
             result
         } catch (e: CancellationException) {
             throw e

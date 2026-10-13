@@ -36,6 +36,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
@@ -251,11 +252,23 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     var menu by remember { mutableStateOf(false) }
     var pickingBackground by remember { mutableStateOf(false) }
     var dropping by remember { mutableStateOf(false) }
+    var editorFocused by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        // A picture or video added while writing lands in the text: at the cursor, or after the text if it isn't there.
+        services.attached.collect { added ->
+            if (added.entryId == vm.entryId && !vm.reading && added.kind in INLINE_KINDS) {
+                vm.editor?.insertAtom(Atom.Attachment(added.attachmentId), atEnd = !editorFocused)
+            }
+        }
+    }
     // The attachments ribbon: open by default unless every attachment already sits in the text; the clip toggles it.
     var ribbonChoice by rememberSaveable { mutableStateOf<Boolean?>(null) }
     val attachments = detail?.attachments.orEmpty()
     val inline = editor?.model?.paragraphs?.mapNotNullTo(HashSet()) { (it.atom as? Atom.Attachment)?.ref }.orEmpty()
     val ribbon = attachments.isNotEmpty() && (ribbonChoice ?: !attachments.all { it.meta.id in inline })
+    val pictures = remember(attachments, detail?.id) {
+        EntryPictures(services, attachments) { id -> detail?.id?.let { nav.open(Route.Media(it, id)) } }
+    }
     LaunchedEffect(Unit) {
         services.shortcuts.collect {
             if (it == Shortcut.Save && !vm.reading) {
@@ -296,7 +309,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                 actions = {
                     if (attachments.isNotEmpty()) {
                         TextButton({ ribbonChoice = !ribbon }) {
-                            val tint = if (ribbon) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                            val tint = if (ribbon) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             Icon(Icons.Attach, stringResource(Res.string.attachments), tint = tint, modifier = Modifier.size(20.dp))
                             Text(" ${attachments.size}", color = tint, style = MaterialTheme.typography.labelLarge)
                         }
@@ -448,6 +461,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                     onOpenComment = { nav.open(Route.Editor(it.summary.id, it.summary.day)) },
                     onReact = vm::react,
                     ribbon = ribbon,
+                    pictures = pictures,
                     modifier = Modifier.fillMaxSize(),
                 )
                 return@Column
@@ -484,8 +498,10 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                     LaunchedEffect(Unit) { if (route.entryId == null) focus.requestFocus() }
                     BenbowEditor(
                         state = editor,
+                        atoms = pictures,
                         modifier = Modifier
                             .fillMaxSize()
+                            .onFocusChanged { editorFocused = it.hasFocus }
                             .focusRequester(focus)
                             .verticalScroll(rememberScrollState())
                             .padding(horizontal = 20.dp, vertical = 12.dp)
@@ -496,3 +512,6 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
         }
     }
 }
+
+/** Attachments that go into the text when added while writing; sounds and files stay in the ribbon. */
+private val INLINE_KINDS = setOf("image", "video")

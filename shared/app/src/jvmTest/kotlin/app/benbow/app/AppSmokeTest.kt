@@ -468,6 +468,37 @@ class AppSmokeTest {
     }
 
     @Test
+    fun aPictureAddedWhileWritingLandsInTheText() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val entry = services.repo.createNote(services.today(), "Прогулка у моря\nВот что я увидел:")
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Прогулка у моря"), 5_000)
+        onNodeWithText("Прогулка у моря").click()
+        waitUntilExactlyOneExists(hasText("Настроение"), 5_000)
+        val bytes = picture()
+        val image = ImageIO.read(bytes.inputStream())
+        runBlocking {
+            services.attach({ entry }, { bytes.inputStream() }) {
+                MediaProbe("image/jpeg", "IMG_7.jpg", "image", image.width, image.height, preview = picture(512, 384))
+            }.join()
+        }
+        waitUntil(timeoutMillis = 5_000) {
+            runBlocking { services.repo.entry(entry).first()?.body?.contains("\"attachment\"") == true }
+        }
+        runBlocking { delay(1_000) }
+        waitForIdle()
+        screenshot("39-inline-picture")
+
+        onNodeWithContentDescription("Назад").click()
+        onNodeWithText("Лента").click()
+        waitUntilExactlyOneExists(hasContentDescription("Вложения"), 5_000)
+        onNodeWithText("Прогулка у моря", substring = true).click()
+        waitUntilExactlyOneExists(hasText("Комментарии"), 5_000)
+        runBlocking { delay(1_000) }
+        waitForIdle()
+        screenshot("40-post-inline")
+    }
+
+    @Test
     fun newEntryOpenedByMistakeLeavesNothing() = runDesktopComposeUiTest(width = 412, height = 860) {
         setContent { BenbowApp(services) }
         waitUntilExactlyOneExists(hasText("Как прошёл день? Пара строк — и он сохранится."))

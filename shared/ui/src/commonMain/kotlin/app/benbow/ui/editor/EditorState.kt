@@ -11,6 +11,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextRange
 import app.benbow.core.text.Align
+import app.benbow.core.text.Atom
 import app.benbow.core.text.BlockKeys
 import app.benbow.core.text.BlockStyle
 import app.benbow.core.text.ListKind
@@ -18,6 +19,7 @@ import app.benbow.core.text.Mark
 import app.benbow.core.text.Paragraph
 import app.benbow.core.text.RichText
 import app.benbow.core.text.applyUserEdit
+import app.benbow.core.text.insertAtom
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
@@ -105,6 +107,16 @@ class EditorState(initial: RichText, private val keys: BlockKeys = BlockKeys()) 
     fun removeCallout() = apply { m, s -> m.updateParagraphs(s.min, s.max) { it.copy(callout = null) } }
 
     fun toggleChecked(paragraphIndex: Int) = apply { m, _ -> m.toggleChecked(paragraphIndex) }
+
+    /** Puts a picture (or another atom) in its own paragraph at the cursor, or after the text when [atEnd]. */
+    fun insertAtom(atom: Atom, atEnd: Boolean = false) {
+        val before = model
+        val at = if (atEnd) before.text.length else selection.min
+        val result = before.insertAtom(at, atom, keys)
+        record(Snapshot(before, selection), typing = false)
+        model = result.text
+        textFieldState.edit { syncText(result.text.text, TextRange(result.selectionStart), forceSelection = true) }
+    }
 
     internal fun noteSelection(selection: TextRange, previous: TextRange) {
         if (!selection.collapsed || !previous.collapsed) lastRangeSelection = TimeSource.Monotonic.markNow()

@@ -34,6 +34,7 @@ import app.benbow.app.resources.comments_empty
 import app.benbow.app.resources.reaction_add
 import app.benbow.client.Comment
 import app.benbow.client.EntryDetail
+import app.benbow.ui.editor.AtomViews
 import app.benbow.ui.editor.BenbowEditor
 import app.benbow.ui.editor.EditorState
 import org.jetbrains.compose.resources.stringResource
@@ -52,6 +53,7 @@ internal fun PostView(
     onOpenComment: (Comment) -> Unit,
     onReact: (String, Boolean) -> Unit,
     ribbon: Boolean,
+    pictures: AtomViews,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.verticalScroll(rememberScrollState())) {
@@ -67,7 +69,12 @@ internal fun PostView(
             }
         }
         if (ribbon) AttachmentStrip(services.media, detail.attachments) { onOpenMedia(it.meta.id) }
-        BenbowEditor(state = editor, readOnly = true, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp))
+        BenbowEditor(
+            state = editor,
+            readOnly = true,
+            atoms = pictures,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+        )
         Reactions(detail.reactions, onReact, Modifier.padding(horizontal = 16.dp))
         HorizontalDivider(Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
         val count = comments?.size ?: 0

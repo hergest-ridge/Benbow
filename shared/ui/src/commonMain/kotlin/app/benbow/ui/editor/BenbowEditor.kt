@@ -3,6 +3,12 @@ package app.benbow.ui.editor
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldLineLimits
@@ -11,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -40,6 +47,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextRange
@@ -49,6 +57,8 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -56,13 +66,26 @@ import app.benbow.core.text.BlockStyle
 import app.benbow.core.text.ListKind
 import app.benbow.core.text.Mark
 import app.benbow.core.text.RichText
+import app.benbow.core.text.atoms
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
-/** Seamless rich text editor: one text field, formatting drawn from [EditorState.model]. [readOnly] is for viewing old versions. */
+/**
+ * Seamless rich text editor: one text field, formatting drawn from [EditorState.model]. [readOnly] is for viewing old
+ * versions and posts. Atom paragraphs (pictures, dividers) are drawn by [atoms] over their own lines.
+ */
 @Composable
-fun BenbowEditor(state: EditorState, modifier: Modifier = Modifier, readOnly: Boolean = false) {
+fun BenbowEditor(state: EditorState, modifier: Modifier = Modifier, readOnly: Boolean = false, atoms: AtomViews = AtomViews.Default) {
+    BoxWithConstraints(modifier) { EditorBody(state, readOnly, atoms, maxWidth) }
+}
+
+@Composable
+private fun EditorBody(state: EditorState, readOnly: Boolean, atoms: AtomViews, width: Dp) {
     val colors = MaterialTheme.colorScheme
-    val styles = remember(colors) { EditorStyles(colors, dark = colors.background.luminance() < 0.5f) }
+    val density = LocalDensity.current
+    val styles = remember(colors, atoms, width, density) {
+        EditorStyles(colors, dark = colors.background.luminance() < 0.5f, atomHeight = { with(density) { atoms.height(it, width).toSp() } })
+    }
     val textStyle = MaterialTheme.typography.bodyLarge.copy(
         color = colors.onSurface,
         fontSize = styles.baseSize,
@@ -110,7 +133,8 @@ fun BenbowEditor(state: EditorState, modifier: Modifier = Modifier, readOnly: Bo
         EditorImeBridge {
             BasicTextField(
                 state = state.textFieldState,
-                modifier = modifier
+                modifier = Modifier
+                    .fillMaxWidth()
                     .onPreviewKeyEvent { state.handleShortcut(it, clipboardActions) }
                     .pointerInput(state, styles) {
                         awaitEachGesture {
@@ -151,6 +175,18 @@ fun BenbowEditor(state: EditorState, modifier: Modifier = Modifier, readOnly: Bo
                 lineLimits = TextFieldLineLimits.MultiLine(),
                 onTextLayout = { getResult -> layout = getResult() },
             )
+        }
+    }
+    // Each atom over its own line, which the paragraph style made exactly as tall.
+    val current = layout
+    if (current != null && current.matches(state.model)) {
+        state.model.atoms().forEach { (offset, atom) ->
+            val line = current.getLineForOffset(offset)
+            val top = current.getLineTop(line)
+            val height = with(density) { (current.getLineBottom(line) - top).toDp() }
+            key(offset, atom) {
+                Box(Modifier.offset { IntOffset(0, top.roundToInt()) }.width(width).height(height)) { atoms.Content(atom) }
+            }
         }
     }
 }

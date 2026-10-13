@@ -43,7 +43,7 @@ Markdown, plain text, HTML and PDF are **exports** (lossy except HTML). This fil
 |---|---|---|
 | `code` | `_key`, `language?`, `code` (string, may contain `\n`), `callout?` | monospace region with background. Plain text only (no marks). The editor merges directly adjacent code blocks with the same callout |
 | `divider` | `_key`, `variant?` (`line` · `dots` · `wave`) | atomic placeholder line |
-| `attachment` | `_key`, `ref` (attachment id), `width?` (0..1), `caption?` | **later** (inline media). v1 media lives in the entry gallery |
+| `attachment` | `_key`, `ref` (attachment id), `width?` (0..1), `caption?` | inline media (7.2): a picture or video placed in the text; the file stays an attachment of the entry (gallery). Markdown links it in place, HTML shows it in place |
 | any unknown | preserved verbatim | atomic read-only chip. Never dropped or altered |
 
 **Unknown-content rule:** a block with an unknown `_type`, an unknown field, an unknown mark/markDef or an invalid value is kept **verbatim as an unknown block** (read-only chip). The rest of the document stays editable. Structurally broken JSON (no `_key`/`_type`, not an object) fails decoding, and the revision history is the fallback.

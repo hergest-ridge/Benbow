@@ -13,9 +13,12 @@ data class EditResult(
 
 /**
  * Applies a keyboard/IME edit: replaces `[start, end)` with [inserted] and runs the editor rules
- * (list exit on Enter, unformat on Backspace, Markdown-style shortcuts).
+ * (atoms stay whole, list exit on Enter, unformat on Backspace, Markdown-style shortcuts).
  */
-fun RichText.applyUserEdit(start: Int, end: Int, inserted: String, typingMarks: Set<Mark>, keys: BlockKeys): EditResult {
+fun RichText.applyUserEdit(start: Int, end: Int, inserted: String, typingMarks: Set<Mark>, keys: BlockKeys): EditResult =
+    atomEdit(start, end, inserted, typingMarks, keys) ?: ordinaryEdit(start, end, inserted, typingMarks, keys).keepAtoms(keys)
+
+private fun RichText.ordinaryEdit(start: Int, end: Int, inserted: String, typingMarks: Set<Mark>, keys: BlockKeys): EditResult {
     if (inserted == "\n" && start == end) {
         val i = paragraphIndexAt(start)
         val p = paragraphs[i]

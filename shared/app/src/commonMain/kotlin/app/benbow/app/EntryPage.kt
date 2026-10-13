@@ -8,12 +8,15 @@ import app.benbow.app.resources.comments
 import app.benbow.app.resources.months_genitive
 import app.benbow.app.resources.not_on_device
 import app.benbow.app.resources.weekdays
+import app.benbow.core.content.AttachmentBlock
 import app.benbow.core.content.DocumentCodec
 import app.benbow.core.content.DocumentFormatException
 import app.benbow.core.content.HtmlExporter
 import app.benbow.core.content.HtmlExporter.Companion.escape
 import app.benbow.core.content.STYLE_NORMAL
+import app.benbow.core.content.Span
 import app.benbow.core.content.TextBlock
+import app.benbow.core.sync.AttachmentState
 import app.benbow.ui.theme.BenbowPalette
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -24,6 +27,7 @@ import kotlinx.datetime.isoDayNumber
 import kotlinx.datetime.number
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.getStringArray
+import java.io.File
 
 /** A page to print or save as PDF: its title and full HTML. */
 internal class PrintPage(val title: String, val html: String)
@@ -55,14 +59,32 @@ internal suspend fun AppServices.entryPage(id: String): PrintPage? = withContext
             append("</p>\n")
         }
     }
+    // Each attachment's file (fetched from the server when not here); pictures by URL, a video by its preview frame.
+    val files = entry.attachments.associate { a -> a.meta.id to fileOf(a.meta.sha256) }
+    val pictures = entry.attachments.associate { a ->
+        a.meta.id to when (a.meta.kind) {
+            "image" -> files[a.meta.id]
+            "video" -> a.visual?.let { fileOf(it) }
+            else -> null
+        }?.toPath()?.toUri()?.toString()
+    }
+    val missing = getString(Res.string.not_on_device)
+    val label = { a: AttachmentState -> a.caption ?: a.meta.name ?: a.meta.kind }
     val body = HtmlExporter(
         color = { BenbowPalette.text(it, dark = false)?.css() },
         highlight = { BenbowPalette.highlight(it, dark = false)?.css() },
         tint = { BenbowPalette.tint(it, dark = false)?.css() },
+        attachmentUrl = { ref -> pictures[ref].orEmpty() },
     ).export(
         // A note's first line reads as its title on paper, as it does in the lists.
         document.copy(
-            blocks = document.blocks.mapIndexed { i, block ->
+            blocks = document.blocks.map { block ->
+                // In the text, a sound or a file (or a picture that couldn't be fetched) is a line naming it.
+                if (block !is AttachmentBlock || pictures[block.ref] != null) return@map block
+                val a = entry.attachments.firstOrNull { it.meta.id == block.ref }
+                val name = a?.let(label).orEmpty() + if (a != null && files[a.meta.id] == null) " — $missing" else ""
+                TextBlock(block.key, children = listOf(Span("📎 $name")))
+            }.mapIndexed { i, block ->
                 if (i == 0 && block is TextBlock && block.style == STYLE_NORMAL &&
                     block.listItem == null
                 ) {
@@ -73,17 +95,11 @@ internal suspend fun AppServices.entryPage(id: String): PrintPage? = withContext
             },
         ),
     )
-    val missing = getString(Res.string.not_on_device)
+    val inline = document.blocks.filterIsInstance<AttachmentBlock>().mapTo(HashSet()) { it.ref }
     val tail = buildString {
-        for (a in entry.attachments) {
-            val label = escape(a.caption ?: a.meta.name ?: a.meta.kind)
-            val file = media.localFile(a.meta.sha256) ?: try {
-                media.file(a.meta.sha256)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                null
-            }
+        for (a in entry.attachments.filter { it.meta.id !in inline }) {
+            val label = escape(label(a))
+            val file = files[a.meta.id]
             when {
                 file == null -> append("<p class=\"file\">📎 $label — ").append(escape(missing)).append("</p>\n")
 
@@ -118,3 +134,12 @@ private fun Color.css(): String {
 /** Shows a page for printing: Android's print dialog (which also saves a PDF), the default browser on desktop. */
 @Composable
 internal expect fun rememberPrint(): (PrintPage) -> Unit
+
+/** The file of [sha256], from this device or the server; null when neither has it now. */
+private suspend fun AppServices.fileOf(sha256: String): File? = media.localFile(sha256) ?: try {
+    media.file(sha256)
+} catch (e: CancellationException) {
+    throw e
+} catch (_: Exception) {
+    null
+}

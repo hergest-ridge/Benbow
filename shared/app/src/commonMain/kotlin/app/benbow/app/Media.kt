@@ -44,7 +44,9 @@ internal fun AppServices.attach(
         val probe = probe()
         val file = open().use { media.import(it, probe.mime, probe.name, probe.capturedAt) }
         val preview = probe.preview?.let { media.import(it.inputStream(), "image/jpeg", null, probe.capturedAt) }
-        repo.attach(entryId(), file, probe.kind, probe.width, probe.height, probe.durationMs, preview)
+        val entry = entryId()
+        val id = repo.attach(entry, file, probe.kind, probe.width, probe.height, probe.durationMs, preview)
+        attached.tryEmit(Attached(entry, id, probe.kind))
         onAttached()
     } catch (e: CancellationException) {
         throw e

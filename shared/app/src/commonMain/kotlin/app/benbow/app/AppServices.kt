@@ -36,6 +36,9 @@ fun interface ReminderClock {
     fun schedule(due: List<Due>)
 }
 
+/** A file just attached to [entryId]: an open editor of that entry places pictures and videos in its text. */
+data class Attached(val entryId: String, val attachmentId: String, val kind: String)
+
 /** Where the app should go when something outside opens it (a launcher shortcut, the widget). */
 enum class AppLaunch { NewEntry, AnswerPrompt }
 
@@ -123,6 +126,8 @@ class AppServices(
 
     /** Set by the platform when it is opened for something; the app takes it and clears it. */
     val launch = MutableStateFlow<AppLaunch?>(null)
+
+    val attached = MutableSharedFlow<Attached>(extraBufferCapacity = 16)
 
     /** Key combinations from the window (desktop): the app root and the open editor act on them. */
     val shortcuts = MutableSharedFlow<Shortcut>(extraBufferCapacity = 8)

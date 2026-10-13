@@ -8,6 +8,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextIndent
@@ -15,6 +16,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import app.benbow.core.text.Align
+import app.benbow.core.text.Atom
 import app.benbow.core.text.BlockStyle
 import app.benbow.core.text.ListKind
 import app.benbow.core.text.Mark
@@ -24,7 +26,13 @@ import app.benbow.ui.theme.BenbowPalette
 
 /** Maps the semantic model to Compose text styles. All visuals of formatting live here. */
 @Immutable
-data class EditorStyles(val colors: ColorScheme, val dark: Boolean, val baseSize: TextUnit = 17.sp) {
+data class EditorStyles(
+    val colors: ColorScheme,
+    val dark: Boolean,
+    val baseSize: TextUnit = 17.sp,
+    /** An atom paragraph's line is as tall as what's drawn over it ([AtomViews]). */
+    val atomHeight: (Atom) -> TextUnit = { 56.sp },
+) {
 
     fun calloutIndent(p: Paragraph): Float = if (p.callout != null) 40f else 0f
 
@@ -52,6 +60,12 @@ data class EditorStyles(val colors: ColorScheme, val dark: Boolean, val baseSize
 
     /** [maxSizeFactor] is the largest size mark in the paragraph, so big text never overlaps lines. */
     fun paragraphStyle(p: Paragraph, maxSizeFactor: Float): ParagraphStyle {
+        p.atom?.let { atom ->
+            return ParagraphStyle(
+                lineHeight = atomHeight(atom),
+                lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None),
+            )
+        }
         val indent = indent(p)
         return ParagraphStyle(
             textAlign = when (p.align) {
@@ -65,6 +79,9 @@ data class EditorStyles(val colors: ColorScheme, val dark: Boolean, val baseSize
     }
 
     fun blockSpan(p: Paragraph): SpanStyle? = when {
+        // The object character itself never shows: the atom is drawn over its line.
+        p.atom != null -> SpanStyle(color = Color.Transparent)
+
         p.isHeading -> SpanStyle(
             fontSize = headingFactor(p).em,
             fontWeight = if (p.style == BlockStyle.H1) FontWeight.Bold else FontWeight.SemiBold,

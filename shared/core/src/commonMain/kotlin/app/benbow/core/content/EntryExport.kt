@@ -13,7 +13,6 @@ import kotlinx.serialization.json.buildJsonObject
  * so the two read the same. Names depend only on day and id, so a changed title never orphans an old file.
  */
 object EntryExport {
-    private val exporter = MarkdownExporter()
     private val json = Json { prettyPrint = true }
 
     /** "YYYY/MM" of the entry's day. */
@@ -48,10 +47,17 @@ object EntryExport {
         }
         val markdown = when {
             body == null -> ""
+
             document == null -> "<!-- body could not be decoded; see the .json sidecar -->"
-            else -> exporter.export(document)
+
+            // A picture placed in the text links to its file right there; the list below names the rest.
+            else -> MarkdownExporter(attachmentUrl = { ref ->
+                entry.attachments[ref]?.let(link)?.let { "<$it>" } ?: "benbow:attachment/$ref"
+            })
+                .export(document)
         }
-        return frontMatter + "\n" + markdown + "\n" + attachments(entry, missing, link)
+        val inline = document?.blocks.orEmpty().filterIsInstance<AttachmentBlock>().mapTo(HashSet()) { it.ref }
+        return frontMatter + "\n" + markdown + "\n" + attachments(entry, missing, inline, link)
     }
 
     /** The `.json` sidecar: the entry state, the canonical body and its plain text. */
@@ -65,8 +71,8 @@ object EntryExport {
     ) + "\n"
 
     /** Present attachments as links relative to the note, so the folder stays browsable without the app. */
-    private fun attachments(entry: EntryState, missing: String, link: (AttachmentState) -> String?): String {
-        val visible = entry.attachments.values.filter { it.present }.sortedBy { it.position }
+    private fun attachments(entry: EntryState, missing: String, inline: Set<String>, link: (AttachmentState) -> String?): String {
+        val visible = entry.attachments.values.filter { it.present && it.meta.id !in inline }.sortedBy { it.position }
         if (visible.isEmpty()) return ""
         return visible.joinToString("\n", prefix = "\n", postfix = "\n") { a ->
             val label = (a.caption ?: a.meta.name ?: a.meta.kind).replace('[', '(').replace(']', ')')

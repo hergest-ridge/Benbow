@@ -80,6 +80,7 @@
     <string name="add">Добавить</string>
     <string name="cancel">Отмена</string>
     <string name="attachments">Вложения</string>
+    <string name="attachment_gone">Вложение удалено</string>
     <string name="saved">Сохранено</string>
     <string name="drop_to_attach">Отпустите, чтобы прикрепить к записи</string>
     <string name="shortcuts">Сочетания клавиш</string>

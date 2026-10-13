@@ -88,3 +88,4 @@ SQLDelight, Koin, Navigation 3, Coil 3, Okio (IO + SHA-256), org.jetbrains:markd
 kotest-property, Turbine, Roborazzi. Server: sqlite-jdbc, logback, kotlinx-html, a QR generator.
 Android: WorkManager, Media3, Photo Picker, Glance (widget; 1.2.0, the latest stable on 2026-10-13), platform BiometricPrompt (app lock), Baseline Profiles.
 Theme: MaterialKolor 5.0.1 (com.materialkolor:material-kolor, all CMP targets) generates the palettes' M3 schemes from seed colors.
+Fonts: Meddon (OFL, google/fonts, 2026-10-14) bundled as a compose resource for the wordmark only; license in docs/licenses/.

@@ -61,7 +61,7 @@ private fun MoreList(services: AppServices, nav: Navigator) {
     val status by services.sync.status.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).statusBarsPadding()) {
         Column(Modifier.fillMaxWidth().padding(vertical = 32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Benbow", style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary)
+            Wordmark()
             Text(
                 stringResource(Res.string.more_tagline),
                 style = MaterialTheme.typography.bodyMedium,

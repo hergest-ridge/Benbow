@@ -94,7 +94,7 @@ internal fun LockScreen(auth: DeviceAuth?, onUnlock: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Icon(Icons.Lock, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
-            Text("Benbow", style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary)
+            Wordmark()
             Text(
                 stringResource(Res.string.lock_closed),
                 style = MaterialTheme.typography.bodyLarge,

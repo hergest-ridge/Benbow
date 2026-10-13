@@ -66,11 +66,11 @@ internal sealed interface FeedRow {
     }
 }
 
-/** Newest first, as the list is drawn bottom-up: a day's line goes after its entries to land above them. */
+/** Newest first, top down: each day's line above its entries. */
 internal fun feedRows(items: List<FeedItem>): List<FeedRow> = buildList {
     items.forEachIndexed { i, item ->
+        if (items.getOrNull(i - 1)?.summary?.day != item.summary.day) add(FeedRow.Day(item.summary.day))
         add(FeedRow.Item(item))
-        if (items.getOrNull(i + 1)?.summary?.day != item.summary.day) add(FeedRow.Day(item.summary.day))
     }
 }
 
@@ -81,17 +81,12 @@ internal class FeedViewModel(private val services: AppServices) : ViewModel() {
         ::feedRows,
     ).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    fun quickNote(text: String) {
-        if (text.isBlank()) return
-        services.scope.launch { services.repo.createNote(services.today(), text) }
-    }
-
     fun react(id: String, emoji: String, on: Boolean) {
         services.scope.launch { services.repo.toggleReaction(id, emoji, on) }
     }
 }
 
-/** Everything as a stream, Telegram-channel style: newest at the bottom by the composer; long-press to react. */
+/** Everything as a stream, newest on top; long-press to react. Writing happens on Home. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun FeedScreen(services: AppServices, nav: Navigator) {
@@ -102,11 +97,8 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(Res.string.feed_title)) },
-                actions = { SyncChip(status) { nav.open(Route.Server) } },
+                actions = { SyncBadge(status) { nav.open(Route.Server) } },
             )
-        },
-        bottomBar = {
-            QuickNoteBar(onSend = vm::quickNote, onNewEntry = { nav.open(Route.Editor(null, services.today(), opened = services.now())) })
         },
     ) { padding ->
         val list = rows ?: return@Scaffold
@@ -120,7 +112,7 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
             }
             return@Scaffold
         }
-        LazyColumn(Modifier.padding(padding).fillMaxSize(), reverseLayout = true, contentPadding = PaddingValues(vertical = 8.dp)) {
+        LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(vertical = 8.dp)) {
             items(list, key = { it.key }) { row ->
                 when (row) {
                     is FeedRow.Day -> DayHeader(row.day)

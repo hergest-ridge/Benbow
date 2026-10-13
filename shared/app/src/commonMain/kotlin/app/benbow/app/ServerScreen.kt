@@ -222,7 +222,7 @@ private fun Paired(services: AppServices, vm: ServerViewModel, connection: Conne
         stringResource(Res.string.server_paired, connection.baseUrl.removePrefix("https://")),
         style = MaterialTheme.typography.titleMedium,
     )
-    syncLabel(status)?.let { (label, tone) -> Text(label, color = tone, style = MaterialTheme.typography.bodyLarge) }
+    syncLook(status)?.let { Text(it.label, color = it.tone, style = MaterialTheme.typography.bodyLarge) }
     Text(
         stringResource(
             Res.string.server_last_sync,

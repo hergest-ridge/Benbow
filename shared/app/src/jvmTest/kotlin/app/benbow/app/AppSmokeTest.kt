@@ -74,16 +74,19 @@ class AppSmokeTest {
         onNodeWithText("В корзину").performClick()
         waitUntilExactlyOneExists(hasText("Как прошёл день? Пара строк — и он сохранится."), 5_000)
 
-        onNodeWithContentDescription("Меню").performClick()
+        onNodeWithText("Ещё").performClick()
+        waitUntilExactlyOneExists(hasText("Корзина"), 5_000)
+        screenshot("22-more")
         onNodeWithText("Корзина").performClick()
         waitUntilExactlyOneExists(hasText("Восстановить"), 5_000)
         screenshot("05-trash")
         onNodeWithText("Восстановить").performClick()
         waitUntilExactlyOneExists(hasText("Корзина пуста"), 5_000)
         onNodeWithContentDescription("Назад").performClick()
+        onNodeWithText("Главная").performClick()
         waitUntilExactlyOneExists(hasText("Купить хлеб"), 5_000)
 
-        onNodeWithText("Не подключено").performClick()
+        onNodeWithContentDescription("Не подключено").performClick()
         waitUntilExactlyOneExists(hasText("Подключиться"))
         screenshot("06-server")
         assertEquals(1, runBlocking { services.repo.journal().first().size })
@@ -201,7 +204,7 @@ class AppSmokeTest {
         waitUntilExactlyOneExists(hasText("#Маша"), 5_000)
         onNodeWithContentDescription("Назад").click()
         waitUntilExactlyOneExists(hasText("Добр", substring = true), 5_000)
-        onNodeWithContentDescription("Меню").click()
+        onNodeWithText("Ещё").click()
         onNodeWithText("Теги").click()
         waitUntilExactlyOneExists(hasText("#Маша · 1"), 5_000)
         onNodeWithText("#Маша · 1").click()
@@ -235,7 +238,7 @@ class AppSmokeTest {
     fun anEveningNudgeIsOneTap() = runDesktopComposeUiTest(width = 412, height = 860) {
         setContent { BenbowApp(services) }
         waitUntilExactlyOneExists(hasText("Добр", substring = true), 5_000)
-        onNodeWithContentDescription("Меню").click()
+        onNodeWithText("Ещё").click()
         onNodeWithText("Напоминания").click()
         waitUntilExactlyOneExists(hasText("Каждый вечер в 21:00", substring = true), 5_000)
         onNodeWithText("Каждый вечер в 21:00", substring = true).click()
@@ -266,7 +269,7 @@ class AppSmokeTest {
     @Test
     fun aHardCheckinOffersKindness() = runDesktopComposeUiTest(width = 412, height = 860) {
         setContent { BenbowApp(services) }
-        waitUntilExactlyOneExists(hasText("Как вы сейчас?"), 5_000)
+        waitUntilExactlyOneExists(hasText("Как сейчас дела?"), 5_000)
         onNodeWithText("🙁").click()
         waitUntilExactlyOneExists(hasText("усталость"), 5_000)
         onNodeWithText("усталость").click()

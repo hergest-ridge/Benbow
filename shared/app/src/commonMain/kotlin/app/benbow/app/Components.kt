@@ -1,5 +1,10 @@
 package app.benbow.app
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,9 +24,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -129,41 +137,47 @@ internal fun Banner(text: String, action: String, error: Boolean = false, onActi
     }
 }
 
-/** Sync state in a few words; red when the user has to act, quiet otherwise. Null when there is nothing to say yet. */
+/** Sync state in a few words with an icon; red when the user has to act, quiet otherwise. */
+internal data class SyncLook(val label: String, val tone: Color, val icon: ImageVector)
+
+/** Null when there is nothing to say yet. */
 @Composable
-internal fun syncLabel(status: SyncStatus): Pair<String, Color>? {
+internal fun syncLook(status: SyncStatus): SyncLook? {
     val colors = MaterialTheme.colorScheme
     val waiting = (status.pending + status.pendingMedia).toInt()
     return when {
-        status.syncing -> stringResource(Res.string.sync_syncing) to colors.outline
+        status.syncing -> SyncLook(stringResource(Res.string.sync_syncing), colors.outline, Icons.Sync)
 
-        status.last is SyncResult.WrongServer -> stringResource(Res.string.sync_wrong_server) to colors.error
+        status.last is SyncResult.WrongServer -> SyncLook(stringResource(Res.string.sync_wrong_server), colors.error, Icons.Error)
 
-        status.last is SyncResult.Incompatible -> stringResource(Res.string.sync_incompatible) to colors.error
+        status.last is SyncResult.Incompatible -> SyncLook(stringResource(Res.string.sync_incompatible), colors.error, Icons.Error)
 
-        status.rejected > 0 -> stringResource(Res.string.sync_attention) to colors.error
+        status.rejected > 0 -> SyncLook(stringResource(Res.string.sync_attention), colors.error, Icons.Error)
 
-        status.last is SyncResult.NotPaired -> stringResource(Res.string.sync_not_paired) to colors.outline
+        status.last is SyncResult.NotPaired -> SyncLook(stringResource(Res.string.sync_not_paired), colors.outline, Icons.CloudOff)
 
-        status.last is SyncResult.Failed && waiting > 0 -> pluralStringResource(Res.plurals.sync_waiting, waiting, waiting) to
-            colors.tertiary
+        status.last is SyncResult.Failed && waiting > 0 ->
+            SyncLook(pluralStringResource(Res.plurals.sync_waiting, waiting, waiting), colors.tertiary, Icons.CloudOff)
 
-        status.last is SyncResult.Failed -> stringResource(Res.string.sync_offline) to colors.tertiary
+        status.last is SyncResult.Failed -> SyncLook(stringResource(Res.string.sync_offline), colors.tertiary, Icons.CloudOff)
 
-        waiting > 0 -> pluralStringResource(Res.plurals.sync_waiting, waiting, waiting) to colors.outline
+        waiting > 0 -> SyncLook(pluralStringResource(Res.plurals.sync_waiting, waiting, waiting), colors.outline, Icons.Cloud)
 
-        status.last is SyncResult.Done -> stringResource(Res.string.sync_done) to colors.primary
+        status.last is SyncResult.Done -> SyncLook(stringResource(Res.string.sync_done), colors.primary, Icons.CloudDone)
 
         else -> null
     }
 }
 
+/** One icon in a top bar; the words are its description and live on the server screen. Turns while syncing. */
 @Composable
-internal fun SyncChip(status: SyncStatus, onClick: () -> Unit) {
-    val (label, tone) = syncLabel(status) ?: return
-    TextButton(onClick, shape = CircleShape) {
-        Box(Modifier.size(8.dp).background(tone, CircleShape))
-        Spacer(Modifier.width(8.dp))
-        Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+internal fun SyncBadge(status: SyncStatus, onClick: () -> Unit) {
+    val look = syncLook(status) ?: return
+    val turn = if (status.syncing) {
+        val spin by rememberInfiniteTransition().animateFloat(0f, -360f, infiniteRepeatable(tween(1_200, easing = LinearEasing)))
+        spin
+    } else {
+        0f
     }
+    IconButton(onClick) { Icon(look.icon, look.label, tint = look.tone, modifier = Modifier.rotate(turn)) }
 }

@@ -9,13 +9,14 @@
 6. **Calm.** Warm, paper-like, unhurried. No guilt mechanics, no noisy badges.
 
 ## Navigation (phone)
-Bottom bar: **Home · Feed · Calendar · Search**. There is always a quick-capture entry point (a composer on Home and Feed, a FAB elsewhere). Settings, tags, trash and server status sit behind the top-bar avatar/menu.
+Bottom bar: **Главная · Лента · Календарь · Поиск · Ещё**. The quick-capture composer lives on Home only. "Ещё" (Mihon-style "More") holds the rest: server and sync, reminders, tags, trash, later settings.
+Motion (owner's feedback, 2026-10-13): tabs switch in place, no animation. A screen opened on top fades in over the one below (220 ms); Back and the predictive back gesture fade it away (no scale-down).
 Desktop and web: navigation rail + adaptive list-detail panes (Material 3 adaptive), with keyboard shortcuts.
 
 ## Screens
-As built (4.2): bottom tabs Главная · Лента · Поиск (the bar steps aside while the keyboard is up); Calendar joins in Phase 5. Home: greeting + date, pinned, today (or a gentle prompt), drafts to continue, On this day by years ago, one favorite older than a month (the same all day), days written this month. Feed: bottom-up stream with day lines, notes in full, journal entries as previews, long-press to react, composer at the bottom.
+As built (4.2): bottom tabs Главная · Лента · Поиск (the bar steps aside while the keyboard is up); Calendar joins in Phase 5. Home: greeting + date, pinned, today (or a gentle prompt), drafts to continue, On this day by years ago, one favorite older than a month (the same all day), days written this month. Feed: stream with day lines, notes in full, journal entries as previews, long-press to react. Since the 2026-10-13 feedback: newest on top (opens at the top), no composer. Home header: date line in accent, a large greeting, sync as one icon (its words on the server screen and under "Ещё").
 - **Home ("Сегодня"):** greeting + date, the day's gentle prompt, one-tap mood check-in, quick-capture bar, "On this day" (1/2/5 years ago), continue drafts, recent feed, a resurfaced favorite memory, upcoming reminders, soft stats ("written 12 days this month", no streaks). A weekly reflection card on Sundays and a monthly one in the last three days of a month (days written and average mood, opens the review template). As built (5.4): the check-in card is faces first; feeling chips and a line of text appear only after a face is tapped. A 🙁/😣 check-in shows a dismissible self-compassion card ("Написать" / "Не сейчас") that opens the `kindness` template.
-- **Feed:** a Telegram-channel-style stream of all entries (posts in full, journal entries as previews) with date separators. Bottom composer works like Saved Messages: type, attach, send. Long-press for reactions, swipe to comment, comments as a thread view.
+- **Feed:** a stream of all entries (posts in full, journal entries as previews) with date separators, newest on top. Long-press for reactions; a post opens read-only with its comments under it.
 - **Day view:** all entries for a day + mood + events. Swipe between days.
 - **Calendar:** month grid with entry dots / mood tint, agenda, reminders.
 - **Editor:** full-screen, distraction-free. Toolbar above the keyboard (format, checklist, attach, voice, template, `/`). Backgrounds Keep-style. Metadata sheet (day, tags, mood, kind). History and conflicts accessible from the menu.

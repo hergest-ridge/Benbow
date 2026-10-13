@@ -1,5 +1,12 @@
 package app.benbow.app
 
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -29,6 +36,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
+import androidx.navigation3.scene.Scene
 import androidx.navigation3.ui.NavDisplay
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.attach_failed
@@ -36,6 +44,7 @@ import app.benbow.app.resources.copied
 import app.benbow.app.resources.tab_calendar
 import app.benbow.app.resources.tab_feed
 import app.benbow.app.resources.tab_home
+import app.benbow.app.resources.tab_more
 import app.benbow.app.resources.tab_search
 import app.benbow.ui.theme.BenbowTheme
 import org.jetbrains.compose.resources.StringResource
@@ -70,6 +79,9 @@ internal sealed interface Route {
     data object Trash : Route
 
     data object Server : Route
+
+    /** The last tab: everything that doesn't need a tab of its own. */
+    data object More : Route
 }
 
 internal class Navigator(private val stack: SnapshotStateList<Route>) {
@@ -101,7 +113,19 @@ private val TABS = listOf(
     Tab(Route.Feed, Res.string.tab_feed, Icons.Feed),
     Tab(Route.Calendar, Res.string.tab_calendar, Icons.Calendar),
     Tab(Route.Search, Res.string.tab_search, Icons.Search),
+    Tab(Route.More, Res.string.tab_more, Icons.MoreHoriz),
 )
+
+/** Tabs switch in place; screens on top fade in over the one below and fade away on Back (ux.md#motion). */
+private val TAB = mapOf("benbow.tab" to true)
+
+private fun Scene<*>.isTab() = metadata["benbow.tab"] == true
+
+private const val FADE_MILLIS = 220
+
+private fun AnimatedContentTransitionScope<Scene<Route>>.betweenTabs() = initialState.isTab() && targetState.isTab()
+
+private val still = EnterTransition.None togetherWith ExitTransition.None
 
 /** Root of the Android and desktop apps. */
 @Composable
@@ -150,16 +174,22 @@ private fun AppNavigation(services: AppServices, backStack: SnapshotStateList<Ro
     NavDisplay(
         backStack = backStack,
         onBack = nav::back,
+        transitionSpec = {
+            if (betweenTabs()) still else fadeIn(tween(FADE_MILLIS)) togetherWith ExitTransition.KeepUntilTransitionsFinished
+        },
+        popTransitionSpec = { if (betweenTabs()) still else EnterTransition.None togetherWith fadeOut(tween(FADE_MILLIS)) },
+        predictivePopTransitionSpec = { if (betweenTabs()) still else EnterTransition.None togetherWith fadeOut() },
         entryDecorators = listOf(rememberSaveableStateHolderNavEntryDecorator(), rememberViewModelStoreNavEntryDecorator()),
         entryProvider = entryProvider {
-            entry<Route.Home> { HomeScreen(services, nav) }
-            entry<Route.Feed> { FeedScreen(services, nav) }
+            entry<Route.Home>(metadata = TAB) { HomeScreen(services, nav) }
+            entry<Route.Feed>(metadata = TAB) { FeedScreen(services, nav) }
             entry<Route.Editor> { EditorScreen(services, nav, it) }
             entry<Route.History> { HistoryScreen(services, nav, it) }
             entry<Route.Revision> { RevisionScreen(services, nav, it) }
             entry<Route.Media> { MediaScreen(services, nav, it) }
-            entry<Route.Search> { SearchScreen(services, nav) }
-            entry<Route.Calendar> { CalendarScreen(services, nav) }
+            entry<Route.Search>(metadata = TAB) { SearchScreen(services, nav) }
+            entry<Route.Calendar>(metadata = TAB) { CalendarScreen(services, nav) }
+            entry<Route.More>(metadata = TAB) { MoreScreen(services, nav) }
             entry<Route.Comments> { CommentsScreen(services, nav, it) }
             entry<Route.Tags> { TagsScreen(services, nav) }
             entry<Route.Reminders> { RemindersScreen(services, nav, it) }

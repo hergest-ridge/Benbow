@@ -1,33 +1,31 @@
 package app.benbow.app
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -48,18 +46,14 @@ import app.benbow.app.resources.home_resurfaced
 import app.benbow.app.resources.home_today
 import app.benbow.app.resources.home_today_empty
 import app.benbow.app.resources.home_write
-import app.benbow.app.resources.menu
-import app.benbow.app.resources.reminders
 import app.benbow.app.resources.review_month
 import app.benbow.app.resources.review_summary
 import app.benbow.app.resources.review_week
-import app.benbow.app.resources.server
-import app.benbow.app.resources.tags
-import app.benbow.app.resources.trash
 import app.benbow.app.resources.years_ago
 import app.benbow.client.DayInfo
 import app.benbow.client.EntrySummary
 import app.benbow.client.Prompts
+import app.benbow.client.SyncStatus
 import app.benbow.client.Templates
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -161,50 +155,10 @@ internal fun HomeScreen(services: AppServices, nav: Navigator) {
     val state by vm.state.collectAsStateWithLifecycle()
     val kindness by vm.kindness.collectAsStateWithLifecycle()
     val status by services.sync.status.collectAsStateWithLifecycle()
-    var menu by remember { mutableStateOf(false) }
     var refreshUntil by remember { mutableStateOf<Int?>(null) }
     val newEntry = { nav.open(Route.Editor(null, services.today(), opened = services.now())) }
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(greeting(), style = MaterialTheme.typography.titleLarge)
-                        state?.let {
-                            Text(
-                                fullDateLabel(it.today),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                },
-                actions = {
-                    SyncChip(status) { nav.open(Route.Server) }
-                    Box {
-                        IconButton({ menu = true }) { Icon(Icons.More, stringResource(Res.string.menu)) }
-                        DropdownMenu(menu, { menu = false }) {
-                            DropdownMenuItem(text = { Text(stringResource(Res.string.reminders)) }, onClick = {
-                                menu = false
-                                nav.open(Route.Reminders())
-                            })
-                            DropdownMenuItem(text = { Text(stringResource(Res.string.tags)) }, onClick = {
-                                menu = false
-                                nav.open(Route.Tags)
-                            })
-                            DropdownMenuItem(text = { Text(stringResource(Res.string.trash)) }, onClick = {
-                                menu = false
-                                nav.open(Route.Trash)
-                            })
-                            DropdownMenuItem(text = { Text(stringResource(Res.string.server)) }, onClick = {
-                                menu = false
-                                nav.open(Route.Server)
-                            })
-                        }
-                    }
-                },
-            )
-        },
+        topBar = { HomeHeader(state?.today, status) { nav.open(Route.Server) } },
         bottomBar = { QuickNoteBar(onSend = vm::quickNote, onNewEntry = newEntry) },
     ) { padding ->
         PullToRefreshBox(
@@ -324,6 +278,27 @@ private fun Prompt(text: String, action: String, onAction: () -> Unit) {
 
 private fun summary(days: Collection<DayInfo>): Pair<Int, Double?> =
     days.size to days.mapNotNull { it.mood }.takeIf { it.isNotEmpty() }?.average()
+
+/** Date above, a large greeting, sync as one quiet icon; the rest of the app lives under the "Ещё" tab. */
+@Composable
+private fun HomeHeader(today: String?, status: SyncStatus, onSync: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().windowInsetsPadding(
+            TopAppBarDefaults.windowInsets,
+        ).padding(start = 24.dp, end = 12.dp, top = 16.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                today?.let { fullDateLabel(it) }.orEmpty(),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(greeting(), style = MaterialTheme.typography.headlineMedium, maxLines = 1)
+        }
+        SyncBadge(status, onSync)
+    }
+}
 
 @Composable
 private fun greeting(): String {

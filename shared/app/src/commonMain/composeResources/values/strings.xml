@@ -86,6 +86,11 @@
     <string name="tab_home">Главная</string>
     <string name="tab_feed">Лента</string>
     <string name="tab_search">Поиск</string>
+    <string name="tab_more">Ещё</string>
+    <string name="more_tagline">Дневник и лента всего</string>
+    <string name="more_reminders">Уведомления в нужное время</string>
+    <string name="more_tags">Категории и цвета</string>
+    <string name="more_trash">Удалённое можно вернуть</string>
     <string name="greeting_morning">Доброе утро</string>
     <string name="greeting_day">Добрый день</string>
     <string name="greeting_evening">Добрый вечер</string>
@@ -110,7 +115,7 @@
         <item quantity="other">В этом месяце вы писали %1$d дня</item>
     </plurals>
     <string name="feed_title">Лента</string>
-    <string name="feed_empty">Здесь будет ваша лента. Напишите первую заметку внизу.</string>
+    <string name="feed_empty">Здесь будет ваша лента. Заметки с главной появятся тут.</string>
     <string name="pin">Закрепить</string>
     <string name="unpin">Открепить</string>
     <string name="react">Реакция</string>
@@ -177,7 +182,7 @@
     <string name="reminder_delete">Удалить напоминание</string>
     <string name="home_answer">Ответить</string>
     <string name="templates">Шаблоны</string>
-    <string name="checkin_title">Как вы сейчас?</string>
+    <string name="checkin_title">Как сейчас дела?</string>
     <string name="checkin_words_hint">Пара слов, если хочется</string>
     <string name="checkin_save">Отметить</string>
     <string name="kindness_hint">Похоже, сейчас непросто. Если хочется, можно ответить себе по-доброму:</string>

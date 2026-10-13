@@ -83,6 +83,37 @@
     <string name="filter_favorites">Избранное</string>
     <string name="filter_media">С вложениями</string>
     <string name="search_empty">Ничего не нашлось</string>
+    <string name="tab_home">Главная</string>
+    <string name="tab_feed">Лента</string>
+    <string name="tab_search">Поиск</string>
+    <string name="greeting_morning">Доброе утро</string>
+    <string name="greeting_day">Добрый день</string>
+    <string name="greeting_evening">Добрый вечер</string>
+    <string name="greeting_night">Доброй ночи</string>
+    <string name="home_pinned">Закреплено</string>
+    <string name="home_today">Сегодня</string>
+    <string name="home_today_empty">Как прошёл день? Пара строк — и он сохранится.</string>
+    <string name="home_write">Написать</string>
+    <string name="home_drafts">Продолжить</string>
+    <string name="home_on_this_day">В этот день</string>
+    <string name="home_resurfaced">Из избранного</string>
+    <plurals name="years_ago">
+        <item quantity="one">%1$d год назад</item>
+        <item quantity="few">%1$d года назад</item>
+        <item quantity="many">%1$d лет назад</item>
+        <item quantity="other">%1$d года назад</item>
+    </plurals>
+    <plurals name="days_written">
+        <item quantity="one">В этом месяце вы писали %1$d день</item>
+        <item quantity="few">В этом месяце вы писали %1$d дня</item>
+        <item quantity="many">В этом месяце вы писали %1$d дней</item>
+        <item quantity="other">В этом месяце вы писали %1$d дня</item>
+    </plurals>
+    <string name="feed_title">Лента</string>
+    <string name="feed_empty">Здесь будет ваша лента. Напишите первую заметку внизу.</string>
+    <string name="pin">Закрепить</string>
+    <string name="unpin">Открепить</string>
+    <string name="react">Реакция</string>
     <string name="trash_empty">Корзина пуста</string>
     <string name="trash_hint">Записи из корзины не удаляются: их можно вернуть в любой момент.</string>
 

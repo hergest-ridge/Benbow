@@ -62,88 +62,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
-internal class DayGroup(val day: String, val entries: List<EntrySummary>)
-
-internal class JournalViewModel(private val services: AppServices) : ViewModel() {
-    /** Null until the first read from the local DB (milliseconds). */
-    val days: StateFlow<List<DayGroup>?> = services.repo.journal()
-        .map { entries -> entries.groupBy { it.day }.map { (day, items) -> DayGroup(day, items) } }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
-
-    fun quickNote(text: String) {
-        if (text.isBlank()) return
-        services.scope.launch { services.repo.createNote(services.today(), text) }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun JournalScreen(services: AppServices, nav: Navigator) {
-    val vm = viewModel { JournalViewModel(services) }
-    val days by vm.days.collectAsStateWithLifecycle()
-    val status by services.sync.status.collectAsStateWithLifecycle()
-    var menu by remember { mutableStateOf(false) }
-    // Only a pull shows the refresh spinner; background syncs stay quiet.
-    var refreshUntil by remember { mutableStateOf<Int?>(null) }
-    val refreshing = refreshUntil?.let { status.completed < it } == true
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(Res.string.journal_title)) },
-                actions = {
-                    IconButton({ nav.open(Route.Search) }) { Icon(Icons.Search, stringResource(Res.string.search)) }
-                    SyncChip(status) { nav.open(Route.Server) }
-                    Box {
-                        IconButton({ menu = true }) { Icon(Icons.More, stringResource(Res.string.menu)) }
-                        DropdownMenu(menu, { menu = false }) {
-                            DropdownMenuItem(text = { Text(stringResource(Res.string.trash)) }, onClick = {
-                                menu = false
-                                nav.open(Route.Trash)
-                            })
-                            DropdownMenuItem(text = { Text(stringResource(Res.string.server)) }, onClick = {
-                                menu = false
-                                nav.open(Route.Server)
-                            })
-                        }
-                    }
-                },
-            )
-        },
-        bottomBar = {
-            QuickNoteBar(
-                onSend = vm::quickNote,
-                onNewEntry = { nav.open(Route.Editor(null, services.today(), opened = services.now())) },
-            )
-        },
-    ) { padding ->
-        PullToRefreshBox(
-            isRefreshing = refreshing,
-            onRefresh = {
-                refreshUntil = status.completed + 1 + if (status.syncing) 1 else 0
-                services.sync.requestSync()
-            },
-            modifier = Modifier.padding(padding).fillMaxSize(),
-        ) {
-            val groups = days ?: return@PullToRefreshBox
-            if (groups.isEmpty()) {
-                EmptyJournal()
-            } else {
-                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 12.dp)) {
-                    groups.forEach { group ->
-                        stickyHeader(key = "day:${group.day}") { DayHeader(group.day) }
-                        items(group.entries, key = { it.id }) { entry ->
-                            EntryCard(entry, onClick = { nav.open(Route.Editor(entry.id, entry.day)) }, media = services.media)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DayHeader(day: String) {
+internal fun DayHeader(day: String) {
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxWidth()) {
         Text(
             dayLabel(day),
@@ -155,25 +75,7 @@ private fun DayHeader(day: String) {
 }
 
 @Composable
-private fun EmptyJournal() {
-    Column(
-        Modifier.fillMaxSize().padding(32.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(stringResource(Res.string.journal_empty_title), style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
-        Text(
-            stringResource(Res.string.journal_empty_text),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-    }
-}
-
-/** Saved-messages style capture: type and send; with an empty field the button opens a full entry instead. */
-@Composable
-private fun QuickNoteBar(onSend: (String) -> Unit, onNewEntry: () -> Unit) {
+internal fun QuickNoteBar(onSend: (String) -> Unit, onNewEntry: () -> Unit) {
     var text by rememberSaveable { mutableStateOf("") }
     Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
         Row(

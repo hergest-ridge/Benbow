@@ -43,6 +43,15 @@ internal fun dayLabel(day: String): String {
     }
 }
 
+/** "Вторник, 13 октября" even for today (the Home header). */
+@Composable
+internal fun fullDateLabel(day: String): String {
+    val date = LocalDate.parse(day)
+    val weekday = stringArrayResource(Res.array.weekdays)[date.dayOfWeek.isoDayNumber - 1]
+    val month = stringArrayResource(Res.array.months_genitive)[date.month.number - 1]
+    return "$weekday, ${date.day} $month"
+}
+
 internal fun timeLabel(millis: Long): String {
     val time = Instant.fromEpochMilliseconds(millis).toLocalDateTime(TimeZone.currentSystemDefault())
     return "${time.hour.toString().padStart(2, '0')}:${time.minute.toString().padStart(2, '0')}"

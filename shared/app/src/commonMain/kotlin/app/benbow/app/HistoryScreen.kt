@@ -178,7 +178,7 @@ internal fun RevisionScreen(services: AppServices, nav: Navigator, route: Route.
                 Button(
                     onClick = {
                         services.scope.launch { services.repo.restoreVersion(route.entryId, body) }
-                        nav.backTo { it is Route.Editor || it is Route.Journal }
+                        nav.backTo { it is Route.Editor || it is Route.Home }
                     },
                     modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp),
                 ) { Text(stringResource(Res.string.revision_restore)) }

@@ -53,6 +53,9 @@ data class EntrySummary(
 
 data class TagCount(val name: String, val uses: Int)
 
+/** An entry as the feed shows it: notes in full, journal entries as a preview. */
+data class FeedItem(val summary: EntrySummary, val kind: String, val text: String, val reactions: Set<String>)
+
 /** What to look for; empty text and off switches match everything outside the trash. */
 data class SearchQuery(val text: String = "", val tag: String? = null, val favorites: Boolean = false, val withMedia: Boolean = false)
 
@@ -75,6 +78,7 @@ data class EntryDetail(
 ) {
     val inTrash: Boolean get() = fields[TRASH_FIELD] == "true"
     val favorite: Boolean get() = fields[FAVORITE_FIELD] == "true"
+    val pinned: Boolean get() = fields[PINNED_FIELD] == "true"
     val mood: Int? get() = fields[MOOD_FIELD]?.toIntOrNull()
     val tags: List<String> get() = tagsOf(fields)
     val reactions: Set<String> get() = fields.filter {
@@ -86,6 +90,7 @@ data class EntryDetail(
 internal const val TRASH_FIELD = "deleted"
 internal const val FAVORITE_FIELD = "favorite"
 internal const val MOOD_FIELD = "mood"
+internal const val PINNED_FIELD = "pinned"
 internal const val TAG_PREFIX = "tag:"
 internal const val REACTION_PREFIX = "reaction:"
 
@@ -266,6 +271,8 @@ class JournalRepository(
 
     fun setFavorite(id: String, favorite: Boolean) = setField(id, FAVORITE_FIELD, if (favorite) "true" else null)
 
+    fun setPinned(id: String, pinned: Boolean) = setField(id, PINNED_FIELD, if (pinned) "true" else null)
+
     /** -2 (hard) .. 2 (great), null = not set. */
     fun setMood(id: String, mood: Int?) = setField(id, MOOD_FIELD, mood?.coerceIn(-2, 2)?.toString())
 
@@ -277,6 +284,33 @@ class JournalRepository(
     fun removeTag(id: String, name: String) = setField(id, tagKey(name), null)
 
     fun toggleReaction(id: String, emoji: String, on: Boolean) = setField(id, REACTION_PREFIX + emoji, if (on) "1" else null)
+
+    // Home (4.2)
+
+    fun pinned(): Flow<List<EntrySummary>> = q.pinned(::summaryOf).asFlow().mapToList(context)
+
+    /** Entries with typing not yet turned into a revision ("continue writing"). */
+    fun withDrafts(): Flow<List<EntrySummary>> = q.withDrafts(::summaryOf).asFlow().mapToList(context)
+
+    /** The same date in earlier years; [today] is "YYYY-MM-DD". */
+    fun onThisDay(today: String): Flow<List<EntrySummary>> = q.onThisDay(today.substring(4), today, ::summaryOf).asFlow().mapToList(context)
+
+    fun favoritesUpTo(lastDay: String): Flow<List<EntrySummary>> = q.favoritesUpTo(lastDay, ::summaryOf).asFlow().mapToList(context)
+
+    fun daysWritten(fromDay: String, toDay: String): Flow<Long> = q.daysWritten(fromDay, toDay).asFlow().mapToOne(context)
+
+    /** Newest first; the feed draws it bottom-up like a chat. */
+    fun feed(limit: Long = 300): Flow<List<FeedItem>> =
+        q.feed(limit) { id, kind, day, createdAt, title, preview, body, conflictHeads, mediaCount, cover, fields ->
+            val summary = summaryOf(id, day, createdAt, title, preview, conflictHeads, mediaCount, cover, fields)
+            val text = if (kind == "journal") {
+                listOf(title, preview).filter { it.isNotBlank() }.joinToString("\n")
+            } else {
+                plainText(body).take(FEED_TEXT_MAX)
+            }
+            val reactions = decodeFields(fields).filter { it.key.startsWith(REACTION_PREFIX) && it.value != null }.keys
+            FeedItem(summary, kind, text, reactions.map { it.removePrefix(REACTION_PREFIX) }.toSet())
+        }.asFlow().mapToList(context)
 
     /** Builds the search index after an update changed it (or on the first start); quick otherwise. */
     fun prepareSearch() = SearchIndex.rebuildIfNeeded(db)
@@ -393,6 +427,13 @@ internal fun summarize(body: String): Pair<String, String> {
     return title.take(TITLE_MAX) to rest.lines().map { it.trim() }.filter { it.isNotEmpty() }.joinToString(" ").take(PREVIEW_MAX)
 }
 
+private fun plainText(body: String): String = try {
+    DocumentCodec.decode(body).toPlainText(includeSpoilers = false).trim()
+} catch (_: DocumentFormatException) {
+    ""
+}
+
+private const val FEED_TEXT_MAX = 4_000
 private const val TITLE_MAX = 120
 private const val PREVIEW_MAX = 200
 

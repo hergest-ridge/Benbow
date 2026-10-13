@@ -50,7 +50,7 @@ class AppSmokeTest {
     @Test
     fun quickNoteEditTrashRestore() = runDesktopComposeUiTest(width = 412, height = 860) {
         setContent { BenbowApp(services) }
-        waitUntilExactlyOneExists(hasText("Здесь будет ваш дневник"))
+        waitUntilExactlyOneExists(hasText("Как прошёл день? Пара строк — и он сохранится."))
         screenshot("01-empty")
 
         onNode(hasSetTextAction()).performTextInput("Купить хлеб\nи молоко")
@@ -69,7 +69,7 @@ class AppSmokeTest {
         onNodeWithText("Купить хлеб").performClick()
         onNodeWithContentDescription("Меню").performClick()
         onNodeWithText("В корзину").performClick()
-        waitUntilExactlyOneExists(hasText("Здесь будет ваш дневник"), 5_000)
+        waitUntilExactlyOneExists(hasText("Как прошёл день? Пара строк — и он сохранится."), 5_000)
 
         onNodeWithContentDescription("Меню").performClick()
         onNodeWithText("Корзина").performClick()
@@ -151,7 +151,7 @@ class AppSmokeTest {
         waitForIdle()
         screenshot("10-journal-metadata")
 
-        onNodeWithContentDescription("Поиск").performClick()
+        onNodeWithText("Поиск").click()
         onNode(hasSetTextAction()).performTextInput("мор")
         waitUntilExactlyOneExists(hasText("Прогулка у моря"), 5_000)
         onNode(hasSetTextAction()).performTextClearance()
@@ -162,13 +162,29 @@ class AppSmokeTest {
     }
 
     @Test
+    fun homeAndFeed() = runDesktopComposeUiTest(width = 412, height = 860) {
+        services.repo.createNote("2025-" + services.today().substring(5), "Год назад тоже писал")
+        val note = services.repo.createNote(services.today(), "Утренняя заметка\nвторая строка")
+        services.repo.toggleReaction(note, "🔥", on = true)
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Утренняя заметка"), 5_000)
+        waitUntilExactlyOneExists(hasText("В этот день"), 5_000)
+        screenshot("12-home")
+
+        onNodeWithText("Лента").click()
+        waitUntilExactlyOneExists(hasText("Утренняя заметка\nвторая строка"), 5_000)
+        waitUntilExactlyOneExists(hasText("🔥"), 5_000)
+        screenshot("13-feed")
+    }
+
+    @Test
     fun newEntryOpenedByMistakeLeavesNothing() = runDesktopComposeUiTest(width = 412, height = 860) {
         setContent { BenbowApp(services) }
-        waitUntilExactlyOneExists(hasText("Здесь будет ваш дневник"))
+        waitUntilExactlyOneExists(hasText("Как прошёл день? Пара строк — и он сохранится."))
         onNodeWithContentDescription("Новая запись").performClick()
         waitUntilExactlyOneExists(hasText("Сегодня"))
         onNodeWithContentDescription("Назад").performClick()
-        waitUntilExactlyOneExists(hasText("Здесь будет ваш дневник"))
+        waitUntilExactlyOneExists(hasText("Как прошёл день? Пара строк — и он сохранится."))
         assertEquals(0, runBlocking { services.repo.journal().first().size })
     }
 }

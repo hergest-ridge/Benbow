@@ -119,6 +119,41 @@ WHERE json_extract(fields, '$.deleted') IS NOT 'true'
 ORDER BY day DESC, created_at DESC
 LIMIT 300;
 
+-- Home (4.2) -------------------------------------------------------------------------------
+
+pinned:
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
+WHERE json_extract(fields, '$.pinned') = 'true' AND json_extract(fields, '$.deleted') IS NOT 'true'
+ORDER BY updated_at DESC;
+
+withDrafts:
+SELECT e.id, e.day, e.created_at, e.title, e.preview, e.conflict_heads, e.media_count, e.cover, e.fields FROM entry e
+JOIN draft d ON d.entry_id = e.id
+WHERE json_extract(e.fields, '$.deleted') IS NOT 'true'
+ORDER BY d.updated_at DESC;
+
+-- Same month and day in earlier years (:monthDay = "-10-13").
+onThisDay:
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
+WHERE substr(day, 5) = :monthDay AND day < :today AND json_extract(fields, '$.deleted') IS NOT 'true'
+ORDER BY day DESC, created_at;
+
+favoritesUpTo:
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
+WHERE json_extract(fields, '$.favorite') = 'true' AND day <= :lastDay AND json_extract(fields, '$.deleted') IS NOT 'true'
+ORDER BY day;
+
+daysWritten:
+SELECT COUNT(DISTINCT day) FROM entry
+WHERE day BETWEEN :fromDay AND :toDay AND json_extract(fields, '$.deleted') IS NOT 'true';
+
+-- Feed: newest first (the list is drawn bottom-up), with bodies to show notes in full.
+feed:
+SELECT id, kind, day, created_at, title, preview, body, conflict_heads, media_count, cover, fields FROM entry
+WHERE json_extract(fields, '$.deleted') IS NOT 'true'
+ORDER BY day DESC, created_at DESC
+LIMIT :limit;
+
 tagCounts:
 SELECT json_each.value AS name, COUNT(*) AS uses
 FROM entry, json_each(entry.fields)

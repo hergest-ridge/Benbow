@@ -46,7 +46,9 @@ import app.benbow.app.resources.history
 import app.benbow.app.resources.in_trash_banner
 import app.benbow.app.resources.menu
 import app.benbow.app.resources.move_to_trash
+import app.benbow.app.resources.pin
 import app.benbow.app.resources.restore
+import app.benbow.app.resources.unpin
 import app.benbow.client.DraftSession
 import app.benbow.client.EntryDetail
 import app.benbow.client.JournalRepository
@@ -107,6 +109,8 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
     }
 
     fun toggleFavorite() = withEntry { repo.setFavorite(it, detail?.favorite != true) }
+
+    fun togglePinned() = withEntry { repo.setPinned(it, detail?.pinned != true) }
 
     fun setMood(mood: Int?) = withEntry { repo.setMood(it, mood) }
 
@@ -206,6 +210,22 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                         Box {
                             IconButton({ menu = true }) { Icon(Icons.More, stringResource(Res.string.menu)) }
                             DropdownMenu(menu, { menu = false }) {
+                                DropdownMenuItem(text = {
+                                    Text(
+                                        stringResource(
+                                            if (detail?.pinned ==
+                                                true
+                                            ) {
+                                                Res.string.unpin
+                                            } else {
+                                                Res.string.pin
+                                            },
+                                        ),
+                                    )
+                                }, onClick = {
+                                    menu = false
+                                    vm.togglePinned()
+                                })
                                 DropdownMenuItem(text = { Text(stringResource(Res.string.history)) }, onClick = {
                                     menu = false
                                     openHistory()

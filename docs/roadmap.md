@@ -26,7 +26,7 @@ Slices: **3.1 server blob store (content-addressed, resumable chunked upload, ve
 
 ## Phase 4: Feed, metadata, search, home
 Feed with composer, comments (threads), reactions, favorites, tag categories, FTS search with filters, Home v1 (Today, On this day, drafts, favorites resurfacing), share/copy actions.
-Slices: **4.1 entry metadata (favorite, pinned, mood, tags, reactions as namespaced LWW fields, ADR-021) + on-device FTS search with filters ✅** · 4.2 navigation shell + Home v1 + Feed · 4.3 comments (threads), share/copy, tag categories.
+Slices: **4.1 entry metadata (favorite, pinned, mood, tags, reactions as namespaced LWW fields, ADR-021) + on-device FTS search with filters ✅** · **4.2 navigation shell + Home v1 + Feed ✅** · 4.3 comments (threads), share/copy, tag categories.
 
 ## Phase 5: Calendar, reminders, templates, psychology
 Calendar views, events, reminders with local notifications, templates with placeholders, prompts library, mood check-ins with emotion words, weekly/monthly reviews.

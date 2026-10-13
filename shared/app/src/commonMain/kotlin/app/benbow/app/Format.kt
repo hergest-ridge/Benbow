@@ -3,9 +3,12 @@ package app.benbow.app
 import androidx.compose.runtime.Composable
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.months_genitive
+import app.benbow.app.resources.months_nominative
 import app.benbow.app.resources.today
 import app.benbow.app.resources.weekdays
 import app.benbow.app.resources.yesterday
+import app.benbow.client.Prompts
+import app.benbow.client.TemplateContext
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -50,6 +53,19 @@ internal fun fullDateLabel(day: String): String {
     val weekday = stringArrayResource(Res.array.weekdays)[date.dayOfWeek.isoDayNumber - 1]
     val month = stringArrayResource(Res.array.months_genitive)[date.month.number - 1]
     return "$weekday, ${date.day} $month"
+}
+
+/** What template placeholders become on [day] (the question of the day included). */
+@Composable
+internal fun templateContext(day: String): TemplateContext {
+    val date = LocalDate.parse(day)
+    val month = stringArrayResource(Res.array.months_genitive)[date.month.number - 1]
+    return TemplateContext(
+        date = "${date.day} $month ${date.year}",
+        weekday = stringArrayResource(Res.array.weekdays)[date.dayOfWeek.isoDayNumber - 1].lowercase(),
+        month = stringArrayResource(Res.array.months_nominative)[date.month.number - 1],
+        prompt = Prompts.ofTheDay(day),
+    )
 }
 
 internal fun timeLabel(millis: Long): String {

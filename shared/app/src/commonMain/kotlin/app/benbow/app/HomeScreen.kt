@@ -40,6 +40,7 @@ import app.benbow.app.resources.greeting_day
 import app.benbow.app.resources.greeting_evening
 import app.benbow.app.resources.greeting_morning
 import app.benbow.app.resources.greeting_night
+import app.benbow.app.resources.home_answer
 import app.benbow.app.resources.home_drafts
 import app.benbow.app.resources.home_on_this_day
 import app.benbow.app.resources.home_pinned
@@ -54,6 +55,8 @@ import app.benbow.app.resources.tags
 import app.benbow.app.resources.trash
 import app.benbow.app.resources.years_ago
 import app.benbow.client.EntrySummary
+import app.benbow.client.Prompts
+import app.benbow.client.Templates
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -181,6 +184,11 @@ internal fun HomeScreen(services: AppServices, nav: Navigator) {
             val home = state ?: return@PullToRefreshBox
             val open = { entry: EntrySummary -> nav.open(Route.Editor(entry.id, entry.day)) }
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
+                item(key = "prompt") {
+                    Prompt(Prompts.ofTheDay(home.today), stringResource(Res.string.home_answer)) {
+                        nav.open(Route.Editor(null, services.today(), opened = services.now(), template = Templates.PROMPT.id))
+                    }
+                }
                 section(Res.string.home_pinned, home.pinned, services, open)
                 item(key = "today") { SectionTitle(stringResource(Res.string.home_today)) }
                 if (home.todays.isEmpty()) {

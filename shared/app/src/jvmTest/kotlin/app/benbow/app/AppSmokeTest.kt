@@ -7,6 +7,7 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -18,6 +19,7 @@ import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.test.waitUntilExactlyOneExists
+import app.benbow.client.Prompts
 import app.benbow.client.db.BenbowDb
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlinx.coroutines.delay
@@ -239,6 +241,25 @@ class AppSmokeTest {
         waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.reminders().first().size == 1 } }
         waitUntilExactlyOneExists(hasText("Пара строк о сегодняшнем дне?"), 5_000)
         screenshot("17-reminders")
+    }
+
+    @Test
+    fun questionOfTheDayAndTemplates() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val prompt = Prompts.ofTheDay(services.today())
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText(prompt), 5_000)
+        screenshot("18-home-prompt")
+        onNodeWithText("Ответить").click()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.journal().first().any { it.title == prompt } } }
+        onNodeWithContentDescription("Назад").click()
+
+        waitUntilExactlyOneExists(hasContentDescription("Новая запись"), 5_000)
+        onNodeWithContentDescription("Новая запись").click()
+        waitUntilExactlyOneExists(hasText("Три хороших события"), 5_000)
+        onNodeWithText("Три хороших события").click()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.journal().first().any { it.title == "Три хороших события" } } }
+        waitForIdle()
+        screenshot("19-template")
     }
 
     @Test

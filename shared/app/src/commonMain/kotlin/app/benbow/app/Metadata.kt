@@ -124,3 +124,17 @@ private fun TagInput(known: List<TagCount>, onDone: () -> Unit, onAdd: (String) 
         }
     }
 }
+
+/** Built-in templates to start a new, empty entry from; optional, one tap. */
+@Composable
+internal fun TemplateRow(onPick: (String) -> Unit) {
+    androidx.compose.foundation.lazy.LazyRow(
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        items(app.benbow.client.Templates.builtIn.size) { i ->
+            val template = app.benbow.client.Templates.builtIn[i]
+            SuggestionChip(onClick = { onPick(template.id) }, label = { Text(template.name) })
+        }
+    }
+}

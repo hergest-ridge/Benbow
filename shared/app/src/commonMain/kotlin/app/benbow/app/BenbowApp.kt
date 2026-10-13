@@ -47,8 +47,8 @@ internal sealed interface Route {
 
     data object Feed : Route
 
-    /** [entryId] = null opens a new entry; [opened] keeps two new-entry screens apart. */
-    data class Editor(val entryId: String?, val day: String, val opened: Long = 0) : Route
+    /** [entryId] = null opens a new entry ([template] fills it); [opened] keeps two new-entry screens apart. */
+    data class Editor(val entryId: String?, val day: String, val opened: Long = 0, val template: String? = null) : Route
 
     data class History(val entryId: String) : Route
 

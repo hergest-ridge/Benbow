@@ -56,6 +56,8 @@ import app.benbow.app.resources.unpin
 import app.benbow.client.DraftSession
 import app.benbow.client.EntryDetail
 import app.benbow.client.JournalRepository
+import app.benbow.client.TemplateContext
+import app.benbow.client.Templates
 import app.benbow.core.content.DocumentCodec
 import app.benbow.core.content.DocumentFormatException
 import app.benbow.core.content.MarkdownExporter
@@ -104,6 +106,16 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
     }
 
     fun onEdited(text: RichText) = session.onChange(text)
+
+    /** Fills a new, still empty entry with a template; the draft starts right away. */
+    fun applyTemplate(id: String, context: TemplateContext) {
+        val template = Templates.byId(id) ?: return
+        val text = DocumentCodec.decode(Templates.render(template, context)).toRichText()
+        show(text, head = shownHead)
+        session.onChange(text)
+    }
+
+    val isBlankNew: Boolean get() = entryId == null && editor?.model?.text?.isBlank() != false
 
     /** For attachments and metadata: a new entry is created on the first one. */
     suspend fun ensureEntryId(): String = session.ensureEntry()
@@ -309,6 +321,11 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
             }
             if (detail?.inTrash == true) {
                 Banner(stringResource(Res.string.in_trash_banner), stringResource(Res.string.restore), onAction = vm::restoreFromTrash)
+            }
+            if (editor != null && vm.isBlankNew) {
+                val context = templateContext(route.day)
+                LaunchedEffect(route.template) { route.template?.let { vm.applyTemplate(it, context) } }
+                TemplateRow { vm.applyTemplate(it, context) }
             }
             if (editor != null && !vm.broken) {
                 val knownTags by vm.knownTags.collectAsStateWithLifecycle()

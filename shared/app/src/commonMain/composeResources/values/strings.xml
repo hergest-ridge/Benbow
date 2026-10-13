@@ -175,6 +175,8 @@
     <string name="reminder_nudge">Каждый вечер в 21:00 — пара строк о дне</string>
     <string name="reminder_nudge_text">Пара строк о сегодняшнем дне?</string>
     <string name="reminder_delete">Удалить напоминание</string>
+    <string name="home_answer">Ответить</string>
+    <string name="templates">Шаблоны</string>
     <string name="trash_empty">Корзина пуста</string>
     <string name="trash_hint">Записи из корзины не удаляются: их можно вернуть в любой момент.</string>
 

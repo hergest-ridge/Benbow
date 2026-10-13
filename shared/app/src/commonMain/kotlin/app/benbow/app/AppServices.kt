@@ -89,6 +89,8 @@ class AppServices(
     )
     val settings get() = Settings(db)
 
+    val lock = AppLock(Settings(db), now)
+
     val export = MutableStateFlow<ExportState>(ExportState.Idle)
 
     /** Writes the whole journal as a ZIP ([ArchiveExport]) after committing any left-over drafts, so it holds what's on screen. */

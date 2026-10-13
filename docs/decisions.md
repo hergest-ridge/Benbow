@@ -69,3 +69,6 @@ Files are stored and transferred by SHA-256 (dedup, verification, resumable uplo
 
 ### ADR-021 Entry metadata = namespaced LWW fields [A]
 Favorite, pinned, mood, tags, reactions and a comment's parent are `entry.meta.set` fields: `favorite`, `pinned`, `mood`, `tag:<lowercase name>` (value = display name, null = removed), `reaction:<emoji>`, `parent`. Each key has its own HLC, so concurrent changes to different tags merge, and restore reconciliation already re-pushes fields. No protocol change. Tag categories and colors (4.3) live in a registry, not in the field key. Replaces the planned `entry.tag.set` / `reaction.set` ops.
+
+### ADR-022 App lock = the platform's owner check, per device [A]
+The lock (6.4) uses Android's `BiometricPrompt` with `BIOMETRIC_STRONG | DEVICE_CREDENTIAL`: fingerprint or face, with the phone's screen lock as the way in. No app PIN, so nothing secret is stored and a forgotten code can't lock the owner out of their own diary; without any screen lock on the device the app doesn't lock. It gates the UI only (files rely on device encryption), never applies to quick capture (it shows nothing), lives in local settings (not synced), starts locked in every new process and re-locks after 1 min / 5 min / 1 h / 5 h away. Recents shows a blank card while it is on. Desktop: none yet.

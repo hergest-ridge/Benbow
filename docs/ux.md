@@ -47,7 +47,7 @@ Evidence-informed practices exposed as **optional** templates, prompts and featu
 | Self-compassion | Neff | Prompts after low-mood check-ins ("what would you tell a friend?") |
 | Small wins | Amabile, progress principle | Weekly review template, soft stats |
 | Reflection cycles | — | Weekly/monthly review templates ("This week", "This month") |
-Anti-patterns to avoid: streak loss shaming, forced daily prompts, gamified points, performance metrics, nagging notifications (reminders are opt-in, gentle, snoozable). App lock (biometric) for a sense of privacy.
+Anti-patterns to avoid: streak loss shaming, forced daily prompts, gamified points, performance metrics, nagging notifications (reminders are opt-in, gentle, snoozable). App lock (biometric) for a sense of privacy. As built (6.4): "Ещё → Блокировка", see ADR-022; the lock screen asks at once and has "Открыть" to ask again.
 
 ## Performance budgets (validated in Phase 6 with macrobenchmarks)
 Cold start to Home <600 ms on the owner's phone. Entry open <100 ms. Feed scroll: no janky frames at 120 Hz. Typing: no dropped frames on a 20k-char entry.

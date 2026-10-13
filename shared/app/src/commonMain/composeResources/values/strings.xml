@@ -79,6 +79,23 @@
     <string name="tag_remove">Убрать тег %1$s</string>
     <string name="add">Добавить</string>
     <string name="cancel">Отмена</string>
+    <string name="lock">Блокировка</string>
+    <string name="lock_enable">Блокировать приложение</string>
+    <string name="lock_after">Закрывать, если не открывать</string>
+    <string-array name="lock_choices">
+        <item>1 минуту</item>
+        <item>5 минут</item>
+        <item>1 час</item>
+        <item>5 часов</item>
+    </string-array>
+    <string name="more_lock_off">Выключена</string>
+    <string name="more_lock_on">Закрывается через %1$s</string>
+    <string name="lock_note">Открывается отпечатком, лицом или блокировкой экрана телефона. Быстрая заметка из шторки, виджета и «Поделиться» работает без разблокировки: она ничего не показывает из дневника.</string>
+    <string name="lock_unavailable">Сначала задайте блокировку экрана в настройках телефона: PIN, рисунок или отпечаток.</string>
+    <string name="lock_desktop">На компьютере блокировки пока нет.</string>
+    <string name="lock_closed">Дневник закрыт</string>
+    <string name="lock_open">Открыть</string>
+    <string name="lock_prompt">Открыть Benbow</string>
     <string name="print">PDF и печать</string>
     <string name="not_on_device">нет на этом устройстве, а сервер недоступен</string>
     <string name="export">Экспорт</string>

@@ -28,7 +28,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.export
+import app.benbow.app.resources.lock
+import app.benbow.app.resources.lock_choices
 import app.benbow.app.resources.more_export
+import app.benbow.app.resources.more_lock_off
+import app.benbow.app.resources.more_lock_on
 import app.benbow.app.resources.more_reminders
 import app.benbow.app.resources.more_tagline
 import app.benbow.app.resources.more_tags
@@ -37,20 +41,20 @@ import app.benbow.app.resources.reminders
 import app.benbow.app.resources.server
 import app.benbow.app.resources.tags
 import app.benbow.app.resources.trash
-import app.benbow.client.SyncStatus
+import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
 
 /** The last tab (Mihon-style "More"): the app's name, then everything that doesn't need a tab, each with a line of what it is. */
 @Composable
 internal fun MoreScreen(services: AppServices, nav: Navigator) {
-    val status by services.sync.status.collectAsStateWithLifecycle()
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        MoreList(status, nav)
+        MoreList(services, nav)
     }
 }
 
 @Composable
-private fun MoreList(status: SyncStatus, nav: Navigator) {
+private fun MoreList(services: AppServices, nav: Navigator) {
+    val status by services.sync.status.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).statusBarsPadding()) {
         Column(Modifier.fillMaxWidth().padding(vertical = 32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("Benbow", style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary)
@@ -71,6 +75,13 @@ private fun MoreList(status: SyncStatus, nav: Navigator) {
         MoreItem(Icons.Label, stringResource(Res.string.tags), stringResource(Res.string.more_tags)) { nav.open(Route.Tags) }
         MoreItem(Icons.Delete, stringResource(Res.string.trash), stringResource(Res.string.more_trash)) { nav.open(Route.Trash) }
         MoreItem(Icons.Download, stringResource(Res.string.export), stringResource(Res.string.more_export)) { nav.open(Route.Export) }
+        val lockMinutes by services.lock.minutes.collectAsStateWithLifecycle()
+        val lockLabel = lockMinutes?.let { m -> stringArrayResource(Res.array.lock_choices).getOrNull(AppLock.CHOICES.indexOf(m)) }
+        MoreItem(
+            Icons.Lock,
+            stringResource(Res.string.lock),
+            lockLabel?.let { stringResource(Res.string.more_lock_on, it) } ?: stringResource(Res.string.more_lock_off),
+        ) { nav.open(Route.Lock) }
     }
 }
 

@@ -36,6 +36,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -100,6 +102,8 @@ internal sealed interface Route {
 
     data object Export : Route
 
+    data object Lock : Route
+
     /** The last tab: everything that doesn't need a tab of its own. */
     data object More : Route
 }
@@ -158,8 +162,14 @@ fun BenbowApp(services: AppServices) {
 
 @Composable
 private fun AppRoot(services: AppServices) {
-    LifecycleEventEffect(Lifecycle.Event.ON_START) { services.sync.foreground = true }
-    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { services.sync.foreground = false }
+    LifecycleEventEffect(Lifecycle.Event.ON_START) {
+        services.sync.foreground = true
+        services.lock.onReturn()
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        services.sync.foreground = false
+        services.lock.onLeave()
+    }
     val backStack = remember { mutableStateListOf<Route>(Route.Home) }
     val nav = remember(backStack) { Navigator(backStack) }
     val snackbar = remember { SnackbarHostState() }
@@ -183,13 +193,32 @@ private fun AppRoot(services: AppServices) {
             }
         }
     }
+    // The lock covers everything, hides it from accessibility and takes focus away, so a keyboard can't type behind it.
+    val locked by services.lock.locked.collectAsStateWithLifecycle()
+    val auth = rememberDeviceAuth()
+    val focus = LocalFocusManager.current
+    LaunchedEffect(locked) { if (locked) focus.clearFocus(force = true) }
+    Box(Modifier.fillMaxSize()) {
+        AppFrame(services, backStack, nav, snackbar, if (locked) Modifier.clearAndSetSemantics {} else Modifier)
+        if (locked) LockScreen(auth) { services.lock.unlock() }
+    }
+}
+
+@Composable
+private fun AppFrame(
+    services: AppServices,
+    backStack: SnapshotStateList<Route>,
+    nav: Navigator,
+    snackbar: SnackbarHostState,
+    modifier: Modifier,
+) {
     // The tab bar stays put on the top-level screens; the keyboard slides over it and off it again (no blink).
     // Screens above see the keyboard's inset minus the bar, so a composer still sits right on the keyboard.
     val top = backStack.lastOrNull()
     val tabs = top in TABS.map { it.route }
     var barHeight by remember { mutableIntStateOf(0) }
     val bar = with(LocalDensity.current) { barHeight.toDp() }
-    Column(Modifier.fillMaxSize()) {
+    Column(modifier.fillMaxSize()) {
         Box(
             Modifier.weight(1f).then(
                 if (tabs) {
@@ -245,6 +274,7 @@ private fun AppNavigation(services: AppServices, backStack: SnapshotStateList<Ro
             entry<Route.Trash> { TrashScreen(services, nav) }
             entry<Route.Server> { ServerScreen(services, nav) }
             entry<Route.Export> { ExportScreen(services, nav) }
+            entry<Route.Lock> { LockSettingsScreen(services, nav) }
         },
     )
 }

@@ -45,6 +45,10 @@ class Settings(private val db: BenbowDb) {
         q.putValue(key, value)
     }
 
+    fun remove(key: String) {
+        q.deleteValue(key)
+    }
+
     var connection: Connection?
         get() {
             val url = get(URL) ?: return null

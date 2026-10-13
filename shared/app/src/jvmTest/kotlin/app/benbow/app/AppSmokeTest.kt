@@ -34,6 +34,7 @@ import java.util.Properties
 import javax.imageio.ImageIO
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /** Drives the real app (in-memory DB, not paired) through the main flows and keeps screenshots for review. */
@@ -328,6 +329,24 @@ class AppSmokeTest {
         waitUntilExactlyOneExists(hasText("Готово", substring = true), 5_000)
         screenshot("25-export")
         assertTrue(out.size() > 0)
+    }
+
+    @Test
+    fun theLockCoversEverythingUntilTheOwnerIsConfirmed() = runDesktopComposeUiTest(width = 412, height = 860) {
+        var asked = 0
+        val auth = object : DeviceAuth {
+            override fun available() = true
+
+            override fun authenticate(title: String, onResult: (Boolean) -> Unit) {
+                asked++ // the system prompt would show here; the owner hasn't answered yet
+            }
+        }
+        var open = false
+        setContent { app.benbow.ui.theme.BenbowTheme { LockScreen(auth) { open = true } } }
+        waitUntilExactlyOneExists(hasText("Дневник закрыт"), 5_000)
+        screenshot("27-lock")
+        assertEquals(1, asked, "it asks at once")
+        assertFalse(open)
     }
 
     @Test

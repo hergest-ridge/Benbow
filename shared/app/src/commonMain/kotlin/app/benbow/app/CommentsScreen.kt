@@ -1,5 +1,6 @@
 package app.benbow.app
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -77,8 +78,9 @@ internal fun CommentsScreen(services: AppServices, nav: Navigator, route: Route.
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
                 ) {
-                    Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                        Text(comment.text, style = MaterialTheme.typography.bodyLarge)
+                    Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (comment.text.isNotBlank()) Text(comment.text, style = MaterialTheme.typography.bodyLarge)
+                        CommentMedia(services, comment) { nav.open(Route.Media(comment.summary.id, it)) }
                         Text(
                             dateTimeLabel(comment.summary.createdAt),
                             style = MaterialTheme.typography.labelSmall,

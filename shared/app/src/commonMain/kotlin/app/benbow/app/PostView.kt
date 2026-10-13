@@ -1,5 +1,6 @@
 package app.benbow.app
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -24,6 +26,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -51,6 +55,7 @@ internal fun PostView(
     comments: List<Comment>?,
     onOpenMedia: (String) -> Unit,
     onOpenComment: (Comment) -> Unit,
+    onOpenCommentMedia: (commentId: String, attachmentId: String) -> Unit,
     onReact: (String, Boolean) -> Unit,
     ribbon: Boolean,
     pictures: AtomViews,
@@ -99,8 +104,9 @@ internal fun PostView(
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
             ) {
-                Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                    Text(comment.text, style = MaterialTheme.typography.bodyLarge)
+                Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (comment.text.isNotBlank()) Text(comment.text, style = MaterialTheme.typography.bodyLarge)
+                    CommentMedia(services, comment) { onOpenCommentMedia(comment.summary.id, it) }
                     Text(
                         dateTimeLabel(comment.summary.createdAt),
                         style = MaterialTheme.typography.labelSmall,
@@ -133,10 +139,11 @@ private fun Reactions(chosen: Set<String>, onReact: (String, Boolean) -> Unit, m
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.semantics { contentDescription = add },
             ) {
-                Text(
-                    "☺ +",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                Icon(
+                    Icons.AddReaction,
+                    null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp).size(20.dp),
                 )
             }
             DropdownMenu(picking, { picking = false }) {
@@ -150,5 +157,15 @@ private fun Reactions(chosen: Set<String>, onReact: (String, Boolean) -> Unit, m
                 }
             }
         }
+    }
+}
+
+/** A comment's pictures and files, each a third of the screen wide; a tap opens the viewer over the comment's own. */
+@Composable
+internal fun CommentMedia(services: AppServices, comment: Comment, onOpen: (attachmentId: String) -> Unit) {
+    if (comment.media.isEmpty()) return
+    val third = with(LocalDensity.current) { (LocalWindowInfo.current.containerSize.width / 3).toDp() }
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        comment.media.forEach { attachment -> MediaThumb(services.media, attachment, third) { onOpen(attachment.meta.id) } }
     }
 }

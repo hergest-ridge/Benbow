@@ -63,6 +63,8 @@ data class FeedItem(
     val reactions: Set<String>,
     val comments: Int = 0,
     val media: List<AttachmentState> = emptyList(),
+    /** The document itself (Benbow Document JSON), for the feed's light formatting. */
+    val body: String = "",
 )
 
 /** A calendar day: how many entries and their average mood (-2..2, null when no mood was set). */
@@ -71,8 +73,8 @@ data class DayInfo(val day: String, val entries: Int, val mood: Double?)
 /** A calendar event; [time] is "HH:MM", null for all day. */
 data class EventItem(val id: String, val day: String, val title: String, val time: String?)
 
-/** A reply in an entry's thread, shown in full. */
-data class Comment(val summary: EntrySummary, val text: String)
+/** A reply in an entry's thread, shown in full, with its pictures and files ([media], in order). */
+data class Comment(val summary: EntrySummary, val text: String, val media: List<AttachmentState> = emptyList())
 
 /** What to look for; empty text and off switches match everything outside the trash. */
 data class SearchQuery(val text: String = "", val tag: String? = null, val favorites: Boolean = false, val withMedia: Boolean = false)
@@ -316,8 +318,9 @@ class JournalRepository(
     }
 
     fun comments(parentId: String): Flow<List<Comment>> =
-        q.commentsOf(parentId) { id, day, createdAt, title, preview, conflictHeads, mediaCount, cover, fields, body ->
-            Comment(summaryOf(id, day, createdAt, title, preview, conflictHeads, mediaCount, cover, fields), plainText(body))
+        q.commentsOf(parentId) { id, day, createdAt, title, preview, conflictHeads, mediaCount, cover, fields, body, attachments ->
+            val media = decodeAttachments(attachments).values.filter { it.present }.sortedBy { it.position }
+            Comment(summaryOf(id, day, createdAt, title, preview, conflictHeads, mediaCount, cover, fields), plainText(body), media)
         }.asFlow().mapToList(context)
 
     fun commentCount(parentId: String): Flow<Long> = q.commentCount(parentId).asFlow().mapToOne(context)
@@ -416,7 +419,7 @@ class JournalRepository(
             }
             val reactions = decodeFields(fields).filter { it.key.startsWith(REACTION_PREFIX) && it.value != null }.keys
             val media = decodeAttachments(attachments).values.filter { it.present && it.meta.kind in VISUAL_KINDS }.sortedBy { it.position }
-            FeedItem(summary, kind, text, reactions.map { it.removePrefix(REACTION_PREFIX) }.toSet(), comments.toInt(), media)
+            FeedItem(summary, kind, text, reactions.map { it.removePrefix(REACTION_PREFIX) }.toSet(), comments.toInt(), media, body)
         }.asFlow().mapToList(context)
 
     /** Builds the search index after an update changed it (or on the first start); quick otherwise. */

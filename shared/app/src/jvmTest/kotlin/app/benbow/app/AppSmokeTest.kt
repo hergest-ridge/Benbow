@@ -185,11 +185,11 @@ class AppSmokeTest {
         screenshot("12-home")
 
         onNodeWithText("Лента").click()
-        waitUntilExactlyOneExists(hasText("Утренняя заметка\nвторая строка"), 5_000)
+        waitUntilExactlyOneExists(hasText("вторая строка"), 5_000) // each paragraph its own line, as in the post
         waitUntilExactlyOneExists(hasText("🔥"), 5_000)
         screenshot("13-feed")
 
-        onNodeWithText("Утренняя заметка\nвторая строка").click()
+        onNodeWithText("вторая строка").click()
         waitUntilExactlyOneExists(hasText("Пока без комментариев", substring = true), 5_000)
         onNode(hasSetTextAction()).performTextInput("Перечитал вечером") // only the reply box takes text while reading
         onNodeWithContentDescription("Сохранить заметку").click()
@@ -496,6 +496,72 @@ class AppSmokeTest {
         runBlocking { delay(1_000) }
         waitForIdle()
         screenshot("40-post-inline")
+    }
+
+    @Test
+    fun theFeedKeepsAPostsShapeAndCommentsShowTheirPictures() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val id = services.repo.createNote(services.today(), "Черновик")
+        val doc = app.benbow.core.content.Document(
+            listOf(
+                app.benbow.core.content.TextBlock(
+                    "h",
+                    style = "h2",
+                    children = listOf(app.benbow.core.content.Span("Bob Dylan — New Morning")),
+                ),
+                app.benbow.core.content.TextBlock(
+                    "q",
+                    style = "blockquote",
+                    children = listOf(app.benbow.core.content.Span("Sign on the window says lonely.")),
+                ),
+                app.benbow.core.content.TextBlock(
+                    "l1",
+                    listItem = "bullet",
+                    level = 1,
+                    children = listOf(app.benbow.core.content.Span("подоконник")),
+                ),
+                app.benbow.core.content.TextBlock(
+                    "l2",
+                    listItem = "check",
+                    level = 1,
+                    checked = true,
+                    children = listOf(app.benbow.core.content.Span("воздух")),
+                ),
+                app.benbow.core.content.TextBlock(
+                    "c",
+                    callout = app.benbow.core.content.CalloutRef("c", "yellow", "💡"),
+                    children = listOf(app.benbow.core.content.Span("Осень. Аврора. Надежда.")),
+                ),
+                app.benbow.core.content.TextBlock("p", children = listOf(app.benbow.core.content.Span("Долгий абзац. ".repeat(40)))),
+                app.benbow.core.content.TextBlock("p2", children = listOf(app.benbow.core.content.Span("Самый конец поста"))),
+            ),
+        )
+        services.repo.saveDraft(id, app.benbow.core.content.DocumentCodec.encode(doc))
+        services.repo.commitDraft(id)
+        val comment = services.repo.createComment(id, services.today(), "Обложка альбома")
+        runBlocking {
+            val bytes = picture()
+            services.attach({
+                comment
+            }, { bytes.inputStream() }) { MediaProbe("image/jpeg", "cover.jpg", "image", 1600, 1200, preview = picture(512, 384)) }.join()
+        }
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Ещё"), 5_000)
+        onNodeWithText("Лента").click()
+        waitUntilExactlyOneExists(hasText("Bob Dylan — New Morning"), 5_000)
+        waitUntilExactlyOneExists(hasText("Показать ещё"), 5_000)
+        screenshot("41-feed-formatting")
+        onNodeWithText("Показать ещё").click()
+        waitUntilExactlyOneExists(hasText("Самый конец поста"), 5_000)
+
+        services.setAppearance(services.appearance.value.copy(feedCards = false))
+        waitForIdle()
+        screenshot("42-feed-flat")
+
+        onNodeWithText("Bob Dylan — New Morning").click()
+        waitUntilExactlyOneExists(hasText("Обложка альбома"), 5_000)
+        runBlocking { delay(1_000) }
+        waitForIdle()
+        screenshot("43-post-comment-media")
     }
 
     @Test

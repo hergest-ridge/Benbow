@@ -22,16 +22,21 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.appearance
+import app.benbow.app.resources.feed_cards
+import app.benbow.app.resources.feed_cards_hint
+import app.benbow.app.resources.feed_section
 import app.benbow.app.resources.palette
 import app.benbow.app.resources.palette_names
 import app.benbow.app.resources.theme_mode
@@ -63,6 +68,18 @@ internal fun AppearanceScreen(services: AppServices, nav: Navigator) {
                         services.setAppearance(current.copy(mode = mode))
                     }, { Text(modes.getOrElse(i) { mode.name }) })
                 }
+            }
+            Title(stringResource(Res.string.feed_section))
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(Res.string.feed_cards), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        stringResource(Res.string.feed_cards_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(current.feedCards, { services.setAppearance(current.copy(feedCards = it)) })
             }
             Title(stringResource(Res.string.palette))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {

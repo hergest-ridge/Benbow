@@ -1,6 +1,7 @@
 package app.benbow.app
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -93,6 +95,8 @@ internal class FeedViewModel(private val services: AppServices) : ViewModel() {
 internal fun FeedScreen(services: AppServices, nav: Navigator) {
     val vm = viewModel { FeedViewModel(services) }
     val rows by vm.rows.collectAsStateWithLifecycle()
+    val appearance by services.appearance.collectAsStateWithLifecycle()
+    val expanded = remember { mutableStateMapOf<String, Boolean>() }
     val status by services.sync.status.collectAsStateWithLifecycle()
     Scaffold(
         topBar = {
@@ -113,14 +117,20 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
             }
             return@Scaffold
         }
-        LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(vertical = 8.dp)) {
+        LazyColumn(
+            Modifier.padding(padding).fillMaxSize(),
+            contentPadding = PaddingValues(vertical = if (appearance.feedCards) 8.dp else 0.dp),
+        ) {
             items(list, key = { it.key }) { row ->
                 when (row) {
                     is FeedRow.Day -> DayHeader(row.day)
 
-                    is FeedRow.Item -> FeedBubble(
+                    is FeedRow.Item -> FeedPost(
                         services,
                         row.item,
+                        cards = appearance.feedCards,
+                        expanded = expanded[row.item.summary.id] == true,
+                        onExpand = { expanded[row.item.summary.id] = true },
                         onOpen = { nav.open(Route.Editor(row.item.summary.id, row.item.summary.day, readOnly = true)) },
                         onComments = { nav.open(Route.Editor(row.item.summary.id, row.item.summary.day, readOnly = true)) },
                         onOpenMedia = { nav.open(Route.Media(row.item.summary.id, it.meta.id)) },
@@ -133,11 +143,18 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
     }
 }
 
+/**
+ * One post. With [cards], a rounded card with inset media; without, edge to edge: media across the full width, the
+ * text in a narrow margin, posts parted by a thin band (more of each post on screen). Long-press for reactions.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun FeedBubble(
+private fun FeedPost(
     services: AppServices,
     item: FeedItem,
+    cards: Boolean,
+    expanded: Boolean,
+    onExpand: () -> Unit,
     onOpen: () -> Unit,
     onComments: () -> Unit,
     onOpenMedia: (AttachmentState) -> Unit,
@@ -146,49 +163,27 @@ private fun FeedBubble(
     val colors = MaterialTheme.colorScheme
     val entry = item.summary
     var picking by remember { mutableStateOf(false) }
-    Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
-        Surface(
-            color = swatch(entry.background) ?: colors.surfaceContainerLow,
-            shape = RoundedCornerShape(18.dp),
-            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).combinedClickable(onClick = onOpen, onLongClick = {
-                picking =
-                    true
-            }),
-        ) {
-            Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (item.media.isNotEmpty()) MediaCarousel(services.media, item.media, onOpenMedia)
-                if (item.text.isNotBlank()) {
-                    Text(
-                        item.text,
-                        style = MaterialTheme.typography.bodyLarge,
-                        maxLines = if (item.kind == "journal") 6 else Int.MAX_VALUE,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+    val tint = swatch(entry.background)
+    val open = Modifier.combinedClickable(onClick = onOpen, onLongClick = { picking = true })
+    Box(Modifier.fillMaxWidth().then(if (cards) Modifier.padding(horizontal = 12.dp, vertical = 4.dp) else Modifier)) {
+        if (cards) {
+            Surface(
+                color = tint ?: colors.surfaceContainerLow,
+                shape = RoundedCornerShape(18.dp),
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).then(open),
+            ) {
+                Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (item.media.isNotEmpty()) MediaCarousel(services.media, item.media, onOpenMedia)
+                    PostBody(item, expanded, onExpand, onComments, onReact)
                 }
-                if (entry.tags.isNotEmpty()) TagRibbon(entry.tags)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    item.reactions.sorted().forEach { emoji ->
-                        Surface(
-                            onClick = { onReact(emoji, false) },
-                            color = colors.secondaryContainer,
-                            shape = RoundedCornerShape(12.dp),
-                        ) { Text(emoji, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) }
-                    }
-                    if (item.comments > 0) {
-                        Text(
-                            "💬 ${item.comments}",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = colors.onSurfaceVariant,
-                            modifier = Modifier.clip(
-                                RoundedCornerShape(8.dp),
-                            ).clickable(onClick = onComments).padding(horizontal = 4.dp, vertical = 2.dp),
-                        )
-                    }
-                    Box(Modifier.weight(1f))
-                    if (entry.favorite) Text("★", style = MaterialTheme.typography.labelMedium, color = colors.primary)
-                    moodEmoji(entry.mood)?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
-                    Text(timeLabel(entry.createdAt), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+            }
+        } else {
+            Column(Modifier.fillMaxWidth().background(tint ?: colors.background).then(open)) {
+                if (item.media.isNotEmpty()) MediaCarousel(services.media, item.media, onOpenMedia, rounded = false)
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    PostBody(item, expanded, onExpand, onComments, onReact)
                 }
+                Box(Modifier.fillMaxWidth().height(6.dp).background(colors.surfaceContainerLowest))
             }
         }
         DropdownMenu(picking, { picking = false }) {
@@ -206,5 +201,37 @@ private fun FeedBubble(
                 }
             }
         }
+    }
+}
+
+/** The text (lightly formatted), tags, and a line of reactions, comments, mood and time. */
+@Composable
+private fun PostBody(item: FeedItem, expanded: Boolean, onExpand: () -> Unit, onComments: () -> Unit, onReact: (String, Boolean) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val entry = item.summary
+    FeedText(item.body, expanded, onExpand)
+    if (entry.tags.isNotEmpty()) TagRibbon(entry.tags)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        item.reactions.sorted().forEach { emoji ->
+            Surface(
+                onClick = { onReact(emoji, false) },
+                color = colors.secondaryContainer,
+                shape = RoundedCornerShape(12.dp),
+            ) { Text(emoji, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) }
+        }
+        if (item.comments > 0) {
+            Text(
+                "💬 ${item.comments}",
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.onSurfaceVariant,
+                modifier = Modifier.clip(
+                    RoundedCornerShape(8.dp),
+                ).clickable(onClick = onComments).padding(horizontal = 4.dp, vertical = 2.dp),
+            )
+        }
+        Box(Modifier.weight(1f))
+        if (entry.favorite) Text("★", style = MaterialTheme.typography.labelMedium, color = colors.primary)
+        moodEmoji(entry.mood)?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
+        Text(timeLabel(entry.createdAt), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
     }
 }

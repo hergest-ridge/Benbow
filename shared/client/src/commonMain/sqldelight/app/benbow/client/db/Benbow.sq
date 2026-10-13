@@ -172,7 +172,7 @@ LIMIT :limit;
 
 -- Comments (4.3): entries of kind "comment" with a parent, oldest first like a chat.
 commentsOf:
-SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields, body FROM entry
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields, body, attachments FROM entry
 WHERE parent_id = ? AND kind = 'comment' AND json_extract(fields, '$.deleted') IS NOT 'true'
 ORDER BY created_at;
 

@@ -11,19 +11,27 @@ import app.benbow.ui.theme.ThemePalette
 import app.benbow.ui.theme.isDark
 
 /** How the app looks on this device: light or dark, and the palette. Kept in local settings, not synced. */
-data class Appearance(val mode: ThemeMode = ThemeMode.System, val palette: ThemePalette = ThemePalette.Inn) {
+data class Appearance(
+    val mode: ThemeMode = ThemeMode.System,
+    val palette: ThemePalette = ThemePalette.Inn,
+    /** Posts in the feed as rounded cards; off = edge to edge, media across the full width. */
+    val feedCards: Boolean = true,
+) {
     internal fun save(settings: Settings) {
         settings.put(MODE, mode.name)
         settings.put(PALETTE, palette.name)
+        settings.put(FEED_CARDS, feedCards.toString())
     }
 
     companion object {
         private const val MODE = "theme.mode"
         private const val PALETTE = "theme.palette"
+        private const val FEED_CARDS = "feed.cards"
 
         internal fun load(settings: Settings) = Appearance(
             mode = ThemeMode.entries.firstOrNull { it.name == settings.get(MODE) } ?: ThemeMode.System,
             palette = ThemePalette.entries.firstOrNull { it.name == settings.get(PALETTE) } ?: ThemePalette.Inn,
+            feedCards = settings.get(FEED_CARDS) != "false",
         )
     }
 }

@@ -459,6 +459,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                     thread,
                     onOpenMedia = { nav.open(Route.Media(detail.id, it)) },
                     onOpenComment = { nav.open(Route.Editor(it.summary.id, it.summary.day)) },
+                    onOpenCommentMedia = { comment, attachment -> nav.open(Route.Media(comment, attachment)) },
                     onReact = vm::react,
                     ribbon = ribbon,
                     pictures = pictures,

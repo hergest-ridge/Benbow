@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -215,12 +216,13 @@ internal fun MediaCarousel(
     items: List<AttachmentState>,
     onOpen: (AttachmentState) -> Unit,
     modifier: Modifier = Modifier,
+    rounded: Boolean = true,
 ) {
     if (items.isEmpty()) return
     val pager = rememberPagerState { items.size }
     val first = items.first().meta
     val ratio = if ((first.width ?: 0) > 0 && (first.height ?: 0) > 0) first.width!!.toFloat() / first.height!! else 4f / 3
-    val shape = RoundedCornerShape(12.dp)
+    val shape = if (rounded) RoundedCornerShape(12.dp) else RectangleShape
     val label = stringResource(Res.string.attachments)
     Box(
         modifier.fillMaxWidth().aspectRatio(ratio.coerceIn(0.8f, 1.9f)).clip(shape)

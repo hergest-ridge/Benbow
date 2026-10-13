@@ -24,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
@@ -52,6 +53,7 @@ import app.benbow.app.resources.in_trash_banner
 import app.benbow.app.resources.menu
 import app.benbow.app.resources.move_to_trash
 import app.benbow.app.resources.pin
+import app.benbow.app.resources.print
 import app.benbow.app.resources.restore
 import app.benbow.app.resources.share
 import app.benbow.app.resources.unpin
@@ -237,6 +239,8 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     val comments by vm.commentCount.collectAsStateWithLifecycle()
     val copy = rememberCopy()
     val share = rememberShare()
+    val print = rememberPrint()
+    val scope = rememberCoroutineScope()
     val openHistory: () -> Unit = {
         vm.commit()
         vm.entryId?.let { nav.open(Route.History(it)) }
@@ -317,6 +321,12 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                 DropdownMenuItem(text = { Text(stringResource(Res.string.share)) }, onClick = {
                                     menu = false
                                     if (!share(vm.markdown())) vm.copied()
+                                })
+                                DropdownMenuItem(text = { Text(stringResource(Res.string.print)) }, onClick = {
+                                    menu = false
+                                    vm.commit()
+                                    val id = vm.entryId
+                                    if (id != null) scope.launch { services.entryPage(id)?.let(print) }
                                 })
                                 DropdownMenuItem(text = { Text(stringResource(Res.string.history)) }, onClick = {
                                     menu = false

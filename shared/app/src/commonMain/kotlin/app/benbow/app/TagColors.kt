@@ -42,6 +42,9 @@ private val SHADES: Map<String, Pair<Long, Long>> = mapOf(
     "clay" to (0xFFE9E3D4 to 0xFF4B443A),
 )
 
+/** The light shade as CSS, for printed pages. */
+internal fun lightSwatch(name: String?): String? = SHADES[name]?.first?.let { "#" + (it and 0xFFFFFF).toString(16).padStart(6, '0') }
+
 /** The tag registry's looks for the whole app, provided once at the root. */
 internal val LocalTagLooks = compositionLocalOf { TagLooks() }
 

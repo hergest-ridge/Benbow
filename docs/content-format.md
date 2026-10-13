@@ -71,5 +71,5 @@ Colors, highlights and callout tones are **token names**, never raw hex. The des
   - *rich* (default, Obsidian-friendly): `**`, `*`, `<u>`, `~~`, `` ` ``, spoiler → `<span class="spoiler">`, color/size → `<span style>`, highlight → `==x==` (default token) or `<mark style>`, align → HTML wrapper, callout → `> [!note] <icon>`, check → `- [ ]` / `- [x]`, entryLink → relative link to the exported file.
   - *clean*: drop all styling that CommonMark+GFM can't express.
   Entry metadata → YAML front matter.
-- **HTML export:** lossless, CSS generated from the palette (light theme by default).
+- **HTML export:** lossless, CSS generated from the palette (light theme by default). As built (6.3): `HtmlExporter` in shared/core; every style, list, callout and mark has a tag or class (spoilers keep their text under `.spoiler`), colors come from the app palette as CSS values; `HtmlExporter.page` wraps it in a print-friendly page. Used for "PDF и печать".
 - **Import** (Markdown/HTML → Document): supported constructs map back. Anything else becomes a preserved unknown block (`_type: "raw"`, `format`, `source`).

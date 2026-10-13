@@ -117,11 +117,16 @@ exportEntries:
 SELECT id, kind, day, created_at, head_rev, body, conflict_heads, fields, field_clocks, attachments FROM entry
 WHERE kind != 'system' ORDER BY day, created_at;
 
--- :match is an FTS query built by SearchIndex.match (never raw user input); null filters are off.
+-- :m1..:m4 are one word each ("stem OR word*"), :rest the words after them; built by SearchIndex.terms, never raw
+-- input. One MATCH per word keeps OR unambiguous in both FTS query syntaxes. Null filters are off.
 search:
 SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
 WHERE json_extract(fields, '$.deleted') IS NOT 'true' AND kind != 'system'
-  AND (:match IS NULL OR id IN (SELECT entry_id FROM entry_search WHERE entry_search MATCH :match))
+  AND (:m1 IS NULL OR id IN (SELECT entry_id FROM entry_search WHERE entry_search MATCH :m1))
+  AND (:m2 IS NULL OR id IN (SELECT entry_id FROM entry_search WHERE entry_search MATCH :m2))
+  AND (:m3 IS NULL OR id IN (SELECT entry_id FROM entry_search WHERE entry_search MATCH :m3))
+  AND (:m4 IS NULL OR id IN (SELECT entry_id FROM entry_search WHERE entry_search MATCH :m4))
+  AND (:rest IS NULL OR id IN (SELECT entry_id FROM entry_search WHERE entry_search MATCH :rest))
   AND (:tagPath IS NULL OR json_extract(fields, :tagPath) IS NOT NULL)
   AND (:favorites = 0 OR json_extract(fields, '$.favorite') = 'true')
   AND (:withMedia = 0 OR media_count > 0)

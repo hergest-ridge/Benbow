@@ -455,13 +455,19 @@ class JournalRepository(
         }
     }
 
-    fun search(query: SearchQuery): Flow<List<EntrySummary>> = q.search(
-        match = SearchIndex.match(query.text),
-        tagPath = query.tag?.let { "$.\"${tagKey(it)}\"" },
-        favorites = if (query.favorites) 1 else 0,
-        withMedia = if (query.withMedia) 1 else 0,
-        mapper = ::summaryOf,
-    ).asFlow().mapToList(context)
+    fun search(query: SearchQuery): Flow<List<EntrySummary>> = SearchIndex.terms(query.text).let { terms ->
+        q.search(
+            m1 = terms.getOrNull(0)?.either,
+            m2 = terms.getOrNull(1)?.either,
+            m3 = terms.getOrNull(2)?.either,
+            m4 = terms.getOrNull(3)?.either,
+            rest = terms.drop(4).takeIf { it.isNotEmpty() }?.joinToString(" ") { it.prefix },
+            tagPath = query.tag?.let { "$.\"${tagKey(it)}\"" },
+            favorites = if (query.favorites) 1 else 0,
+            withMedia = if (query.withMedia) 1 else 0,
+            mapper = ::summaryOf,
+        ).asFlow().mapToList(context)
+    }
 
     fun moveToTrash(id: String) = setField(id, TRASH_FIELD, "true")
 

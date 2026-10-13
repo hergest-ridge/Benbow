@@ -67,3 +67,4 @@ As built (5.3): built-in templates in code (`Templates`: Итоги дня, Тр
 - `applied_ops(op_id PRIMARY KEY, device_id, at, result)`
 - `store_meta(key, value)`: `store_id`, `epoch`, settings
 - Search: `entry_fts` (FTS5, `unicode61 remove_diacritics 2`, prefix queries in v1, Russian Snowball stems in an extra column in P2).
+- As built (7.1): FTS4 `entry_search`; each entry's body and tags are indexed followed by the Snowball Russian stems that differ from their words (no schema change; index version 3 rebuilds it). A typed word matches its stem exactly or its beginning ("моря" → `мор OR моря*`): all forms, not "морковь", and partial words still match while typing. One MATCH per word (four, then the rest as plain prefixes) keeps OR unambiguous in both SQLite FTS query syntaxes.

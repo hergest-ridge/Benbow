@@ -82,6 +82,19 @@ class MetadataSearchTest {
     }
 
     @Test
+    fun searchFindsEveryFormOfAWord() = runTest {
+        val phone = Device(FakeServer(), "phone")
+        phone.repo.createNote("2026-10-12", "Гуляли у моря вечером")
+        phone.repo.createNote("2026-10-13", "Купить морковь")
+
+        for (query in listOf("море", "морем", "МОРЯ", "вечер", "вечерами", "гулять", "гуля", "у моря")) {
+            assertTrue("Гуляли у моря вечером" in phone.find(SearchQuery(query)), query)
+        }
+        assertEquals(listOf("Гуляли у моря вечером"), phone.find(SearchQuery("море")), "a whole word finds its forms, not other words")
+        assertEquals(listOf("Купить морковь", "Гуляли у моря вечером"), phone.find(SearchQuery("мор")), "a beginning is still a prefix")
+    }
+
+    @Test
     fun filtersNarrowAndTrashIsLeftOut() = runTest {
         val phone = Device(FakeServer(), "phone")
         val a = phone.repo.createNote("2026-10-12", "Утро на даче")

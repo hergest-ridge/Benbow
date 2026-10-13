@@ -6,12 +6,13 @@ import app.benbow.core.content.DocumentFormatException
 import app.benbow.core.content.toPlainText
 
 /**
- * The on-device full-text index (`entry_search`): title, all text and tags of every entry. Updated in
- * the same transaction as the entry; rebuilt from scratch when [VERSION] changes.
+ * The on-device full-text index (`entry_search`): title, all text and tags of every entry, plus the Russian stems of
+ * their words. Updated in the same transaction as the entry; rebuilt from scratch when [VERSION] changes.
  */
 internal object SearchIndex {
-    const val VERSION = "2"
+    const val VERSION = "3"
     private const val VERSION_KEY = "search.version"
+    private val WORD = Regex("""[\p{L}\p{N}]+""")
 
     fun update(db: BenbowDb, id: String) {
         val q = db.benbowQueries
@@ -22,11 +23,19 @@ internal object SearchIndex {
         } catch (_: DocumentFormatException) {
             ""
         }
-        q.indexEntry(id, fold(entry.title), fold(text), fold(tagsOf(decodeFields(entry.fields)).joinToString(" ")))
+        val tags = tagsOf(decodeFields(entry.fields)).joinToString(" ")
+        q.indexEntry(id, fold(entry.title), withStems(fold(text)), withStems(fold(tags)))
     }
 
     /** unicode61 folds case everywhere but diacritics only in Latin script: "ёлка" must still match "елка". */
     private fun fold(text: String) = text.replace('ё', 'е').replace('Ё', 'Е')
+
+    /** The text, then the stems that differ from their words: "у моря" also indexes "мор", so "море" and "морем" find it. */
+    private fun withStems(text: String): String {
+        val stems = WORD.findAll(text).map { it.value.lowercase() }.mapNotNull { word -> RussianStemmer.stem(word).takeIf { it != word } }
+            .distinct().toList()
+        return if (stems.isEmpty()) text else text + "\n" + stems.joinToString(" ")
+    }
 
     fun rebuildIfNeeded(db: BenbowDb) {
         val settings = Settings(db)
@@ -38,10 +47,16 @@ internal object SearchIndex {
         }
     }
 
+    /** One typed word as FTS: [either] = its stem or the word as a prefix, [prefix] = just the prefix. */
+    class Term(val either: String, val prefix: String)
+
     /**
-     * An FTS query from what the user typed: every word must match, as a prefix ("мор" finds "море").
-     * Only letters and digits pass, so FTS syntax in the input can't break or widen the query.
+     * What the user typed, word by word; every word must match. A word matches its stem exactly ("моря" → "мор": "море",
+     * "морем", but not "морковь") or its beginning ("казан" while typing "Казань"). Only letters and digits pass, so FTS
+     * syntax in the input can't break or widen the query.
      */
-    fun match(input: String): String? = fold(input).split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotEmpty() }.takeIf { it.isNotEmpty() }
-        ?.joinToString(" ") { "$it*" }
+    fun terms(input: String): List<Term> = WORD.findAll(fold(input)).map { it.value.lowercase() }.distinct().map { word ->
+        val stem = RussianStemmer.stem(word)
+        Term(either = if (stem != word) "$stem OR $word*" else "$word*", prefix = "$word*")
+    }.toList()
 }

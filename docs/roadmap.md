@@ -34,7 +34,8 @@ Slices: **5.1 Calendar tab (month grid with dots and mood tint, day view with sw
 
 ## Phase 6: Polish and platforms
 Themes and Keep-like backgrounds, export (ZIP / Markdown / PDF), web client polish, desktop polish (shortcuts, tray), performance pass (baseline profiles, macrobenchmarks), app lock, widget, QS tile.
-Slices (owner agreed the order on 2026-10-13): **6.1 capture from anywhere (share target, QS tile, launcher shortcuts, one quick capture sheet) ✅** · **6.2 home-screen widget (Glance) ✅** · **6.3 export from the app (ZIP with media, Markdown, PDF) ✅** · **6.4 app lock ✅** · **6.5 themes, Keep-like note backgrounds, app icon ✅** · **6.6 desktop polish ✅** · 6.7 performance pass · web client as its own larger step.
+Slices (owner agreed the order on 2026-10-13): **6.1 capture from anywhere (share target, QS tile, launcher shortcuts, one quick capture sheet) ✅** · **6.2 home-screen widget (Glance) ✅** · **6.3 export from the app (ZIP with media, Markdown, PDF) ✅** · **6.4 app lock ✅** · **6.5 themes, Keep-like note backgrounds, app icon ✅** · **6.6 desktop polish ✅** · 6.7 performance pass (postponed by the owner on 2026-10-14) · web client as its own larger step.
 
 ## Phase 7: Later
 Ink layer (paper mode), ICS import/export and Google Calendar, Russian stemming, inline images in text, importers, writer's archive module, backup encryption, on-device voice transcription.
+Slices (started 2026-10-14, quick daily value first): **7.1 Russian word forms in search ✅** · 7.2 inline images in text · 7.3 ICS import/export · 7.4 importers (sources: open question 13) · 7.5 ink layer · 7.6 on-device voice transcription · 7.7 backup encryption · later: Google Calendar (needs the owner's Google Cloud project), writer's archive.

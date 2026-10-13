@@ -26,6 +26,7 @@ kotlin {
             implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.serialization.kotlinx.json)
             api(libs.kotlinx.coroutines.core)
+            api(libs.kotlinx.datetime)
         }
         // Android and desktop share the OkHttp/TLS code; the default hierarchy has no JVM-only set for both.
         androidMain {

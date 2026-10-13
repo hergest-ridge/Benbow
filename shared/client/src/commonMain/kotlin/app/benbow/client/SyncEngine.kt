@@ -181,6 +181,7 @@ class SyncEngine(private val db: BenbowDb, private val apiFor: (Connection) -> B
             media.second,
         )
         q.updateParent(entry.fields[PARENT_FIELD]?.value, entry.id)
+        Moments.apply(db, entry.id, entry.fields.mapValues { it.value.value })
         SearchIndex.update(db, entry.id)
     }
 

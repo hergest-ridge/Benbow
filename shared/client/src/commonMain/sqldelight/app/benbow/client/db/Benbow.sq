@@ -179,6 +179,10 @@ ORDER BY created_at;
 commentCount:
 SELECT COUNT(*) FROM entry WHERE parent_id = ? AND kind = 'comment' AND json_extract(fields, '$.deleted') IS NOT 'true';
 
+-- The day and order an entry shows at, from its "when" field (Moments).
+moveEntry:
+UPDATE entry SET day = ?, created_at = ? WHERE id = ?;
+
 updateParent:
 UPDATE entry SET parent_id = ? WHERE id = ?;
 

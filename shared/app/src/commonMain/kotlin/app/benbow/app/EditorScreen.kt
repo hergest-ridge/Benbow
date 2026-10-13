@@ -1,5 +1,6 @@
 package app.benbow.app
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -34,6 +35,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -91,6 +93,12 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.LocalTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -180,6 +188,8 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
 
     fun setMood(mood: Int?) = withEntry { repo.setMood(it, mood) }
 
+    fun moveTo(moment: LocalDateTime) = withEntry { repo.moveTo(it, moment) }
+
     fun setBackground(color: String?) = withEntry { repo.setBackground(it, color) }
 
     fun addTag(name: String) = withEntry { repo.addTag(it, name) }
@@ -251,6 +261,19 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     val detail = vm.detail
     var menu by remember { mutableStateOf(false) }
     var pickingBackground by remember { mutableStateOf(false) }
+    var moving by remember { mutableStateOf(false) }
+    if (moving) {
+        val at = detail?.createdAt?.let { Instant.fromEpochMilliseconds(it).toLocalDateTime(TimeZone.currentSystemDefault()).time }
+            ?: LocalTime(12, 0)
+        MomentPicker(
+            initial = LocalDateTime(LocalDate.parse(detail?.day ?: route.day), at),
+            onPick = {
+                moving = false
+                vm.moveTo(it)
+            },
+            onDismiss = { moving = false },
+        )
+    }
     var dropping by remember { mutableStateOf(false) }
     var editorFocused by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
@@ -303,8 +326,14 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                     }
                 },
                 title = {
-                    val label = if (vm.reading && detail != null) dateTimeLabel(detail.createdAt) else dayLabel(detail?.day ?: route.day)
-                    Text(label, style = MaterialTheme.typography.titleMedium)
+                    // The entry's day and time; while editing, a tap moves it to another day and time.
+                    val day = dayLabel(detail?.day ?: route.day)
+                    val label = detail?.let { "$day, ${timeLabel(it.createdAt)}" } ?: day
+                    Text(
+                        if (vm.reading) label else "$label ▾",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = if (vm.reading) Modifier else Modifier.clip(RoundedCornerShape(8.dp)).clickable { moving = true },
+                    )
                 },
                 actions = {
                     if (attachments.isNotEmpty()) {

@@ -72,3 +72,6 @@ Favorite, pinned, mood, tags, reactions and a comment's parent are `entry.meta.s
 
 ### ADR-022 App lock = the platform's owner check, per device [A]
 The lock (6.4) uses Android's `BiometricPrompt` with `BIOMETRIC_STRONG | DEVICE_CREDENTIAL`: fingerprint or face, with the phone's screen lock as the way in. No app PIN, so nothing secret is stored and a forgotten code can't lock the owner out of their own diary; without any screen lock on the device the app doesn't lock. It gates the UI only (files rely on device encryption), never applies to quick capture (it shows nothing), lives in local settings (not synced), starts locked in every new process and re-locks after 1 min / 5 min / 1 h / 5 h away. Recents shows a blank card while it is on. Desktop: none yet.
+
+### ADR-023 Moving an entry in time = the LWW field `when` [A]
+An entry's `day` and `createdAt` come from `entry.create` and never change (the server and the mirror keep them, so mirror file names stay stable). Moving it sets the field `when` = local "YYYY-MM-DDTHH:MM"; each client rewrites its local `day` and `created_at` columns from it after every local change and every pull (`Moments`), so lists, the calendar and the day view show it there on every device. No protocol change; restore reconciliation re-pushes it like any field. The export's front matter carries `when` next to the original `day`.

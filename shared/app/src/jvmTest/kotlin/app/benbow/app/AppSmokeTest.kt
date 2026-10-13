@@ -69,7 +69,7 @@ class AppSmokeTest {
         screenshot("02-note")
 
         onNodeWithText("Купить хлеб").performClick()
-        waitUntilExactlyOneExists(hasText("Сегодня"))
+        waitUntilExactlyOneExists(hasText("Сегодня", substring = true) and hasClickAction()) // the editor title: day, time, tap to move
         onNode(hasSetTextAction()).performTextInput(" и сыр")
         screenshot("03-editor")
         onNodeWithContentDescription("Назад").performClick()
@@ -569,7 +569,7 @@ class AppSmokeTest {
         setContent { BenbowApp(services) }
         waitUntilExactlyOneExists(hasText("Как прошёл день? Пара строк — и он сохранится."))
         onNodeWithContentDescription("Новая запись").performClick()
-        waitUntilExactlyOneExists(hasText("Сегодня"))
+        waitUntilExactlyOneExists(hasText("Сегодня", substring = true) and hasClickAction()) // the editor title: day, time, tap to move
         onNodeWithContentDescription("Назад").performClick()
         waitUntilExactlyOneExists(hasText("Как прошёл день? Пара строк — и он сохранится."))
         assertEquals(0, runBlocking { services.repo.journal().first().size })

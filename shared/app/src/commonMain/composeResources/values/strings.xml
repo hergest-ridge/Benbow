@@ -80,6 +80,8 @@
     <string name="add">Добавить</string>
     <string name="cancel">Отмена</string>
     <string name="attachments">Вложения</string>
+    <string name="moment_next">Дальше</string>
+    <string name="moment_save">Перенести</string>
     <string name="show_more">Показать ещё</string>
     <string name="feed_section">Лента</string>
     <string name="feed_cards">Карточки постов в ленте</string>

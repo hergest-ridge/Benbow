@@ -25,6 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.datetime.LocalDateTime
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.builtins.serializer
@@ -253,8 +254,12 @@ class JournalRepository(
             )
             SearchIndex.update(db, id)
             if (field == PARENT_FIELD) q.updateParent(value, id)
+            if (field == Moments.FIELD) Moments.apply(db, id, mapOf(field to value))
         }
     }
+
+    /** Moves the entry to another day and time (the `when` field); it shows there on every device. */
+    fun moveTo(id: String, moment: LocalDateTime) = setField(id, Moments.FIELD, Moments.format(moment))
 
     /**
      * Links [file] (already in the app's media folder) to the entry. One transaction records the file as

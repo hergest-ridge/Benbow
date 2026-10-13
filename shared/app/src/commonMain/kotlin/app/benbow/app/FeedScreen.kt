@@ -120,8 +120,8 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
                     is FeedRow.Item -> FeedBubble(
                         services,
                         row.item,
-                        onOpen = { nav.open(Route.Editor(row.item.summary.id, row.item.summary.day)) },
-                        onComments = { nav.open(Route.Comments(row.item.summary.id)) },
+                        onOpen = { nav.open(Route.Editor(row.item.summary.id, row.item.summary.day, readOnly = true)) },
+                        onComments = { nav.open(Route.Editor(row.item.summary.id, row.item.summary.day, readOnly = true)) },
                     ) { emoji, on ->
                         vm.react(row.item.summary.id, emoji, on)
                     }

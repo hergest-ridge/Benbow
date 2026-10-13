@@ -122,6 +122,8 @@
     <string name="comments">Комментарии</string>
     <string name="comments_count">Комментарии (%1$d)</string>
     <string name="comment_hint">Комментарий…</string>
+    <string name="edit">Редактировать</string>
+    <string name="reaction_add">Добавить реакцию</string>
     <string name="comments_empty">Пока без комментариев. Можно ответить себе — сейчас или через год.</string>
     <string name="copy_text">Копировать текст</string>
     <string name="share">Поделиться</string>

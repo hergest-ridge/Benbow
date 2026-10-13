@@ -37,11 +37,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.benbow.app.resources.Res
+import app.benbow.app.resources.comment_hint
 import app.benbow.app.resources.comments
 import app.benbow.app.resources.comments_count
 import app.benbow.app.resources.conflict_banner
 import app.benbow.app.resources.conflict_choose
 import app.benbow.app.resources.copy_text
+import app.benbow.app.resources.edit
 import app.benbow.app.resources.entry_broken
 import app.benbow.app.resources.favorite_add
 import app.benbow.app.resources.favorite_remove
@@ -94,6 +96,14 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
         private set
     val entryId: String? get() = session.entryId
 
+    /** Reading a post (from the feed): nothing is editable until the menu says so. */
+    var reading by mutableStateOf(route.readOnly && route.entryId != null)
+        private set
+
+    fun startEditing() {
+        reading = false
+    }
+
     private var shownHead: String? = null
     private var clean: String? = null
 
@@ -105,7 +115,9 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
         }
     }
 
-    fun onEdited(text: RichText) = session.onChange(text)
+    fun onEdited(text: RichText) {
+        if (!reading) session.onChange(text)
+    }
 
     /** Fills a new, still empty entry with a template; the draft starts right away. */
     fun applyTemplate(id: String, context: TemplateContext) {
@@ -140,6 +152,17 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
     fun markdown(): String = editor?.model?.toDocument()?.let { MarkdownExporter().export(it) }.orEmpty()
 
     fun copied() = services.messages.tryEmit(AppMessage.Copied)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val comments = session.entryIdFlow.filterNotNull().flatMapLatest { repo.comments(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    fun comment(text: String) {
+        if (text.isBlank()) return
+        withEntry { repo.createComment(it, services.today(), text) }
+    }
+
+    fun react(emoji: String, on: Boolean) = withEntry { repo.toggleReaction(it, emoji, on) }
 
     fun setMood(mood: Int?) = withEntry { repo.setMood(it, mood) }
 
@@ -228,7 +251,10 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                         nav.back()
                     }
                 },
-                title = { Text(dayLabel(detail?.day ?: route.day), style = MaterialTheme.typography.titleMedium) },
+                title = {
+                    val label = if (vm.reading && detail != null) dateTimeLabel(detail.createdAt) else dayLabel(detail?.day ?: route.day)
+                    Text(label, style = MaterialTheme.typography.titleMedium)
+                },
                 actions = {
                     val favorite = detail?.favorite == true
                     IconButton(vm::toggleFavorite) {
@@ -242,6 +268,12 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                         Box {
                             IconButton({ menu = true }) { Icon(Icons.More, stringResource(Res.string.menu)) }
                             DropdownMenu(menu, { menu = false }) {
+                                if (vm.reading) {
+                                    DropdownMenuItem(text = { Text(stringResource(Res.string.edit)) }, onClick = {
+                                        menu = false
+                                        vm.startEditing()
+                                    })
+                                }
                                 DropdownMenuItem(text = {
                                     Text(
                                         stringResource(
@@ -258,24 +290,26 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                     menu = false
                                     vm.togglePinned()
                                 })
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            if (comments >
-                                                0
-                                            ) {
-                                                stringResource(Res.string.comments_count, comments.toInt())
-                                            } else {
-                                                stringResource(Res.string.comments)
-                                            },
-                                        )
-                                    },
-                                    onClick = {
-                                        menu = false
-                                        vm.commit()
-                                        vm.entryId?.let { nav.open(Route.Comments(it)) }
-                                    },
-                                )
+                                if (!vm.reading) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                if (comments >
+                                                    0
+                                                ) {
+                                                    stringResource(Res.string.comments_count, comments.toInt())
+                                                } else {
+                                                    stringResource(Res.string.comments)
+                                                },
+                                            )
+                                        },
+                                        onClick = {
+                                            menu = false
+                                            vm.commit()
+                                            vm.entryId?.let { nav.open(Route.Comments(it)) }
+                                        },
+                                    )
+                                }
                                 DropdownMenuItem(text = { Text(stringResource(Res.string.copy_text)) }, onClick = {
                                     menu = false
                                     if (!copy(vm.plainText())) vm.copied()
@@ -302,7 +336,9 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
             )
         },
         bottomBar = {
-            if (editor != null) {
+            if (vm.reading) {
+                QuickNoteBar(onSend = vm::comment, hint = stringResource(Res.string.comment_hint))
+            } else if (editor != null) {
                 Column(Modifier.navigationBarsPadding().imePadding()) {
                     MediaBar(services, vm::ensureEntryId)
                     EditorToolbar(editor)
@@ -321,6 +357,20 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
             }
             if (detail?.inTrash == true) {
                 Banner(stringResource(Res.string.in_trash_banner), stringResource(Res.string.restore), onAction = vm::restoreFromTrash)
+            }
+            if (vm.reading && editor != null && detail != null && !vm.broken) {
+                val thread by vm.comments.collectAsStateWithLifecycle()
+                PostView(
+                    services,
+                    detail,
+                    editor,
+                    thread,
+                    onOpenMedia = { nav.open(Route.Media(detail.id, it)) },
+                    onOpenComment = { nav.open(Route.Editor(it.summary.id, it.summary.day)) },
+                    onReact = vm::react,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                return@Column
             }
             if (editor != null && vm.isBlankNew) {
                 val context = templateContext(route.day)

@@ -181,6 +181,17 @@ class AppSmokeTest {
         waitUntilExactlyOneExists(hasText("Утренняя заметка\nвторая строка"), 5_000)
         waitUntilExactlyOneExists(hasText("🔥"), 5_000)
         screenshot("13-feed")
+
+        onNodeWithText("Утренняя заметка\nвторая строка").click()
+        waitUntilExactlyOneExists(hasText("Пока без комментариев", substring = true), 5_000)
+        onNode(hasSetTextAction()).performTextInput("Перечитал вечером") // only the reply box takes text while reading
+        onNodeWithContentDescription("Сохранить заметку").click()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.commentCount(note).first() } == 1L }
+        waitUntilExactlyOneExists(hasText("Перечитал вечером"), 5_000)
+        screenshot("23-post")
+        onNodeWithContentDescription("Меню").click()
+        onNodeWithText("Редактировать").click()
+        waitUntilExactlyOneExists(hasText("Настроение"), 5_000)
     }
 
     @Test

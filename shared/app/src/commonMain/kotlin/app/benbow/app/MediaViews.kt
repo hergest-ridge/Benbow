@@ -64,6 +64,9 @@ import app.benbow.app.resources.in_text
 import app.benbow.client.MediaStore
 import app.benbow.core.sync.AttachmentState
 import coil3.compose.AsyncImage
+import coil3.compose.LocalPlatformContext
+import coil3.request.ImageRequest
+import coil3.size.Size
 import kotlinx.coroutines.CancellationException
 import org.jetbrains.compose.resources.stringResource
 import java.io.File
@@ -280,8 +283,11 @@ internal fun ZoomableImage(file: File, modifier: Modifier = Modifier, onZoom: (B
         zoom((scale * change).coerceIn(1f, 6f))
         if (scale > 1f) offset += pan * scale
     }
+    // Full resolution (Coil caps it at 4096 px), so zooming in shows the photo's own detail.
+    val context = LocalPlatformContext.current
+    val request = remember(file) { ImageRequest.Builder(context).data(file).size(Size.ORIGINAL).build() }
     AsyncImage(
-        model = file,
+        model = request,
         contentDescription = null,
         contentScale = ContentScale.Fit,
         modifier = modifier
@@ -324,10 +330,7 @@ internal fun MediaCarousel(
         HorizontalPager(pager, key = { items[it].meta.id }, modifier = Modifier.fillMaxSize()) { page ->
             val item = items[page]
             Box(Modifier.fillMaxSize().clickable { onOpen(item) }, contentAlignment = Alignment.Center) {
-                item.visual?.let { sha ->
-                    val load by rememberMediaFile(media, sha)
-                    (load as? MediaLoad.Ready)?.let { FittedPicture(it.file, item, carousel = ratio.coerceIn(0.8f, 1.9f)) }
-                }
+                FittedPicture(media, item, carousel = ratio.coerceIn(0.8f, 1.9f))
                 if (item.meta.kind == "video") {
                     PlayBadge()
                     item.meta.durationMs?.let { ms -> Chip(durationLabel(ms), Modifier.align(Alignment.BottomStart).padding(8.dp)) }
@@ -357,19 +360,46 @@ private fun Chip(text: String, modifier: Modifier = Modifier) {
 }
 
 /**
+ * A picture at its best: the small preview shows at once and the original (images) fades in over it as soon as it's
+ * on hand, decoded at the size it's shown, so nothing in view looks compressed. Offline, a file that isn't on the device
+ * keeps its preview. [previewOnly] is for backdrops that are blurred anyway.
+ */
+@Composable
+internal fun BestPicture(
+    media: MediaStore,
+    attachment: AttachmentState,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Crop,
+    alpha: Float = 1f,
+    previewOnly: Boolean = false,
+) {
+    val meta = attachment.meta
+    Box(modifier) {
+        val preview by rememberMediaFile(media, attachment.visual)
+        (preview as? MediaLoad.Ready)?.let { AsyncImage(it.file, null, Modifier.fillMaxSize(), contentScale = contentScale, alpha = alpha) }
+        if (!previewOnly && meta.kind == "image" && meta.previewSha256 != null) {
+            val original by rememberMediaFile(media, meta.sha256)
+            (original as? MediaLoad.Ready)?.let {
+                AsyncImage(it.file, null, Modifier.fillMaxSize(), contentScale = contentScale, alpha = alpha)
+            }
+        }
+    }
+}
+
+/**
  * A picture in a frame of another shape: cropped when the shapes are close, otherwise shown whole over a blurred,
  * dimmed copy of itself (a tall photo after a wide one doesn't lose most of its sides).
  */
 @Composable
-internal fun FittedPicture(file: File, attachment: AttachmentState, carousel: Float) {
+internal fun FittedPicture(media: MediaStore, attachment: AttachmentState, carousel: Float) {
     val w = attachment.meta.width ?: 0
     val h = attachment.meta.height ?: 0
     val own = if (w > 0 && h > 0) w.toFloat() / h else null
     val far = own != null && maxOf(own / carousel, carousel / own) > 1.3f
     if (!far) {
-        AsyncImage(file, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        BestPicture(media, attachment, Modifier.fillMaxSize())
         return
     }
-    AsyncImage(file, null, Modifier.fillMaxSize().blur(24.dp), contentScale = ContentScale.Crop, alpha = 0.5f)
-    AsyncImage(file, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+    BestPicture(media, attachment, Modifier.fillMaxSize().blur(24.dp), alpha = 0.5f, previewOnly = true)
+    BestPicture(media, attachment, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
 }

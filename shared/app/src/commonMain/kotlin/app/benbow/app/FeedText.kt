@@ -50,7 +50,8 @@ import org.jetbrains.compose.resources.stringResource
 
 /** About this much text shows before "Показать ещё" (blocks count a little extra for their spacing). */
 private const val BUDGET = 480
-private const val BLOCK_COST = 40
+private const val BLOCK_COST = 24
+private const val LINE_COST = 40
 
 /**
  * A post's text in the feed: headings, quotes, lists, checklists, callouts and code keep their shape and inline marks
@@ -68,15 +69,34 @@ internal fun FeedText(body: String, expanded: Boolean, onExpand: () -> Unit, mod
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         var budget = BUDGET
         var cut = false
-        for ((index, block) in blocks.withIndex()) {
-            if (!expanded && budget <= 0) {
+        for (block in blocks) {
+            if (expanded) {
+                FeedBlock(rich, block, styles, dark, Int.MAX_VALUE)
+                continue
+            }
+            if (budget <= 0) {
                 cut = true
                 break
             }
-            val lines = if (expanded || block.length <= budget) Int.MAX_VALUE else 4
-            if (lines != Int.MAX_VALUE) cut = cut || index < blocks.lastIndex || block.length > budget
-            FeedBlock(rich, block, styles, dark, lines)
-            budget -= block.length + BLOCK_COST
+            // Line by line, even inside a quote or a callout: each costs its length, but at least a short line's worth,
+            // so a song of many short lines stops too. The last line shown may end in an ellipsis.
+            val shown = ArrayList<Int>()
+            var lastLines = Int.MAX_VALUE
+            for (p in block.paragraphs) {
+                if (budget <= 0) break
+                val cost = maxOf(rich.paragraphText(p).length, LINE_COST)
+                shown += p
+                if (cost > budget) {
+                    lastLines = (budget / LINE_COST).coerceIn(2, 4)
+                    budget = 0
+                    cut = true
+                    break
+                }
+                budget -= cost
+            }
+            if (shown.size < block.paragraphs.size) cut = true
+            FeedBlock(rich, Block(shown, 0), styles, dark, lastLines)
+            budget -= BLOCK_COST
         }
         if (cut && !expanded) {
             Text(
@@ -142,7 +162,23 @@ private fun FeedBlock(rich: RichText, block: Block, styles: EditorStyles, dark: 
         ) {
             Row(Modifier.padding(horizontal = 10.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(callout.icon, style = body)
-                Column { block.paragraphs.forEach { Line(rich, it, styles, body, maxLines) } }
+                Column {
+                    block.paragraphs.forEach {
+                        Line(
+                            rich,
+                            it,
+                            styles,
+                            body,
+                            if (it ==
+                                block.paragraphs.last()
+                            ) {
+                                maxLines
+                            } else {
+                                Int.MAX_VALUE
+                            },
+                        )
+                    }
+                }
             }
         }
 
@@ -153,14 +189,28 @@ private fun FeedBlock(rich: RichText, block: Block, styles: EditorStyles, dark: 
         ) {
             Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
                 val code = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace)
-                block.paragraphs.forEach { Line(rich, it, styles, code, maxLines) }
+                block.paragraphs.forEach { Line(rich, it, styles, code, if (it == block.paragraphs.last()) maxLines else Int.MAX_VALUE) }
             }
         }
 
         first.style == BlockStyle.Quote -> Row(Modifier.height(IntrinsicSize.Min).padding(vertical = 2.dp)) {
             Box(Modifier.width(3.dp).fillMaxHeight().background(colors.primary, RoundedCornerShape(2.dp)))
             Column(Modifier.padding(start = 10.dp)) {
-                block.paragraphs.forEach { Line(rich, it, styles, body.copy(color = colors.onSurfaceVariant), maxLines) }
+                block.paragraphs.forEach {
+                    Line(
+                        rich,
+                        it,
+                        styles,
+                        body.copy(color = colors.onSurfaceVariant),
+                        if (it ==
+                            block.paragraphs.last()
+                        ) {
+                            maxLines
+                        } else {
+                            Int.MAX_VALUE
+                        },
+                    )
+                }
             }
         }
 

@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -36,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,6 +49,7 @@ import app.benbow.app.resources.Res
 import app.benbow.app.resources.comments
 import app.benbow.app.resources.feed_empty
 import app.benbow.app.resources.feed_title
+import app.benbow.app.resources.months_nominative
 import app.benbow.client.FeedItem
 import app.benbow.core.sync.AttachmentState
 import coil3.compose.AsyncImage
@@ -55,6 +58,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
 
 /** A row of the feed: an entry, or the day line drawn above a day's entries. */
@@ -68,11 +72,18 @@ internal sealed interface FeedRow {
     data class Day(val day: String) : FeedRow {
         override val key get() = "day:$day"
     }
+
+    /** "YYYY-MM": a month's title above its newest day. */
+    data class Month(val month: String) : FeedRow {
+        override val key get() = "month:$month"
+    }
 }
 
-/** Newest first, top down: each day's line above its entries. */
+/** Newest first, top down: each month's title, then each day's line above its entries. */
 internal fun feedRows(items: List<FeedItem>): List<FeedRow> = buildList {
     items.forEachIndexed { i, item ->
+        val month = item.summary.day.take(7)
+        if (items.getOrNull(i - 1)?.summary?.day?.take(7) != month) add(FeedRow.Month(month))
         if (items.getOrNull(i - 1)?.summary?.day != item.summary.day) add(FeedRow.Day(item.summary.day))
         add(FeedRow.Item(item))
     }
@@ -125,6 +136,8 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
             items(list, key = { it.key }) { row ->
                 when (row) {
                     is FeedRow.Day -> DayHeader(row.day)
+
+                    is FeedRow.Month -> MonthHeader(row.month)
 
                     is FeedRow.Item -> FeedPost(
                         services,
@@ -184,7 +197,7 @@ private fun FeedPost(
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     PostBody(item, expanded, onExpand, onComments, onReact)
                 }
-                Box(Modifier.fillMaxWidth().height(6.dp).background(colors.surfaceContainerLowest))
+                HorizontalDivider(Modifier.padding(top = 4.dp), thickness = 0.5.dp, color = colors.outlineVariant)
             }
         }
         DropdownMenu(picking, { picking = false }) {
@@ -235,4 +248,21 @@ private fun PostBody(item: FeedItem, expanded: Boolean, onExpand: () -> Unit, on
         moodEmoji(entry.mood)?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
         Text(timeLabel(entry.createdAt), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
     }
+}
+
+/** A season's sign for each month, January first. */
+private val MONTH_SIGNS = listOf("❄️", "🌨️", "🌱", "🌷", "🌸", "☀️", "🌻", "🍉", "🍁", "🍂", "🌧️", "🎄")
+
+/** "🍂 Октябрь" above a month's posts; the year too when it isn't this one. */
+@Composable
+private fun MonthHeader(month: String) {
+    val year = month.take(4).toIntOrNull() ?: return
+    val index = (month.drop(5).toIntOrNull() ?: return) - 1
+    val name = stringArrayResource(Res.array.months_nominative).getOrNull(index) ?: return
+    val thisYear = journalToday().year
+    Text(
+        "${MONTH_SIGNS[index]} $name" + if (year != thisYear) " $year" else "",
+        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 22.dp, bottom = 2.dp),
+    )
 }

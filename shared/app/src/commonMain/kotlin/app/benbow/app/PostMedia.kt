@@ -144,10 +144,7 @@ private fun Tile(services: AppServices, item: AttachmentState, modifier: Modifie
         },
         contentAlignment = Alignment.Center,
     ) {
-        item.visual?.let { sha ->
-            val load by rememberMediaFile(services.media, sha)
-            (load as? MediaLoad.Ready)?.let { AsyncImage(it.file, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
-        }
+        BestPicture(services.media, item, Modifier.fillMaxSize())
         if (item.meta.kind == "video") PlayBadge()
         if (more > 0) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)), contentAlignment = Alignment.Center) {

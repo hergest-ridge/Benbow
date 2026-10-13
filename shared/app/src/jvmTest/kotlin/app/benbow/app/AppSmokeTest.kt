@@ -539,6 +539,14 @@ class AppSmokeTest {
                 ),
                 app.benbow.core.content.TextBlock("p", children = listOf(app.benbow.core.content.Span("Долгий абзац. ".repeat(40)))),
                 app.benbow.core.content.TextBlock("p2", children = listOf(app.benbow.core.content.Span("Самый конец поста"))),
+            ) + (1..25).map { line ->
+                app.benbow.core.content.TextBlock(
+                    "s$line",
+                    style = "blockquote",
+                    children = listOf(app.benbow.core.content.Span("Don't let go $line")),
+                )
+            } + listOf(
+                app.benbow.core.content.TextBlock("p3", children = listOf(app.benbow.core.content.Span("Wunderhorse — The Rope"))),
             ),
         )
         services.repo.saveDraft(id, app.benbow.core.content.DocumentCodec.encode(doc))
@@ -556,6 +564,7 @@ class AppSmokeTest {
         waitUntilExactlyOneExists(hasText("Bob Dylan — New Morning"), 5_000)
         waitUntilExactlyOneExists(hasText("Показать ещё"), 5_000)
         screenshot("41-feed-formatting")
+        assertTrue(onAllNodes(hasText("Don't let go 25")).fetchSemanticsNodes().isEmpty(), "a long quote stops with the rest")
         onNodeWithText("Показать ещё").click()
         waitUntilExactlyOneExists(hasText("Самый конец поста"), 5_000)
 

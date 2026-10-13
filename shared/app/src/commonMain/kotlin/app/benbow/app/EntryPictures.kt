@@ -70,12 +70,7 @@ internal class EntryPictures(
                 contentAlignment = Alignment.Center,
             ) {
                 if (meta.kind == "image" || meta.kind == "video") {
-                    attachment.visual?.let { sha ->
-                        val load by rememberMediaFile(services.media, sha)
-                        (load as? MediaLoad.Ready)?.let {
-                            AsyncImage(it.file, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                        }
-                    }
+                    BestPicture(services.media, attachment, Modifier.fillMaxSize())
                     if (meta.kind == "video") PlayBadge()
                 } else {
                     Row(

@@ -77,6 +77,19 @@ class SyncRules(
         }
 
         is PutRevision -> putRevision(op)
+
+        is PutAttachment -> {
+            val entry = store.entry(op.entryId) ?: return OpResult(op.opId, OpStatus.Rejected, "unknown entry")
+            val current = entry.attachments[op.attachment.id]
+            if (current == null || op.hlc > current.hlc) {
+                // The file's identity never changes; only a preview may be added to it.
+                val meta = current?.meta?.let { it.copy(previewSha256 = it.previewSha256 ?: op.attachment.previewSha256) } ?: op.attachment
+                val state = AttachmentState(meta, op.position, op.caption, op.present, op.hlc)
+                store.putEntry(entry.copy(attachments = entry.attachments + (meta.id to state)))
+            }
+            store.appendChange(op.entryId) // logged even when it lost, like fields
+            OpResult(op.opId, OpStatus.Applied)
+        }
     }
 
     private fun putRevision(op: PutRevision): OpResult {

@@ -113,7 +113,7 @@ internal fun Banner(text: String, action: String, error: Boolean = false, onActi
 @Composable
 internal fun syncLabel(status: SyncStatus): Pair<String, Color>? {
     val colors = MaterialTheme.colorScheme
-    val waiting = status.pending.toInt()
+    val waiting = (status.pending + status.pendingMedia).toInt()
     return when {
         status.syncing -> stringResource(Res.string.sync_syncing) to colors.outline
 

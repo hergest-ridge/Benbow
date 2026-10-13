@@ -15,7 +15,25 @@ CREATE TABLE entry (
     fields TEXT NOT NULL DEFAULT '{}',
     updated_at INTEGER NOT NULL,
     -- HLC of each field value, so a re-push after a server restore keeps last-writer-wins correct.
-    field_clocks TEXT NOT NULL DEFAULT '{}'
+    field_clocks TEXT NOT NULL DEFAULT '{}',
+    -- AttachmentState by attachment id (LWW per link), plus what lists show without parsing it.
+    attachments TEXT NOT NULL DEFAULT '{}',
+    media_count INTEGER NOT NULL DEFAULT 0,
+    cover TEXT
+);
+
+-- Media files on this device, by SHA-256. A captured file stays until the server confirmed it;
+-- downloaded ones are a cache (docs/data-safety.md#client-side-safety).
+CREATE TABLE media (
+    sha256 TEXT NOT NULL PRIMARY KEY,
+    path TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    mime TEXT NOT NULL,
+    origin TEXT NOT NULL, -- captured | downloaded
+    uploaded INTEGER NOT NULL DEFAULT 0,
+    name TEXT,
+    captured_at INTEGER,
+    last_access_at INTEGER NOT NULL
 );
 
 CREATE INDEX entry_by_day ON entry(day, created_at);
@@ -49,23 +67,23 @@ SELECT * FROM entry WHERE id = ?;
 
 -- Trash is the LWW field "deleted" (JournalRepository.TRASH_FIELD).
 journal:
-SELECT id, day, created_at, title, preview, conflict_heads FROM entry
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover FROM entry
 WHERE json_extract(fields, '$.deleted') IS NOT 'true'
 ORDER BY day DESC, created_at;
 
 entriesForDay:
-SELECT id, day, created_at, title, preview, conflict_heads FROM entry
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover FROM entry
 WHERE day = ? AND json_extract(fields, '$.deleted') IS NOT 'true'
 ORDER BY created_at;
 
 trash:
-SELECT id, day, created_at, title, preview, conflict_heads FROM entry
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover FROM entry
 WHERE json_extract(fields, '$.deleted') IS 'true'
 ORDER BY updated_at DESC;
 
 upsertEntry:
-INSERT INTO entry(id, kind, day, created_at, head_rev, body, title, preview, conflict_heads, fields, updated_at, field_clocks)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO entry(id, kind, day, created_at, head_rev, body, title, preview, conflict_heads, fields, updated_at, field_clocks, attachments, media_count, cover)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
     kind = excluded.kind,
     day = excluded.day,
@@ -76,11 +94,42 @@ ON CONFLICT(id) DO UPDATE SET
     conflict_heads = excluded.conflict_heads,
     fields = excluded.fields,
     updated_at = excluded.updated_at,
-    field_clocks = excluded.field_clocks;
+    field_clocks = excluded.field_clocks,
+    attachments = excluded.attachments,
+    media_count = excluded.media_count,
+    cover = excluded.cover;
 
 -- Everything a device knows, for reconciliation after a server restore.
 allEntries:
-SELECT id, kind, day, created_at, head_rev, body, fields, field_clocks FROM entry;
+SELECT id, kind, day, created_at, head_rev, body, fields, field_clocks, attachments FROM entry;
+
+updateAttachments:
+UPDATE entry SET attachments = ?, media_count = ?, cover = ?, updated_at = ? WHERE id = ?;
+
+putMedia:
+INSERT INTO media(sha256, path, size, mime, origin, uploaded, name, captured_at, last_access_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(sha256) DO UPDATE SET
+    origin = CASE WHEN media.origin = 'captured' THEN 'captured' ELSE excluded.origin END,
+    last_access_at = excluded.last_access_at;
+
+selectMedia:
+SELECT * FROM media WHERE sha256 = ?;
+
+touchMedia:
+UPDATE media SET last_access_at = ? WHERE sha256 = ?;
+
+pendingUploads:
+SELECT * FROM media WHERE origin = 'captured' AND uploaded = 0 ORDER BY last_access_at;
+
+pendingUploadCount:
+SELECT COUNT(*) FROM media WHERE origin = 'captured' AND uploaded = 0;
+
+markUploaded:
+UPDATE media SET uploaded = 1 WHERE sha256 = ?;
+
+-- After a server restore the server may lack files it once confirmed; the uploader asks again (dedup makes it cheap).
+recheckUploads:
+UPDATE media SET uploaded = 0 WHERE origin = 'captured';
 
 updateHead:
 UPDATE entry SET head_rev = ?, body = ?, title = ?, preview = ?, updated_at = ? WHERE id = ?;

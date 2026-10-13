@@ -30,6 +30,8 @@ dependencies {
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.ktor.network.tls.certificates)
     implementation(libs.ktor.server.auth)
+    implementation(libs.ktor.server.partial.content)
+    implementation(libs.ktor.server.auto.head.response)
     implementation(libs.ktor.server.swagger)
     implementation(libs.ktor.server.routing.openapi)
     implementation(libs.sqlite.jdbc)

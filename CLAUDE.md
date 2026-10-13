@@ -3,7 +3,7 @@
 Personal journal / life-feed app ("my feed of everything"). Single user, many devices.
 Android app (primary), desktop + web clients, self-hosted LAN server on Windows (standalone, autostart, no Docker).
 
-**Status:** Phase 2 (safe core MVP) in progress: 2.1 server storage/sync/pairing, 2.2 backups, 2.3 client data layer (`shared/client`), 2.4 screens (`shared/app`), 2.5 restore/reconciliation/background sync + drills done. Next: real-use dogfooding, then Phase 3.
+**Status:** Phase 2 (safe core MVP) done: 2.1 server storage/sync/pairing, 2.2 backups, 2.3 client data layer (`shared/client`), 2.4 screens (`shared/app`), 2.5 done. Phase 3 (attachments): 3.1 server blob store and 3.2 sync + client media engine done. Next: 3.3 Android capture and UI.
 
 ## Non-negotiables
 1. **No data loss or corruption, ever.** Read `docs/data-safety.md` before touching storage, sync, migrations, deletion or backups. Never weaken an invariant to make something pass. Ask instead.
@@ -38,7 +38,7 @@ Android app (primary), desktop + web clients, self-hosted LAN server on Windows 
 ## Commands
 - `./gradlew check`: the single gate (tests for all modules + Android lint).
 - `./gradlew :apps:desktop:run`: desktop app. `./gradlew :apps:desktop:hotRun`: desktop app with Compose Hot Reload. `hotMcpServer`: MCP server so an agent can screenshot and drive the running app.
-- `./gradlew :apps:android:installDebug`: install on a connected phone.
+- `./gradlew :apps:android:installDebug`: dev build `app.benbow.debug` ("Benbow Dev", own local DB). The owner's real app is the release build `app.benbow` (`installRelease`, signed with the key from `tools/create-release-key.ps1`, kept in `%USERPROFILE%\.benbow`). Never test against the owner's real app or pair it with a throwaway server.
 - `./gradlew :shared:app:jvmTest`: headless UI smoke test; screenshots land in `shared/app/build/screens` (look at them after UI changes).
 - `./gradlew :apps:web:wasmJsBrowserDevelopmentRun`: web client dev server.
 - `./gradlew :server:run --args="--data <dir>"`: HTTPS server on 8765 (`/`, `/api/v1/info`, `/api/docs`).

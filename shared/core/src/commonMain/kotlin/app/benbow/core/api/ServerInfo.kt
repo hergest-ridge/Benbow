@@ -6,7 +6,9 @@ import kotlinx.serialization.Serializable
 /** Sync protocol range this build speaks (docs/sync.md#api-versioning-and-docs). */
 object Protocol {
     const val MIN = 1
-    const val MAX = 1
+
+    /** 2: `entry.attachment.put` and attachments in entry state. */
+    const val MAX = 2
 }
 
 /** Response of `GET /api/v1/info`; store identity per docs/sync.md#store-identity. */

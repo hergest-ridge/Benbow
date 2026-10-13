@@ -19,6 +19,8 @@ data class ServerConfig(
     /** Second location for backup copies (e.g. another disk); empty = disabled (data-safety.md#backups). */
     val backupMirror: Path? = null,
     val backupIntervalMinutes: Long = 60,
+    /** Where media files live (ADR-009); empty = `<data>/media`. */
+    val mediaRoot: Path? = null,
 ) {
     companion object {
         const val FILE_NAME = "benbow.properties"
@@ -42,6 +44,7 @@ data class ServerConfig(
                 "tls.password" to randomSecret(),
                 "backup.mirror" to "",
                 "backup.intervalMinutes" to "60",
+                "media.root" to "",
             )
             val missing = defaults.filterKeys { props.getProperty(it) == null }
             if (missing.isNotEmpty()) {
@@ -54,6 +57,7 @@ data class ServerConfig(
                 tlsPassword = props.getProperty("tls.password"),
                 backupMirror = props.getProperty("backup.mirror").trim().takeIf { it.isNotEmpty() }?.let(Path::of),
                 backupIntervalMinutes = props.getProperty("backup.intervalMinutes").toLong().coerceIn(5, 24 * 60),
+                mediaRoot = props.getProperty("media.root").trim().takeIf { it.isNotEmpty() }?.let(Path::of),
             )
         }
 

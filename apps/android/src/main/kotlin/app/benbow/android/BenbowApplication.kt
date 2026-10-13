@@ -11,6 +11,7 @@ import app.benbow.client.KeystoreSecretBox
 import app.benbow.client.SecretBox
 import app.benbow.client.db.BenbowDb
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
+import java.io.File
 
 class BenbowApplication : Application() {
     override fun onCreate() {
@@ -40,6 +41,6 @@ class BenbowApplication : Application() {
             },
         )
         val name = Settings.Global.getString(contentResolver, Settings.Global.DEVICE_NAME) ?: Build.MODEL
-        AppServices(driver, platform = "android", deviceName = name)
+        AppServices(driver, File(filesDir, "media"), platform = "android", deviceName = name)
     }
 }

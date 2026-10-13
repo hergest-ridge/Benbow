@@ -11,6 +11,8 @@ import app.benbow.core.api.ReconcileRequest
 import app.benbow.core.api.ReconcileResponse
 import app.benbow.core.api.RevisionInfo
 import app.benbow.core.api.ServerInfo
+import app.benbow.core.api.UploadStart
+import app.benbow.core.api.UploadStatus
 import app.benbow.core.sync.PullResponse
 import app.benbow.core.sync.RevisionRecord
 import app.benbow.core.sync.SyncOp
@@ -18,15 +20,22 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.request.parameter
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
+import io.ktor.client.request.prepareGet
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
+import io.ktor.utils.io.jvm.javaio.copyTo
 import kotlinx.serialization.json.Json
+import java.io.File
 
 /** The server API as the client sees it (docs/sync.md#implemented-endpoints). */
 interface BenbowApi {
@@ -37,7 +46,19 @@ interface BenbowApi {
     suspend fun revisions(entryId: String): List<RevisionInfo>
     suspend fun revision(id: String): RevisionRecord
     suspend fun reconcile(entries: List<KnownEntry>): ReconcileResponse
+
+    /** Announces a file; `complete` when the server already has it. */
+    suspend fun startUpload(file: UploadStart): UploadStatus
+
+    /** Appends [data] at [offset]. A wrong offset is not an error: the answer carries the offset to continue from. */
+    suspend fun uploadChunk(id: String, offset: Long, data: ByteArray): UploadStatus
+
+    /** Streams a file into [target]; returns its MIME type. */
+    suspend fun downloadBlob(sha256: String, target: File): String
 }
+
+/** The finished upload didn't match its hash (corrupted on the way); start it again. */
+class ChecksumMismatchException : Exception("The uploaded file didn't match its SHA-256")
 
 /** A non-2xx answer from the server; [error] carries the API error code when the body had one. */
 class ApiException(val status: Int, val error: String?, message: String) : Exception(message)
@@ -79,6 +100,33 @@ class KtorBenbowApi(private val client: HttpClient, private val baseUrl: String,
         contentType(ContentType.Application.Json)
         setBody(ReconcileRequest(entries))
     }.ok().body()
+
+    override suspend fun startUpload(file: UploadStart): UploadStatus = client.post("$baseUrl/api/v1/uploads") {
+        auth()
+        contentType(ContentType.Application.Json)
+        setBody(file)
+    }.ok().body()
+
+    override suspend fun uploadChunk(id: String, offset: Long, data: ByteArray): UploadStatus {
+        val response = client.patch("$baseUrl/api/v1/uploads/$id") {
+            auth()
+            header("Upload-Offset", offset)
+            contentType(ContentType.Application.OctetStream)
+            setBody(data)
+        }
+        return when (response.status) {
+            HttpStatusCode.Conflict -> response.body()
+            HttpStatusCode.UnprocessableEntity -> throw ChecksumMismatchException()
+            else -> response.ok().body()
+        }
+    }
+
+    override suspend fun downloadBlob(sha256: String, target: File): String = client.prepareGet("$baseUrl/api/v1/blobs/$sha256") { auth() }
+        .execute { response ->
+            response.ok()
+            target.outputStream().use { response.bodyAsChannel().copyTo(it) }
+            response.contentType()?.withoutParameters()?.toString() ?: "application/octet-stream"
+        }
 
     private fun io.ktor.client.request.HttpRequestBuilder.auth() {
         token()?.let { bearerAuth(it) }

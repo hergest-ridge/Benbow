@@ -1,26 +1,15 @@
 package app.benbow.client
 
 import app.benbow.client.db.BenbowDb
-import app.benbow.core.api.KnownEntry
-import app.benbow.core.api.PairResponse
-import app.benbow.core.api.PushResponse
-import app.benbow.core.api.ReconcileResponse
-import app.benbow.core.api.RevisionInfo
-import app.benbow.core.api.ServerInfo
 import app.benbow.core.content.Document
 import app.benbow.core.content.DocumentCodec
 import app.benbow.core.content.Span
 import app.benbow.core.content.TextBlock
-import app.benbow.core.sync.PullResponse
 import app.benbow.core.sync.PutRevision
-import app.benbow.core.sync.RevisionRecord
 import app.benbow.core.sync.SyncOp
-import app.benbow.core.sync.SyncRules
-import app.benbow.testing.InMemorySyncStore
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
-import java.io.IOException
 import java.util.Properties
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -29,35 +18,6 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class ClientSyncTest {
-    private class FakeServer(val storeId: String = "store-1", val epoch: Long = 1) {
-        val store = InMemorySyncStore()
-        val rules = SyncRules(store)
-        val log = mutableListOf<SyncOp>()
-
-        /** A copy of this server as a backup would have it now, restored under a new epoch. */
-        fun restoredCopy(epoch: Long) = FakeServer(storeId, epoch).also { it.rules.push(log) }
-    }
-
-    private class FakeApi(var server: FakeServer, var serverStore: String = server.storeId) : BenbowApi {
-        var dropRequest = false
-        var dropResponse = false
-
-        override suspend fun info() =
-            ServerInfo("test", 1, 1, serverStore, server.epoch, 2, server.store.changesSince(0, Int.MAX_VALUE).lastOrNull()?.first ?: 0)
-        override suspend fun pair(code: String, deviceName: String, platform: String): PairResponse = error("not used")
-        override suspend fun push(ops: List<SyncOp>): PushResponse {
-            if (dropRequest) throw IOException("request lost")
-            val results = server.rules.push(ops)
-            server.log += ops
-            if (dropResponse) throw IOException("response lost")
-            return PushResponse(results)
-        }
-        override suspend fun pull(cursor: Long, limit: Int): PullResponse = server.rules.pull(cursor, limit)
-        override suspend fun revisions(entryId: String): List<RevisionInfo> = error("not used")
-        override suspend fun revision(id: String): RevisionRecord = error("not used")
-        override suspend fun reconcile(entries: List<KnownEntry>): ReconcileResponse = server.rules.reconcile(entries)
-    }
-
     private var time = 1_000L
 
     private inner class Device(server: FakeServer, private val name: String, paired: Boolean = true) {

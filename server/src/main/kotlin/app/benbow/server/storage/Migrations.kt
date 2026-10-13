@@ -8,7 +8,7 @@ import java.util.UUID
  * an existing database before calling [apply]; a newer schema is refused.
  */
 object Migrations {
-    const val SCHEMA_VERSION = 2
+    const val SCHEMA_VERSION = 3
 
     private val steps: List<List<String>> = listOf(
         // 1: store identity
@@ -58,6 +58,32 @@ object Migrations {
                 last_seen_at INTEGER,
                 revoked_at INTEGER
             )""",
+        ),
+        // 3: media files by SHA-256 (ADR-009) and resumable uploads
+        listOf(
+            """CREATE TABLE blobs (
+                sha256 TEXT PRIMARY KEY,
+                size INTEGER NOT NULL,
+                mime TEXT NOT NULL,
+                path TEXT NOT NULL UNIQUE,
+                created_at INTEGER NOT NULL,
+                verified_at INTEGER NOT NULL
+            )""",
+            """CREATE TABLE uploads (
+                id TEXT PRIMARY KEY,
+                sha256 TEXT NOT NULL,
+                size INTEGER NOT NULL,
+                mime TEXT NOT NULL,
+                name TEXT,
+                captured_at INTEGER,
+                received INTEGER NOT NULL,
+                device_id TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )""",
+            "CREATE INDEX uploads_by_sha ON uploads(sha256)",
+            // Attachment links of an entry (AttachmentState by attachment id, LWW per link)
+            "ALTER TABLE entries ADD COLUMN attachments TEXT NOT NULL DEFAULT '{}'",
         ),
     )
 

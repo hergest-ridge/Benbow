@@ -129,6 +129,10 @@ private fun statusPage(ctx: ServerContext, admin: Boolean): String = buildString
         append("</table>")
     }
     if (admin) append("<form method=\"post\" action=\"/admin/backup\"><button>Сделать копию сейчас</button></form>")
+    ctx.blobs?.let { store ->
+        val (count, bytes) = store.stats()
+        append("<p>Медиафайлы: $count, ${"%.1f".format(bytes / 1_073_741_824.0)} ГБ в <code>${esc(store.root.toString())}</code></p>")
+    }
     ctx.dataDir?.let { append("<p>Данные: <code>${esc(it.toString())}</code></p>") }
     append("</section></body></html>")
 }

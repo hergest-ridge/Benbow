@@ -38,8 +38,10 @@ class Backups(dataDir: Path) {
     fun snapshot(connection: Connection, reason: String, seq: Long = 0): BackupRecord {
         directory.createDirectories()
         val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
-        val target = directory.resolve("benbow-$stamp-$reason.sqlite")
-        check(!target.exists()) { "Backup $target already exists" }
+        // Two runs in one second (button + schedule) get distinct names; nothing is ever overwritten.
+        val target = generateSequence(1) { it + 1 }
+            .map { n -> directory.resolve(if (n == 1) "benbow-$stamp-$reason.sqlite" else "benbow-$stamp-$reason-$n.sqlite") }
+            .first { !it.exists() }
         val expected = rowCounts(connection)
         connection.createStatement().use { it.execute("VACUUM INTO '${target.toString().replace("'", "''")}'") }
         val record = BackupRecord(target.fileName.toString(), reason, System.currentTimeMillis(), verify(target, expected), expected, seq)

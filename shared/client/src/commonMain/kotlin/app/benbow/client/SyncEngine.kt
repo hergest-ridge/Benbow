@@ -7,6 +7,7 @@ import app.benbow.core.api.ServerInfo
 import app.benbow.core.sync.CreateEntry
 import app.benbow.core.sync.EntrySnapshot
 import app.benbow.core.sync.OpStatus
+import app.benbow.core.sync.PutAttachment
 import app.benbow.core.sync.PutRevision
 import app.benbow.core.sync.SetField
 import app.benbow.core.sync.SyncOp
@@ -88,6 +89,9 @@ class SyncEngine(private val db: BenbowDb, private val apiFor: (Connection) -> B
                 }
                 val values = decodeFields(entry.fields)
                 decodeClocks(entry.field_clocks).forEach { (field, hlc) -> add(SetField(newOpId(), entry.id, field, values[field], hlc)) }
+                decodeAttachments(entry.attachments).values.forEach { a ->
+                    add(PutAttachment(newOpId(), entry.id, a.meta, a.position, a.caption, a.present, a.hlc))
+                }
             }
         }
         for (batch in ops.chunked(BATCH)) {
@@ -101,7 +105,10 @@ class SyncEngine(private val db: BenbowDb, private val apiFor: (Connection) -> B
                 }
             }
         }
-        settings.connection = connection.copy(epoch = info.epoch) // also resets the cursor: change numbers were reused
+        db.transaction {
+            settings.connection = connection.copy(epoch = info.epoch) // also resets the cursor: change numbers were reused
+            q.recheckUploads() // the restored server may lack files it once confirmed
+        }
         return ops.size
     }
 
@@ -150,6 +157,7 @@ class SyncEngine(private val db: BenbowDb, private val apiFor: (Connection) -> B
         val existing = q.selectEntry(entry.id).executeAsOneOrNull()
         val body = snapshot.headBody ?: existing?.body ?: JournalRepository.emptyBody()
         val (title, preview) = summarize(body)
+        val media = mediaSummary(entry.attachments)
         q.upsertEntry(
             entry.id,
             entry.kind,
@@ -168,6 +176,9 @@ class SyncEngine(private val db: BenbowDb, private val apiFor: (Connection) -> B
             ),
             now(),
             ClientJson.encodeToString(clocksSerializer, entry.fields.mapValues { it.value.hlc }),
+            ClientJson.encodeToString(attachmentsSerializer, entry.attachments),
+            media.first.toLong(),
+            media.second,
         )
     }
 

@@ -20,9 +20,9 @@ fun main() {
     val driver = JdbcSqliteDriver("jdbc:sqlite:${File(dir, "benbow.db").absolutePath}", properties, BenbowDb.Schema)
     val services = AppServices(
         driver,
+        mediaDir = File(dir, "media"),
         platform = "desktop",
-        deviceName =
-        System.getenv("COMPUTERNAME") ?: InetAddress.getLocalHost().hostName,
+        deviceName = System.getenv("COMPUTERNAME") ?: InetAddress.getLocalHost().hostName,
     )
     application {
         Window(onCloseRequest = ::exitApplication, title = "Benbow") {

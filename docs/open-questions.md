@@ -6,7 +6,7 @@ CMP for all clients (ADR-002) · desktop-first, Android ASAP (ADR-003) · Window
 Content format: Portable Text-based JSON + exporters, palette tokens, full v1 formatting list (ADR-015/017).
 
 ## Before real use (Phase 2)
-- **Release signing key:** Android only installs updates signed with the same key. Changing keys forces an uninstall, which would wipe unsynced local data. Create a dedicated release keystore once, keep it outside the repo and back it up on both disks.
+- **Release signing key:** Android only installs updates signed with the same key. Changing keys forces an uninstall, which would wipe unsynced local data. Ready: the owner runs `tools/create-release-key.ps1` once (key + properties in `%USERPROFILE%\.benbow`), backs both files up on both disks, then `installRelease`. Moving from the debug-signed `app.benbow` to release: sync first, uninstall, install release, pair, full pull.
 
 ## Later
 13. Existing data to import (Day One, Keep, Telegram, Notion, Obsidian)? Affects importer priority.

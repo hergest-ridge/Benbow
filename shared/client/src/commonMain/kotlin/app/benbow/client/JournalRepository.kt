@@ -7,9 +7,12 @@ import app.benbow.core.content.DocumentFormatException
 import app.benbow.core.content.Span
 import app.benbow.core.content.TextBlock
 import app.benbow.core.content.toPlainText
+import app.benbow.core.sync.AttachmentMeta
+import app.benbow.core.sync.AttachmentState
 import app.benbow.core.sync.CreateEntry
 import app.benbow.core.sync.Hlc
 import app.benbow.core.sync.HlcClock
+import app.benbow.core.sync.PutAttachment
 import app.benbow.core.sync.PutRevision
 import app.benbow.core.sync.SetField
 import app.benbow.core.sync.SyncOp
@@ -33,7 +36,20 @@ data class DaySummary(val day: String, val entries: Int)
 /** An op the server refused (data-safety S5): kept and shown until the user retries it. */
 data class RejectedOp(val opId: String, val entryId: String, val error: String?)
 
-data class EntrySummary(val id: String, val day: String, val createdAt: Long, val title: String, val preview: String, val conflict: Boolean)
+data class EntrySummary(
+    val id: String,
+    val day: String,
+    val createdAt: Long,
+    val title: String,
+    val preview: String,
+    val conflict: Boolean,
+    val mediaCount: Int = 0,
+    /** SHA-256 of the picture to show for the entry (a preview or the image itself). */
+    val cover: String? = null,
+)
+
+/** A file in the app's media folder, ready to be attached ([MediaStore.import]). */
+data class MediaFile(val sha256: String, val size: Long, val mime: String, val path: String, val name: String?, val capturedAt: Long?)
 
 /** What the editor shows: the draft when there is one, otherwise the head body. */
 data class EntryDetail(
@@ -46,6 +62,8 @@ data class EntryDetail(
     val fields: Map<String, String?>,
     val conflictHeads: List<String>,
     val hasDraft: Boolean,
+    /** Present attachments in gallery order. */
+    val attachments: List<AttachmentState> = emptyList(),
 ) {
     val inTrash: Boolean get() = fields[TRASH_FIELD] == "true"
 }
@@ -96,6 +114,7 @@ class JournalRepository(
                 fields = decodeFields(it.fields),
                 conflictHeads = ClientJson.decodeFromString(it.conflict_heads),
                 hasDraft = draft != null,
+                attachments = decodeAttachments(it.attachments).values.filter { a -> a.present }.sortedBy { a -> a.position },
             )
         }
     }
@@ -106,7 +125,7 @@ class JournalRepository(
         val revision = newId()
         val (title, preview) = summarize(body)
         db.transaction {
-            q.upsertEntry(id, kind, day, time, revision, body, title, preview, "[]", "{}", time, "{}")
+            q.upsertEntry(id, kind, day, time, revision, body, title, preview, "[]", "{}", time, "{}", "{}", 0, null)
             enqueue(CreateEntry(newId(), id, kind, day, time))
             enqueue(PutRevision(newId(), id, revision, emptyList(), body))
         }
@@ -163,6 +182,58 @@ class JournalRepository(
         }
     }
 
+    /**
+     * Links [file] (already in the app's media folder) to the entry. One transaction records the file as
+     * captured here (kept until the server confirms it), queues the link and shows it right away.
+     */
+    fun attach(
+        entryId: String,
+        file: MediaFile,
+        kind: String,
+        width: Int? = null,
+        height: Int? = null,
+        durationMs: Long? = null,
+        previewSha256: String? = null,
+    ): String = db.transactionWithResult {
+        val entry = q.selectEntry(entryId).executeAsOneOrNull() ?: error("No entry $entryId")
+        q.putMedia(file.sha256, file.path, file.size, file.mime, "captured", 0, file.name, file.capturedAt, now())
+        val current = decodeAttachments(entry.attachments)
+        val meta = AttachmentMeta(
+            id = newId(),
+            sha256 = file.sha256,
+            size = file.size,
+            mime = file.mime,
+            kind = kind,
+            name = file.name,
+            width = width,
+            height = height,
+            durationMs = durationMs,
+            capturedAt = file.capturedAt,
+            previewSha256 = previewSha256,
+        )
+        val position = (current.values.maxOfOrNull { it.position } ?: 0.0) + 1
+        val state = AttachmentState(meta, position, hlc = clock.next())
+        enqueue(PutAttachment(newId(), entryId, meta, state.position, state.caption, state.present, state.hlc))
+        putAttachments(entryId, current + (meta.id to state))
+        meta.id
+    }
+
+    /** Hides the attachment (S6: the file and the link's history stay on the server). */
+    fun removeAttachment(entryId: String, attachmentId: String) {
+        db.transaction {
+            val entry = q.selectEntry(entryId).executeAsOneOrNull() ?: return@transaction
+            val current = decodeAttachments(entry.attachments)
+            val state = current[attachmentId]?.copy(present = false, hlc = clock.next()) ?: return@transaction
+            enqueue(PutAttachment(newId(), entryId, state.meta, state.position, state.caption, state.present, state.hlc))
+            putAttachments(entryId, current + (attachmentId to state))
+        }
+    }
+
+    private fun putAttachments(entryId: String, attachments: Map<String, AttachmentState>) {
+        val (count, cover) = mediaSummary(attachments)
+        q.updateAttachments(ClientJson.encodeToString(attachmentsSerializer, attachments), count.toLong(), cover, now(), entryId)
+    }
+
     fun moveToTrash(id: String) = setField(id, TRASH_FIELD, "true")
 
     fun restore(id: String) = setField(id, TRASH_FIELD, null)
@@ -210,8 +281,29 @@ class JournalRepository(
 }
 
 @Suppress("UNUSED_PARAMETER")
-private fun summaryOf(id: String, day: String, createdAt: Long, title: String, preview: String, conflictHeads: String) =
-    EntrySummary(id, day, createdAt, title, preview, conflictHeads != "[]")
+private fun summaryOf(
+    id: String,
+    day: String,
+    createdAt: Long,
+    title: String,
+    preview: String,
+    conflictHeads: String,
+    mediaCount: Long,
+    cover: String?,
+) = EntrySummary(id, day, createdAt, title, preview, conflictHeads != "[]", mediaCount.toInt(), cover)
+
+internal val attachmentsSerializer = MapSerializer(String.serializer(), AttachmentState.serializer())
+
+internal fun decodeAttachments(json: String): Map<String, AttachmentState> = ClientJson.decodeFromString(attachmentsSerializer, json)
+
+/** How many attachments are visible, and which picture stands for the entry in lists. */
+internal fun mediaSummary(attachments: Map<String, AttachmentState>): Pair<Int, String?> {
+    val visible = attachments.values.filter { it.present }.sortedBy { it.position }
+    val cover = visible.firstNotNullOfOrNull { a ->
+        a.meta.previewSha256 ?: a.meta.sha256.takeIf { a.meta.kind == "image" }
+    }
+    return visible.size to cover
+}
 
 /** Title = the first paragraph, preview = the rest as one line (spoilers hidden). */
 internal fun summarize(body: String): Pair<String, String> {

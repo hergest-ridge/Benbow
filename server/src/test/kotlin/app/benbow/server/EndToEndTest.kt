@@ -1,6 +1,7 @@
 package app.benbow.server
 
 import app.benbow.client.JournalRepository
+import app.benbow.client.MediaStore
 import app.benbow.client.Pairing
 import app.benbow.client.Settings
 import app.benbow.client.SyncEngine
@@ -9,6 +10,7 @@ import app.benbow.client.apiFor
 import app.benbow.client.db.BenbowDb
 import app.benbow.server.api.ServerContext
 import app.benbow.server.api.benbowModule
+import app.benbow.server.storage.BlobStore
 import app.benbow.server.storage.Database
 import app.benbow.server.storage.Devices
 import app.benbow.server.storage.HighWater
@@ -25,7 +27,10 @@ import kotlinx.coroutines.runBlocking
 import java.net.ServerSocket
 import java.nio.file.Files
 import java.util.Properties
+import kotlin.io.path.readBytes
+import kotlin.random.Random
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
@@ -44,7 +49,8 @@ class EndToEndTest {
         val db = Database.open(dir, "test")
         val tls = TlsMaterial.ensure(dir, "secret")
         val highWater = HighWater(dir).also { it.check(db) }
-        val ctx = ServerContext(db, Devices(db), PairingCodes(), tls.fingerprint, dir, port, highWater = highWater)
+        val blobs = BlobStore(db, dir.resolve("media"))
+        val ctx = ServerContext(db, Devices(db), PairingCodes(), tls.fingerprint, dir, port, highWater = highWater, blobs = blobs)
         private val engine = embeddedServer(
             factory = Netty,
             environment = applicationEnvironment {},
@@ -93,6 +99,38 @@ class EndToEndTest {
             repo.createEntry("2026-10-13")
             assertIs<SyncResult.Failed>(engine.sync())
             assertEquals(2L, phoneDb.benbowQueries.pendingCount().executeAsOne(), "nothing left the phone")
+        }
+    }
+
+    /** A video-sized file in real (8 MB) chunks over real HTTPS, then fetched and verified by another device. */
+    @Test
+    fun photoUploadsInChunksAndAnotherDeviceDownloadsIt() = runBlocking<Unit> {
+        RunningServer().use { running ->
+            val bytes = Random(5).nextBytes(9_000_000)
+            val phoneDb = phone()
+            val pairing = Pairing(phoneDb)
+            pairing.pair(pairing.probe("127.0.0.1", port), running.ctx.pairing.issue().first, "Galaxy S24+", "android")
+            val media = MediaStore(
+                Files.createTempDirectory("phone-media").toFile(),
+                phoneDb,
+                { apiFor(it) },
+                System::currentTimeMillis,
+            )
+            val repo = JournalRepository(phoneDb, System::currentTimeMillis)
+            val entry = repo.createEntry("2026-10-13")
+            repo.attach(entry, media.import(bytes.inputStream(), "video/mp4", "VID_1.mp4", null), "video")
+            assertIs<SyncResult.Done>(SyncEngine(phoneDb, { apiFor(it) }, System::currentTimeMillis).sync())
+            assertEquals(1, media.uploadPending())
+            val sha = repo.entry(entry).first()!!.attachments.single().meta.sha256
+            assertContentEquals(bytes, running.blobs.file(running.blobs.blob(sha)!!).readBytes())
+
+            val desktopDb = phone()
+            val desktopPairing = Pairing(desktopDb)
+            desktopPairing.pair(desktopPairing.probe("127.0.0.1", port), running.ctx.pairing.issue().first, "PC", "desktop")
+            SyncEngine(desktopDb, { apiFor(it) }, System::currentTimeMillis).sync()
+            val desktopMedia =
+                MediaStore(Files.createTempDirectory("desktop-media").toFile(), desktopDb, { apiFor(it) }, System::currentTimeMillis)
+            assertContentEquals(bytes, desktopMedia.file(sha).readBytes())
         }
     }
 

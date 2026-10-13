@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -32,6 +33,8 @@ data class SyncStatus(
     val lastSuccessAt: Long? = null,
     val pending: Long = 0,
     val rejected: Long = 0,
+    /** Files captured here that the server hasn't confirmed yet. */
+    val pendingMedia: Long = 0,
 )
 
 /**
@@ -44,13 +47,16 @@ class SyncController(
     private val sync: suspend () -> SyncResult,
     private val pending: Flow<Long>,
     rejected: Flow<Long>,
+    private val pendingMedia: Flow<Long> = flowOf(0),
     private val now: () -> Long,
     private val random: Random = Random.Default,
 ) {
     private val state = MutableStateFlow(SyncStatus())
     private val requests = Channel<Unit>(Channel.CONFLATED)
 
-    val status: StateFlow<SyncStatus> = combine(state, pending, rejected) { s, p, r -> s.copy(pending = p, rejected = r) }
+    val status: StateFlow<SyncStatus> = combine(state, pending, rejected, pendingMedia) { s, p, r, m ->
+        s.copy(pending = p, rejected = r, pendingMedia = m)
+    }
         .stateIn(scope, SharingStarted.Eagerly, SyncStatus())
 
     @Volatile
@@ -66,7 +72,9 @@ class SyncController(
 
     @OptIn(FlowPreview::class)
     fun start() {
-        scope.launch { pending.filter { it > 0 }.debounce(LOCAL_CHANGE_DELAY).collect { requestSync() } }
+        scope.launch {
+            combine(pending, pendingMedia) { p, m -> p + m }.filter { it > 0 }.debounce(LOCAL_CHANGE_DELAY).collect { requestSync() }
+        }
         scope.launch {
             var failures = 0
             while (isActive) {

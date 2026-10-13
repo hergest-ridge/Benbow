@@ -16,6 +16,7 @@ import app.benbow.server.api.ServerContext
 import app.benbow.server.api.benbowModule
 import app.benbow.server.storage.Database
 import app.benbow.server.storage.Devices
+import app.benbow.server.storage.Migrations
 import app.benbow.server.storage.PairingCodes
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -65,7 +66,7 @@ class ServerApiTest {
     fun infoReportsStoreIdentity() = withServer { ctx, client ->
         val info = client.get("/api/v1/info").body<ServerInfo>()
         assertEquals(ctx.db.storeId, info.storeId)
-        assertEquals(2, info.schemaVersion)
+        assertEquals(Migrations.SCHEMA_VERSION, info.schemaVersion)
     }
 
     @Test

@@ -40,6 +40,20 @@ data class ReconcileResponse(
     @SerialName("missing_revisions") val missingRevisions: List<String>,
 )
 
+/** `POST /api/v1/uploads`: announce a file by hash; resumes an open upload of the same file. */
+@Serializable
+data class UploadStart(
+    val sha256: String,
+    val size: Long,
+    val mime: String,
+    val name: String? = null,
+    @SerialName("captured_at") val capturedAt: Long? = null,
+)
+
+/** Answer of `POST /api/v1/uploads` and `PATCH /api/v1/uploads/{id}`; [id] is null when the server already had the file. */
+@Serializable
+data class UploadStatus(val id: String?, val offset: Long, val complete: Boolean)
+
 @Serializable
 data class ApiError(val error: String, val message: String)
 

@@ -8,9 +8,12 @@ import app.benbow.core.api.PushRequest
 import app.benbow.core.api.PushResponse
 import app.benbow.core.api.ReconcileRequest
 import app.benbow.core.api.ServerInfo
+import app.benbow.core.api.UploadStart
+import app.benbow.core.api.UploadStatus
 import app.benbow.core.sync.SyncRules
 import app.benbow.server.SERVER_VERSION
 import app.benbow.server.backup.BackupStatus
+import app.benbow.server.storage.BlobStore
 import app.benbow.server.storage.Database
 import app.benbow.server.storage.Devices
 import app.benbow.server.storage.HighWater
@@ -18,6 +21,7 @@ import app.benbow.server.storage.Migrations
 import app.benbow.server.storage.PairingCodes
 import app.benbow.server.storage.SqliteSyncStore
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.openapi.OpenApiInfo
 import io.ktor.serialization.kotlinx.json.json
@@ -28,15 +32,25 @@ import io.ktor.server.auth.Authentication
 import io.ktor.server.auth.authenticate
 import io.ktor.server.auth.bearer
 import io.ktor.server.auth.principal
+import io.ktor.server.http.content.LocalPathContent
+import io.ktor.server.plugins.autohead.AutoHeadResponse
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.plugins.partialcontent.PartialContent
 import io.ktor.server.plugins.swagger.swaggerUI
+import io.ktor.server.request.header
 import io.ktor.server.request.receive
+import io.ktor.server.request.receiveChannel
+import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.get
 import io.ktor.server.routing.openapi.OpenApiDocSource
+import io.ktor.server.routing.patch
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
+import io.ktor.utils.io.jvm.javaio.toInputStream
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.net.InetAddress
 import java.nio.file.Path
 
@@ -54,6 +68,8 @@ class ServerContext(
     val isLoopback: (ApplicationCall) -> Boolean = ::fromLoopback,
     /** Updated after every push so a database copied back by hand is noticed at the next start. */
     val highWater: HighWater? = null,
+    /** Media files; null in tests that don't need them. */
+    val blobs: BlobStore? = null,
 )
 
 data class DevicePrincipal(val deviceId: String)
@@ -66,6 +82,8 @@ private const val MAX_RECONCILE = 2_000
 @Suppress("ktlint:standard:kdoc")
 fun Application.benbowModule(ctx: ServerContext) {
     install(ContentNegotiation) { json() }
+    install(PartialContent) // Range requests: video seeking, resumed downloads
+    install(AutoHeadResponse) // HEAD /blobs/{sha256}: does the server have it?
     install(Authentication) {
         bearer("device") {
             authenticate { credential -> ctx.devices.authenticate(credential.token)?.let { DevicePrincipal(it.id) } }
@@ -148,6 +166,86 @@ fun Application.benbowModule(ctx: ServerContext) {
                     val cursor = call.request.queryParameters["cursor"]?.toLongOrNull() ?: 0
                     val limit = (call.request.queryParameters["limit"]?.toIntOrNull() ?: 200).coerceIn(1, MAX_PULL_LIMIT)
                     call.respond(SyncRules(SqliteSyncStore(ctx.db)).pull(cursor, limit))
+                }
+
+                /**
+                 * A media file by SHA-256 (supports Range). HEAD answers whether the server has it.
+                 */
+                get("/blobs/{sha256}") {
+                    val store =
+                        ctx.blobs
+                            ?: return@get call.respond(HttpStatusCode.ServiceUnavailable, ApiError("no_media", "Media storage is off"))
+                    val blob = store.blob(call.parameters["sha256"]!!)
+                        ?: return@get call.respond(HttpStatusCode.NotFound, ApiError("not_found", "No such file"))
+                    call.response.header(HttpHeaders.ETag, "\"${blob.sha256}\"")
+                    call.response.header(HttpHeaders.CacheControl, "private, max-age=31536000, immutable")
+                    call.respond(LocalPathContent(store.file(blob), ContentType.parse(blob.mime)))
+                }
+
+                /**
+                 * Announces a file by hash and size. `complete` when the server already has it; otherwise an
+                 * upload id and the offset to continue from (an open upload of the same file is resumed).
+                 */
+                post("/uploads") {
+                    val store =
+                        ctx.blobs
+                            ?: return@post call.respond(HttpStatusCode.ServiceUnavailable, ApiError("no_media", "Media storage is off"))
+                    val request = call.receive<UploadStart>()
+                    val device = call.principal<DevicePrincipal>()!!.deviceId
+                    try {
+                        when (
+                            val start = store.start(
+                                request.sha256,
+                                request.size,
+                                request.mime,
+                                request.name,
+                                request.capturedAt,
+                                device,
+                            )
+                        ) {
+                            is BlobStore.Start.Exists -> call.respond(UploadStatus(null, start.blob.size, complete = true))
+                            is BlobStore.Start.Upload -> call.respond(UploadStatus(start.id, start.offset, complete = false))
+                        }
+                    } catch (e: IllegalArgumentException) {
+                        call.respond(HttpStatusCode.BadRequest, ApiError("bad_upload", e.message.orEmpty()))
+                    } catch (e: BlobStore.InsufficientSpace) {
+                        call.respond(HttpStatusCode.InsufficientStorage, ApiError("no_space", e.message.orEmpty()))
+                    }
+                }
+
+                /**
+                 * Appends a chunk (at most 16 MB) at `Upload-Offset`; a wrong offset answers 409 with the one to
+                 * resume from. The last chunk is verified (size, SHA-256) and placed; a mismatch answers 422.
+                 */
+                patch("/uploads/{id}") {
+                    val store =
+                        ctx.blobs
+                            ?: return@patch call.respond(HttpStatusCode.ServiceUnavailable, ApiError("no_media", "Media storage is off"))
+                    val id = call.parameters["id"]!!
+                    val offset = call.request.header("Upload-Offset")?.toLongOrNull()
+                        ?: return@patch call.respond(HttpStatusCode.BadRequest, ApiError("bad_upload", "Upload-Offset header missing"))
+                    val channel = call.receiveChannel()
+                    val result = withContext(Dispatchers.IO) { channel.toInputStream().use { store.append(id, offset, it) } }
+                    when (result) {
+                        is BlobStore.Chunk.Accepted -> call.respond(UploadStatus(id, result.offset, complete = result.blob != null))
+
+                        is BlobStore.Chunk.WrongOffset -> call.respond(
+                            HttpStatusCode.Conflict,
+                            UploadStatus(id, result.expected, complete = false),
+                        )
+
+                        BlobStore.Chunk.TooLarge -> call.respond(
+                            HttpStatusCode.PayloadTooLarge,
+                            ApiError("too_large", "Chunk over 16 MB or past the file size"),
+                        )
+
+                        BlobStore.Chunk.Corrupt -> call.respond(
+                            HttpStatusCode.UnprocessableEntity,
+                            ApiError("checksum", "The file doesn't match its hash; upload it again"),
+                        )
+
+                        BlobStore.Chunk.NotFound -> call.respond(HttpStatusCode.NotFound, ApiError("not_found", "No such upload"))
+                    }
                 }
 
                 /**

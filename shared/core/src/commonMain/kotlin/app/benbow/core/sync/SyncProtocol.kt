@@ -29,6 +29,49 @@ data class PutRevision(
 @SerialName("entry.meta.set")
 data class SetField(override val opId: String, override val entryId: String, val field: String, val value: String?, val hlc: Hlc) : SyncOp
 
+/**
+ * Links a media file to an entry, or changes the link (docs/sync.md#blobs). Last writer wins per
+ * (entry, attachment) by [hlc]; removing is `present = false` (S6). The file itself travels separately,
+ * by its SHA-256, and may arrive later than the link. Protocol 2.
+ */
+@Serializable
+@SerialName("entry.attachment.put")
+data class PutAttachment(
+    override val opId: String,
+    override val entryId: String,
+    val attachment: AttachmentMeta,
+    val position: Double,
+    val caption: String? = null,
+    val present: Boolean = true,
+    val hlc: Hlc,
+) : SyncOp
+
+/** What a media file is; fixed once created (a preview may be added later). */
+@Serializable
+data class AttachmentMeta(
+    val id: String,
+    val sha256: String,
+    val size: Long,
+    val mime: String,
+    /** image | video | audio | voice | file */
+    val kind: String,
+    val name: String? = null,
+    val width: Int? = null,
+    val height: Int? = null,
+    @SerialName("duration_ms") val durationMs: Long? = null,
+    @SerialName("captured_at") val capturedAt: Long? = null,
+    @SerialName("preview_sha256") val previewSha256: String? = null,
+)
+
+@Serializable
+data class AttachmentState(
+    val meta: AttachmentMeta,
+    val position: Double,
+    val caption: String? = null,
+    val present: Boolean = true,
+    val hlc: Hlc,
+)
+
 @Serializable
 enum class OpStatus { Applied, Duplicate, Merged, Conflict, Rejected }
 
@@ -48,6 +91,7 @@ data class EntryState(
     val head: String? = null,
     val conflictHeads: List<String> = emptyList(),
     val fields: Map<String, LwwValue> = emptyMap(),
+    val attachments: Map<String, AttachmentState> = emptyMap(),
 )
 
 @Serializable

@@ -23,6 +23,7 @@ A draft becomes a revision on: editor close, app backgrounded, 30 s idle, or eve
 `entry.revision.put`, `entry.delete` / `entry.restore {hlc}`, `entry.tag.set {tag_id, present, hlc}`,
 `entry.attachment.set {attachment_id, position, caption, present, hlc}`, `reaction.set {emoji, present, hlc}`,
 `tag.upsert`, `tag_category.upsert`, `attachment.register`, `template.*`, `event.*`, `reminder.*`.
+Implemented: `entry.create`, `entry.revision.put`, `entry.meta.set` (protocol 1); `entry.attachment.put {attachment: meta, position, caption, present, hlc}` (protocol 2, replaces the planned `attachment.register` + `entry.attachment.set`: the immutable file meta travels with every link change, so a link is self-contained). Trash is `entry.meta.set deleted`.
 Metadata fields use per-field LWW ordered by a **Hybrid Logical Clock** (`hlc` = wall ms + counter + device id), so it tolerates phone clock drift.
 
 ## Push
@@ -57,6 +58,8 @@ When `parents[0] != head`:
    `HEAD /api/v1/blobs/{sha256}` (already exists? done) → `POST /api/v1/uploads {sha256,size,mime}` → `PATCH /api/v1/uploads/{id}` with `Upload-Offset`, 4–8 MB chunks → server verifies (S7) → `uploaded`.
 3. Download: `GET /api/v1/blobs/{sha256}` with HTTP Range (video streaming). Previews: `/thumb?w=`. The client generates its own preview at capture time (images and video frames) and uploads it, so the server doesn't need ffmpeg early on.
 4. Client cache policy: LRU by size cap + max age, favorites pinned offline. Settings are configurable (P1). Start weak (thumbnails + recent items).
+6. Implemented on the client (3.2, `MediaStore`): files live in the app's media folder named by SHA-256 (table `media`, origin `captured` or `downloaded`). Import = copy + hash + fsync + atomic rename, then `JournalRepository.attach` records the file, queues `entry.attachment.put` and shows it at once, in one transaction. Uploads run after each successful text sync (8 MB chunks, resume from the server's offset, restart once on a checksum mismatch); a captured file is marked uploaded only after the server verified it. Downloads are verified by hash before they are kept. When a file is placed, the server logs a change for the entries that point at it, so devices and the Markdown export (relative links) learn it's there.
+5. Implemented on the server (3.1, `BlobStore`): bytes are content-addressed by SHA-256 (`blobs` table); attachment metadata is separate (3.2). `HEAD|GET /api/v1/blobs/{sha256}` (Range, `ETag`, immutable caching) · `POST /api/v1/uploads {sha256,size,mime,name?,captured_at?}` → `{id|null, offset, complete}` (null id = already there; an open upload of the same file is resumed) · `PATCH /api/v1/uploads/{id}` + `Upload-Offset`, ≤16 MB per chunk, 409 with the right offset on mismatch, 422 when the finished file doesn't match its hash (upload dropped, start over), 507 when the disk lacks size + 1 GB.
 
 ## Sync triggers
 App start and foreground, connectivity change, local change (debounced 2 s), periodic WorkManager (15 min, network required), manual pull-to-refresh. Exponential backoff with jitter.

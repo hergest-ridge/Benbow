@@ -41,6 +41,7 @@ The server denormalizes the head into `entry_text(entry_id, title, plain_text)` 
 - `attachment(id, sha256, size, mime, kind (image|video|audio|voice|file), original_name, width, height, duration_ms, captured_at, storage_path (server, relative to media root), preview_sha256?)`
 - `entry_attachment(entry_id, attachment_id, position, caption?, present, hlc)`
 - Client-only: `attachment_local(attachment_id, local_path, state (local|uploading|uploaded|evicted), last_access_at, pinned)`
+- As built (3.2): `AttachmentMeta` (the `attachment` fields, immutable but for a later preview) + `AttachmentState(meta, position, caption, present, hlc)` stored per entry as `attachments` (server `entries.attachments`, client `entry.attachments`). Bytes are separate: server `blobs(sha256, size, mime, path, verified_at)`, client `media(sha256, path, origin, uploaded, last_access_at)`.
 
 ## Calendar (P1)
 - `event(id, title, start_at, end_at?, all_day, tz, rrule?, entry_id?, source (local|ics:<feed_id>), external_uid?, deleted_at)`

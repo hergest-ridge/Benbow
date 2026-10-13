@@ -63,3 +63,6 @@ A cozy home base and Jim Hawkins's journal (Treasure Island, public domain). It 
 
 ### ADR-019 Server restore = new epoch + reconciliation from device caches [A]
 Restoring a snapshot (`--restore`, or a hand-copied file noticed via `db/high-water.properties`) moves the store to an epoch past every one this data folder has seen. Devices that see a new epoch (or a server cursor below theirs) ask which of their entries and heads the server lacks and re-push them, then pull from 0. A re-pushed head goes without parents: if the server kept an older head, both stay as a conflict and the user picks. Devices don't keep revision ancestry, and a silent fast-forward could hide edits made after the restore.
+
+### ADR-020 Attachments: content-addressed files + LWW links in the entry [A]
+Files are stored and transferred by SHA-256 (dedup, verification, resumable upload); the server places them at human-readable paths (ADR-009). The link to an entry is an `AttachmentState` in the entry, last writer wins per link by HLC, and carries the immutable file meta, so one op type (`entry.attachment.put`, protocol 2) covers add, reorder, caption and remove (`present = false`). A link may sync before its file; clients show it as pending.

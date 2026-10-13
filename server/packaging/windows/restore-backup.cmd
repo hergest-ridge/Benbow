@@ -15,13 +15,14 @@ if errorlevel 1 (
   echo Run this script as Administrator.
   exit /b 1
 )
-set "SVC=%ProgramFiles%\Benbow Serverenbow-server-service.exe"
+set "SVC=%ProgramFiles%\Benbow Server\benbow-server-service.exe"
 set "SERVICE=0"
 sc query BenbowServer | find "RUNNING" >nul 2>&1
 if not errorlevel 1 (
   set "SERVICE=1"
   echo Stopping Benbow Server...
   "%SVC%" stop
+  powershell -NoProfile -Command "(Get-Service BenbowServer).WaitForStatus('Stopped', '00:01:00'); Get-Process java -ErrorAction SilentlyContinue | Where-Object { $_.Path -like '%ProgramFiles%\Benbow Server\*' } | Wait-Process -Timeout 60 -ErrorAction SilentlyContinue"
 )
 "%~dp0runtime\bin\java.exe" -Dfile.encoding=UTF-8 --enable-native-access=ALL-UNNAMED -cp "%~dp0lib\*" app.benbow.server.MainKt --data "%DATA%" --restore "%WHICH%"
 set "RESULT=%ERRORLEVEL%"

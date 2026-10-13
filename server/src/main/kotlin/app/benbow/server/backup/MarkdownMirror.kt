@@ -21,8 +21,9 @@ import kotlin.io.path.writeText
  * Human-readable disaster-recovery copy (data-safety.md#backups): one `.md` per entry with YAML
  * front matter, plus a `.json` sidecar holding the canonical document and metadata losslessly.
  * File names depend only on day and id, so a changed title never orphans an old file.
+ * [media] finds the placed file of a SHA-256 (null while it hasn't been uploaded).
  */
-class MarkdownMirror(private val root: Path) {
+class MarkdownMirror(private val root: Path, private val media: (String) -> Path? = { null }) {
     private val exporter = MarkdownExporter()
     private val json = Json { prettyPrint = true }
 
@@ -54,13 +55,25 @@ class MarkdownMirror(private val root: Path) {
             document == null -> "<!-- body could not be decoded; see the .json sidecar -->"
             else -> exporter.export(document)
         }
-        atomicWrite(dir.resolve("$base.md"), frontMatter + "\n" + markdown + "\n")
+        atomicWrite(dir.resolve("$base.md"), frontMatter + "\n" + markdown + "\n" + attachments(entry, dir))
         val sidecar: JsonObject = buildJsonObject {
             put("entry", Json.encodeToJsonElement(EntryState.serializer(), entry))
             put("body", body?.let { JsonPrimitive(it) } ?: JsonPrimitive(""))
             put("plain_text", document?.toPlainText() ?: "")
         }
         atomicWrite(dir.resolve("$base.json"), json.encodeToString(JsonObject.serializer(), sidecar) + "\n")
+    }
+
+    /** Present attachments as links relative to the note, so the folder stays browsable without the app. */
+    private fun attachments(entry: EntryState, dir: Path): String {
+        val visible = entry.attachments.values.filter { it.present }.sortedBy { it.position }
+        if (visible.isEmpty()) return ""
+        return visible.joinToString("\n", prefix = "\n", postfix = "\n") { a ->
+            val label = (a.caption ?: a.meta.name ?: a.meta.kind).replace('[', '(').replace(']', ')')
+            val file = media(a.meta.sha256) ?: return@joinToString "<!-- ${a.meta.kind} ${a.meta.sha256} not uploaded yet -->"
+            val link = runCatching { dir.relativize(file).joinToString("/") }.getOrElse { file.toUri().toString() } // another drive
+            if (a.meta.kind == "image") "![$label](<$link>)" else "[$label](<$link>)"
+        }
     }
 
     private fun yaml(value: String): String = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\""

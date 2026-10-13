@@ -26,7 +26,12 @@ import kotlin.test.assertEquals
 /** Drives the real app (in-memory DB, not paired) through the main flows and keeps screenshots for review. */
 @OptIn(ExperimentalTestApi::class)
 class AppSmokeTest {
-    private val services = AppServices(JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), BenbowDb.Schema), "desktop", "Test PC")
+    private val services = AppServices(
+        JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), BenbowDb.Schema),
+        java.nio.file.Files.createTempDirectory("benbow-media").toFile(),
+        "desktop",
+        "Test PC",
+    )
 
     private fun SemanticsNodeInteractionsProvider.screenshot(name: String) {
         val file = File("build/screens/$name.png").apply { parentFile.mkdirs() }

@@ -33,6 +33,7 @@ Losing or corrupting data is unacceptable from v1. Every storage, sync, migratio
   2026/10/2026-10-12_153012_<shortid>.jpg   human-readable, immutable
   .trash/
 ```
+Default media root: `<data>/media` (`media.root` in benbow.properties moves it, e.g. to another disk). Partial uploads live in `<media root>/.uploads` (same volume, so placement is an atomic rename) and are dropped after 7 days untouched; the device still has the original. The backup job mirrors media to `<backup.mirror>/media` (never deletes there), re-hashes up to 200 files older than 7 days per run (mismatches are reported, never deleted), and at startup the server re-records files the database doesn't know (after a restore).
 Media paths are human-readable on purpose: if the app ever dies, the files can still be browsed. Dedup works by SHA-256 in the DB (the same hash reuses the existing file).
 
 ## Backups

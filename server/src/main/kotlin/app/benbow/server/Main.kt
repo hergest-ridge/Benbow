@@ -3,6 +3,7 @@ package app.benbow.server
 import app.benbow.server.api.ServerContext
 import app.benbow.server.api.benbowModule
 import app.benbow.server.backup.BackupJobs
+import app.benbow.server.storage.BlobStore
 import app.benbow.server.storage.Database
 import app.benbow.server.storage.Devices
 import app.benbow.server.storage.HighWater
@@ -20,7 +21,7 @@ import java.nio.file.StandardOpenOption
 import kotlin.io.path.createDirectories
 import kotlin.system.exitProcess
 
-const val SERVER_VERSION = "0.3.0"
+const val SERVER_VERSION = "0.4.0"
 const val DEFAULT_PORT = 8765
 
 fun main(args: Array<String>) {
@@ -67,7 +68,9 @@ fun main(args: Array<String>) {
     log.info("Benbow server {} | data {} | store {} epoch {}", SERVER_VERSION, dataDir, db.storeId, db.epoch)
     log.info("HTTPS on {}:{} | certificate SHA-256 {}", config.host, config.port, tls.fingerprint)
 
-    val backupJobs = BackupJobs(db, dataDir, config.backupMirror).also { it.start(config.backupIntervalMinutes) }
+    val blobs = BlobStore(db, config.mediaRoot ?: dataDir.resolve("media"))
+    blobs.adoptUntracked().takeIf { it > 0 }?.let { log.warn("Recorded {} media files the database didn't know (after a restore?)", it) }
+    val backupJobs = BackupJobs(db, dataDir, config.backupMirror, blobs).also { it.start(config.backupIntervalMinutes) }
     val context =
         ServerContext(
             db = db,
@@ -79,6 +82,7 @@ fun main(args: Array<String>) {
             backupStatus = { backupJobs.status },
             backupNow = backupJobs::runNow,
             highWater = highWater,
+            blobs = blobs,
         )
     val server = embeddedServer(
         factory = Netty,

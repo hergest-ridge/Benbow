@@ -1,6 +1,7 @@
 package app.benbow.server.storage
 
 import app.benbow.core.api.RevisionInfo
+import app.benbow.core.sync.AttachmentState
 import app.benbow.core.sync.EntryState
 import app.benbow.core.sync.LwwValue
 import app.benbow.core.sync.OpResult
@@ -41,7 +42,9 @@ class SqliteSyncStore(private val db: Database, private val deviceId: String? = 
     }
 
     override fun entry(id: String): EntryState? = query { c ->
-        c.prepareStatement("SELECT id, kind, day, created_at, head_rev, conflict_heads, fields FROM entries WHERE id = ?").use { st ->
+        c.prepareStatement(
+            "SELECT id, kind, day, created_at, head_rev, conflict_heads, fields, attachments FROM entries WHERE id = ?",
+        ).use { st ->
             st.setString(1, id)
             st.executeQuery().use { rs -> if (rs.next()) rs.toEntry() else null }
         }
@@ -49,8 +52,9 @@ class SqliteSyncStore(private val db: Database, private val deviceId: String? = 
 
     override fun putEntry(entry: EntryState) = query { c ->
         c.prepareStatement(
-            """INSERT INTO entries(id, kind, day, created_at, head_rev, conflict_heads, fields) VALUES (?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(id) DO UPDATE SET head_rev = excluded.head_rev, conflict_heads = excluded.conflict_heads, fields = excluded.fields""",
+            """INSERT INTO entries(id, kind, day, created_at, head_rev, conflict_heads, fields, attachments) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET head_rev = excluded.head_rev, conflict_heads = excluded.conflict_heads,
+               fields = excluded.fields, attachments = excluded.attachments""",
         ).use { st ->
             st.setString(1, entry.id)
             st.setString(2, entry.kind)
@@ -59,6 +63,7 @@ class SqliteSyncStore(private val db: Database, private val deviceId: String? = 
             st.setString(5, entry.head)
             st.setString(6, json.encodeToString(entry.conflictHeads))
             st.setString(7, json.encodeToString(entry.fields))
+            st.setString(8, json.encodeToString(entry.attachments))
             st.executeUpdate()
         }
         Unit
@@ -156,6 +161,7 @@ class SqliteSyncStore(private val db: Database, private val deviceId: String? = 
         head = getString(5),
         conflictHeads = json.decodeFromString(getString(6)),
         fields = json.decodeFromString<Map<String, LwwValue>>(getString(7)),
+        attachments = json.decodeFromString<Map<String, AttachmentState>>(getString(8)),
     )
 }
 

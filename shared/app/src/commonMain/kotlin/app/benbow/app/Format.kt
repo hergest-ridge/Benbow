@@ -46,6 +46,24 @@ internal fun dayLabel(day: String): String {
     }
 }
 
+/** "Сегодня" / "Вчера", or "10 октября" (with the year when not this one) and the weekday for a second line. */
+@Composable
+internal fun dayTitle(day: String): Pair<String, String?> {
+    val date = LocalDate.parse(day)
+    val today = journalToday()
+    return when (date) {
+        today -> stringResource(Res.string.today) to null
+
+        today.minus(1, DateTimeUnit.DAY) -> stringResource(Res.string.yesterday) to null
+
+        else -> {
+            val month = stringArrayResource(Res.array.months_genitive)[date.month.number - 1]
+            val weekday = stringArrayResource(Res.array.weekdays)[date.dayOfWeek.isoDayNumber - 1]
+            "${date.day} $month" + (if (date.year != today.year) " ${date.year}" else "") to weekday
+        }
+    }
+}
+
 /** "Вторник, 13 октября" even for today (the Home header). */
 @Composable
 internal fun fullDateLabel(day: String): String {

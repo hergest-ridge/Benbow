@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.show_more
 import app.benbow.core.content.DocumentCodec
@@ -102,10 +103,10 @@ private fun blocksOf(rich: RichText): List<Block> {
         when {
             atom is Atom.Attachment || atom is Atom.Unknown -> i++
 
-            callout != null || p.style == BlockStyle.Code -> {
+            callout != null || p.style == BlockStyle.Code || p.style == BlockStyle.Quote -> {
                 val group = (i..last).takeWhile { j ->
                     val q = rich.paragraphs[j]
-                    if (callout != null) q.callout?.key == callout.key else q.style == BlockStyle.Code && q.callout == null
+                    if (callout != null) q.callout?.key == callout.key else q.style == p.style && q.callout == null
                 }
                 result += Block(group, group.sumOf { rich.paragraphText(it).length })
                 i += group.size
@@ -158,24 +159,20 @@ private fun FeedBlock(rich: RichText, block: Block, styles: EditorStyles, dark: 
 
         first.style == BlockStyle.Quote -> Row(Modifier.height(IntrinsicSize.Min).padding(vertical = 2.dp)) {
             Box(Modifier.width(3.dp).fillMaxHeight().background(colors.primary, RoundedCornerShape(2.dp)))
-            Line(
-                rich,
-                block.paragraphs.first(),
-                styles,
-                body.copy(color = colors.onSurfaceVariant),
-                maxLines,
-                Modifier.padding(start = 10.dp),
-            )
+            Column(Modifier.padding(start = 10.dp)) {
+                block.paragraphs.forEach { Line(rich, it, styles, body.copy(color = colors.onSurfaceVariant), maxLines) }
+            }
         }
 
         first.list != null -> ListItem(rich, block.paragraphs.first(), first, styles, body, maxLines)
 
         first.isHeading -> {
+            // Always a step above the 16 sp text, but well below the editor's sizes.
             val heading = when (first.style) {
-                BlockStyle.H1 -> MaterialTheme.typography.titleLarge
-                BlockStyle.H2 -> MaterialTheme.typography.titleMedium
-                else -> MaterialTheme.typography.titleSmall
-            }.copy(fontWeight = FontWeight.Bold)
+                BlockStyle.H1 -> body.copy(fontSize = 21.sp, lineHeight = 27.sp, fontWeight = FontWeight.Bold)
+                BlockStyle.H2 -> body.copy(fontSize = 19.sp, lineHeight = 25.sp, fontWeight = FontWeight.Bold)
+                else -> body.copy(fontSize = 17.sp, lineHeight = 23.sp, fontWeight = FontWeight.SemiBold)
+            }
             Line(rich, block.paragraphs.first(), styles, heading, maxLines, Modifier.padding(top = 2.dp))
         }
 

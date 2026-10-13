@@ -39,6 +39,9 @@ import app.benbow.app.resources.feed_cards_hint
 import app.benbow.app.resources.feed_section
 import app.benbow.app.resources.palette
 import app.benbow.app.resources.palette_names
+import app.benbow.app.resources.post_media
+import app.benbow.app.resources.post_media_names
+import app.benbow.app.resources.post_section
 import app.benbow.app.resources.theme_mode
 import app.benbow.app.resources.theme_modes
 import app.benbow.ui.theme.ThemeMode
@@ -80,6 +83,22 @@ internal fun AppearanceScreen(services: AppServices, nav: Navigator) {
                     )
                 }
                 Switch(current.feedCards, { services.setAppearance(current.copy(feedCards = it)) })
+            }
+            Title(stringResource(Res.string.post_section))
+            Text(
+                stringResource(Res.string.post_media),
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.padding(start = 8.dp, bottom = 6.dp),
+            )
+            val layouts = stringArrayResource(Res.array.post_media_names)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                PostMedia.entries.forEachIndexed { i, layout ->
+                    FilterChip(
+                        current.postMedia == layout,
+                        { services.setAppearance(current.copy(postMedia = layout)) },
+                        { Text(layouts.getOrElse(i) { layout.name }) },
+                    )
+                }
             }
             Title(stringResource(Res.string.palette))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {

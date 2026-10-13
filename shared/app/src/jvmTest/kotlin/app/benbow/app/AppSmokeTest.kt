@@ -514,6 +514,12 @@ class AppSmokeTest {
                     children = listOf(app.benbow.core.content.Span("Sign on the window says lonely.")),
                 ),
                 app.benbow.core.content.TextBlock(
+                    "q2",
+                    style = "blockquote",
+                    children = listOf(app.benbow.core.content.Span("Sign on the door said no company allowed.")),
+                ),
+                app.benbow.core.content.TextBlock("h3", style = "h3", children = listOf(app.benbow.core.content.Span("Мелкий заголовок"))),
+                app.benbow.core.content.TextBlock(
                     "l1",
                     listItem = "bullet",
                     level = 1,
@@ -593,6 +599,40 @@ class AppSmokeTest {
         )
         waitForIdle()
         screenshot("44-ribbon-reordered")
+    }
+
+    @Test
+    fun postPicturesFollowTheChosenLayout() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val entry = services.repo.createNote("2026-10-10", "Прогулка по набережной")
+        runBlocking {
+            listOf(600 to 1000, 1600 to 900, 1600 to 1200, 1200 to 1200, 1600 to 1000).forEachIndexed { i, (w, h) ->
+                val bytes = picture(w, h)
+                services.attach({ entry }, { bytes.inputStream() }) { MediaProbe("image/jpeg", "P$i.jpg", "image", w, h) }.join()
+            }
+        }
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Ещё"), 5_000)
+        onNodeWithText("Лента").click()
+        waitUntilExactlyOneExists(hasContentDescription("Вложения"), 5_000)
+        onNodeWithContentDescription("Вложения").performTouchInput { drag(center, Offset(-width * 0.7f, 0f)) }
+        waitUntilExactlyOneExists(hasText("2/5"), 5_000)
+        runBlocking { delay(1_000) }
+        waitForIdle()
+        screenshot("45-carousel-fitted") // a wide one after a tall one: whole, over a blurred copy
+
+        onNodeWithText("Прогулка по набережной").click()
+        waitUntilExactlyOneExists(hasText("Суббота"), 5_000) // the weekday under the date
+        runBlocking { delay(800) }
+        waitForIdle()
+        screenshot("46-post-carousel")
+        services.setAppearance(services.appearance.value.copy(postMedia = PostMedia.Grid))
+        runBlocking { delay(800) }
+        waitForIdle()
+        screenshot("47-post-grid")
+        services.setAppearance(services.appearance.value.copy(postMedia = PostMedia.Strip))
+        runBlocking { delay(800) }
+        waitForIdle()
+        screenshot("48-post-strip")
     }
 
     @Test

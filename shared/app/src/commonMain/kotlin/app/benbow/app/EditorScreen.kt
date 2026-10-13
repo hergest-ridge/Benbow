@@ -328,14 +328,15 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                     }
                 },
                 title = {
-                    // The entry's day and time; while editing, a tap moves it to another day and time.
-                    val day = dayLabel(detail?.day ?: route.day)
-                    val label = detail?.let { "$day, ${timeLabel(it.createdAt)}" } ?: day
-                    Text(
-                        if (vm.reading) label else "$label ▾",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = if (vm.reading) Modifier else Modifier.clip(RoundedCornerShape(8.dp)).clickable { moving = true },
-                    )
+                    // The entry's date and time, the weekday under them; while editing, a tap moves it in time.
+                    val (date, weekday) = dayTitle(detail?.day ?: route.day)
+                    val label = detail?.let { "$date, ${timeLabel(it.createdAt)}" } ?: date
+                    Column(if (vm.reading) Modifier else Modifier.clip(RoundedCornerShape(8.dp)).clickable { moving = true }) {
+                        Text(if (vm.reading) label else "$label ▾", style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                        weekday?.let {
+                            Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
                 },
                 actions = {
                     if (attachments.isNotEmpty()) {

@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -220,14 +221,14 @@ private fun PostBody(item: FeedItem, expanded: Boolean, onExpand: () -> Unit, on
             ) { Text(emoji, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) }
         }
         if (item.comments > 0) {
-            Text(
-                "💬 ${item.comments}",
-                style = MaterialTheme.typography.labelMedium,
-                color = colors.onSurfaceVariant,
-                modifier = Modifier.clip(
-                    RoundedCornerShape(8.dp),
-                ).clickable(onClick = onComments).padding(horizontal = 4.dp, vertical = 2.dp),
-            )
+            Row(
+                Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onComments).padding(horizontal = 4.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Icon(Icons.Comment, stringResource(Res.string.comments), Modifier.size(18.dp), tint = colors.onSurfaceVariant)
+                Text("${item.comments}", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+            }
         }
         Box(Modifier.weight(1f))
         if (entry.favorite) Text("★", style = MaterialTheme.typography.labelMedium, color = colors.primary)

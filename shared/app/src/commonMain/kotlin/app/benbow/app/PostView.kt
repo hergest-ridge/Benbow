@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.comments
 import app.benbow.app.resources.comments_count
@@ -75,9 +76,13 @@ internal fun PostView(
             }
         }
         if (ribbon) {
-            AttachmentStrip(services.media, detail.attachments, onOpen = {
+            // Pictures that aren't in the text, laid out as chosen in "Оформление"; with all of them placed, the clip shows all.
+            val placed = placedIn(detail.body).toSet()
+            val loose = detail.attachments.filter { it.meta.id !in placed }.ifEmpty { detail.attachments }
+            val layout = services.appearance.collectAsStateWithLifecycle().value.postMedia
+            PostMedia(services, loose, layout, onOpen = {
                 onOpenMedia(it.meta.id)
-            }, placed = placedIn(detail.body).toSet())
+            }, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
         }
         BenbowEditor(
             state = editor,
@@ -148,7 +153,7 @@ private fun Reactions(chosen: Set<String>, onReact: (String, Boolean) -> Unit, m
                     Icons.AddReaction,
                     null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp).size(20.dp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp).size(18.dp),
                 )
             }
             DropdownMenu(picking, { picking = false }) {

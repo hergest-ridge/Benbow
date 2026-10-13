@@ -80,6 +80,13 @@
     <string name="add">Добавить</string>
     <string name="cancel">Отмена</string>
     <string name="attachments">Вложения</string>
+    <string name="post_section">Посты</string>
+    <string name="post_media">Фото без места в тексте</string>
+    <string-array name="post_media_names">
+        <item>Карусель</item>
+        <item>Сетка</item>
+        <item>Миниатюры</item>
+    </string-array>
     <string name="in_text">в тексте</string>
     <string name="moment_next">Дальше</string>
     <string name="moment_save">Перенести</string>

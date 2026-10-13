@@ -41,6 +41,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -325,7 +326,7 @@ internal fun MediaCarousel(
             Box(Modifier.fillMaxSize().clickable { onOpen(item) }, contentAlignment = Alignment.Center) {
                 item.visual?.let { sha ->
                     val load by rememberMediaFile(media, sha)
-                    (load as? MediaLoad.Ready)?.let { AsyncImage(it.file, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
+                    (load as? MediaLoad.Ready)?.let { FittedPicture(it.file, item, carousel = ratio.coerceIn(0.8f, 1.9f)) }
                 }
                 if (item.meta.kind == "video") {
                     PlayBadge()
@@ -353,4 +354,22 @@ private fun Chip(text: String, modifier: Modifier = Modifier) {
     Surface(color = Color.Black.copy(alpha = 0.55f), contentColor = Color.White, shape = RoundedCornerShape(10.dp), modifier = modifier) {
         Text(text, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp))
     }
+}
+
+/**
+ * A picture in a frame of another shape: cropped when the shapes are close, otherwise shown whole over a blurred,
+ * dimmed copy of itself (a tall photo after a wide one doesn't lose most of its sides).
+ */
+@Composable
+internal fun FittedPicture(file: File, attachment: AttachmentState, carousel: Float) {
+    val w = attachment.meta.width ?: 0
+    val h = attachment.meta.height ?: 0
+    val own = if (w > 0 && h > 0) w.toFloat() / h else null
+    val far = own != null && maxOf(own / carousel, carousel / own) > 1.3f
+    if (!far) {
+        AsyncImage(file, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        return
+    }
+    AsyncImage(file, null, Modifier.fillMaxSize().blur(24.dp), contentScale = ContentScale.Crop, alpha = 0.5f)
+    AsyncImage(file, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
 }

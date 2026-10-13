@@ -178,6 +178,38 @@ class AppSmokeTest {
     }
 
     @Test
+    fun commentsAndTagCategories() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val entry = services.repo.createNote(services.today(), "Обед с Машей")
+        services.repo.addTag(entry, "Маша")
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Обед с Машей"), 5_000)
+        onNodeWithText("Обед с Машей").click()
+        waitUntilExactlyOneExists(hasText("#Маша"), 5_000)
+        onNodeWithContentDescription("Меню").click()
+        onNodeWithText("Комментарии").click()
+        waitUntilExactlyOneExists(hasText("Комментарий…"), 5_000)
+        onNode(hasSetTextAction()).performTextInput("Было очень вкусно")
+        onNodeWithContentDescription("Сохранить заметку").click()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.commentCount(entry).first() } == 1L }
+        waitUntilExactlyOneExists(hasText("Было очень вкусно"), 5_000)
+        screenshot("14-comments")
+
+        onNodeWithContentDescription("Назад").click()
+        waitUntilExactlyOneExists(hasText("#Маша"), 5_000)
+        onNodeWithContentDescription("Назад").click()
+        waitUntilExactlyOneExists(hasText("Добр", substring = true), 5_000)
+        onNodeWithContentDescription("Меню").click()
+        onNodeWithText("Теги").click()
+        waitUntilExactlyOneExists(hasText("#Маша · 1"), 5_000)
+        onNodeWithText("#Маша · 1").click()
+        onNodeWithText("Люди").click()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.tags().first().single().category == "Люди" } }
+        waitForIdle()
+        screenshot("15-tags")
+        assertEquals(1L, runBlocking { services.repo.commentCount(entry).first() })
+    }
+
+    @Test
     fun newEntryOpenedByMistakeLeavesNothing() = runDesktopComposeUiTest(width = 412, height = 860) {
         setContent { BenbowApp(services) }
         waitUntilExactlyOneExists(hasText("Как прошёл день? Пара строк — и он сохранится."))

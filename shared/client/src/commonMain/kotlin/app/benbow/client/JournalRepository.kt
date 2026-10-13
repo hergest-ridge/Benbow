@@ -51,10 +51,13 @@ data class EntrySummary(
     val tags: List<String> = emptyList(),
 )
 
-data class TagCount(val name: String, val uses: Int)
+data class TagCount(val name: String, val uses: Int, val category: String? = null)
 
 /** An entry as the feed shows it: notes in full, journal entries as a preview. */
-data class FeedItem(val summary: EntrySummary, val kind: String, val text: String, val reactions: Set<String>)
+data class FeedItem(val summary: EntrySummary, val kind: String, val text: String, val reactions: Set<String>, val comments: Int = 0)
+
+/** A reply in an entry's thread, shown in full. */
+data class Comment(val summary: EntrySummary, val text: String)
 
 /** What to look for; empty text and off switches match everything outside the trash. */
 data class SearchQuery(val text: String = "", val tag: String? = null, val favorites: Boolean = false, val withMedia: Boolean = false)
@@ -79,6 +82,9 @@ data class EntryDetail(
     val inTrash: Boolean get() = fields[TRASH_FIELD] == "true"
     val favorite: Boolean get() = fields[FAVORITE_FIELD] == "true"
     val pinned: Boolean get() = fields[PINNED_FIELD] == "true"
+
+    /** For comments: the entry they answer. */
+    val parentId: String? get() = fields[PARENT_FIELD]
     val mood: Int? get() = fields[MOOD_FIELD]?.toIntOrNull()
     val tags: List<String> get() = tagsOf(fields)
     val reactions: Set<String> get() = fields.filter {
@@ -91,6 +97,11 @@ internal const val TRASH_FIELD = "deleted"
 internal const val FAVORITE_FIELD = "favorite"
 internal const val MOOD_FIELD = "mood"
 internal const val PINNED_FIELD = "pinned"
+internal const val PARENT_FIELD = "parent"
+
+/** The tag registry (ADR-021): a system entry whose fields are `cat:<tag key>` = category. Fixed id, so devices share it. */
+internal const val TAG_REGISTRY_ID = "system-tags"
+internal const val CATEGORY_PREFIX = "cat:"
 internal const val TAG_PREFIX = "tag:"
 internal const val REACTION_PREFIX = "reaction:"
 
@@ -214,6 +225,7 @@ class JournalRepository(
                 id,
             )
             SearchIndex.update(db, id)
+            if (field == PARENT_FIELD) q.updateParent(value, id)
         }
     }
 
@@ -271,6 +283,20 @@ class JournalRepository(
 
     fun setFavorite(id: String, favorite: Boolean) = setField(id, FAVORITE_FIELD, if (favorite) "true" else null)
 
+    /** A reply to [parentId] (also to an old entry, as a later look back): its own entry, linked by the "parent" field. */
+    fun createComment(parentId: String, day: String, text: String): String = db.transactionWithResult {
+        val id = createEntry(day, kind = "comment", body = textBody(text, random))
+        setField(id, PARENT_FIELD, parentId)
+        id
+    }
+
+    fun comments(parentId: String): Flow<List<Comment>> =
+        q.commentsOf(parentId) { id, day, createdAt, title, preview, conflictHeads, mediaCount, cover, fields, body ->
+            Comment(summaryOf(id, day, createdAt, title, preview, conflictHeads, mediaCount, cover, fields), plainText(body))
+        }.asFlow().mapToList(context)
+
+    fun commentCount(parentId: String): Flow<Long> = q.commentCount(parentId).asFlow().mapToOne(context)
+
     fun setPinned(id: String, pinned: Boolean) = setField(id, PINNED_FIELD, if (pinned) "true" else null)
 
     /** -2 (hard) .. 2 (great), null = not set. */
@@ -301,7 +327,7 @@ class JournalRepository(
 
     /** Newest first; the feed draws it bottom-up like a chat. */
     fun feed(limit: Long = 300): Flow<List<FeedItem>> =
-        q.feed(limit) { id, kind, day, createdAt, title, preview, body, conflictHeads, mediaCount, cover, fields ->
+        q.feed(limit) { id, kind, day, createdAt, title, preview, body, conflictHeads, mediaCount, cover, fields, comments ->
             val summary = summaryOf(id, day, createdAt, title, preview, conflictHeads, mediaCount, cover, fields)
             val text = if (kind == "journal") {
                 listOf(title, preview).filter { it.isNotBlank() }.joinToString("\n")
@@ -309,16 +335,38 @@ class JournalRepository(
                 plainText(body).take(FEED_TEXT_MAX)
             }
             val reactions = decodeFields(fields).filter { it.key.startsWith(REACTION_PREFIX) && it.value != null }.keys
-            FeedItem(summary, kind, text, reactions.map { it.removePrefix(REACTION_PREFIX) }.toSet())
+            FeedItem(summary, kind, text, reactions.map { it.removePrefix(REACTION_PREFIX) }.toSet(), comments.toInt())
         }.asFlow().mapToList(context)
 
     /** Builds the search index after an update changed it (or on the first start); quick otherwise. */
     fun prepareSearch() = SearchIndex.rebuildIfNeeded(db)
 
-    /** Every tag in use (outside the trash), most used first: suggestions and search filters. */
-    fun tags(): Flow<List<TagCount>> = q.tagCounts { name, uses ->
-        TagCount(name.orEmpty(), uses.toInt())
-    }.asFlow().mapToList(context).map { it.filter { t -> t.name.isNotEmpty() } }
+    /** Every tag in use (outside the trash), most used first, with its category: suggestions, filters, the tag list. */
+    fun tags(): Flow<List<TagCount>> = combine(
+        q.tagCounts { name, uses -> TagCount(name.orEmpty(), uses.toInt()) }.asFlow().mapToList(context),
+        q.selectEntry(TAG_REGISTRY_ID).asFlow().mapToOneOrNull(context),
+    ) { counts, registry ->
+        val categories = registry?.let { decodeFields(it.fields) }.orEmpty()
+        counts.filter { it.name.isNotEmpty() }.map { it.copy(category = categories[CATEGORY_PREFIX + tagName(it.name).lowercase()]) }
+    }
+
+    /** Puts a tag into a category (null = none). Created once, without revisions, so two devices never conflict over it. */
+    fun setTagCategory(tag: String, category: String?) {
+        db.transaction {
+            if (q.selectEntry(TAG_REGISTRY_ID).executeAsOneOrNull() == null) {
+                val time = now()
+                q.upsertEntry(
+                    TAG_REGISTRY_ID, "system", "1970-01-01", time, null,
+                    emptyBody(
+                        random,
+                    ),
+                    "", "", "[]", "{}", time, "{}", "{}", 0, null,
+                )
+                enqueue(CreateEntry(newId(), TAG_REGISTRY_ID, "system", "1970-01-01", time))
+            }
+            setField(TAG_REGISTRY_ID, CATEGORY_PREFIX + tagName(tag).lowercase(), category?.trim()?.takeIf { it.isNotEmpty() })
+        }
+    }
 
     fun search(query: SearchQuery): Flow<List<EntrySummary>> = q.search(
         match = SearchIndex.match(query.text),

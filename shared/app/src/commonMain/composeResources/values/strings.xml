@@ -114,6 +114,22 @@
     <string name="pin">Закрепить</string>
     <string name="unpin">Открепить</string>
     <string name="react">Реакция</string>
+    <string name="comments">Комментарии</string>
+    <string name="comments_count">Комментарии (%1$d)</string>
+    <string name="comment_hint">Комментарий…</string>
+    <string name="comments_empty">Пока без комментариев. Можно ответить себе — сейчас или через год.</string>
+    <string name="copy_text">Копировать текст</string>
+    <string name="share">Поделиться</string>
+    <string name="copied">Скопировано</string>
+    <string name="tags">Теги</string>
+    <string name="tags_empty">Тегов пока нет. Добавьте их в записи — кнопкой «+ Тег».</string>
+    <string name="tags_uncategorized">Без категории</string>
+    <string-array name="tag_categories">
+        <item>Люди</item>
+        <item>Места</item>
+        <item>Проекты</item>
+        <item>Эмоции</item>
+    </string-array>
     <string name="trash_empty">Корзина пуста</string>
     <string name="trash_hint">Записи из корзины не удаляются: их можно вернуть в любой момент.</string>
 

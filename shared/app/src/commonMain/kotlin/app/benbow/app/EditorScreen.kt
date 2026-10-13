@@ -37,8 +37,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.benbow.app.resources.Res
+import app.benbow.app.resources.comments
+import app.benbow.app.resources.comments_count
 import app.benbow.app.resources.conflict_banner
 import app.benbow.app.resources.conflict_choose
+import app.benbow.app.resources.copy_text
 import app.benbow.app.resources.entry_broken
 import app.benbow.app.resources.favorite_add
 import app.benbow.app.resources.favorite_remove
@@ -48,13 +51,16 @@ import app.benbow.app.resources.menu
 import app.benbow.app.resources.move_to_trash
 import app.benbow.app.resources.pin
 import app.benbow.app.resources.restore
+import app.benbow.app.resources.share
 import app.benbow.app.resources.unpin
 import app.benbow.client.DraftSession
 import app.benbow.client.EntryDetail
 import app.benbow.client.JournalRepository
 import app.benbow.core.content.DocumentCodec
 import app.benbow.core.content.DocumentFormatException
+import app.benbow.core.content.MarkdownExporter
 import app.benbow.core.content.toDocument
+import app.benbow.core.content.toPlainText
 import app.benbow.core.content.toRichText
 import app.benbow.core.text.RichText
 import app.benbow.ui.editor.BenbowEditor
@@ -111,6 +117,17 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
     fun toggleFavorite() = withEntry { repo.setFavorite(it, detail?.favorite != true) }
 
     fun togglePinned() = withEntry { repo.setPinned(it, detail?.pinned != true) }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val commentCount = session.entryIdFlow.filterNotNull().flatMapLatest { repo.commentCount(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
+
+    /** What's on screen right now (typing included), as plain text or portable Markdown. */
+    fun plainText(): String = editor?.model?.toDocument()?.toPlainText(includeSpoilers = true).orEmpty()
+
+    fun markdown(): String = editor?.model?.toDocument()?.let { MarkdownExporter().export(it) }.orEmpty()
+
+    fun copied() = services.messages.tryEmit(AppMessage.Copied)
 
     fun setMood(mood: Int?) = withEntry { repo.setMood(it, mood) }
 
@@ -182,6 +199,9 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     val editor = vm.editor
     val detail = vm.detail
     var menu by remember { mutableStateOf(false) }
+    val comments by vm.commentCount.collectAsStateWithLifecycle()
+    val copy = rememberCopy()
+    val share = rememberShare()
     val openHistory: () -> Unit = {
         vm.commit()
         vm.entryId?.let { nav.open(Route.History(it)) }
@@ -225,6 +245,32 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                 }, onClick = {
                                     menu = false
                                     vm.togglePinned()
+                                })
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            if (comments >
+                                                0
+                                            ) {
+                                                stringResource(Res.string.comments_count, comments.toInt())
+                                            } else {
+                                                stringResource(Res.string.comments)
+                                            },
+                                        )
+                                    },
+                                    onClick = {
+                                        menu = false
+                                        vm.commit()
+                                        vm.entryId?.let { nav.open(Route.Comments(it)) }
+                                    },
+                                )
+                                DropdownMenuItem(text = { Text(stringResource(Res.string.copy_text)) }, onClick = {
+                                    menu = false
+                                    if (!copy(vm.plainText())) vm.copied()
+                                })
+                                DropdownMenuItem(text = { Text(stringResource(Res.string.share)) }, onClick = {
+                                    menu = false
+                                    if (!share(vm.markdown())) vm.copied()
                                 })
                                 DropdownMenuItem(text = { Text(stringResource(Res.string.history)) }, onClick = {
                                     menu = false

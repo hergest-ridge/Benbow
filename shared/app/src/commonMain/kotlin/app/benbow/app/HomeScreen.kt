@@ -49,6 +49,7 @@ import app.benbow.app.resources.home_today_empty
 import app.benbow.app.resources.home_write
 import app.benbow.app.resources.menu
 import app.benbow.app.resources.server
+import app.benbow.app.resources.tags
 import app.benbow.app.resources.trash
 import app.benbow.app.resources.years_ago
 import app.benbow.client.EntrySummary
@@ -145,6 +146,10 @@ internal fun HomeScreen(services: AppServices, nav: Navigator) {
                     Box {
                         IconButton({ menu = true }) { Icon(Icons.More, stringResource(Res.string.menu)) }
                         DropdownMenu(menu, { menu = false }) {
+                            DropdownMenuItem(text = { Text(stringResource(Res.string.tags)) }, onClick = {
+                                menu = false
+                                nav.open(Route.Tags)
+                            })
                             DropdownMenuItem(text = { Text(stringResource(Res.string.trash)) }, onClick = {
                                 menu = false
                                 nav.open(Route.Trash)

@@ -19,8 +19,12 @@ CREATE TABLE entry (
     -- AttachmentState by attachment id (LWW per link), plus what lists show without parsing it.
     attachments TEXT NOT NULL DEFAULT '{}',
     media_count INTEGER NOT NULL DEFAULT 0,
-    cover TEXT
+    cover TEXT,
+    -- A comment's entry (the "parent" field), kept as a column so threads and counts use an index.
+    parent_id TEXT
 );
+
+CREATE INDEX entry_by_parent ON entry(parent_id);
 
 -- Media files on this device, by SHA-256. A captured file stays until the server confirmed it;
 -- downloaded ones are a cache (docs/data-safety.md#client-side-safety).
@@ -73,12 +77,12 @@ SELECT * FROM entry WHERE id = ?;
 -- Trash is the LWW field "deleted" (JournalRepository.TRASH_FIELD).
 journal:
 SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
-WHERE json_extract(fields, '$.deleted') IS NOT 'true'
+WHERE json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system')
 ORDER BY day DESC, created_at;
 
 entriesForDay:
 SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
-WHERE day = ? AND json_extract(fields, '$.deleted') IS NOT 'true'
+WHERE day = ? AND json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system')
 ORDER BY created_at;
 
 trash:
@@ -111,7 +115,7 @@ SELECT id, kind, day, created_at, head_rev, body, fields, field_clocks, attachme
 -- :match is an FTS query built by SearchIndex.match (never raw user input); null filters are off.
 search:
 SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
-WHERE json_extract(fields, '$.deleted') IS NOT 'true'
+WHERE json_extract(fields, '$.deleted') IS NOT 'true' AND kind != 'system'
   AND (:match IS NULL OR id IN (SELECT entry_id FROM entry_search WHERE entry_search MATCH :match))
   AND (:tagPath IS NULL OR json_extract(fields, :tagPath) IS NOT NULL)
   AND (:favorites = 0 OR json_extract(fields, '$.favorite') = 'true')
@@ -123,7 +127,7 @@ LIMIT 300;
 
 pinned:
 SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
-WHERE json_extract(fields, '$.pinned') = 'true' AND json_extract(fields, '$.deleted') IS NOT 'true'
+WHERE json_extract(fields, '$.pinned') = 'true' AND json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system')
 ORDER BY updated_at DESC;
 
 withDrafts:
@@ -135,29 +139,43 @@ ORDER BY d.updated_at DESC;
 -- Same month and day in earlier years (:monthDay = "-10-13").
 onThisDay:
 SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
-WHERE substr(day, 5) = :monthDay AND day < :today AND json_extract(fields, '$.deleted') IS NOT 'true'
+WHERE substr(day, 5) = :monthDay AND day < :today AND json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system')
 ORDER BY day DESC, created_at;
 
 favoritesUpTo:
 SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
-WHERE json_extract(fields, '$.favorite') = 'true' AND day <= :lastDay AND json_extract(fields, '$.deleted') IS NOT 'true'
+WHERE json_extract(fields, '$.favorite') = 'true' AND day <= :lastDay AND json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system')
 ORDER BY day;
 
 daysWritten:
 SELECT COUNT(DISTINCT day) FROM entry
-WHERE day BETWEEN :fromDay AND :toDay AND json_extract(fields, '$.deleted') IS NOT 'true';
+WHERE (day BETWEEN :fromDay AND :toDay) AND json_extract(fields, '$.deleted') IS NOT 'true' AND kind != 'system';
 
 -- Feed: newest first (the list is drawn bottom-up), with bodies to show notes in full.
 feed:
-SELECT id, kind, day, created_at, title, preview, body, conflict_heads, media_count, cover, fields FROM entry
-WHERE json_extract(fields, '$.deleted') IS NOT 'true'
+SELECT id, kind, day, created_at, title, preview, body, conflict_heads, media_count, cover, fields,
+    (SELECT COUNT(*) FROM entry c WHERE c.parent_id = entry.id AND c.kind = 'comment' AND json_extract(c.fields, '$.deleted') IS NOT 'true') AS comments
+FROM entry
+WHERE json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system')
 ORDER BY day DESC, created_at DESC
 LIMIT :limit;
+
+-- Comments (4.3): entries of kind "comment" with a parent, oldest first like a chat.
+commentsOf:
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields, body FROM entry
+WHERE parent_id = ? AND kind = 'comment' AND json_extract(fields, '$.deleted') IS NOT 'true'
+ORDER BY created_at;
+
+commentCount:
+SELECT COUNT(*) FROM entry WHERE parent_id = ? AND kind = 'comment' AND json_extract(fields, '$.deleted') IS NOT 'true';
+
+updateParent:
+UPDATE entry SET parent_id = ? WHERE id = ?;
 
 tagCounts:
 SELECT json_each.value AS name, COUNT(*) AS uses
 FROM entry, json_each(entry.fields)
-WHERE json_each.key LIKE 'tag:%' AND json_each.value IS NOT NULL AND json_extract(entry.fields, '$.deleted') IS NOT 'true'
+WHERE json_each.key LIKE 'tag:%' AND json_each.value IS NOT NULL AND json_extract(entry.fields, '$.deleted') IS NOT 'true' AND entry.kind != 'system'
 GROUP BY json_each.key
 ORDER BY uses DESC, name;
 

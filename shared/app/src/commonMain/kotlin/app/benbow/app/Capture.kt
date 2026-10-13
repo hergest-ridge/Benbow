@@ -75,7 +75,7 @@ internal fun DayHeader(day: String) {
 }
 
 @Composable
-internal fun QuickNoteBar(onSend: (String) -> Unit, onNewEntry: () -> Unit) {
+internal fun QuickNoteBar(onSend: (String) -> Unit, onNewEntry: (() -> Unit)? = null, hint: String? = null) {
     var text by rememberSaveable { mutableStateOf("") }
     Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
         Row(
@@ -85,7 +85,7 @@ internal fun QuickNoteBar(onSend: (String) -> Unit, onNewEntry: () -> Unit) {
             TextField(
                 value = text,
                 onValueChange = { text = it },
-                placeholder = { Text(stringResource(Res.string.quick_note_hint)) },
+                placeholder = { Text(hint ?: stringResource(Res.string.quick_note_hint)) },
                 maxLines = 6,
                 shape = RoundedCornerShape(24.dp),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
@@ -98,7 +98,9 @@ internal fun QuickNoteBar(onSend: (String) -> Unit, onNewEntry: () -> Unit) {
                 modifier = Modifier.weight(1f),
             )
             if (text.isBlank()) {
-                IconButton(onNewEntry, Modifier.padding(bottom = 4.dp)) { Icon(Icons.Edit, stringResource(Res.string.new_entry)) }
+                if (onNewEntry != null) {
+                    IconButton(onNewEntry, Modifier.padding(bottom = 4.dp)) { Icon(Icons.Edit, stringResource(Res.string.new_entry)) }
+                }
             } else {
                 IconButton(
                     onClick = {

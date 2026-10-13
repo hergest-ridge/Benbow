@@ -23,6 +23,8 @@ import kotlin.time.Clock
 
 sealed interface AppMessage {
     data class AttachFailed(val reason: String) : AppMessage
+
+    data object Copied : AppMessage
 }
 
 /**

@@ -32,6 +32,7 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.attach_failed
+import app.benbow.app.resources.copied
 import app.benbow.app.resources.tab_feed
 import app.benbow.app.resources.tab_home
 import app.benbow.app.resources.tab_search
@@ -55,6 +56,10 @@ internal sealed interface Route {
     data class Media(val entryId: String, val attachmentId: String) : Route
 
     data object Search : Route
+
+    data class Comments(val entryId: String) : Route
+
+    data object Tags : Route
 
     data object Trash : Route
 
@@ -104,6 +109,7 @@ fun BenbowApp(services: AppServices) {
             services.messages.collect { message ->
                 when (message) {
                     is AppMessage.AttachFailed -> snackbar.showSnackbar(getString(Res.string.attach_failed, message.reason))
+                    AppMessage.Copied -> snackbar.showSnackbar(getString(Res.string.copied))
                 }
             }
         }
@@ -146,6 +152,8 @@ private fun AppNavigation(services: AppServices, backStack: SnapshotStateList<Ro
             entry<Route.Revision> { RevisionScreen(services, nav, it) }
             entry<Route.Media> { MediaScreen(services, nav, it) }
             entry<Route.Search> { SearchScreen(services, nav) }
+            entry<Route.Comments> { CommentsScreen(services, nav, it) }
+            entry<Route.Tags> { TagsScreen(services, nav) }
             entry<Route.Trash> { TrashScreen(services, nav) }
             entry<Route.Server> { ServerScreen(services, nav) }
         },

@@ -28,6 +28,7 @@ class MarkdownMirror(private val root: Path, private val media: (String) -> Path
     private val json = Json { prettyPrint = true }
 
     fun write(entry: EntryState, body: String?) {
+        if (entry.kind == "system") return // registries (e.g. tag categories) are app data, not notes
         val (year, month) = entry.day.split("-").let { it.getOrElse(0) { "0000" } to it.getOrElse(1) { "00" } }
         val dir = root.resolve(year).resolve(month).createDirectories()
         val base = "${entry.day}_${entry.id.takeLast(12).replace(Regex("[^A-Za-z0-9-]"), "_")}"

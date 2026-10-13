@@ -1,6 +1,7 @@
 package app.benbow.app
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,6 +41,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.benbow.app.resources.Res
+import app.benbow.app.resources.comments
 import app.benbow.app.resources.feed_empty
 import app.benbow.app.resources.feed_title
 import app.benbow.client.FeedItem
@@ -123,9 +125,12 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
                 when (row) {
                     is FeedRow.Day -> DayHeader(row.day)
 
-                    is FeedRow.Item -> FeedBubble(services, row.item, onOpen = {
-                        nav.open(Route.Editor(row.item.summary.id, row.item.summary.day))
-                    }) { emoji, on ->
+                    is FeedRow.Item -> FeedBubble(
+                        services,
+                        row.item,
+                        onOpen = { nav.open(Route.Editor(row.item.summary.id, row.item.summary.day)) },
+                        onComments = { nav.open(Route.Comments(row.item.summary.id)) },
+                    ) { emoji, on ->
                         vm.react(row.item.summary.id, emoji, on)
                     }
                 }
@@ -136,7 +141,13 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun FeedBubble(services: AppServices, item: FeedItem, onOpen: () -> Unit, onReact: (String, Boolean) -> Unit) {
+private fun FeedBubble(
+    services: AppServices,
+    item: FeedItem,
+    onOpen: () -> Unit,
+    onComments: () -> Unit,
+    onReact: (String, Boolean) -> Unit,
+) {
     val colors = MaterialTheme.colorScheme
     val entry = item.summary
     var picking by remember { mutableStateOf(false) }
@@ -180,6 +191,16 @@ private fun FeedBubble(services: AppServices, item: FeedItem, onOpen: () -> Unit
                             shape = RoundedCornerShape(12.dp),
                         ) { Text(emoji, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) }
                     }
+                    if (item.comments > 0) {
+                        Text(
+                            "💬 ${item.comments}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = colors.onSurfaceVariant,
+                            modifier = Modifier.clip(
+                                RoundedCornerShape(8.dp),
+                            ).clickable(onClick = onComments).padding(horizontal = 4.dp, vertical = 2.dp),
+                        )
+                    }
                     Box(Modifier.weight(1f))
                     if (entry.favorite) Text("★", style = MaterialTheme.typography.labelMedium, color = colors.primary)
                     moodEmoji(entry.mood)?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
@@ -193,6 +214,10 @@ private fun FeedBubble(services: AppServices, item: FeedItem, onOpen: () -> Unit
             }
         }
         DropdownMenu(picking, { picking = false }) {
+            DropdownMenuItem(text = { Text(stringResource(Res.string.comments)) }, onClick = {
+                picking = false
+                onComments()
+            })
             Row(Modifier.padding(horizontal = 8.dp)) {
                 REACTIONS.forEach { emoji ->
                     val on = emoji in item.reactions

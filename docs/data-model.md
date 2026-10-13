@@ -8,7 +8,7 @@ Soft delete via `deleted_at`. Metadata fields carry `hlc` for LWW. The server is
 |---|---|
 | id | UUIDv7 |
 | kind | `journal` (long, day-anchored) · `post` (feed, short) · `note` (quick capture) · `comment` |
-| parent_id | for comments: the entry being commented on (retrospective replies) |
+| parent_id | for comments: the entry being commented on (retrospective replies). As built (4.3): the LWW field `parent`, mirrored on the client into an indexed `parent_id` column; comments are hidden from Home/Feed lists, shown in the thread and counted on the feed |
 | space_id | default `journal`. Reserved for the writer's archive (P3) |
 | day | local date the entry belongs to. Default = local date of creation with the "day starts at" offset (e.g. 04:00) |
 | created_at, tz | creation instant + IANA zone at creation (correct display while travelling) |
@@ -33,6 +33,7 @@ The server denormalizes the head into `entry_text(entry_id, title, plain_text)` 
 - `tag(id, name, category_id?, color?, parent_id? (P2 hierarchy), deleted_at)`. Name is unique case-insensitively within a category.
 - `entry_tag(entry_id, tag_id, present, hlc)`: LWW per pair.
 - Idea (decide later): inline `#hashtags` in text auto-link to tags (`#tag` is plain portable Markdown text).
+- As built (4.3): categories live in the system entry `system-tags` (kind `system`, no revisions, created by a single idempotent `entry.create`), fields `cat:<tag key>` = category; defaults Люди, Места, Проекты, Эмоции. System entries are hidden from lists, search and the export.
 - As built (4.1, ADR-021): the link is the LWW field `tag:<lowercase name>` = display name on the entry; categories and colors (4.3) go to a registry. Reactions: field `reaction:<emoji>`.
 
 ## Reactions

@@ -1,0 +1,4 @@
+-- v5 -> v6 (4.3): comment threads.
+ALTER TABLE entry ADD COLUMN parent_id TEXT;
+CREATE INDEX entry_by_parent ON entry(parent_id);
+UPDATE entry SET parent_id = json_extract(fields, '$.parent');

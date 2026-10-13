@@ -1,4 +1,7 @@
 <resources>
     <string name="app_name">Benbow</string>
     <string name="reminders_channel">Напоминания</string>
+    <string name="shortcut_note">Заметка</string>
+    <string name="shortcut_entry">Запись</string>
+    <string name="tile_note">Заметка</string>
 </resources>

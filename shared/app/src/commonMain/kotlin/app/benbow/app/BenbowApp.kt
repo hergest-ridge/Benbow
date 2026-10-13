@@ -54,6 +54,7 @@ import app.benbow.app.resources.tab_more
 import app.benbow.app.resources.tab_search
 import app.benbow.client.TagLooks
 import app.benbow.ui.theme.BenbowTheme
+import kotlinx.coroutines.flow.filterNotNull
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
@@ -159,6 +160,17 @@ private fun AppRoot(services: AppServices) {
     val backStack = remember { mutableStateListOf<Route>(Route.Home) }
     val nav = remember(backStack) { Navigator(backStack) }
     val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(Unit) {
+        services.launch.filterNotNull().collect { request ->
+            services.launch.value = null
+            when (request) {
+                AppLaunch.NewEntry -> {
+                    nav.selectTab(Route.Home)
+                    nav.open(Route.Editor(null, services.today(), opened = services.now()))
+                }
+            }
+        }
+    }
     LaunchedEffect(Unit) {
         services.messages.collect { message ->
             when (message) {

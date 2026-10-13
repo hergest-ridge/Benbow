@@ -299,6 +299,22 @@ class AppSmokeTest {
     }
 
     @Test
+    fun aSharedLinkBecomesANoteInOneTap() = runDesktopComposeUiTest(width = 412, height = 860) {
+        var closed = false
+        setContent {
+            QuickCapture(services, SharedContent.text(sharedNoteText("Статья про сон", "https://example.com/sleep"))) {
+                closed =
+                    true
+            }
+        }
+        waitUntilExactlyOneExists(hasText("Заметка в Benbow"), 5_000)
+        screenshot("24-capture")
+        onNodeWithText("Сохранить").click()
+        waitUntil(timeoutMillis = 5_000) { closed }
+        assertEquals("Статья про сон", runBlocking { services.repo.journal().first().single().title })
+    }
+
+    @Test
     fun newEntryOpenedByMistakeLeavesNothing() = runDesktopComposeUiTest(width = 412, height = 860) {
         setContent { BenbowApp(services) }
         waitUntilExactlyOneExists(hasText("Как прошёл день? Пара строк — и он сохранится."))

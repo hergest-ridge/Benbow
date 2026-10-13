@@ -20,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import java.io.File
 import java.time.LocalDateTime
@@ -30,6 +31,9 @@ import kotlin.time.Clock
 fun interface ReminderClock {
     fun schedule(due: List<Due>)
 }
+
+/** Where the app should go when something outside opens it (a launcher shortcut, the widget). */
+enum class AppLaunch { NewEntry, }
 
 sealed interface AppMessage {
     data class AttachFailed(val reason: String) : AppMessage
@@ -72,6 +76,9 @@ class AppServices(
 
     /** Things the user must hear about (shown as a snackbar). */
     val messages = MutableSharedFlow<AppMessage>(extraBufferCapacity = 8)
+
+    /** Set by the platform when it is opened for something; the app takes it and clears it. */
+    val launch = MutableStateFlow<AppLaunch?>(null)
 
     @Volatile
     private var reminders: List<ReminderItem> = emptyList()

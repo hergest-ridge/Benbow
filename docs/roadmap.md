@@ -34,6 +34,7 @@ Slices: **5.1 Calendar tab (month grid with dots and mood tint, day view with sw
 
 ## Phase 6: Polish and platforms
 Themes and Keep-like backgrounds, export (ZIP / Markdown / PDF), web client polish, desktop polish (shortcuts, tray), performance pass (baseline profiles, macrobenchmarks), app lock, widget, QS tile.
+Slices (owner agreed the order on 2026-10-13): **6.1 capture from anywhere (share target, QS tile, launcher shortcuts, one quick capture sheet) ✅** · 6.2 home-screen widget (Glance) · 6.3 export from the app (ZIP with media, Markdown, PDF) · 6.4 app lock · 6.5 themes, Keep-like note backgrounds, app icon · 6.6 desktop polish · 6.7 performance pass · web client as its own larger step.
 
 ## Phase 7: Later
 Ink layer (paper mode), ICS import/export and Google Calendar, Russian stemming, inline images in text, importers, writer's archive module, backup encryption, on-device voice transcription.

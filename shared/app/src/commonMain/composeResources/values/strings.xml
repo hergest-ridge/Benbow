@@ -78,6 +78,17 @@
     <string name="tag_hint">Например, работа</string>
     <string name="tag_remove">Убрать тег %1$s</string>
     <string name="add">Добавить</string>
+    <string name="cancel">Отмена</string>
+    <string name="capture_title">Заметка в Benbow</string>
+    <string name="capture_hint">Пара строк…</string>
+    <string name="capture_save">Сохранить</string>
+    <string name="capture_saving">Сохраняю…</string>
+    <plurals name="capture_files">
+        <item quantity="one">%1$d файл</item>
+        <item quantity="few">%1$d файла</item>
+        <item quantity="many">%1$d файлов</item>
+        <item quantity="other">%1$d файла</item>
+    </plurals>
     <string name="search">Поиск</string>
     <string name="search_hint">Слова, теги…</string>
     <string name="filter_favorites">Избранное</string>

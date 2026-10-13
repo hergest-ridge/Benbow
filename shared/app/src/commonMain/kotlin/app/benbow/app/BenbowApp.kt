@@ -64,6 +64,9 @@ internal sealed interface Route {
 
     data object Tags : Route
 
+    /** [day] preselects the date (from the calendar). */
+    data class Reminders(val day: String? = null) : Route
+
     data object Trash : Route
 
     data object Server : Route
@@ -159,6 +162,7 @@ private fun AppNavigation(services: AppServices, backStack: SnapshotStateList<Ro
             entry<Route.Calendar> { CalendarScreen(services, nav) }
             entry<Route.Comments> { CommentsScreen(services, nav, it) }
             entry<Route.Tags> { TagsScreen(services, nav) }
+            entry<Route.Reminders> { RemindersScreen(services, nav, it) }
             entry<Route.Trash> { TrashScreen(services, nav) }
             entry<Route.Server> { ServerScreen(services, nav) }
         },

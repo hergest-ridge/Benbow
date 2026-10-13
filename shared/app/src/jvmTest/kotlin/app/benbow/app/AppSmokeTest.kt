@@ -229,6 +229,19 @@ class AppSmokeTest {
     }
 
     @Test
+    fun anEveningNudgeIsOneTap() = runDesktopComposeUiTest(width = 412, height = 860) {
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Добр", substring = true), 5_000)
+        onNodeWithContentDescription("Меню").click()
+        onNodeWithText("Напоминания").click()
+        waitUntilExactlyOneExists(hasText("Каждый вечер в 21:00", substring = true), 5_000)
+        onNodeWithText("Каждый вечер в 21:00", substring = true).click()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.reminders().first().size == 1 } }
+        waitUntilExactlyOneExists(hasText("Пара строк о сегодняшнем дне?"), 5_000)
+        screenshot("17-reminders")
+    }
+
+    @Test
     fun newEntryOpenedByMistakeLeavesNothing() = runDesktopComposeUiTest(width = 412, height = 860) {
         setContent { BenbowApp(services) }
         waitUntilExactlyOneExists(hasText("Как прошёл день? Пара строк — и он сохранится."))

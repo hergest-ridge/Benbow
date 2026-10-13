@@ -30,7 +30,7 @@ Slices: **4.1 entry metadata (favorite, pinned, mood, tags, reactions as namespa
 
 ## Phase 5: Calendar, reminders, templates, psychology
 Calendar views, events, reminders with local notifications, templates with placeholders, prompts library, mood check-ins with emotion words, weekly/monthly reviews.
-Slices: **5.1 Calendar tab (month grid with dots and mood tint, day view with swipe, events as entries of kind `event`) ✅** · 5.2 reminders (kind `reminder`, local notifications, optional gentle daily nudge) · 5.3 templates with placeholders + prompts library + question of the day · 5.4 mood check-ins with emotion words, self-compassion follow-up, weekly/monthly review cards.
+Slices: **5.1 Calendar tab (month grid with dots and mood tint, day view with swipe, events as entries of kind `event`) ✅** · **5.2 reminders (kind `reminder`, local notifications, optional gentle daily nudge) ✅** · 5.3 templates with placeholders + prompts library + question of the day · 5.4 mood check-ins with emotion words, self-compassion follow-up, weekly/monthly review cards.
 
 ## Phase 6: Polish and platforms
 Themes and Keep-like backgrounds, export (ZIP / Markdown / PDF), web client polish, desktop polish (shortcuts, tray), performance pass (baseline profiles, macrobenchmarks), app lock, widget, QS tile.

@@ -178,6 +178,7 @@ internal fun CalendarScreen(services: AppServices, nav: Navigator) {
                             nav.open(Route.Editor(null, selected.toString(), opened = services.now()))
                         }) { Text(stringResource(Res.string.calendar_entry)) }
                         TextButton({ adding = !adding }) { Text(stringResource(Res.string.calendar_event)) }
+                        IconButton({ nav.open(Route.Reminders(selected.toString())) }) { Text("🔔") }
                     }
                 }
                 if (adding) {

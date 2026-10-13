@@ -1,15 +1,18 @@
 package app.benbow.app
 
 import app.benbow.client.ApiCache
+import app.benbow.client.Due
 import app.benbow.client.JournalRepository
 import app.benbow.client.MediaStore
 import app.benbow.client.Pairing
+import app.benbow.client.ReminderItem
 import app.benbow.client.ServerHistory
 import app.benbow.client.Settings
 import app.benbow.client.SyncController
 import app.benbow.client.SyncEngine
 import app.benbow.client.SyncResult
 import app.benbow.client.db.BenbowDb
+import app.benbow.client.upcoming
 import app.cash.sqldelight.db.SqlDriver
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -19,7 +22,14 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import java.io.File
+import java.time.LocalDateTime
+import kotlin.concurrent.Volatile
 import kotlin.time.Clock
+
+/** Rings reminders on this device; [schedule] replaces whatever was scheduled before. */
+fun interface ReminderClock {
+    fun schedule(due: List<Due>)
+}
 
 sealed interface AppMessage {
     data class AttachFailed(val reason: String) : AppMessage
@@ -38,6 +48,8 @@ class AppServices(
     val deviceName: String,
     /** Large media files kept on this device beyond what still has to reach the server. */
     private val mediaCacheBytes: Long = 2L * 1024 * 1024 * 1024,
+    /** Rings reminders on this device (Android alarms, a tray message on desktop); none in tests. */
+    private val reminderClock: ReminderClock? = null,
 ) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     val now: () -> Long = { Clock.System.now().toEpochMilliseconds() }
@@ -61,10 +73,26 @@ class AppServices(
     /** Things the user must hear about (shown as a snackbar). */
     val messages = MutableSharedFlow<AppMessage>(extraBufferCapacity = 8)
 
+    @Volatile
+    private var reminders: List<ReminderItem> = emptyList()
+
     init {
         repo.commitLeftoverDrafts()
         sync.start()
         scope.launch { repo.prepareSearch() }
+        if (reminderClock != null) {
+            scope.launch {
+                repo.reminders().collect {
+                    reminders = it
+                    rescheduleReminders()
+                }
+            }
+        }
+    }
+
+    /** Puts the next rings on the clock; called on every change and after a repeating reminder rang. */
+    fun rescheduleReminders() {
+        reminderClock?.schedule(reminders.upcoming(LocalDateTime.now()))
     }
 
     /** Text first (small, the outbox), then files captured here; a failed upload retries with backoff. */

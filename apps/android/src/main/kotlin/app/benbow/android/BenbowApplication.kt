@@ -17,6 +17,7 @@ class BenbowApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         SecretBox.current = KeystoreSecretBox()
+        AlarmReminderClock.createChannel(this)
         SyncWorker.schedulePeriodic(this)
         // Back on a network (Wi-Fi at home, airplane mode off): sync without waiting for the timer.
         getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(
@@ -41,6 +42,6 @@ class BenbowApplication : Application() {
             },
         )
         val name = Settings.Global.getString(contentResolver, Settings.Global.DEVICE_NAME) ?: Build.MODEL
-        AppServices(driver, File(filesDir, "media"), platform = "android", deviceName = name)
+        AppServices(driver, File(filesDir, "media"), platform = "android", deviceName = name, reminderClock = AlarmReminderClock(this))
     }
 }

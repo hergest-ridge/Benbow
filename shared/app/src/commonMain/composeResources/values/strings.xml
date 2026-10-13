@@ -162,6 +162,19 @@
     <string name="event_time_hint">Время, ЧЧ:ММ</string>
     <string name="previous">Назад</string>
     <string name="next">Вперёд</string>
+    <string name="reminders">Напоминания</string>
+    <string name="reminders_empty">Напоминаний нет. Можно попросить приложение мягко напоминать о дневнике.</string>
+    <string name="reminders_past">Прошедшие</string>
+    <string name="reminder_hint">О чём напомнить</string>
+    <string name="reminder_today">Сегодня</string>
+    <string name="reminder_tomorrow">Завтра</string>
+    <string name="reminder_once">Один раз</string>
+    <string name="reminder_daily">Каждый день</string>
+    <string name="reminder_weekly">Каждую неделю</string>
+    <string name="reminder_done">Готово</string>
+    <string name="reminder_nudge">Каждый вечер в 21:00 — пара строк о дне</string>
+    <string name="reminder_nudge_text">Пара строк о сегодняшнем дне?</string>
+    <string name="reminder_delete">Удалить напоминание</string>
     <string name="trash_empty">Корзина пуста</string>
     <string name="trash_hint">Записи из корзины не удаляются: их можно вернуть в любой момент.</string>
 

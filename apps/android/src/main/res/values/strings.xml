@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Benbow</string>
+    <string name="reminders_channel">Напоминания</string>
 </resources>

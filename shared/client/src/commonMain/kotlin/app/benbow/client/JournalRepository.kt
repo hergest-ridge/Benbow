@@ -105,6 +105,9 @@ internal const val MOOD_FIELD = "mood"
 internal const val PINNED_FIELD = "pinned"
 internal const val PARENT_FIELD = "parent"
 internal const val START_FIELD = "start"
+internal const val AT_FIELD = "at"
+internal const val REPEAT_FIELD = "repeat"
+internal const val DONE_FIELD = "done"
 
 /** The tag registry (ADR-021): a system entry whose fields are `cat:<tag key>` = category. Fixed id, so devices share it. */
 internal const val TAG_REGISTRY_ID = "system-tags"
@@ -321,6 +324,22 @@ class JournalRepository(
         setField(id, START_FIELD, time?.let { "${day}T$it" } ?: day)
         id
     }
+
+    // Reminders (5.2)
+
+    fun reminders(): Flow<List<ReminderItem>> = q.reminders { id, title, at, repeat, done ->
+        ReminderItem(id, title, at.orEmpty(), repeat, done == "true")
+    }.asFlow().mapToList(context)
+
+    /** [at] is local "YYYY-MM-DDTHH:MM"; the entry's day is its date, so the calendar shows it there. */
+    fun createReminder(text: String, at: String, repeat: String?): String = db.transactionWithResult {
+        val id = createEntry(at.substringBefore('T'), kind = "reminder", body = textBody(text, random))
+        setField(id, AT_FIELD, at)
+        if (repeat != null) setField(id, REPEAT_FIELD, repeat)
+        id
+    }
+
+    fun setReminderDone(id: String, done: Boolean) = setField(id, DONE_FIELD, if (done) "true" else null)
 
     fun setPinned(id: String, pinned: Boolean) = setField(id, PINNED_FIELD, if (pinned) "true" else null)
 

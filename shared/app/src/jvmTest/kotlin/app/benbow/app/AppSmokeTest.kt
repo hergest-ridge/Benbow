@@ -373,6 +373,25 @@ class AppSmokeTest {
     }
 
     @Test
+    fun aNoteTakesAKeepColor() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val id = services.repo.createNote(services.today(), "Список покупок\nхлеб, молоко")
+        services.repo.createNote(services.today(), "Без цвета")
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Список покупок"), 5_000)
+        onNodeWithText("Список покупок").click()
+        waitUntilExactlyOneExists(hasContentDescription("Меню"), 5_000)
+        onNodeWithContentDescription("Меню").click()
+        onNodeWithText("Фон").click()
+        onNodeWithContentDescription("Мятный").click()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.entry(id).first()?.background == "mint" } }
+        waitForIdle()
+        screenshot("31-note-color")
+        onNodeWithContentDescription("Назад").click()
+        waitUntilExactlyOneExists(hasText("Без цвета"), 5_000)
+        screenshot("32-home-note-color")
+    }
+
+    @Test
     fun newEntryOpenedByMistakeLeavesNothing() = runDesktopComposeUiTest(width = 412, height = 860) {
         setContent { BenbowApp(services) }
         waitUntilExactlyOneExists(hasText("Как прошёл день? Пара строк — и он сохранится."))

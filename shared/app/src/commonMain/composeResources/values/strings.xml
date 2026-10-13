@@ -79,6 +79,8 @@
     <string name="tag_remove">Убрать тег %1$s</string>
     <string name="add">Добавить</string>
     <string name="cancel">Отмена</string>
+    <string name="background">Фон</string>
+    <string name="background_none">Без фона</string>
     <string name="appearance">Оформление</string>
     <string name="theme_mode">Тема</string>
     <string-array name="theme_modes">

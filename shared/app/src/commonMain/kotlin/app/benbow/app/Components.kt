@@ -70,7 +70,7 @@ internal fun EntryCard(
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
-        color = colors.surfaceContainerLow,
+        color = swatch(entry.background) ?: colors.surfaceContainerLow,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
     ) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {

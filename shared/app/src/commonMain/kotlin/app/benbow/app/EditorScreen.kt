@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,6 +39,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.benbow.app.resources.Res
+import app.benbow.app.resources.background
+import app.benbow.app.resources.background_none
 import app.benbow.app.resources.comment_hint
 import app.benbow.app.resources.comments
 import app.benbow.app.resources.comments_count
@@ -168,6 +171,8 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
 
     fun setMood(mood: Int?) = withEntry { repo.setMood(it, mood) }
 
+    fun setBackground(color: String?) = withEntry { repo.setBackground(it, color) }
+
     fun addTag(name: String) = withEntry { repo.addTag(it, name) }
 
     fun removeTag(name: String) = withEntry { repo.removeTag(it, name) }
@@ -236,6 +241,9 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     val editor = vm.editor
     val detail = vm.detail
     var menu by remember { mutableStateOf(false) }
+    var pickingBackground by remember { mutableStateOf(false) }
+    // The whole page takes the note's color, as in Keep; the toolbars keep theirs.
+    val noteColor = swatch(detail?.background)
     val comments by vm.commentCount.collectAsStateWithLifecycle()
     val copy = rememberCopy()
     val share = rememberShare()
@@ -247,8 +255,10 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     }
 
     Scaffold(
+        containerColor = noteColor ?: MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = noteColor ?: MaterialTheme.colorScheme.surface),
                 navigationIcon = {
                     BackButton {
                         vm.commit()
@@ -322,6 +332,10 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                     menu = false
                                     if (!share(vm.markdown())) vm.copied()
                                 })
+                                DropdownMenuItem(text = { Text(stringResource(Res.string.background)) }, onClick = {
+                                    menu = false
+                                    pickingBackground = true
+                                })
                                 DropdownMenuItem(text = { Text(stringResource(Res.string.print)) }, onClick = {
                                     menu = false
                                     vm.commit()
@@ -367,6 +381,17 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
             }
             if (detail?.inTrash == true) {
                 Banner(stringResource(Res.string.in_trash_banner), stringResource(Res.string.restore), onAction = vm::restoreFromTrash)
+            }
+            if (pickingBackground) {
+                SwatchPicker(
+                    selected = detail?.background,
+                    noneLabel = stringResource(Res.string.background_none),
+                    onPick = {
+                        vm.setBackground(it)
+                        pickingBackground = false
+                    },
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
             }
             if (vm.reading && editor != null && detail != null && !vm.broken) {
                 val thread by vm.comments.collectAsStateWithLifecycle()

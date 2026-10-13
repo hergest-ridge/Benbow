@@ -49,6 +49,8 @@ data class EntrySummary(
     val favorite: Boolean = false,
     val mood: Int? = null,
     val tags: List<String> = emptyList(),
+    /** A Keep-like note color, one of [SWATCHES]; null = the theme's own. */
+    val background: String? = null,
 )
 
 data class TagCount(val name: String, val uses: Int, val category: String? = null)
@@ -92,6 +94,7 @@ data class EntryDetail(
     /** For comments: the entry they answer. */
     val parentId: String? get() = fields[PARENT_FIELD]
     val mood: Int? get() = fields[MOOD_FIELD]?.toIntOrNull()
+    val background: String? get() = fields[BACKGROUND_FIELD]?.takeIf { it in SWATCHES }
     val tags: List<String> get() = tagsOf(fields)
     val reactions: Set<String> get() = fields.filter {
         it.key.startsWith(REACTION_PREFIX) && it.value != null
@@ -108,6 +111,7 @@ internal const val START_FIELD = "start"
 internal const val AT_FIELD = "at"
 internal const val REPEAT_FIELD = "repeat"
 internal const val DONE_FIELD = "done"
+internal const val BACKGROUND_FIELD = "background"
 
 /** The tag registry (ADR-021): a system entry whose fields are `cat:<tag key>` = category. Fixed id, so devices share it. */
 internal const val TAG_REGISTRY_ID = "system-tags"
@@ -365,6 +369,9 @@ class JournalRepository(
     /** -2 (hard) .. 2 (great), null = not set. */
     fun setMood(id: String, mood: Int?) = setField(id, MOOD_FIELD, mood?.coerceIn(-2, 2)?.toString())
 
+    /** The note's color, one of [SWATCHES] (anything else, or null, clears it). */
+    fun setBackground(id: String, color: String?) = setField(id, BACKGROUND_FIELD, color?.takeIf { it in SWATCHES })
+
     fun addTag(id: String, name: String) {
         val clean = tagName(name)
         if (clean.isNotEmpty()) setField(id, tagKey(clean), clean)
@@ -527,6 +534,7 @@ private fun summaryOf(
         favorite = f[FAVORITE_FIELD] == "true",
         mood = f[MOOD_FIELD]?.toIntOrNull(),
         tags = tagsOf(f),
+        background = f[BACKGROUND_FIELD]?.takeIf { it in SWATCHES },
     )
 }
 

@@ -145,7 +145,7 @@ private fun FeedBubble(
     var picking by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
         Surface(
-            color = colors.surfaceContainerLow,
+            color = swatch(entry.background) ?: colors.surfaceContainerLow,
             shape = RoundedCornerShape(18.dp),
             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).combinedClickable(onClick = onOpen, onLongClick = {
                 picking =

@@ -32,7 +32,7 @@ The server denormalizes the head into `entry_text(entry_id, title, plain_text)` 
 - `tag_category(id, name, color, sort)`: e.g. People, Places, Projects, Emotions.
 - `tag(id, name, category_id?, color?, parent_id? (P2 hierarchy), deleted_at)`. Name is unique case-insensitively within a category.
 - `entry_tag(entry_id, tag_id, present, hlc)`: LWW per pair.
-- Idea (decide later): inline `#hashtags` in text auto-link to tags (`#tag` is plain portable Markdown text).
+- Inline `#hashtags` in text as tags: not wanted for now (owner, 2026-10-13). Tags stay metadata chips.
 - As built (4.3): categories live in the system entry `system-tags` (kind `system`, no revisions, created by a single idempotent `entry.create`), fields `cat:<tag key>` = category; defaults Люди, Места, Проекты, Эмоции. System entries are hidden from lists, search and the export.
 - As built (4.1, ADR-021): the link is the LWW field `tag:<lowercase name>` = display name on the entry; categories and colors (4.3) go to a registry. Reactions: field `reaction:<emoji>`.
 

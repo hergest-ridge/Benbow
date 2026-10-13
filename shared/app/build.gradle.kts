@@ -37,6 +37,10 @@ kotlin {
             implementation(libs.media3.ui)
             implementation(libs.androidx.exifinterface)
         }
+        // Desktop: DWM calls that paint the Windows title bar in the app's colors.
+        jvmMain.dependencies {
+            implementation(libs.jna)
+        }
         // Headless UI smoke test of the whole app on desktop; it also writes screenshots to build/screens.
         jvmTest.dependencies {
             implementation(libs.kotlin.test)

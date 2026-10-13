@@ -1,10 +1,10 @@
 package app.benbow.desktop
 
-import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.Notification
+import androidx.compose.ui.window.TrayState
 import androidx.compose.ui.window.application
 import app.benbow.app.AppServices
-import app.benbow.app.BenbowApp
-import app.benbow.app.appIcon
+import app.benbow.app.BenbowDesktop
 import app.benbow.client.db.BenbowDb
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlinx.coroutines.CoroutineScope
@@ -23,7 +23,11 @@ fun main() {
     }
     val driver = JdbcSqliteDriver("jdbc:sqlite:${File(dir, "benbow.db").absolutePath}", properties, BenbowDb.Schema)
     lateinit var services: AppServices
-    val clock = TrayReminderClock(CoroutineScope(SupervisorJob() + Dispatchers.Default)) { services.rescheduleReminders() }
+    val tray = TrayState()
+    val clock = TrayReminderClock(
+        CoroutineScope(SupervisorJob() + Dispatchers.Default),
+        notify = { tray.sendNotification(Notification("Benbow", it)) },
+    ) { services.rescheduleReminders() }
     services = AppServices(
         driver,
         mediaDir = File(dir, "media"),
@@ -32,9 +36,5 @@ fun main() {
         mediaCacheBytes = 10L * 1024 * 1024 * 1024, // the PC has room; originals open without waiting
         reminderClock = clock,
     )
-    application {
-        Window(onCloseRequest = ::exitApplication, title = "Benbow", icon = appIcon()) {
-            BenbowApp(services)
-        }
-    }
+    application { BenbowDesktop(services, tray) }
 }

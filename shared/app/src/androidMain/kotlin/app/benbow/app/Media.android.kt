@@ -146,3 +146,6 @@ private fun uriFor(context: android.content.Context, file: File): Uri =
 
 private const val MAX_PICK = 20
 private const val MIN_VOICE_MS = 700L
+
+@Composable
+internal actual fun Modifier.attachOnDrop(services: AppServices, entryId: suspend () -> String, onHover: (Boolean) -> Unit): Modifier = this

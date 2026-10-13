@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -17,6 +18,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -47,6 +49,7 @@ import app.benbow.app.resources.comments_count
 import app.benbow.app.resources.conflict_banner
 import app.benbow.app.resources.conflict_choose
 import app.benbow.app.resources.copy_text
+import app.benbow.app.resources.drop_to_attach
 import app.benbow.app.resources.edit
 import app.benbow.app.resources.entry_broken
 import app.benbow.app.resources.favorite_add
@@ -242,6 +245,15 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     val detail = vm.detail
     var menu by remember { mutableStateOf(false) }
     var pickingBackground by remember { mutableStateOf(false) }
+    var dropping by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        services.shortcuts.collect {
+            if (it == Shortcut.Save && !vm.reading) {
+                vm.commit()
+                services.messages.tryEmit(AppMessage.Saved)
+            }
+        }
+    }
     // The whole page takes the note's color, as in Keep; the toolbars keep theirs.
     val noteColor = swatch(detail?.background)
     val comments by vm.commentCount.collectAsStateWithLifecycle()
@@ -255,6 +267,8 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     }
 
     Scaffold(
+        // Files dragged in from the desktop are attached like picked ones.
+        modifier = Modifier.attachOnDrop(services, vm::ensureEntryId) { dropping = it },
         containerColor = noteColor ?: MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
@@ -381,6 +395,19 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
             }
             if (detail?.inTrash == true) {
                 Banner(stringResource(Res.string.in_trash_banner), stringResource(Res.string.restore), onAction = vm::restoreFromTrash)
+            }
+            if (dropping) {
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                ) {
+                    Text(
+                        stringResource(Res.string.drop_to_attach),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
             }
             if (pickingBackground) {
                 SwatchPicker(

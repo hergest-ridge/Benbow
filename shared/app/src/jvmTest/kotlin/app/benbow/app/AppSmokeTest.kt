@@ -403,6 +403,28 @@ class AppSmokeTest {
     }
 
     @Test
+    fun aWideWindowGetsARailAndKeyboardShortcuts() = runDesktopComposeUiTest(width = 1280, height = 820) {
+        services.repo.createNote(services.today(), "Широкое окно")
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Широкое окно"), 5_000)
+        screenshot("34-desktop-wide")
+
+        services.shortcuts.tryEmit(Shortcut.NewEntry)
+        waitUntilExactlyOneExists(hasText("Итоги дня"), 5_000) // the templates of a new, empty entry
+        onNode(hasSetTextAction()).performTextInput("Набрано с клавиатуры")
+        services.shortcuts.tryEmit(Shortcut.Save)
+        waitUntilExactlyOneExists(hasText("Сохранено"), 5_000)
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.journal().first().any { it.title == "Набрано с клавиатуры" } } }
+        screenshot("35-desktop-editor")
+
+        services.shortcuts.tryEmit(Shortcut.Tab(4))
+        waitUntilExactlyOneExists(hasText("Сочетания клавиш"), 5_000)
+        onNodeWithText("Сочетания клавиш").click()
+        waitUntilExactlyOneExists(hasText("Ctrl+N"), 5_000)
+        screenshot("36-shortcuts")
+    }
+
+    @Test
     fun newEntryOpenedByMistakeLeavesNothing() = runDesktopComposeUiTest(width = 412, height = 860) {
         setContent { BenbowApp(services) }
         waitUntilExactlyOneExists(hasText("Как прошёл день? Пара строк — и он сохранится."))

@@ -35,7 +35,7 @@ internal actual fun MediaBar(services: AppServices, entryId: suspend () -> Strin
                 isMultipleMode = true
                 isVisible = true // modal
             }
-            dialog.files.forEach { file -> services.attach(entryId, { file.inputStream() }) { probe(file) } }
+            dialog.files.forEach { file -> services.attach(entryId, { file.inputStream() }) { desktopProbe(file) } }
         }) { Icon(Icons.Attach, title) }
     }
 }
@@ -53,7 +53,7 @@ internal actual fun MediaPlayer(file: File, mime: String, modifier: Modifier) {
     }
 }
 
-private fun probe(file: File): MediaProbe {
+internal fun desktopProbe(file: File): MediaProbe {
     val mime = Files.probeContentType(file.toPath()) ?: "application/octet-stream"
     val kind = kindOf(mime)
     val image = if (kind == "image") runCatching { ImageIO.read(file) }.getOrNull() else null

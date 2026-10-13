@@ -35,12 +35,14 @@ import app.benbow.app.resources.more_export
 import app.benbow.app.resources.more_lock_off
 import app.benbow.app.resources.more_lock_on
 import app.benbow.app.resources.more_reminders
+import app.benbow.app.resources.more_shortcuts
 import app.benbow.app.resources.more_tagline
 import app.benbow.app.resources.more_tags
 import app.benbow.app.resources.more_trash
 import app.benbow.app.resources.palette_names
 import app.benbow.app.resources.reminders
 import app.benbow.app.resources.server
+import app.benbow.app.resources.shortcuts
 import app.benbow.app.resources.tags
 import app.benbow.app.resources.trash
 import org.jetbrains.compose.resources.stringArrayResource
@@ -83,6 +85,11 @@ private fun MoreList(services: AppServices, nav: Navigator) {
         MoreItem(Icons.Label, stringResource(Res.string.tags), stringResource(Res.string.more_tags)) { nav.open(Route.Tags) }
         MoreItem(Icons.Delete, stringResource(Res.string.trash), stringResource(Res.string.more_trash)) { nav.open(Route.Trash) }
         MoreItem(Icons.Download, stringResource(Res.string.export), stringResource(Res.string.more_export)) { nav.open(Route.Export) }
+        if (services.platform == "desktop") {
+            MoreItem(Icons.Keyboard, stringResource(Res.string.shortcuts), stringResource(Res.string.more_shortcuts)) {
+                nav.open(Route.Shortcuts)
+            }
+        }
         val lockMinutes by services.lock.minutes.collectAsStateWithLifecycle()
         val lockLabel = lockMinutes?.let { m -> stringArrayResource(Res.array.lock_choices).getOrNull(AppLock.CHOICES.indexOf(m)) }
         MoreItem(

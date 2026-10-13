@@ -7,16 +7,27 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.ShortNavigationBar
 import androidx.compose.material3.ShortNavigationBarItem
 import androidx.compose.material3.SnackbarHost
@@ -38,6 +49,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -49,6 +62,7 @@ import androidx.navigation3.ui.NavDisplay
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.attach_failed
 import app.benbow.app.resources.copied
+import app.benbow.app.resources.saved
 import app.benbow.app.resources.tab_calendar
 import app.benbow.app.resources.tab_feed
 import app.benbow.app.resources.tab_home
@@ -104,6 +118,8 @@ internal sealed interface Route {
     data object Lock : Route
 
     data object Appearance : Route
+
+    data object Shortcuts : Route
 
     /** The last tab: everything that doesn't need a tab of its own. */
     data object More : Route
@@ -187,10 +203,23 @@ private fun AppRoot(services: AppServices) {
         }
     }
     LaunchedEffect(Unit) {
+        services.shortcuts.collect { shortcut ->
+            if (services.lock.locked.value) return@collect
+            when (shortcut) {
+                Shortcut.NewEntry -> nav.open(Route.Editor(null, services.today(), opened = services.now()))
+                Shortcut.Search -> nav.selectTab(Route.Search)
+                Shortcut.Back -> nav.back()
+                is Shortcut.Tab -> TABS.getOrNull(shortcut.index)?.let { nav.selectTab(it.route) }
+                Shortcut.Save -> Unit // the open editor takes it
+            }
+        }
+    }
+    LaunchedEffect(Unit) {
         services.messages.collect { message ->
             when (message) {
                 is AppMessage.AttachFailed -> snackbar.showSnackbar(getString(Res.string.attach_failed, message.reason))
                 AppMessage.Copied -> snackbar.showSnackbar(getString(Res.string.copied))
+                AppMessage.Saved -> snackbar.showSnackbar(getString(Res.string.saved))
             }
         }
     }
@@ -213,40 +242,71 @@ private fun AppFrame(
     snackbar: SnackbarHostState,
     modifier: Modifier,
 ) {
-    // The tab bar stays put on the top-level screens; the keyboard slides over it and off it again (no blink).
-    // Screens above see the keyboard's inset minus the bar, so a composer still sits right on the keyboard.
+    // Phones: the tab bar stays put at the bottom; the keyboard slides over it and off it again (no blink), and
+    // screens above see the keyboard's inset minus the bar, so a composer still sits right on the keyboard.
+    // Wide windows (desktop, tablets): a rail on the left and the screens centred at a readable width. The tree keeps
+    // the same shape in both, so resizing across the line never rebuilds the screens.
     val top = backStack.lastOrNull()
     val tabs = top in TABS.map { it.route }
     var barHeight by remember { mutableIntStateOf(0) }
     val bar = with(LocalDensity.current) { barHeight.toDp() }
-    Column(modifier.fillMaxSize()) {
-        Box(
-            Modifier.weight(1f).then(
-                if (tabs) {
-                    Modifier.consumeWindowInsets(WindowInsets.navigationBars).consumeWindowInsets(PaddingValues(bottom = bar))
-                } else {
-                    Modifier
-                },
-            ),
-        ) {
-            AppNavigation(services, backStack, nav)
-            SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().imePadding())
-        }
-        if (tabs) {
-            ShortNavigationBar(Modifier.onSizeChanged { barHeight = it.height }) {
-                TABS.forEach { tab ->
-                    val label = stringResource(tab.label)
-                    ShortNavigationBarItem(
-                        selected = top == tab.route,
-                        onClick = { nav.selectTab(tab.route) },
-                        icon = { Icon(tab.icon, label) },
-                        label = { Text(label) },
-                    )
+    BoxWithConstraints(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        val wide = maxWidth >= WIDE
+        Row(Modifier.fillMaxSize()) {
+            if (wide && tabs) {
+                NavigationRail {
+                    Spacer(Modifier.height(8.dp))
+                    TABS.forEach { tab ->
+                        val label = stringResource(tab.label)
+                        NavigationRailItem(
+                            selected = top == tab.route,
+                            onClick = { nav.selectTab(tab.route) },
+                            icon = { Icon(tab.icon, label) },
+                            label = { Text(label) },
+                        )
+                    }
+                }
+            }
+            Column(Modifier.weight(1f).fillMaxHeight()) {
+                val bottomBar = tabs && !wide
+                Box(
+                    Modifier.weight(1f).fillMaxWidth().then(
+                        if (bottomBar) {
+                            Modifier.consumeWindowInsets(WindowInsets.navigationBars).consumeWindowInsets(PaddingValues(bottom = bar))
+                        } else {
+                            Modifier
+                        },
+                    ),
+                    contentAlignment = Alignment.TopCenter,
+                ) {
+                    Box(Modifier.fillMaxHeight().widthIn(max = if (wide) READABLE else Dp.Infinity)) {
+                        AppNavigation(services, backStack, nav)
+                    }
+                    SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().imePadding())
+                }
+                if (bottomBar) {
+                    ShortNavigationBar(Modifier.onSizeChanged { barHeight = it.height }) {
+                        TABS.forEach { tab ->
+                            val label = stringResource(tab.label)
+                            ShortNavigationBarItem(
+                                selected = top == tab.route,
+                                onClick = { nav.selectTab(tab.route) },
+                                icon = { Icon(tab.icon, label) },
+                                label = { Text(label) },
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 }
+
+/** From here a window gets the side rail (Material's "expanded" width). */
+private val WIDE = 840.dp
+
+/** How wide a screen grows in a big window: lines of text stay readable. */
+private val READABLE = 820.dp
 
 @Composable
 private fun AppNavigation(services: AppServices, backStack: SnapshotStateList<Route>, nav: Navigator) {
@@ -277,6 +337,7 @@ private fun AppNavigation(services: AppServices, backStack: SnapshotStateList<Ro
             entry<Route.Export> { ExportScreen(services, nav) }
             entry<Route.Lock> { LockSettingsScreen(services, nav) }
             entry<Route.Appearance> { AppearanceScreen(services, nav) }
+            entry<Route.Shortcuts> { ShortcutsScreen(nav) }
         },
     )
 }

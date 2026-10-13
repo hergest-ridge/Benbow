@@ -54,6 +54,8 @@ sealed interface AppMessage {
     data class AttachFailed(val reason: String) : AppMessage
 
     data object Copied : AppMessage
+
+    data object Saved : AppMessage
 }
 
 /**
@@ -121,6 +123,9 @@ class AppServices(
 
     /** Set by the platform when it is opened for something; the app takes it and clears it. */
     val launch = MutableStateFlow<AppLaunch?>(null)
+
+    /** Key combinations from the window (desktop): the app root and the open editor act on them. */
+    val shortcuts = MutableSharedFlow<Shortcut>(extraBufferCapacity = 8)
 
     @Volatile
     private var reminders: List<ReminderItem> = emptyList()

@@ -79,6 +79,23 @@
     <string name="tag_remove">Убрать тег %1$s</string>
     <string name="add">Добавить</string>
     <string name="cancel">Отмена</string>
+    <string name="saved">Сохранено</string>
+    <string name="drop_to_attach">Отпустите, чтобы прикрепить к записи</string>
+    <string name="shortcuts">Сочетания клавиш</string>
+    <string name="more_shortcuts">Ctrl+N, Ctrl+F и другие</string>
+    <string-array name="shortcut_list">
+        <item>Ctrl+N|Новая запись</item>
+        <item>Ctrl+F|Поиск</item>
+        <item>Ctrl+1 … Ctrl+5|Главная, Лента, Календарь, Поиск, Ещё</item>
+        <item>Ctrl+S|Сохранить версию записи</item>
+        <item>Alt+←|Назад</item>
+        <item>Ctrl+B, I, U, E|Жирный, курсив, подчёркнутый, код</item>
+        <item>Ctrl+Z, Ctrl+Y|Отменить, повторить</item>
+    </string-array>
+    <string name="tray_open">Открыть Benbow</string>
+    <string name="tray_new_entry">Новая запись</string>
+    <string name="tray_quit">Выход</string>
+    <string name="tray_hint">Benbow остаётся в трее: напоминания и синхронизация работают. Выйти можно из меню значка.</string>
     <string name="background">Фон</string>
     <string name="background_none">Без фона</string>
     <string name="appearance">Оформление</string>

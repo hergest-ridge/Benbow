@@ -57,6 +57,10 @@ internal fun AppServices.attach(
 @Composable
 internal expect fun MediaBar(services: AppServices, entryId: suspend () -> String, modifier: Modifier = Modifier)
 
+/** Files dropped on the screen from the desktop are attached; [onHover] tells while some are over it. No-op on Android. */
+@Composable
+internal expect fun Modifier.attachOnDrop(services: AppServices, entryId: suspend () -> String, onHover: (Boolean) -> Unit): Modifier
+
 /** Plays a video or audio file, or offers to open it outside the app where there is no player. */
 @Composable
 internal expect fun MediaPlayer(file: File, mime: String, modifier: Modifier = Modifier)

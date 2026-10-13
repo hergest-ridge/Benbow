@@ -23,7 +23,9 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshots.SnapshotStateList
@@ -33,6 +35,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
@@ -46,6 +49,7 @@ import app.benbow.app.resources.tab_feed
 import app.benbow.app.resources.tab_home
 import app.benbow.app.resources.tab_more
 import app.benbow.app.resources.tab_search
+import app.benbow.client.TagLooks
 import app.benbow.ui.theme.BenbowTheme
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.getString
@@ -139,39 +143,45 @@ private val still = EnterTransition.None togetherWith ExitTransition.None
 /** Root of the Android and desktop apps. */
 @Composable
 fun BenbowApp(services: AppServices) {
+    val looks by remember { services.repo.tagLooks() }.collectAsStateWithLifecycle(TagLooks())
     BenbowTheme {
-        LifecycleEventEffect(Lifecycle.Event.ON_START) { services.sync.foreground = true }
-        LifecycleEventEffect(Lifecycle.Event.ON_STOP) { services.sync.foreground = false }
-        val backStack = remember { mutableStateListOf<Route>(Route.Home) }
-        val nav = remember(backStack) { Navigator(backStack) }
-        val snackbar = remember { SnackbarHostState() }
-        LaunchedEffect(Unit) {
-            services.messages.collect { message ->
-                when (message) {
-                    is AppMessage.AttachFailed -> snackbar.showSnackbar(getString(Res.string.attach_failed, message.reason))
-                    AppMessage.Copied -> snackbar.showSnackbar(getString(Res.string.copied))
-                }
+        CompositionLocalProvider(LocalTagLooks provides looks) { AppRoot(services) }
+    }
+}
+
+@Composable
+private fun AppRoot(services: AppServices) {
+    LifecycleEventEffect(Lifecycle.Event.ON_START) { services.sync.foreground = true }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { services.sync.foreground = false }
+    val backStack = remember { mutableStateListOf<Route>(Route.Home) }
+    val nav = remember(backStack) { Navigator(backStack) }
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(Unit) {
+        services.messages.collect { message ->
+            when (message) {
+                is AppMessage.AttachFailed -> snackbar.showSnackbar(getString(Res.string.attach_failed, message.reason))
+                AppMessage.Copied -> snackbar.showSnackbar(getString(Res.string.copied))
             }
         }
-        // The tab bar shows on the top-level screens and steps aside while the keyboard is up.
-        val top = backStack.lastOrNull()
-        val tabs = top in TABS.map { it.route } && WindowInsets.ime.getBottom(LocalDensity.current) == 0
-        Column(Modifier.fillMaxSize()) {
-            Box(Modifier.weight(1f).then(if (tabs) Modifier.consumeWindowInsets(WindowInsets.navigationBars) else Modifier)) {
-                AppNavigation(services, backStack, nav)
-                SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().imePadding())
-            }
-            if (tabs) {
-                NavigationBar {
-                    TABS.forEach { tab ->
-                        val label = stringResource(tab.label)
-                        NavigationBarItem(
-                            selected = top == tab.route,
-                            onClick = { nav.selectTab(tab.route) },
-                            icon = { Icon(tab.icon, label) },
-                            label = { Text(label) },
-                        )
-                    }
+    }
+    // The tab bar shows on the top-level screens and steps aside while the keyboard is up.
+    val top = backStack.lastOrNull()
+    val tabs = top in TABS.map { it.route } && WindowInsets.ime.getBottom(LocalDensity.current) == 0
+    Column(Modifier.fillMaxSize()) {
+        Box(Modifier.weight(1f).then(if (tabs) Modifier.consumeWindowInsets(WindowInsets.navigationBars) else Modifier)) {
+            AppNavigation(services, backStack, nav)
+            SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().imePadding())
+        }
+        if (tabs) {
+            NavigationBar {
+                TABS.forEach { tab ->
+                    val label = stringResource(tab.label)
+                    NavigationBarItem(
+                        selected = top == tab.route,
+                        onClick = { nav.selectTab(tab.route) },
+                        icon = { Icon(tab.icon, label) },
+                        label = { Text(label) },
+                    )
                 }
             }
         }

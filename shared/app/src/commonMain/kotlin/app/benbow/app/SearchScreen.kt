@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -107,7 +108,12 @@ internal fun SearchScreen(services: AppServices, nav: Navigator) {
                 }
                 items(tags, key = { it.name }) { tag ->
                     val on = query.tag.equals(tag.name, ignoreCase = true)
-                    FilterChip(on, { vm.edit { it.copy(tag = if (on) null else tag.name) } }, { Text("#${tag.name} · ${tag.uses}") })
+                    FilterChip(
+                        on,
+                        { vm.edit { it.copy(tag = if (on) null else tag.name) } },
+                        { Text("${tag.name} · ${tag.uses}") },
+                        colors = FilterChipDefaults.filterChipColors(containerColor = tagColor(tag.name)),
+                    )
                 }
             }
             val found = results ?: return@Column

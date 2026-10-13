@@ -97,15 +97,7 @@ internal fun EntryCard(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                if (entry.tags.isNotEmpty()) {
-                    Text(
-                        entry.tags.joinToString(" ") { "#$it" },
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.primary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+                if (entry.tags.isNotEmpty()) TagRibbon(entry.tags, Modifier.padding(top = 4.dp))
                 if (entry.title.isBlank() && entry.preview.isBlank()) {
                     Text(
                         stringResource(Res.string.untitled),

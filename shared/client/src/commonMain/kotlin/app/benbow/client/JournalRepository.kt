@@ -413,8 +413,25 @@ class JournalRepository(
         counts.filter { it.name.isNotEmpty() }.map { it.copy(category = categories[CATEGORY_PREFIX + tagName(it.name).lowercase()]) }
     }
 
-    /** Puts a tag into a category (null = none). Created once, without revisions, so two devices never conflict over it. */
-    fun setTagCategory(tag: String, category: String?) {
+    /** Own colors, categories and category colors from the tag registry. */
+    fun tagLooks(): Flow<TagLooks> = q.selectEntry(TAG_REGISTRY_ID).asFlow().mapToOneOrNull(context).map { registry ->
+        registry?.let { TagLooks.of(decodeFields(it.fields)) } ?: TagLooks()
+    }
+
+    /** Puts a tag into a category (null = none). */
+    fun setTagCategory(tag: String, category: String?) =
+        setRegistryField(CATEGORY_PREFIX + tagName(tag).lowercase(), category?.trim()?.takeIf { it.isNotEmpty() })
+
+    /** A tag's own color, one of [SWATCHES] (null = as its category). */
+    fun setTagColor(tag: String, color: String?) =
+        setRegistryField(COLOR_PREFIX + tagName(tag).lowercase(), color?.takeIf { it in SWATCHES })
+
+    /** A category's color, one of [SWATCHES] (null = the default). */
+    fun setCategoryColor(category: String, color: String?) =
+        setRegistryField(CATEGORY_COLOR_PREFIX + category.trim().lowercase(), color?.takeIf { it in SWATCHES })
+
+    /** The registry is created once, without revisions, so two devices never conflict over it; its fields are LWW. */
+    private fun setRegistryField(name: String, value: String?) {
         db.transaction {
             if (q.selectEntry(TAG_REGISTRY_ID).executeAsOneOrNull() == null) {
                 val time = now()
@@ -427,7 +444,7 @@ class JournalRepository(
                 )
                 enqueue(CreateEntry(newId(), TAG_REGISTRY_ID, "system", "1970-01-01", time))
             }
-            setField(TAG_REGISTRY_ID, CATEGORY_PREFIX + tagName(tag).lowercase(), category?.trim()?.takeIf { it.isNotEmpty() })
+            setField(TAG_REGISTRY_ID, name, value)
         }
     }
 

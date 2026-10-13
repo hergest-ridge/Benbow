@@ -172,9 +172,7 @@ private fun FeedBubble(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                if (entry.tags.isNotEmpty()) {
-                    Text(entry.tags.joinToString(" ") { "#$it" }, style = MaterialTheme.typography.labelMedium, color = colors.primary)
-                }
+                if (entry.tags.isNotEmpty()) TagRibbon(entry.tags)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     item.reactions.sorted().forEach { emoji ->
                         Surface(

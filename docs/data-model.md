@@ -34,6 +34,7 @@ The server denormalizes the head into `entry_text(entry_id, title, plain_text)` 
 - `entry_tag(entry_id, tag_id, present, hlc)`: LWW per pair.
 - Inline `#hashtags` in text as tags: not wanted for now (owner, 2026-10-13). Tags stay metadata chips.
 - As built (4.3): categories live in the system entry `system-tags` (kind `system`, no revisions, created by a single idempotent `entry.create`), fields `cat:<tag key>` = category; defaults Люди, Места, Проекты, Эмоции. System entries are hidden from lists, search and the export.
+- Tag colors (2026-10-13): registry fields `color:<tag key>` (a tag's own color) and `catcolor:<category, lowercase>` (a category's color). Values are color names from Google Keep's note palette (`coral peach sand mint sage fog storm dusk blossom clay`), never hex; the app maps each name to a light and a dark shade. A tag shows its own color, else its category's (defaults: Люди storm, Места mint, Проекты dusk, Эмоции blossom; other categories get one from the name), else a neutral chip. Tags are drawn as chips without "#".
 - As built (4.1, ADR-021): the link is the LWW field `tag:<lowercase name>` = display name on the entry; categories and colors (4.3) go to a registry. Reactions: field `reaction:<emoji>`.
 
 ## Reactions

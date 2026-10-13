@@ -74,4 +74,31 @@ class CommentsAndTagsTest {
         assertEquals(listOf("Обед с Машей"), phone.repo.journal().first().map { it.title }, "the registry is not a note")
         assertEquals(1, phone.repo.feed().first().size)
     }
+
+    @Test
+    fun tagColorsComeFromTheTagThenItsCategoryAndSync() = runTest {
+        val server = FakeServer()
+        val phone = Device(server, "phone")
+        val desktop = Device(server, "desktop")
+        phone.repo.setTagCategory("Маша", "Люди")
+        phone.repo.setTagCategory("кафе", "Места")
+        phone.repo.setTagCategory("Benbow", "Хобби")
+        phone.repo.setCategoryColor("места", "sand")
+        phone.repo.setTagColor("Маша", "coral")
+        phone.repo.setTagColor("кафе", "not-a-color") // ignored, stays as its category
+        phone.engine.sync()
+        desktop.engine.sync()
+
+        val looks = desktop.repo.tagLooks().first()
+        assertEquals("coral", looks.color("маша"), "a tag's own color wins")
+        assertEquals("sand", looks.color("Кафе"), "then its category's")
+        assertEquals("storm", looks.categoryColor("Люди"), "built-in categories have defaults")
+        assertTrue(looks.color("benbow") in SWATCHES, "other categories get one from the name")
+        assertEquals(null, looks.color("без категории"), "a free tag stays neutral")
+
+        desktop.repo.setTagColor("Маша", null)
+        desktop.engine.sync()
+        phone.engine.sync()
+        assertEquals("storm", phone.repo.tagLooks().first().color("Маша"), "back to the category color")
+    }
 }

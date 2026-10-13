@@ -147,7 +147,7 @@ class AppSmokeTest {
         onNodeWithText("+ Тег").click()
         onNode(hasSetTextAction() and !hasText("Планы", substring = true)).performTextInput("Работа") // the tag field, not the editor
         onNodeWithText("Добавить").click()
-        waitUntilExactlyOneExists(hasText("#Работа"), 5_000)
+        waitUntilExactlyOneExists(hasText("Работа"), 5_000)
         screenshot("09-editor-metadata")
 
         onNodeWithContentDescription("Назад").performClick()
@@ -201,7 +201,7 @@ class AppSmokeTest {
         setContent { BenbowApp(services) }
         waitUntilExactlyOneExists(hasText("Обед с Машей"), 5_000)
         onNodeWithText("Обед с Машей").click()
-        waitUntilExactlyOneExists(hasText("#Маша"), 5_000)
+        waitUntilExactlyOneExists(hasText("Маша"), 5_000)
         onNodeWithContentDescription("Меню").click()
         onNodeWithText("Комментарии").click()
         waitUntilExactlyOneExists(hasText("Комментарий…"), 5_000)
@@ -212,15 +212,17 @@ class AppSmokeTest {
         screenshot("14-comments")
 
         onNodeWithContentDescription("Назад").click()
-        waitUntilExactlyOneExists(hasText("#Маша"), 5_000)
+        waitUntilExactlyOneExists(hasText("Маша"), 5_000)
         onNodeWithContentDescription("Назад").click()
         waitUntilExactlyOneExists(hasText("Добр", substring = true), 5_000)
         onNodeWithText("Ещё").click()
         onNodeWithText("Теги").click()
-        waitUntilExactlyOneExists(hasText("#Маша · 1"), 5_000)
-        onNodeWithText("#Маша · 1").click()
+        waitUntilExactlyOneExists(hasText("Маша"), 5_000)
+        onNodeWithText("Маша").click()
         onNodeWithText("Люди").click()
         waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.tags().first().single().category == "Люди" } }
+        onNodeWithContentDescription("Коралловый").click()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.tagLooks().first().color("Маша") == "coral" } }
         waitForIdle()
         screenshot("15-tags")
         assertEquals(1L, runBlocking { services.repo.commentCount(entry).first() })

@@ -13,9 +13,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.InputChip
+import androidx.compose.material3.InputChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -68,8 +70,10 @@ internal fun MetadataRow(
                 InputChip(
                     selected = false,
                     onClick = { onRemoveTag(tag) },
-                    label = { Text("#$tag") },
+                    label = { Text(tag) },
                     trailingIcon = { Icon(Icons.Close, remove, Modifier.size(16.dp)) },
+                    colors = InputChipDefaults.inputChipColors(containerColor = tagColor(tag)),
+                    border = null,
                 )
             }
             AssistChip(onClick = { adding = true }, label = { Text("+ " + stringResource(Res.string.tag_add)) })
@@ -96,11 +100,19 @@ internal fun MetadataRow(
     }
 }
 
-/** A tag as Keep shows labels: a quiet rounded chip, no "#". */
+/** A tag as Keep shows labels: a rounded chip in the tag's color, no "#". */
 @Composable
 internal fun TagChip(name: String, modifier: Modifier = Modifier) {
-    Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest, shape = RoundedCornerShape(8.dp), modifier = modifier) {
+    Surface(color = tagColor(name), shape = RoundedCornerShape(8.dp), modifier = modifier) {
         Text(name, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
+    }
+}
+
+/** An entry's tags on a line of their own under the text. */
+@Composable
+internal fun TagRibbon(tags: List<String>, modifier: Modifier = Modifier) {
+    FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        tags.forEach { TagChip(it) }
     }
 }
 
@@ -130,7 +142,14 @@ private fun TagInput(known: List<TagCount>, onDone: () -> Unit, onAdd: (String) 
             TextButton({ add(clean) }, enabled = clean.isNotEmpty()) { Text(stringResource(Res.string.add)) }
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            suggestions.forEach { tag -> SuggestionChip(onClick = { add(tag.name) }, label = { Text("#${tag.name}") }) }
+            suggestions.forEach { tag ->
+                SuggestionChip(
+                    onClick = { add(tag.name) },
+                    label = { Text(tag.name) },
+                    colors = SuggestionChipDefaults.suggestionChipColors(containerColor = tagColor(tag.name)),
+                    border = null,
+                )
+            }
         }
     }
 }

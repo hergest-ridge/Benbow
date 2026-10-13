@@ -131,6 +131,22 @@
     <string name="tags">Теги</string>
     <string name="tags_empty">Тегов пока нет. Добавьте их в записи — кнопкой «+ Тег».</string>
     <string name="tags_uncategorized">Без категории</string>
+    <string name="tag_category">Категория</string>
+    <string name="tag_color">Цвет</string>
+    <string name="color_default">Обычный</string>
+    <string name="color_as_category">Как у категории</string>
+    <string-array name="swatch_names">
+        <item>Коралловый</item>
+        <item>Персиковый</item>
+        <item>Песочный</item>
+        <item>Мятный</item>
+        <item>Шалфей</item>
+        <item>Туманный</item>
+        <item>Грозовой</item>
+        <item>Сумеречный</item>
+        <item>Цветочный</item>
+        <item>Глиняный</item>
+    </string-array>
     <string-array name="tag_categories">
         <item>Люди</item>
         <item>Места</item>

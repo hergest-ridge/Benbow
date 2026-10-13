@@ -80,6 +80,11 @@
     <string name="add">Добавить</string>
     <string name="cancel">Отмена</string>
     <string name="attachments">Вложения</string>
+    <string name="voice_note">Голосовое сообщение</string>
+    <string name="audio_play">Слушать</string>
+    <string name="audio_pause">Пауза</string>
+    <string name="voice_tap_to_finish">нажмите ещё раз, чтобы сохранить</string>
+    <string name="voice_discard">Не сохранять</string>
     <string name="post_section">Посты</string>
     <string name="post_media">Фото без места в тексте</string>
     <string-array name="post_media_names">
@@ -215,7 +220,7 @@
         <item quantity="many">В этом месяце вы писали %1$d дней</item>
         <item quantity="other">В этом месяце вы писали %1$d дня</item>
     </plurals>
-    <string name="feed_title">Лента</string>
+    <string name="feed_title">Моя лента</string>
     <string name="feed_empty">Здесь будет ваша лента. Заметки с главной появятся тут.</string>
     <string name="pin">Закрепить</string>
     <string name="unpin">Открепить</string>

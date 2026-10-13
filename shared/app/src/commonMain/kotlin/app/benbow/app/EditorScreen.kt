@@ -552,5 +552,5 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     }
 }
 
-/** Attachments that go into the text when added while writing; sounds and files stay in the ribbon. */
-private val INLINE_KINDS = setOf("image", "video")
+/** Attachments that go into the text when added while writing (pictures, videos, sounds); files stay in the ribbon. */
+private val INLINE_KINDS = setOf("image", "video", "voice", "audio")

@@ -645,6 +645,26 @@ class AppSmokeTest {
     }
 
     @Test
+    fun voiceNotesShowAsPlayers() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val entry = services.repo.createNote(services.today(), "Мысли по дороге")
+        runBlocking {
+            val sound = ByteArray(4_000) { (it % 251).toByte() }
+            services.attach({ entry }, { sound.inputStream() }) {
+                MediaProbe("audio/mp4", "voice-1.m4a", "voice", durationMs = 42_000, capturedAt = 0)
+            }.join()
+        }
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Ещё"), 5_000)
+        onNodeWithText("Лента").click()
+        waitUntilExactlyOneExists(hasText("Голосовое сообщение"), 5_000)
+        waitUntilExactlyOneExists(hasText("0:42"), 5_000)
+        screenshot("49-feed-voice")
+        onNodeWithText("Мысли по дороге").click()
+        waitUntilExactlyOneExists(hasText("Голосовое сообщение"), 5_000)
+        screenshot("50-post-voice")
+    }
+
+    @Test
     fun newEntryOpenedByMistakeLeavesNothing() = runDesktopComposeUiTest(width = 412, height = 860) {
         setContent { BenbowApp(services) }
         waitUntilExactlyOneExists(hasText("Как прошёл день? Пара строк — и он сохранится."))

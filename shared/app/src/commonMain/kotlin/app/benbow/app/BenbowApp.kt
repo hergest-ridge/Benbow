@@ -173,7 +173,7 @@ private val still = EnterTransition.None togetherWith ExitTransition.None
 fun BenbowApp(services: AppServices) {
     val looks by remember { services.repo.tagLooks() }.collectAsStateWithLifecycle(TagLooks())
     AppTheme(services) {
-        CompositionLocalProvider(LocalTagLooks provides looks) { AppRoot(services) }
+        CompositionLocalProvider(LocalTagLooks provides looks, LocalAudio provides rememberAudioPlayback()) { AppRoot(services) }
     }
 }
 

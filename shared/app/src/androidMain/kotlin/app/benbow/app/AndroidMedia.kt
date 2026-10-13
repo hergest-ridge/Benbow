@@ -155,4 +155,7 @@ internal class VoiceRecorder(private val context: Context) {
     fun cancel() {
         stop()?.first?.delete()
     }
+
+    /** How long the current recording runs, for the timer. */
+    fun elapsedMs(): Long = if (recording) SystemClock.elapsedRealtime() - startedAt else 0
 }

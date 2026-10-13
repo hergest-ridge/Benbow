@@ -66,6 +66,8 @@ data class FeedItem(
     val media: List<AttachmentState> = emptyList(),
     /** The document itself (Benbow Document JSON), for the feed's light formatting. */
     val body: String = "",
+    /** Voice notes and sounds, in gallery order. */
+    val audio: List<AttachmentState> = emptyList(),
 )
 
 /** A calendar day: how many entries and their average mood (-2..2, null when no mood was set). */
@@ -446,8 +448,10 @@ class JournalRepository(
                 plainText(body).take(FEED_TEXT_MAX)
             }
             val reactions = decodeFields(fields).filter { it.key.startsWith(REACTION_PREFIX) && it.value != null }.keys
-            val media = galleryOrder(decodeAttachments(attachments).values, body).filter { it.meta.kind in VISUAL_KINDS }
-            FeedItem(summary, kind, text, reactions.map { it.removePrefix(REACTION_PREFIX) }.toSet(), comments.toInt(), media, body)
+            val gallery = galleryOrder(decodeAttachments(attachments).values, body)
+            val media = gallery.filter { it.meta.kind in VISUAL_KINDS }
+            val audio = gallery.filter { it.meta.kind == "voice" || it.meta.kind == "audio" }
+            FeedItem(summary, kind, text, reactions.map { it.removePrefix(REACTION_PREFIX) }.toSet(), comments.toInt(), media, body, audio)
         }.asFlow().mapToList(context)
 
     /** Builds the search index after an update changed it (or on the first start); quick otherwise. */

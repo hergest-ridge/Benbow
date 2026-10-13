@@ -74,7 +74,7 @@ internal fun AppearanceScreen(services: AppServices, nav: Navigator) {
             }
             Title(stringResource(Res.string.feed_section))
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
+                Column(Modifier.weight(1f).padding(end = 16.dp)) {
                     Text(stringResource(Res.string.feed_cards), style = MaterialTheme.typography.bodyLarge)
                     Text(
                         stringResource(Res.string.feed_cards_hint),

@@ -175,7 +175,10 @@ private fun Reactions(chosen: Set<String>, onReact: (String, Boolean) -> Unit, m
 internal fun CommentMedia(services: AppServices, comment: Comment, onOpen: (attachmentId: String) -> Unit) {
     if (comment.media.isEmpty()) return
     val third = with(LocalDensity.current) { (LocalWindowInfo.current.containerSize.width / 3).toDp() }
+    val (sounds, rest) = comment.media.partition { it.meta.kind == "voice" || it.meta.kind == "audio" }
+    sounds.forEach { AudioRow(services.media, it) }
+    if (rest.isEmpty()) return
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        comment.media.forEach { attachment -> MediaThumb(services.media, attachment, third) { onOpen(attachment.meta.id) } }
+        rest.forEach { attachment -> MediaThumb(services.media, attachment, third) { onOpen(attachment.meta.id) } }
     }
 }

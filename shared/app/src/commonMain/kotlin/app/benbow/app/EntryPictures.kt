@@ -42,6 +42,7 @@ internal class EntryPictures(
 
     override fun pictureHeight(atom: Atom.Attachment, width: Dp): Dp {
         val meta = find(atom)?.meta ?: return 48.dp
+        if (meta.kind == "voice" || meta.kind == "audio") return 72.dp
         if (meta.kind != "image" && meta.kind != "video") return 64.dp
         val w = meta.width ?: 0
         val h = meta.height ?: 0
@@ -65,6 +66,10 @@ internal class EntryPictures(
                 return@Box
             }
             val meta = attachment.meta
+            if (meta.kind == "voice" || meta.kind == "audio") {
+                AudioRow(services.media, attachment, Modifier.align(Alignment.Center))
+                return@Box
+            }
             Box(
                 Modifier.fillMaxSize().clip(shape).background(colors.surfaceContainerHigh).clickable { onOpen(meta.id) },
                 contentAlignment = Alignment.Center,

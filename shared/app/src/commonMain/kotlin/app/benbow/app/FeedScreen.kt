@@ -188,14 +188,14 @@ private fun FeedPost(
             ) {
                 Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (item.media.isNotEmpty()) MediaCarousel(services.media, item.media, onOpenMedia)
-                    PostBody(item, expanded, onExpand, onComments, onReact)
+                    PostBody(services, item, expanded, onExpand, onComments, onReact)
                 }
             }
         } else {
             Column(Modifier.fillMaxWidth().background(tint ?: colors.background).then(open)) {
                 if (item.media.isNotEmpty()) MediaCarousel(services.media, item.media, onOpenMedia, rounded = false)
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    PostBody(item, expanded, onExpand, onComments, onReact)
+                    PostBody(services, item, expanded, onExpand, onComments, onReact)
                 }
                 HorizontalDivider(Modifier.padding(top = 4.dp), thickness = 0.5.dp, color = colors.outlineVariant)
             }
@@ -220,10 +220,18 @@ private fun FeedPost(
 
 /** The text (lightly formatted), tags, and a line of reactions, comments, mood and time. */
 @Composable
-private fun PostBody(item: FeedItem, expanded: Boolean, onExpand: () -> Unit, onComments: () -> Unit, onReact: (String, Boolean) -> Unit) {
+private fun PostBody(
+    services: AppServices,
+    item: FeedItem,
+    expanded: Boolean,
+    onExpand: () -> Unit,
+    onComments: () -> Unit,
+    onReact: (String, Boolean) -> Unit,
+) {
     val colors = MaterialTheme.colorScheme
     val entry = item.summary
     FeedText(item.body, expanded, onExpand)
+    item.audio.forEach { AudioRow(services.media, it) }
     if (entry.tags.isNotEmpty()) TagRibbon(entry.tags)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         item.reactions.sorted().forEach { emoji ->

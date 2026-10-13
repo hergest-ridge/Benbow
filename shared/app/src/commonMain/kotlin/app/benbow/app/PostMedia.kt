@@ -56,7 +56,15 @@ internal fun PostMedia(
                 PostMedia.Strip -> LargeStrip(services, visual, onOpen)
             }
         }
-        other.forEach { FileRow(it) { onOpen(it) } }
+        other.forEach {
+            if (it.meta.kind == "voice" ||
+                it.meta.kind == "audio"
+            ) {
+                AudioRow(services.media, it)
+            } else {
+                FileRow(it) { onOpen(it) }
+            }
+        }
     }
 }
 

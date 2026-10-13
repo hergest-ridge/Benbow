@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -46,6 +47,9 @@ import app.benbow.app.resources.media_gallery
 import app.benbow.app.resources.media_mic_denied
 import app.benbow.app.resources.media_recording
 import app.benbow.app.resources.media_voice
+import app.benbow.app.resources.voice_discard
+import app.benbow.app.resources.voice_tap_to_finish
+import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 import java.io.File
 
@@ -71,8 +75,23 @@ internal actual fun MediaBar(services: AppServices, entryId: suspend () -> Strin
     }
     val recorder = remember { VoiceRecorder(context) }
     var denied by remember { mutableStateOf(false) }
+    // A tap starts a recording that runs until the next tap (hands free); holding records only while held.
+    var locked by remember { mutableStateOf(false) }
     val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> denied = !granted }
-    DisposableEffect(recorder) { onDispose { recorder.cancel() } }
+    val keep: (Boolean) -> Unit = { save ->
+        locked = false
+        val result = recorder.stop()
+        if (!save || result == null || result.second < MIN_VOICE_MS) {
+            result?.first?.delete()
+        } else {
+            val (file, duration) = result
+            services.attach(entryId, { file.inputStream() }, onAttached = { file.delete() }) {
+                MediaProbe("audio/mp4", file.name, "voice", durationMs = duration, capturedAt = System.currentTimeMillis())
+            }
+        }
+    }
+    // Leaving the screen mid-recording keeps what was said rather than dropping it.
+    DisposableEffect(recorder) { onDispose { if (recorder.recording) keep(true) } }
 
     Row(modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton({ pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }) {
@@ -83,11 +102,16 @@ internal actual fun MediaBar(services: AppServices, entryId: suspend () -> Strin
             photoPath = file.path
             camera.launch(uriFor(context, file))
         }) { Icon(Icons.Camera, stringResource(Res.string.media_camera)) }
-        // Hold to record, release to keep (Telegram-style); a tap shorter than MIN_VOICE_MS is dropped.
+        // Hold to record and release to keep (Telegram-style), or tap to start and tap again to keep.
         Box(
             Modifier.size(48.dp).pointerInput(recorder) {
                 awaitEachGesture {
-                    awaitFirstDown()
+                    val down = awaitFirstDown()
+                    if (locked) {
+                        waitForUpOrCancellation()
+                        keep(true)
+                        return@awaitEachGesture
+                    }
                     if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                         askMic.launch(Manifest.permission.RECORD_AUDIO)
                         waitForUpOrCancellation()
@@ -96,14 +120,10 @@ internal actual fun MediaBar(services: AppServices, entryId: suspend () -> Strin
                     if (!recorder.start()) return@awaitEachGesture
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     val up = waitForUpOrCancellation()
-                    val result = recorder.stop()
-                    if (up == null || result == null || result.second < MIN_VOICE_MS) {
-                        result?.first?.delete()
-                        return@awaitEachGesture
-                    }
-                    val (file, duration) = result
-                    services.attach(entryId, { file.inputStream() }, onAttached = { file.delete() }) {
-                        MediaProbe("audio/mp4", file.name, "voice", durationMs = duration, capturedAt = System.currentTimeMillis())
+                    if (up != null && up.uptimeMillis - down.uptimeMillis < TAP_MS) {
+                        locked = true // a tap: keep recording, hands free, until the next tap
+                    } else {
+                        keep(up != null)
                     }
                 }
             },
@@ -116,11 +136,22 @@ internal actual fun MediaBar(services: AppServices, entryId: suspend () -> Strin
             )
         }
         when {
-            recorder.recording -> Text(
-                stringResource(Res.string.media_recording),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
+            recorder.recording -> {
+                val elapsed by produceState(0L, recorder.recording) {
+                    while (recorder.recording) {
+                        value = recorder.elapsedMs()
+                        delay(200)
+                    }
+                }
+                Text(
+                    "● ${durationLabel(elapsed)}" + if (locked) " · " + stringResource(Res.string.voice_tap_to_finish) else "",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f),
+                )
+                if (locked) IconButton({ keep(false) }) { Icon(Icons.Close, stringResource(Res.string.voice_discard)) }
+            }
 
             denied -> Text(stringResource(Res.string.media_mic_denied), style = MaterialTheme.typography.labelSmall)
         }
@@ -146,6 +177,9 @@ private fun uriFor(context: android.content.Context, file: File): Uri =
 
 private const val MAX_PICK = 20
 private const val MIN_VOICE_MS = 700L
+
+/** A press shorter than this is a tap: the recording goes on hands free. */
+private const val TAP_MS = 350L
 
 @Composable
 internal actual fun Modifier.attachOnDrop(services: AppServices, entryId: suspend () -> String, onHover: (Boolean) -> Unit): Modifier = this

@@ -38,6 +38,7 @@ import app.benbow.app.resources.comments_empty
 import app.benbow.app.resources.reaction_add
 import app.benbow.client.Comment
 import app.benbow.client.EntryDetail
+import app.benbow.client.placedIn
 import app.benbow.ui.editor.AtomViews
 import app.benbow.ui.editor.BenbowEditor
 import app.benbow.ui.editor.EditorState
@@ -73,7 +74,11 @@ internal fun PostView(
                 detail.tags.forEach { TagChip(it) }
             }
         }
-        if (ribbon) AttachmentStrip(services.media, detail.attachments) { onOpenMedia(it.meta.id) }
+        if (ribbon) {
+            AttachmentStrip(services.media, detail.attachments, onOpen = {
+                onOpenMedia(it.meta.id)
+            }, placed = placedIn(detail.body).toSet())
+        }
         BenbowEditor(
             state = editor,
             readOnly = true,

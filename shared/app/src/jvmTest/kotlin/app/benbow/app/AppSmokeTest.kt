@@ -565,6 +565,37 @@ class AppSmokeTest {
     }
 
     @Test
+    fun attachmentsReorderByLongPressAndDrag() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val entry = services.repo.createNote(services.today(), "Три снимка")
+        runBlocking {
+            for (name in listOf("A.jpg", "B.jpg", "C.jpg")) {
+                val bytes = picture(640, 480)
+                services.attach({ entry }, { bytes.inputStream() }) { MediaProbe("image/jpeg", name, "image", 640, 480) }.join()
+            }
+        }
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Три снимка"), 5_000)
+        onNodeWithText("Три снимка").click()
+        waitUntilExactlyOneExists(hasContentDescription("A.jpg"), 5_000)
+        onNodeWithContentDescription("A.jpg").performTouchInput {
+            down(center)
+            move(delayMillis = 1_000) // held still: a long press lifts it
+            repeat(8) { moveBy(Offset(10f, 0f), delayMillis = 16) } // past the middle of B, not of C
+            up()
+        }
+        runBlocking { delay(500) }
+        waitForIdle()
+        assertEquals(
+            listOf("B.jpg", "A.jpg", "C.jpg"),
+            runBlocking {
+                services.repo.entry(entry).first()!!.attachments.map { it.meta.name }
+            },
+        )
+        waitForIdle()
+        screenshot("44-ribbon-reordered")
+    }
+
+    @Test
     fun newEntryOpenedByMistakeLeavesNothing() = runDesktopComposeUiTest(width = 412, height = 860) {
         setContent { BenbowApp(services) }
         waitUntilExactlyOneExists(hasText("Как прошёл день? Пара строк — и он сохранится."))

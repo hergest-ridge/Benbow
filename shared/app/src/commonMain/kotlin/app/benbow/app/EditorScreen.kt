@@ -190,6 +190,8 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
 
     fun moveTo(moment: LocalDateTime) = withEntry { repo.moveTo(it, moment) }
 
+    fun moveAttachment(id: String, after: String?, before: String?) = withEntry { repo.moveAttachment(it, id, after, before) }
+
     fun setBackground(color: String?) = withEntry { repo.setBackground(it, color) }
 
     fun addTag(name: String) = withEntry { repo.addTag(it, name) }
@@ -513,7 +515,13 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                 )
             }
             if (ribbon && detail != null) {
-                AttachmentStrip(services.media, attachments) { nav.open(Route.Media(detail.id, it.meta.id)) }
+                AttachmentStrip(
+                    services.media,
+                    attachments,
+                    onOpen = { nav.open(Route.Media(detail.id, it.meta.id)) },
+                    placed = inline,
+                    onMove = vm::moveAttachment,
+                )
             }
             when {
                 vm.broken -> Text(

@@ -186,7 +186,7 @@ class JournalRepository(
                 fields = decodeFields(it.fields),
                 conflictHeads = ClientJson.decodeFromString(it.conflict_heads),
                 hasDraft = draft != null,
-                attachments = decodeAttachments(it.attachments).values.filter { a -> a.present }.sortedBy { a -> a.position },
+                attachments = galleryOrder(decodeAttachments(it.attachments).values, draft?.body ?: it.body),
             )
         }
     }
@@ -308,6 +308,29 @@ class JournalRepository(
         }
     }
 
+    /**
+     * Puts an attachment between two others in the hand-made order ([after] / [before], null = that end). Pictures
+     * placed in the text keep the text's order; this only orders the rest.
+     */
+    fun moveAttachment(entryId: String, attachmentId: String, after: String?, before: String?) {
+        db.transaction {
+            val entry = q.selectEntry(entryId).executeAsOneOrNull() ?: return@transaction
+            val current = decodeAttachments(entry.attachments)
+            val state = current[attachmentId] ?: return@transaction
+            val low = after?.let { current[it]?.position }
+            val high = before?.let { current[it]?.position }
+            val position = when {
+                low != null && high != null -> (low + high) / 2
+                low != null -> low + 1
+                high != null -> high - 1
+                else -> return@transaction
+            }
+            val moved = state.copy(position = position, hlc = clock.next())
+            enqueue(PutAttachment(newId(), entryId, moved.meta, moved.position, moved.caption, moved.present, moved.hlc))
+            putAttachments(entryId, current + (attachmentId to moved))
+        }
+    }
+
     private fun putAttachments(entryId: String, attachments: Map<String, AttachmentState>) {
         val (count, cover) = mediaSummary(attachments)
         q.updateAttachments(ClientJson.encodeToString(attachmentsSerializer, attachments), count.toLong(), cover, now(), entryId)
@@ -324,7 +347,7 @@ class JournalRepository(
 
     fun comments(parentId: String): Flow<List<Comment>> =
         q.commentsOf(parentId) { id, day, createdAt, title, preview, conflictHeads, mediaCount, cover, fields, body, attachments ->
-            val media = decodeAttachments(attachments).values.filter { it.present }.sortedBy { it.position }
+            val media = galleryOrder(decodeAttachments(attachments).values, body)
             Comment(summaryOf(id, day, createdAt, title, preview, conflictHeads, mediaCount, cover, fields), plainText(body), media)
         }.asFlow().mapToList(context)
 
@@ -423,7 +446,7 @@ class JournalRepository(
                 plainText(body).take(FEED_TEXT_MAX)
             }
             val reactions = decodeFields(fields).filter { it.key.startsWith(REACTION_PREFIX) && it.value != null }.keys
-            val media = decodeAttachments(attachments).values.filter { it.present && it.meta.kind in VISUAL_KINDS }.sortedBy { it.position }
+            val media = galleryOrder(decodeAttachments(attachments).values, body).filter { it.meta.kind in VISUAL_KINDS }
             FeedItem(summary, kind, text, reactions.map { it.removePrefix(REACTION_PREFIX) }.toSet(), comments.toInt(), media, body)
         }.asFlow().mapToList(context)
 

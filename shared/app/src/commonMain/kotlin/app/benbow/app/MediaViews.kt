@@ -2,9 +2,11 @@ package app.benbow.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -30,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -42,15 +46,20 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.attachments
+import app.benbow.app.resources.in_text
 import app.benbow.client.MediaStore
 import app.benbow.core.sync.AttachmentState
 import coil3.compose.AsyncImage
@@ -91,7 +100,8 @@ internal val AttachmentState.visual: String? get() = meta.previewSha256 ?: meta.
 internal fun MediaThumb(media: MediaStore, attachment: AttachmentState, size: Dp, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Box(
-        Modifier.size(size).clip(RoundedCornerShape(12.dp)).background(colors.surfaceContainerHigh).clickable(onClick = onClick),
+        Modifier.size(size).clip(RoundedCornerShape(12.dp)).background(colors.surfaceContainerHigh).clickable(onClick = onClick)
+            .semantics { contentDescription = attachment.meta.name ?: attachment.meta.kind },
         contentAlignment = Alignment.Center,
     ) {
         val visual = attachment.visual
@@ -133,14 +143,96 @@ private fun Badge(icon: androidx.compose.ui.graphics.vector.ImageVector, duratio
     }
 }
 
-/** The entry's attachments as a row of thumbnails above the text. */
+/**
+ * The entry's attachments as a row of thumbnails above the text, in gallery order. Those placed in the text come first
+ * (marked, in the text's order); the rest can be put in order by a long press and drag ([onMove] gets the item and its
+ * new neighbours), when the entry is being edited.
+ */
 @Composable
-internal fun AttachmentStrip(media: MediaStore, attachments: List<AttachmentState>, onOpen: (AttachmentState) -> Unit) {
+internal fun AttachmentStrip(
+    media: MediaStore,
+    attachments: List<AttachmentState>,
+    onOpen: (AttachmentState) -> Unit,
+    placed: Set<String> = emptySet(),
+    onMove: ((id: String, after: String?, before: String?) -> Unit)? = null,
+) {
     if (attachments.isEmpty()) return
-    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(attachments, key = { it.meta.id }) { attachment -> MediaThumb(media, attachment, 96.dp) { onOpen(attachment) } }
+    val fixed = attachments.filter { it.meta.id in placed }
+    val loose = attachments.filter { it.meta.id !in placed }
+    var order by remember(loose.map { it.meta.id }) { mutableStateOf(loose) }
+    var dragging by remember { mutableStateOf<String?>(null) }
+    var dragX by remember { mutableFloatStateOf(0f) }
+    val step = with(LocalDensity.current) { (THUMB + GAP).toPx() }
+    val haptics = LocalHapticFeedback.current
+    val inText = stringResource(Res.string.in_text)
+    Row(
+        Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(GAP),
+    ) {
+        fixed.forEach { attachment ->
+            Box {
+                MediaThumb(media, attachment, THUMB) { onOpen(attachment) }
+                Chip(inText, Modifier.align(Alignment.BottomStart).padding(4.dp))
+            }
+        }
+        // Keyed, so a thumbnail keeps its gesture while it changes places.
+        order.forEach { attachment ->
+            key(attachment.meta.id) {
+                val id = attachment.meta.id
+                val lifted = id == dragging
+                val drag = if (onMove == null) {
+                    Modifier
+                } else {
+                    Modifier.pointerInput(id) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                dragging = id
+                                dragX = 0f
+                            },
+                            onDrag = { change, amount ->
+                                change.consume()
+                                dragX += amount.x
+                                val i = order.indexOfFirst { it.meta.id == id }
+                                if (dragX > step / 2 && i < order.lastIndex) {
+                                    order = order.toMutableList().apply { add(i + 1, removeAt(i)) }
+                                    dragX -= step
+                                } else if (dragX < -step / 2 && i > 0) {
+                                    order = order.toMutableList().apply { add(i - 1, removeAt(i)) }
+                                    dragX += step
+                                }
+                            },
+                            onDragEnd = {
+                                val i = order.indexOfFirst { it.meta.id == id }
+                                if (order.map { it.meta.id } != loose.map { it.meta.id }) {
+                                    onMove(id, order.getOrNull(i - 1)?.meta?.id, order.getOrNull(i + 1)?.meta?.id)
+                                }
+                                dragging = null
+                                dragX = 0f
+                            },
+                            onDragCancel = {
+                                order = loose
+                                dragging = null
+                                dragX = 0f
+                            },
+                        )
+                    }
+                }
+                Box(
+                    Modifier.zIndex(if (lifted) 1f else 0f).graphicsLayer {
+                        translationX = if (lifted) dragX else 0f
+                        val scale = if (lifted) 1.06f else 1f
+                        scaleX = scale
+                        scaleY = scale
+                    }.then(drag),
+                ) { MediaThumb(media, attachment, THUMB) { onOpen(attachment) } }
+            }
+        }
     }
 }
+
+private val THUMB = 96.dp
+private val GAP = 8.dp
 
 /** A cover in the journal list, with "+N" when the entry has more. */
 @Composable

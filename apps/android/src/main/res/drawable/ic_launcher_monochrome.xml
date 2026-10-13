@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Themed icon (Android 13+): the lantern's outline and flame in one color. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M54,23.5a5,5 0,1 1,0 10a5,5 0,1 1,0 -10z"
+        android:strokeWidth="2.6"
+        android:strokeColor="#FFFFFFFF" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M47,32.5h14v2.5h-14zM44,42l5.5,-7h9l5.5,7zM43,67h22l-3,6h-16zM46.5,73h15v2.5h-15zM54,47c3,4 5,7 5,10a5,5 0,0 1,-10 0c0,-3 2,-6 5,-10z" />
+    <path
+        android:pathData="M47.5,42h13a2.5,2.5 0,0 1,2.5 2.5v20a2.5,2.5 0,0 1,-2.5 2.5h-13a2.5,2.5 0,0 1,-2.5 -2.5v-20a2.5,2.5 0,0 1,2.5 -2.5z"
+        android:strokeWidth="2.4"
+        android:strokeColor="#FFFFFFFF" />
+</vector>

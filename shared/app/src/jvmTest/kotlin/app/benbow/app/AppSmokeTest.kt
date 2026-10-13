@@ -1,5 +1,6 @@
 package app.benbow.app
 
+import androidx.compose.foundation.layout.size
 import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -20,6 +21,7 @@ import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.test.waitUntilExactlyOneExists
+import androidx.compose.ui.unit.dp
 import app.benbow.client.Prompts
 import app.benbow.client.db.BenbowDb
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
@@ -389,6 +391,15 @@ class AppSmokeTest {
         onNodeWithContentDescription("Назад").click()
         waitUntilExactlyOneExists(hasText("Без цвета"), 5_000)
         screenshot("32-home-note-color")
+    }
+
+    @Test
+    fun theIconRenders() = runDesktopComposeUiTest(width = 220, height = 220) {
+        setContent {
+            androidx.compose.foundation.Image(appIcon(), null, androidx.compose.ui.Modifier.size(192.dp))
+        }
+        waitForIdle()
+        screenshot("33-icon")
     }
 
     @Test

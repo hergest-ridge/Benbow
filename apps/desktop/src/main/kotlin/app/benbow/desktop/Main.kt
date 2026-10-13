@@ -4,6 +4,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import app.benbow.app.AppServices
 import app.benbow.app.BenbowApp
+import app.benbow.app.appIcon
 import app.benbow.client.db.BenbowDb
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlinx.coroutines.CoroutineScope
@@ -32,7 +33,7 @@ fun main() {
         reminderClock = clock,
     )
     application {
-        Window(onCloseRequest = ::exitApplication, title = "Benbow") {
+        Window(onCloseRequest = ::exitApplication, title = "Benbow", icon = appIcon()) {
             BenbowApp(services)
         }
     }

@@ -9,16 +9,16 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.ShortNavigationBar
+import androidx.compose.material3.ShortNavigationBarItem
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -26,12 +26,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -164,19 +167,30 @@ private fun AppRoot(services: AppServices) {
             }
         }
     }
-    // The tab bar shows on the top-level screens and steps aside while the keyboard is up.
+    // The tab bar stays put on the top-level screens; the keyboard slides over it and off it again (no blink).
+    // Screens above see the keyboard's inset minus the bar, so a composer still sits right on the keyboard.
     val top = backStack.lastOrNull()
-    val tabs = top in TABS.map { it.route } && WindowInsets.ime.getBottom(LocalDensity.current) == 0
+    val tabs = top in TABS.map { it.route }
+    var barHeight by remember { mutableIntStateOf(0) }
+    val bar = with(LocalDensity.current) { barHeight.toDp() }
     Column(Modifier.fillMaxSize()) {
-        Box(Modifier.weight(1f).then(if (tabs) Modifier.consumeWindowInsets(WindowInsets.navigationBars) else Modifier)) {
+        Box(
+            Modifier.weight(1f).then(
+                if (tabs) {
+                    Modifier.consumeWindowInsets(WindowInsets.navigationBars).consumeWindowInsets(PaddingValues(bottom = bar))
+                } else {
+                    Modifier
+                },
+            ),
+        ) {
             AppNavigation(services, backStack, nav)
             SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().imePadding())
         }
         if (tabs) {
-            NavigationBar {
+            ShortNavigationBar(Modifier.onSizeChanged { barHeight = it.height }) {
                 TABS.forEach { tab ->
                     val label = stringResource(tab.label)
-                    NavigationBarItem(
+                    ShortNavigationBarItem(
                         selected = top == tab.route,
                         onClick = { nav.selectTab(tab.route) },
                         icon = { Icon(tab.icon, label) },

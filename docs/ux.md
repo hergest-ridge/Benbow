@@ -10,7 +10,7 @@
 
 ## Navigation (phone)
 Bottom bar: **Главная · Лента · Календарь · Поиск · Ещё**. The quick-capture composer lives on Home only. "Ещё" (Mihon-style "More") holds the rest: server and sync, reminders, tags, trash, later settings.
-Motion (owner's feedback, 2026-10-13): tabs switch in place, no animation. A screen opened on top fades in over the one below (220 ms); Back and the predictive back gesture fade it away (no scale-down).
+Motion (owner's feedback, 2026-10-13): tabs switch in place, no animation. A screen opened on top fades in over the one below (220 ms); Back and the predictive back gesture fade it away (no scale-down). The tab bar is the compact M3 Expressive `ShortNavigationBar`; it stays in place while the keyboard is up (the keyboard covers it and slides off it), and screens above get the keyboard inset minus the bar.
 Desktop and web: navigation rail + adaptive list-detail panes (Material 3 adaptive), with keyboard shortcuts.
 
 ## Screens

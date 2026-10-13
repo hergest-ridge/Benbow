@@ -13,11 +13,13 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
@@ -662,6 +664,16 @@ class AppSmokeTest {
         onNodeWithText("Мысли по дороге").click()
         waitUntilExactlyOneExists(hasText("Голосовое сообщение"), 5_000)
         screenshot("50-post-voice")
+
+        // A tap on the title names the sound in place; Done keeps it, and the feed shows the name too.
+        onNodeWithText("Голосовое сообщение").performClick()
+        val title = hasSetTextAction() and isFocused() // the post's comment box has a text field too
+        waitUntilExactlyOneExists(title, 5_000)
+        onNode(title).performTextInput("Утро у моря")
+        screenshot("51-voice-rename")
+        onNode(title).performImeAction()
+        waitUntilExactlyOneExists(hasText("Утро у моря") and hasClickAction(), 5_000)
+        assertEquals("Утро у моря", runBlocking { services.repo.entry(entry).first()!!.attachments.single().caption })
     }
 
     @Test

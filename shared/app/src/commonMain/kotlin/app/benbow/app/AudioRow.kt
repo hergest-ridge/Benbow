@@ -1,5 +1,6 @@
 package app.benbow.app
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,12 +11,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
@@ -24,6 +29,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.benbow.app.resources.Res
@@ -60,14 +75,21 @@ internal val LocalAudio = compositionLocalOf<AudioPlayback?> { null }
  * one playing, a seek bar with the time appears in the row. Used in the feed, in posts, in the text and under comments.
  */
 @Composable
-internal fun AudioRow(media: MediaStore, attachment: AttachmentState, modifier: Modifier = Modifier) {
+internal fun AudioRow(
+    media: MediaStore,
+    attachment: AttachmentState,
+    modifier: Modifier = Modifier,
+    onRename: ((String?) -> Unit)? = null,
+) {
     val audio = LocalAudio.current
     val now by (audio?.now ?: remember { kotlinx.coroutines.flow.MutableStateFlow<AudioNow?>(null) }).collectAsState()
     val meta = attachment.meta
     val mine = now?.takeIf { it.id == meta.id }
     val load by rememberMediaFile(media, meta.sha256)
     val file = (load as? MediaLoad.Ready)?.file
-    val title = if (meta.kind == "voice") stringResource(Res.string.voice_note) else meta.name?.substringBeforeLast('.') ?: meta.kind
+    val fallback = if (meta.kind == "voice") stringResource(Res.string.voice_note) else meta.name?.substringBeforeLast('.') ?: meta.kind
+    val title = attachment.caption ?: fallback
+    var renaming by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
     Surface(color = colors.surfaceContainerHigh, shape = RoundedCornerShape(14.dp), modifier = modifier.fillMaxWidth()) {
         Row(
@@ -93,7 +115,20 @@ internal fun AudioRow(media: MediaStore, attachment: AttachmentState, modifier: 
                 }
             }
             Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (renaming && onRename != null) {
+                    TitleField(attachment.caption.orEmpty(), fallback) {
+                        renaming = false
+                        onRename(it)
+                    }
+                } else {
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = if (onRename != null) Modifier.clickable { renaming = true } else Modifier,
+                    )
+                }
                 val total = mine?.durationMs?.takeIf { it > 0 } ?: meta.durationMs ?: 0
                 if (mine != null && total > 0) {
                     var dragging by remember { mutableStateOf<Float?>(null) }
@@ -124,4 +159,46 @@ internal fun AudioRow(media: MediaStore, attachment: AttachmentState, modifier: 
             }
         }
     }
+}
+
+/** The title in place: Done (or leaving the field) keeps it; blank goes back to [hint], the default name. */
+@Composable
+private fun TitleField(initial: String, hint: String, onDone: (String?) -> Unit) {
+    var text by remember { mutableStateOf(TextFieldValue(initial, TextRange(initial.length))) }
+    val focus = remember { FocusRequester() }
+    var focused by remember { mutableStateOf(false) }
+    var done by remember { mutableStateOf(false) }
+    val finish = {
+        if (!done) {
+            done = true
+            onDone(text.text)
+        }
+    }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    val colors = MaterialTheme.colorScheme
+    BasicTextField(
+        value = text,
+        onValueChange = { text = it },
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.onSurface),
+        cursorBrush = SolidColor(colors.primary),
+        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { finish() }),
+        decorationBox = { inner ->
+            // A hairline under the title says it's being edited.
+            Box(
+                Modifier.drawBehind {
+                    val y = size.height + 1.dp.toPx()
+                    drawLine(colors.primary, Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
+                },
+            ) {
+                if (text.text.isEmpty()) Text(hint, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+                inner()
+            }
+        },
+        modifier = Modifier.fillMaxWidth().focusRequester(focus).onFocusChanged {
+            if (focused && !it.isFocused) finish()
+            focused = it.isFocused
+        },
+    )
 }

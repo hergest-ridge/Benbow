@@ -333,6 +333,20 @@ class JournalRepository(
         }
     }
 
+    /** Names an attachment (its caption: a sound's title, a picture's label); blank = back to the default. */
+    fun setCaption(entryId: String, attachmentId: String, caption: String?) {
+        db.transaction {
+            val entry = q.selectEntry(entryId).executeAsOneOrNull() ?: return@transaction
+            val current = decodeAttachments(entry.attachments)
+            val state = current[attachmentId] ?: return@transaction
+            val clean = caption?.trim()?.takeIf { it.isNotEmpty() }
+            if (clean == state.caption) return@transaction
+            val named = state.copy(caption = clean, hlc = clock.next())
+            enqueue(PutAttachment(newId(), entryId, named.meta, named.position, named.caption, named.present, named.hlc))
+            putAttachments(entryId, current + (attachmentId to named))
+        }
+    }
+
     private fun putAttachments(entryId: String, attachments: Map<String, AttachmentState>) {
         val (count, cover) = mediaSummary(attachments)
         q.updateAttachments(ClientJson.encodeToString(attachmentsSerializer, attachments), count.toLong(), cover, now(), entryId)

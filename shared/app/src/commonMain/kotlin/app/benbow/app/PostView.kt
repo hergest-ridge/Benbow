@@ -43,6 +43,7 @@ import app.benbow.client.placedIn
 import app.benbow.ui.editor.AtomViews
 import app.benbow.ui.editor.BenbowEditor
 import app.benbow.ui.editor.EditorState
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -80,7 +81,9 @@ internal fun PostView(
             val placed = placedIn(detail.body).toSet()
             val loose = detail.attachments.filter { it.meta.id !in placed }.ifEmpty { detail.attachments }
             val layout = services.appearance.collectAsStateWithLifecycle().value.postMedia
-            PostMedia(services, loose, layout, onOpen = {
+            PostMedia(services, loose, layout, onRename = { id, caption ->
+                services.scope.launch { services.repo.setCaption(detail.id, id, caption) }
+            }, onOpen = {
                 onOpenMedia(it.meta.id)
             }, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
         }
@@ -176,7 +179,11 @@ internal fun CommentMedia(services: AppServices, comment: Comment, onOpen: (atta
     if (comment.media.isEmpty()) return
     val third = with(LocalDensity.current) { (LocalWindowInfo.current.containerSize.width / 3).toDp() }
     val (sounds, rest) = comment.media.partition { it.meta.kind == "voice" || it.meta.kind == "audio" }
-    sounds.forEach { AudioRow(services.media, it) }
+    sounds.forEach { sound ->
+        AudioRow(services.media, sound, onRename = { caption ->
+            services.scope.launch { services.repo.setCaption(comment.summary.id, sound.meta.id, caption) }
+        })
+    }
     if (rest.isEmpty()) return
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         rest.forEach { attachment -> MediaThumb(services.media, attachment, third) { onOpen(attachment.meta.id) } }

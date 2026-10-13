@@ -292,7 +292,14 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     val inline = editor?.model?.paragraphs?.mapNotNullTo(HashSet()) { (it.atom as? Atom.Attachment)?.ref }.orEmpty()
     val ribbon = attachments.isNotEmpty() && (ribbonChoice ?: !attachments.all { it.meta.id in inline })
     val pictures = remember(attachments, detail?.id) {
-        EntryPictures(services, attachments) { id -> detail?.id?.let { nav.open(Route.Media(it, id)) } }
+        EntryPictures(
+            services,
+            attachments,
+            onOpen = { id -> detail?.id?.let { nav.open(Route.Media(it, id)) } },
+            onRename = { id, caption ->
+                detail?.id?.let { entry -> services.scope.launch { services.repo.setCaption(entry, id, caption) } }
+            },
+        )
     }
     LaunchedEffect(Unit) {
         services.shortcuts.collect {

@@ -37,6 +37,7 @@ internal class EntryPictures(
     private val services: AppServices,
     private val attachments: List<AttachmentState>,
     private val onOpen: (attachmentId: String) -> Unit,
+    private val onRename: ((attachmentId: String, caption: String?) -> Unit)? = null,
 ) : AtomViews() {
     private fun find(atom: Atom.Attachment) = attachments.firstOrNull { it.meta.id == atom.ref }
 
@@ -67,7 +68,12 @@ internal class EntryPictures(
             }
             val meta = attachment.meta
             if (meta.kind == "voice" || meta.kind == "audio") {
-                AudioRow(services.media, attachment, Modifier.align(Alignment.Center))
+                AudioRow(
+                    services.media,
+                    attachment,
+                    Modifier.align(Alignment.Center),
+                    onRename = onRename?.let { rename -> { caption -> rename(meta.id, caption) } },
+                )
                 return@Box
             }
             Box(

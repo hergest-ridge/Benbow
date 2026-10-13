@@ -58,4 +58,25 @@ class GalleryTest {
         assertEquals(listOf("C.jpg", "B.jpg", "A.jpg"), desktop.names(entry), "the order syncs")
         assertEquals(listOf("C.jpg", "B.jpg", "A.jpg"), desktop.repo.feed().first().single().media.map { it.meta.name }, "the feed agrees")
     }
+
+    @Test
+    fun aNameSyncsAndABlankOneGoesBackToTheDefault() = runTest {
+        val server = FakeServer()
+        val phone = Device(server, "phone")
+        val entry = phone.repo.createNote("2026-10-14", "Голос")
+        val a = phone.add(entry, "A.jpg", 1)
+        suspend fun Device.caption() = repo.entry(entry).first()!!.attachments.single().caption
+
+        phone.repo.setCaption(entry, a, "  Утро у моря ")
+        assertEquals("Утро у моря", phone.caption(), "trimmed")
+        phone.engine.sync()
+        val desktop = Device(server, "desktop")
+        desktop.engine.sync()
+        assertEquals("Утро у моря", desktop.caption(), "the name syncs")
+
+        desktop.repo.setCaption(entry, a, " ")
+        desktop.engine.sync()
+        phone.engine.sync()
+        assertEquals(null, phone.caption(), "blank = the default name again")
+    }
 }

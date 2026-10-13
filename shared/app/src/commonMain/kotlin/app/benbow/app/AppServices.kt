@@ -33,7 +33,7 @@ fun interface ReminderClock {
 }
 
 /** Where the app should go when something outside opens it (a launcher shortcut, the widget). */
-enum class AppLaunch { NewEntry, }
+enum class AppLaunch { NewEntry, AnswerPrompt }
 
 sealed interface AppMessage {
     data class AttachFailed(val reason: String) : AppMessage

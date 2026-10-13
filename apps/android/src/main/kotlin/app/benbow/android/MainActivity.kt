@@ -25,11 +25,15 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handle(intent: Intent) {
-        if (intent.action == Shortcuts.ACTION_NEW_ENTRY) services.launch.value = AppLaunch.NewEntry
+        when (intent.action) {
+            Shortcuts.ACTION_NEW_ENTRY -> services.launch.value = AppLaunch.NewEntry
+            ACTION_ANSWER_PROMPT -> services.launch.value = AppLaunch.AnswerPrompt
+        }
     }
 
     override fun onStop() {
         super.onStop()
         SyncWorker.scheduleSoon(this)
+        BenbowWidget.refresh(this, services)
     }
 }

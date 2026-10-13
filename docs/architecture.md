@@ -86,4 +86,4 @@ Desktop client: Compose `packageMsi`. Web client: static files served by the ser
 kotlinx-coroutines, kotlinx-serialization, kotlinx-datetime, kotlinx-collections-immutable, Ktor (client and server),
 SQLDelight, Koin, Navigation 3, Coil 3, Okio (IO + SHA-256), org.jetbrains:markdown (parser), Kermit (logging),
 kotest-property, Turbine, Roborazzi. Server: sqlite-jdbc, logback, kotlinx-html, a QR generator.
-Android: WorkManager, Media3, Photo Picker, Glance (widget), Biometric, Baseline Profiles.
+Android: WorkManager, Media3, Photo Picker, Glance (widget; 1.2.0, the latest stable on 2026-10-13), Biometric, Baseline Profiles.

@@ -53,6 +53,7 @@ import app.benbow.app.resources.tab_home
 import app.benbow.app.resources.tab_more
 import app.benbow.app.resources.tab_search
 import app.benbow.client.TagLooks
+import app.benbow.client.Templates
 import app.benbow.ui.theme.BenbowTheme
 import kotlinx.coroutines.flow.filterNotNull
 import org.jetbrains.compose.resources.StringResource
@@ -164,9 +165,10 @@ private fun AppRoot(services: AppServices) {
         services.launch.filterNotNull().collect { request ->
             services.launch.value = null
             when (request) {
-                AppLaunch.NewEntry -> {
+                AppLaunch.NewEntry, AppLaunch.AnswerPrompt -> {
                     nav.selectTab(Route.Home)
-                    nav.open(Route.Editor(null, services.today(), opened = services.now()))
+                    val template = Templates.PROMPT.id.takeIf { request == AppLaunch.AnswerPrompt }
+                    nav.open(Route.Editor(null, services.today(), opened = services.now(), template = template))
                 }
             }
         }

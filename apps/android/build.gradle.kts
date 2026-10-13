@@ -72,5 +72,6 @@ dependencies {
     implementation(project(":shared:app"))
     implementation(libs.sqldelight.android.driver)
     implementation(libs.androidx.work.runtime)
+    implementation(libs.androidx.glance.appwidget)
     implementation(libs.androidx.activity.compose)
 }

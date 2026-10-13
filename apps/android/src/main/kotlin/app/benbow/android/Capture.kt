@@ -26,6 +26,7 @@ class CaptureActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         SyncWorker.scheduleSoon(this)
+        BenbowWidget.refresh(this, (application as BenbowApplication).services)
     }
 
     companion object {

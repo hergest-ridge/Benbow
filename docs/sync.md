@@ -23,7 +23,7 @@ A draft becomes a revision on: editor close, app backgrounded, 30 s idle, or eve
 `entry.revision.put`, `entry.delete` / `entry.restore {hlc}`, `entry.tag.set {tag_id, present, hlc}`,
 `entry.attachment.set {attachment_id, position, caption, present, hlc}`, `reaction.set {emoji, present, hlc}`,
 `tag.upsert`, `tag_category.upsert`, `attachment.register`, `template.*`, `event.*`, `reminder.*`.
-Implemented: `entry.create`, `entry.revision.put`, `entry.meta.set` (protocol 1); `entry.attachment.put {attachment: meta, position, caption, present, hlc}` (protocol 2, replaces the planned `attachment.register` + `entry.attachment.set`: the immutable file meta travels with every link change, so a link is self-contained). Trash is `entry.meta.set deleted`.
+Implemented: `entry.create`, `entry.revision.put`, `entry.meta.set` (protocol 1); `entry.attachment.put {attachment: meta, position, caption, present, hlc}` (protocol 2, replaces the planned `attachment.register` + `entry.attachment.set`: the immutable file meta travels with every link change, so a link is self-contained). Trash is `entry.meta.set deleted`. Favorite, mood, tags, reactions and a comment's parent are namespaced fields too (ADR-021): `favorite`, `pinned`, `mood`, `tag:<lowercase>` = display name, `reaction:<emoji>`, `parent`.
 Metadata fields use per-field LWW ordered by a **Hybrid Logical Clock** (`hlc` = wall ms + counter + device id), so it tolerates phone clock drift.
 
 ## Push

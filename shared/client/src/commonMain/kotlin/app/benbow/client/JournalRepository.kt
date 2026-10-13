@@ -46,7 +46,15 @@ data class EntrySummary(
     val mediaCount: Int = 0,
     /** SHA-256 of the picture to show for the entry (a preview or the image itself). */
     val cover: String? = null,
+    val favorite: Boolean = false,
+    val mood: Int? = null,
+    val tags: List<String> = emptyList(),
 )
+
+data class TagCount(val name: String, val uses: Int)
+
+/** What to look for; empty text and off switches match everything outside the trash. */
+data class SearchQuery(val text: String = "", val tag: String? = null, val favorites: Boolean = false, val withMedia: Boolean = false)
 
 /** A file in the app's media folder, ready to be attached ([MediaStore.import]). */
 data class MediaFile(val sha256: String, val size: Long, val mime: String, val path: String, val name: String?, val capturedAt: Long?)
@@ -66,9 +74,29 @@ data class EntryDetail(
     val attachments: List<AttachmentState> = emptyList(),
 ) {
     val inTrash: Boolean get() = fields[TRASH_FIELD] == "true"
+    val favorite: Boolean get() = fields[FAVORITE_FIELD] == "true"
+    val mood: Int? get() = fields[MOOD_FIELD]?.toIntOrNull()
+    val tags: List<String> get() = tagsOf(fields)
+    val reactions: Set<String> get() = fields.filter {
+        it.key.startsWith(REACTION_PREFIX) && it.value != null
+    }.keys.map { it.removePrefix(REACTION_PREFIX) }.toSet()
 }
 
+// Entry metadata as namespaced LWW fields (ADR-021).
 internal const val TRASH_FIELD = "deleted"
+internal const val FAVORITE_FIELD = "favorite"
+internal const val MOOD_FIELD = "mood"
+internal const val TAG_PREFIX = "tag:"
+internal const val REACTION_PREFIX = "reaction:"
+
+/** Display names of the entry's tags, alphabetically. */
+internal fun tagsOf(fields: Map<String, String?>): List<String> =
+    fields.filter { it.key.startsWith(TAG_PREFIX) }.values.filterNotNull().sortedBy { it.lowercase() }
+
+/** "#Работа " → "Работа"; empty when nothing usable is left. Quotes can't be in tags (they'd break the JSON path). */
+fun tagName(input: String): String = input.trim().trimStart('#').replace('"', ' ').replace(Regex("""\s+"""), " ").trim()
+
+internal fun tagKey(name: String): String = TAG_PREFIX + tagName(name).lowercase()
 
 private val fieldsSerializer = MapSerializer(String.serializer(), String.serializer().nullable)
 
@@ -126,6 +154,7 @@ class JournalRepository(
         val (title, preview) = summarize(body)
         db.transaction {
             q.upsertEntry(id, kind, day, time, revision, body, title, preview, "[]", "{}", time, "{}", "{}", 0, null)
+            SearchIndex.update(db, id)
             enqueue(CreateEntry(newId(), id, kind, day, time))
             enqueue(PutRevision(newId(), id, revision, emptyList(), body))
         }
@@ -179,6 +208,7 @@ class JournalRepository(
                 now(),
                 id,
             )
+            SearchIndex.update(db, id)
         }
     }
 
@@ -234,6 +264,36 @@ class JournalRepository(
         q.updateAttachments(ClientJson.encodeToString(attachmentsSerializer, attachments), count.toLong(), cover, now(), entryId)
     }
 
+    fun setFavorite(id: String, favorite: Boolean) = setField(id, FAVORITE_FIELD, if (favorite) "true" else null)
+
+    /** -2 (hard) .. 2 (great), null = not set. */
+    fun setMood(id: String, mood: Int?) = setField(id, MOOD_FIELD, mood?.coerceIn(-2, 2)?.toString())
+
+    fun addTag(id: String, name: String) {
+        val clean = tagName(name)
+        if (clean.isNotEmpty()) setField(id, tagKey(clean), clean)
+    }
+
+    fun removeTag(id: String, name: String) = setField(id, tagKey(name), null)
+
+    fun toggleReaction(id: String, emoji: String, on: Boolean) = setField(id, REACTION_PREFIX + emoji, if (on) "1" else null)
+
+    /** Builds the search index after an update changed it (or on the first start); quick otherwise. */
+    fun prepareSearch() = SearchIndex.rebuildIfNeeded(db)
+
+    /** Every tag in use (outside the trash), most used first: suggestions and search filters. */
+    fun tags(): Flow<List<TagCount>> = q.tagCounts { name, uses ->
+        TagCount(name.orEmpty(), uses.toInt())
+    }.asFlow().mapToList(context).map { it.filter { t -> t.name.isNotEmpty() } }
+
+    fun search(query: SearchQuery): Flow<List<EntrySummary>> = q.search(
+        match = SearchIndex.match(query.text),
+        tagPath = query.tag?.let { "$.\"${tagKey(it)}\"" },
+        favorites = if (query.favorites) 1 else 0,
+        withMedia = if (query.withMedia) 1 else 0,
+        mapper = ::summaryOf,
+    ).asFlow().mapToList(context)
+
     fun moveToTrash(id: String) = setField(id, TRASH_FIELD, "true")
 
     fun restore(id: String) = setField(id, TRASH_FIELD, null)
@@ -265,6 +325,7 @@ class JournalRepository(
     private fun putHead(id: String, revision: String, body: String) {
         val (title, preview) = summarize(body)
         q.updateHead(revision, body, title, preview, now(), id)
+        SearchIndex.update(db, id)
     }
 
     private fun enqueue(op: SyncOp) = q.enqueue(op.opId, op.entryId, ClientJson.encodeToString(SyncOp.serializer(), op), now())
@@ -290,7 +351,22 @@ private fun summaryOf(
     conflictHeads: String,
     mediaCount: Long,
     cover: String?,
-) = EntrySummary(id, day, createdAt, title, preview, conflictHeads != "[]", mediaCount.toInt(), cover)
+    fields: String,
+) = decodeFields(fields).let { f ->
+    EntrySummary(
+        id = id,
+        day = day,
+        createdAt = createdAt,
+        title = title,
+        preview = preview,
+        conflict = conflictHeads != "[]",
+        mediaCount = mediaCount.toInt(),
+        cover = cover,
+        favorite = f[FAVORITE_FIELD] == "true",
+        mood = f[MOOD_FIELD]?.toIntOrNull(),
+        tags = tagsOf(f),
+    )
+}
 
 internal val attachmentsSerializer = MapSerializer(String.serializer(), AttachmentState.serializer())
 

@@ -33,6 +33,7 @@ The server denormalizes the head into `entry_text(entry_id, title, plain_text)` 
 - `tag(id, name, category_id?, color?, parent_id? (P2 hierarchy), deleted_at)`. Name is unique case-insensitively within a category.
 - `entry_tag(entry_id, tag_id, present, hlc)`: LWW per pair.
 - Idea (decide later): inline `#hashtags` in text auto-link to tags (`#tag` is plain portable Markdown text).
+- As built (4.1, ADR-021): the link is the LWW field `tag:<lowercase name>` = display name on the entry; categories and colors (4.3) go to a registry. Reactions: field `reaction:<emoji>`.
 
 ## Reactions
 `reaction(entry_id, emoji, present, hlc)`. "Likes" on your own posts, Telegram-style.

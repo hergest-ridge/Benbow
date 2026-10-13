@@ -1,0 +1,2 @@
+-- v4 -> v5 (4.1): full-text search index; filled by SearchIndex.rebuild on the first start.
+CREATE VIRTUAL TABLE entry_search USING fts4(entry_id, title, body, tags, notindexed=entry_id, tokenize=unicode61);

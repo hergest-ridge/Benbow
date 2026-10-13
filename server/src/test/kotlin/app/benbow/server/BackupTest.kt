@@ -42,7 +42,13 @@ class BackupTest {
 
             assertTrue(jobs.runOnce(), "first change gets a snapshot")
             assertFalse(jobs.runOnce(), "nothing changed: no new snapshot")
-            rules.push(listOf(SetField("o3", "entry-0001", "mood", "спокойно", Hlc(5, 0, "phone"))))
+            rules.push(
+                listOf(
+                    SetField("o3", "entry-0001", "mood", "спокойно", Hlc(5, 0, "phone")),
+                    SetField("o4", "entry-0001", "tag:море", "Море", Hlc(6, 0, "phone")),
+                    SetField("o5", "entry-0001", "reaction:❤️", "1", Hlc(7, 0, "phone")),
+                ),
+            )
             Thread.sleep(1_100) // snapshot names have second resolution
             assertTrue(jobs.runOnce())
 
@@ -60,6 +66,8 @@ class BackupTest {
             val md = data.resolve("export/2026/10").listDirectoryEntries("*.md").single().readText()
             assertTrue("title: \"Вечер у моря\"" in md, md)
             assertTrue("mood: \"спокойно\"" in md, md)
+            assertTrue("tags: [\"Море\"]" in md, md)
+            assertTrue("reactions: [\"❤️\"]" in md, md)
             assertTrue("**Тихо.**" in md, md)
             assertTrue(data.resolve("export/2026/10").listDirectoryEntries("*.json").single().readText().contains("\"body\""))
         }

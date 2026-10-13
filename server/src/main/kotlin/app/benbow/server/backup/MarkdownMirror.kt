@@ -47,7 +47,13 @@ class MarkdownMirror(private val root: Path, private val media: (String) -> Path
             appendLine("title: ${yaml(title.take(120))}")
             entry.head?.let { appendLine("revision: ${yaml(it)}") }
             if (entry.conflictHeads.isNotEmpty()) appendLine("conflict: [${entry.conflictHeads.joinToString(", ") { yaml(it) }}]")
-            entry.fields.toSortedMap().forEach { (k, v) -> v.value?.let { appendLine("$k: ${yaml(it)}") } }
+            // Namespaced fields (ADR-021) read as lists; everything else as plain keys.
+            val fields = entry.fields.mapNotNull { (k, v) -> v.value?.let { k to it } }.toMap().toSortedMap()
+            val tags = fields.filterKeys { it.startsWith("tag:") }.values.sortedBy { it.lowercase() }
+            val reactions = fields.keys.filter { it.startsWith("reaction:") }.map { it.removePrefix("reaction:") }
+            fields.filterKeys { !it.startsWith("tag:") && !it.startsWith("reaction:") }.forEach { (k, v) -> appendLine("$k: ${yaml(v)}") }
+            if (tags.isNotEmpty()) appendLine("tags: [${tags.joinToString(", ") { yaml(it) }}]")
+            if (reactions.isNotEmpty()) appendLine("reactions: [${reactions.joinToString(", ") { yaml(it) }}]")
             appendLine("---")
         }
         val markdown = when {

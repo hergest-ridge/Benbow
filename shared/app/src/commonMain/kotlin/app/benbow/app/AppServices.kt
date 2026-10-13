@@ -17,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.launch
 import java.io.File
 import kotlin.time.Clock
 
@@ -61,6 +62,7 @@ class AppServices(
     init {
         repo.commitLeftoverDrafts()
         sync.start()
+        scope.launch { repo.prepareSearch() }
     }
 
     /** Text first (small, the outbox), then files captured here; a failed upload retries with backoff. */

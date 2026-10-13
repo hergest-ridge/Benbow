@@ -66,3 +66,6 @@ Restoring a snapshot (`--restore`, or a hand-copied file noticed via `db/high-wa
 
 ### ADR-020 Attachments: content-addressed files + LWW links in the entry [A]
 Files are stored and transferred by SHA-256 (dedup, verification, resumable upload); the server places them at human-readable paths (ADR-009). The link to an entry is an `AttachmentState` in the entry, last writer wins per link by HLC, and carries the immutable file meta, so one op type (`entry.attachment.put`, protocol 2) covers add, reorder, caption and remove (`present = false`). A link may sync before its file; clients show it as pending.
+
+### ADR-021 Entry metadata = namespaced LWW fields [A]
+Favorite, pinned, mood, tags, reactions and a comment's parent are `entry.meta.set` fields: `favorite`, `pinned`, `mood`, `tag:<lowercase name>` (value = display name, null = removed), `reaction:<emoji>`, `parent`. Each key has its own HLC, so concurrent changes to different tags merge, and restore reconciliation already re-pushes fields. No protocol change. Tag categories and colors (4.3) live in a registry, not in the field key. Replaces the planned `entry.tag.set` / `reaction.set` ops.

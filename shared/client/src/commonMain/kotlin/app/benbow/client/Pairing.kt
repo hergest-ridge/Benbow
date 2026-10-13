@@ -47,6 +47,7 @@ class Pairing(private val db: BenbowDb, private val httpClient: (ServerTrust) ->
             }
             settings.connection = null
             q.deleteAllEntries()
+            q.clearIndex()
         }
     }
 }

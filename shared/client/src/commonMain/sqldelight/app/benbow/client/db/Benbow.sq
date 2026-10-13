@@ -58,6 +58,10 @@ CREATE TABLE outbox (
 
 CREATE INDEX outbox_by_entry ON outbox(entry_id, state);
 
+-- Full-text search over everything on the device: title, all text, tags (FTS4: Android's SQLite has no FTS5).
+-- unicode61 folds case and diacritics, so "елка" finds "ёлка". Rebuilt when SearchIndex.VERSION changes.
+CREATE VIRTUAL TABLE entry_search USING fts4(entry_id, title, body, tags, notindexed=entry_id, tokenize=unicode61);
+
 CREATE TABLE kv (
     key TEXT NOT NULL PRIMARY KEY,
     value TEXT NOT NULL
@@ -68,17 +72,17 @@ SELECT * FROM entry WHERE id = ?;
 
 -- Trash is the LWW field "deleted" (JournalRepository.TRASH_FIELD).
 journal:
-SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover FROM entry
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
 WHERE json_extract(fields, '$.deleted') IS NOT 'true'
 ORDER BY day DESC, created_at;
 
 entriesForDay:
-SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover FROM entry
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
 WHERE day = ? AND json_extract(fields, '$.deleted') IS NOT 'true'
 ORDER BY created_at;
 
 trash:
-SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover FROM entry
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
 WHERE json_extract(fields, '$.deleted') IS 'true'
 ORDER BY updated_at DESC;
 
@@ -103,6 +107,36 @@ ON CONFLICT(id) DO UPDATE SET
 -- Everything a device knows, for reconciliation after a server restore.
 allEntries:
 SELECT id, kind, day, created_at, head_rev, body, fields, field_clocks, attachments FROM entry;
+
+-- :match is an FTS query built by SearchIndex.match (never raw user input); null filters are off.
+search:
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
+WHERE json_extract(fields, '$.deleted') IS NOT 'true'
+  AND (:match IS NULL OR id IN (SELECT entry_id FROM entry_search WHERE entry_search MATCH :match))
+  AND (:tagPath IS NULL OR json_extract(fields, :tagPath) IS NOT NULL)
+  AND (:favorites = 0 OR json_extract(fields, '$.favorite') = 'true')
+  AND (:withMedia = 0 OR media_count > 0)
+ORDER BY day DESC, created_at DESC
+LIMIT 300;
+
+tagCounts:
+SELECT json_each.value AS name, COUNT(*) AS uses
+FROM entry, json_each(entry.fields)
+WHERE json_each.key LIKE 'tag:%' AND json_each.value IS NOT NULL AND json_extract(entry.fields, '$.deleted') IS NOT 'true'
+GROUP BY json_each.key
+ORDER BY uses DESC, name;
+
+indexEntry:
+INSERT INTO entry_search(entry_id, title, body, tags) VALUES (?, ?, ?, ?);
+
+unindexEntry:
+DELETE FROM entry_search WHERE entry_id = ?;
+
+clearIndex:
+DELETE FROM entry_search;
+
+allEntryIds:
+SELECT id FROM entry;
 
 updateAttachments:
 UPDATE entry SET attachments = ?, media_count = ?, cover = ?, updated_at = ? WHERE id = ?;

@@ -36,6 +36,8 @@ internal sealed interface Route {
 
     data class Media(val entryId: String, val attachmentId: String) : Route
 
+    data object Search : Route
+
     data object Trash : Route
 
     data object Server : Route
@@ -91,6 +93,7 @@ private fun AppNavigation(services: AppServices, backStack: SnapshotStateList<Ro
             entry<Route.History> { HistoryScreen(services, nav, it) }
             entry<Route.Revision> { RevisionScreen(services, nav, it) }
             entry<Route.Media> { MediaScreen(services, nav, it) }
+            entry<Route.Search> { SearchScreen(services, nav) }
             entry<Route.Trash> { TrashScreen(services, nav) }
             entry<Route.Server> { ServerScreen(services, nav) }
         },

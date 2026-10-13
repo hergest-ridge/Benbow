@@ -180,6 +180,7 @@ class SyncEngine(private val db: BenbowDb, private val apiFor: (Connection) -> B
             media.first.toLong(),
             media.second,
         )
+        SearchIndex.update(db, entry.id)
     }
 
     private companion object {

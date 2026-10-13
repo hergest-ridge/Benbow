@@ -51,7 +51,13 @@ internal fun BackButton(onClick: () -> Unit) {
 
 /** A journal entry in a list: time, title, a few lines of preview. */
 @Composable
-internal fun EntryCard(entry: EntrySummary, onClick: () -> Unit, media: MediaStore? = null, trailing: @Composable (() -> Unit)? = null) {
+internal fun EntryCard(
+    entry: EntrySummary,
+    onClick: () -> Unit,
+    media: MediaStore? = null,
+    showDay: Boolean = false,
+    trailing: @Composable (() -> Unit)? = null,
+) {
     val colors = MaterialTheme.colorScheme
     Surface(
         onClick = onClick,
@@ -62,7 +68,10 @@ internal fun EntryCard(entry: EntrySummary, onClick: () -> Unit, media: MediaSto
         Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(timeLabel(entry.createdAt), style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+                    val time = if (showDay) "${dayLabel(entry.day)}, ${timeLabel(entry.createdAt)}" else timeLabel(entry.createdAt)
+                    Text(time, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+                    if (entry.favorite) Text("  ★", style = MaterialTheme.typography.labelMedium, color = colors.primary)
+                    moodEmoji(entry.mood)?.let { Text("  $it", style = MaterialTheme.typography.labelMedium) }
                     if (entry.conflict) {
                         Spacer(Modifier.width(8.dp))
                         Text(stringResource(Res.string.conflict_badge), style = MaterialTheme.typography.labelMedium, color = colors.error)
@@ -77,6 +86,15 @@ internal fun EntryCard(entry: EntrySummary, onClick: () -> Unit, media: MediaSto
                         style = MaterialTheme.typography.bodyMedium,
                         color = colors.onSurfaceVariant,
                         maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (entry.tags.isNotEmpty()) {
+                    Text(
+                        entry.tags.joinToString(" ") { "#$it" },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.primary,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }

@@ -1,7 +1,9 @@
 package app.benbow.app
 
 import androidx.compose.ui.graphics.toAwtImage
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasClickAction
@@ -11,6 +13,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.test.waitUntilExactlyOneExists
@@ -118,6 +122,43 @@ class AppSmokeTest {
         screenshot("08-editor-gallery")
         assertEquals(1, runBlocking { services.repo.entry(entry).first()!!.attachments.size })
         assertEquals(2L, runBlocking { services.media.pendingCount().first() }, "the file and its preview wait for the server")
+    }
+
+    /** Clicks through the node's action: no hit-testing against a layout that may be a frame behind. */
+    private fun SemanticsNodeInteraction.click() = performSemanticsAction(SemanticsActions.OnClick)
+
+    @Test
+    fun favoriteMoodTagsAndSearch() = runDesktopComposeUiTest(width = 412, height = 860) {
+        services.repo.createNote(services.today(), "Планы на неделю\nдописать поиск")
+        services.repo.createNote(services.today(), "Прогулка у моря")
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Планы на неделю"), 5_000)
+        onNodeWithText("Планы на неделю").performClick()
+        waitUntilExactlyOneExists(hasText("Настроение"), 5_000)
+        onNodeWithContentDescription("В избранное").click()
+        onNodeWithText("Настроение").click()
+        onNodeWithText("🙂").click()
+        onNodeWithText("+ Тег").click()
+        onNode(hasSetTextAction() and !hasText("Планы", substring = true)).performTextInput("Работа") // the tag field, not the editor
+        onNodeWithText("Добавить").click()
+        waitUntilExactlyOneExists(hasText("#Работа"), 5_000)
+        screenshot("09-editor-metadata")
+
+        onNodeWithContentDescription("Назад").performClick()
+        waitUntil(timeoutMillis = 5_000) {
+            runBlocking { services.repo.journal().first().any { it.favorite && it.tags == listOf("Работа") } }
+        }
+        waitForIdle()
+        screenshot("10-journal-metadata")
+
+        onNodeWithContentDescription("Поиск").performClick()
+        onNode(hasSetTextAction()).performTextInput("мор")
+        waitUntilExactlyOneExists(hasText("Прогулка у моря"), 5_000)
+        onNode(hasSetTextAction()).performTextClearance()
+        onNodeWithText("★ Избранное").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Прогулка у моря")).fetchSemanticsNodes().isEmpty() }
+        waitUntilExactlyOneExists(hasText("Планы на неделю"), 5_000)
+        screenshot("11-search")
     }
 
     @Test

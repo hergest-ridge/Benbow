@@ -14,6 +14,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -32,12 +33,15 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.conflict_banner
 import app.benbow.app.resources.conflict_choose
 import app.benbow.app.resources.entry_broken
+import app.benbow.app.resources.favorite_add
+import app.benbow.app.resources.favorite_remove
 import app.benbow.app.resources.history
 import app.benbow.app.resources.in_trash_banner
 import app.benbow.app.resources.menu
@@ -55,9 +59,11 @@ import app.benbow.ui.editor.BenbowEditor
 import app.benbow.ui.editor.EditorState
 import app.benbow.ui.editor.EditorToolbar
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
@@ -91,8 +97,22 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
 
     fun onEdited(text: RichText) = session.onChange(text)
 
-    /** For attachments: a new entry is created on the first one. */
+    /** For attachments and metadata: a new entry is created on the first one. */
     suspend fun ensureEntryId(): String = session.ensureEntry()
+
+    val knownTags = repo.tags().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private fun withEntry(action: (String) -> Unit) {
+        services.scope.launch { action(ensureEntryId()) }
+    }
+
+    fun toggleFavorite() = withEntry { repo.setFavorite(it, detail?.favorite != true) }
+
+    fun setMood(mood: Int?) = withEntry { repo.setMood(it, mood) }
+
+    fun addTag(name: String) = withEntry { repo.addTag(it, name) }
+
+    fun removeTag(name: String) = withEntry { repo.removeTag(it, name) }
 
     fun commit() {
         session.commit()
@@ -174,6 +194,14 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                 },
                 title = { Text(dayLabel(detail?.day ?: route.day), style = MaterialTheme.typography.titleMedium) },
                 actions = {
+                    val favorite = detail?.favorite == true
+                    IconButton(vm::toggleFavorite) {
+                        Icon(
+                            if (favorite) Icons.Star else Icons.StarOutline,
+                            stringResource(if (favorite) Res.string.favorite_remove else Res.string.favorite_add),
+                            tint = if (favorite) MaterialTheme.colorScheme.primary else LocalContentColor.current,
+                        )
+                    }
                     if (vm.entryId != null) {
                         Box {
                             IconButton({ menu = true }) { Icon(Icons.More, stringResource(Res.string.menu)) }
@@ -215,6 +243,17 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
             }
             if (detail?.inTrash == true) {
                 Banner(stringResource(Res.string.in_trash_banner), stringResource(Res.string.restore), onAction = vm::restoreFromTrash)
+            }
+            if (editor != null && !vm.broken) {
+                val knownTags by vm.knownTags.collectAsStateWithLifecycle()
+                MetadataRow(
+                    mood = detail?.mood,
+                    tags = detail?.tags.orEmpty(),
+                    knownTags = knownTags,
+                    onMood = vm::setMood,
+                    onAddTag = vm::addTag,
+                    onRemoveTag = vm::removeTag,
+                )
             }
             detail?.attachments?.let { attachments ->
                 AttachmentStrip(services.media, attachments) { nav.open(Route.Media(detail.id, it.meta.id)) }

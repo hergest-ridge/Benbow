@@ -50,6 +50,7 @@ import app.benbow.app.resources.journal_title
 import app.benbow.app.resources.menu
 import app.benbow.app.resources.new_entry
 import app.benbow.app.resources.quick_note_hint
+import app.benbow.app.resources.search
 import app.benbow.app.resources.send
 import app.benbow.app.resources.server
 import app.benbow.app.resources.trash
@@ -91,6 +92,7 @@ internal fun JournalScreen(services: AppServices, nav: Navigator) {
             TopAppBar(
                 title = { Text(stringResource(Res.string.journal_title)) },
                 actions = {
+                    IconButton({ nav.open(Route.Search) }) { Icon(Icons.Search, stringResource(Res.string.search)) }
                     SyncChip(status) { nav.open(Route.Server) }
                     Box {
                         IconButton({ menu = true }) { Icon(Icons.More, stringResource(Res.string.menu)) }

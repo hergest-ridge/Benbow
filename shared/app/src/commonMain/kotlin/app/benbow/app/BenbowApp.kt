@@ -33,6 +33,7 @@ import androidx.navigation3.ui.NavDisplay
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.attach_failed
 import app.benbow.app.resources.copied
+import app.benbow.app.resources.tab_calendar
 import app.benbow.app.resources.tab_feed
 import app.benbow.app.resources.tab_home
 import app.benbow.app.resources.tab_search
@@ -56,6 +57,8 @@ internal sealed interface Route {
     data class Media(val entryId: String, val attachmentId: String) : Route
 
     data object Search : Route
+
+    data object Calendar : Route
 
     data class Comments(val entryId: String) : Route
 
@@ -93,6 +96,7 @@ private class Tab(val route: Route, val label: StringResource, val icon: ImageVe
 private val TABS = listOf(
     Tab(Route.Home, Res.string.tab_home, Icons.Home),
     Tab(Route.Feed, Res.string.tab_feed, Icons.Feed),
+    Tab(Route.Calendar, Res.string.tab_calendar, Icons.Calendar),
     Tab(Route.Search, Res.string.tab_search, Icons.Search),
 )
 
@@ -152,6 +156,7 @@ private fun AppNavigation(services: AppServices, backStack: SnapshotStateList<Ro
             entry<Route.Revision> { RevisionScreen(services, nav, it) }
             entry<Route.Media> { MediaScreen(services, nav, it) }
             entry<Route.Search> { SearchScreen(services, nav) }
+            entry<Route.Calendar> { CalendarScreen(services, nav) }
             entry<Route.Comments> { CommentsScreen(services, nav, it) }
             entry<Route.Tags> { TagsScreen(services, nav) }
             entry<Route.Trash> { TrashScreen(services, nav) }

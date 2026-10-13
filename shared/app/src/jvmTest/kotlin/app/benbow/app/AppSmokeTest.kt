@@ -210,6 +210,25 @@ class AppSmokeTest {
     }
 
     @Test
+    fun calendarShowsTheMonthAndTakesAnEvent() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val today = services.today()
+        val good = services.repo.createNote(today, "Хороший день")
+        services.repo.setMood(good, 2)
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Хороший день"), 5_000)
+        onNodeWithText("Календарь").click()
+        waitUntilExactlyOneExists(hasText("+ Событие"), 5_000)
+        onNodeWithText("+ Событие").click()
+        waitForIdle()
+        onAllNodes(hasSetTextAction())[0].performTextInput("Врач")
+        onAllNodes(hasSetTextAction())[1].performTextInput("9:30")
+        onNodeWithText("Добавить").click()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.events(today, today).first().size == 1 } }
+        waitUntilExactlyOneExists(hasText("09:30"), 5_000)
+        screenshot("16-calendar")
+    }
+
+    @Test
     fun newEntryOpenedByMistakeLeavesNothing() = runDesktopComposeUiTest(width = 412, height = 860) {
         setContent { BenbowApp(services) }
         waitUntilExactlyOneExists(hasText("Как прошёл день? Пара строк — и он сохранится."))

@@ -77,12 +77,12 @@ SELECT * FROM entry WHERE id = ?;
 -- Trash is the LWW field "deleted" (JournalRepository.TRASH_FIELD).
 journal:
 SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
-WHERE json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system')
+WHERE json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system', 'event')
 ORDER BY day DESC, created_at;
 
 entriesForDay:
 SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
-WHERE day = ? AND json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system')
+WHERE day = ? AND json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system', 'event')
 ORDER BY created_at;
 
 trash:
@@ -127,7 +127,7 @@ LIMIT 300;
 
 pinned:
 SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
-WHERE json_extract(fields, '$.pinned') = 'true' AND json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system')
+WHERE json_extract(fields, '$.pinned') = 'true' AND json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system', 'event')
 ORDER BY updated_at DESC;
 
 withDrafts:
@@ -139,12 +139,12 @@ ORDER BY d.updated_at DESC;
 -- Same month and day in earlier years (:monthDay = "-10-13").
 onThisDay:
 SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
-WHERE substr(day, 5) = :monthDay AND day < :today AND json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system')
+WHERE substr(day, 5) = :monthDay AND day < :today AND json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system', 'event')
 ORDER BY day DESC, created_at;
 
 favoritesUpTo:
 SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
-WHERE json_extract(fields, '$.favorite') = 'true' AND day <= :lastDay AND json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system')
+WHERE json_extract(fields, '$.favorite') = 'true' AND day <= :lastDay AND json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system', 'event')
 ORDER BY day;
 
 daysWritten:
@@ -156,7 +156,7 @@ feed:
 SELECT id, kind, day, created_at, title, preview, body, conflict_heads, media_count, cover, fields,
     (SELECT COUNT(*) FROM entry c WHERE c.parent_id = entry.id AND c.kind = 'comment' AND json_extract(c.fields, '$.deleted') IS NOT 'true') AS comments
 FROM entry
-WHERE json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system')
+WHERE json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system', 'event')
 ORDER BY day DESC, created_at DESC
 LIMIT :limit;
 
@@ -171,6 +171,21 @@ SELECT COUNT(*) FROM entry WHERE parent_id = ? AND kind = 'comment' AND json_ext
 
 updateParent:
 UPDATE entry SET parent_id = ? WHERE id = ?;
+
+-- Calendar (5.1) ---------------------------------------------------------------------------
+
+-- Per day in a range: how many entries and the average mood (null when none was set).
+monthDays:
+SELECT day, COUNT(*) AS entries, AVG(CAST(json_extract(fields, '$.mood') AS INTEGER)) AS mood FROM entry
+WHERE (day BETWEEN :fromDay AND :toDay) AND json_extract(fields, '$.deleted') IS NOT 'true'
+  AND kind NOT IN ('comment', 'system', 'event')
+GROUP BY day;
+
+-- Events (kind "event"): the title is the text, "start" is "YYYY-MM-DD" (all day) or "YYYY-MM-DDTHH:MM".
+events:
+SELECT id, day, title, json_extract(fields, '$.start') AS start FROM entry
+WHERE kind = 'event' AND (day BETWEEN :fromDay AND :toDay) AND json_extract(fields, '$.deleted') IS NOT 'true'
+ORDER BY day, start;
 
 tagCounts:
 SELECT json_each.value AS name, COUNT(*) AS uses

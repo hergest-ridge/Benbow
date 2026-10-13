@@ -47,6 +47,7 @@ The server denormalizes the head into `entry_text(entry_id, title, plain_text)` 
 
 ## Calendar (P1)
 - `event(id, title, start_at, end_at?, all_day, tz, rrule?, entry_id?, source (local|ics:<feed_id>), external_uid?, deleted_at)`
+- As built (5.1): an entry of kind `event` (the text is the title, `day` is its date) with the LWW field `start` = "YYYY-MM-DD" (all day) or "YYYY-MM-DDTHH:MM". Events stay out of Home, Feed and the writing stats; the calendar lists them per day. End time, repeats and ICS come later.
 - `reminder(id, target_type (entry|event|none), target_id?, fire_at?, rrule?, message, done_at?, deleted_at)`. Scheduled locally on each device (no server push).
 
 ## Templates (P1)

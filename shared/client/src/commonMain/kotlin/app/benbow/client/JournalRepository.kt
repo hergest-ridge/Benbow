@@ -56,6 +56,12 @@ data class TagCount(val name: String, val uses: Int, val category: String? = nul
 /** An entry as the feed shows it: notes in full, journal entries as a preview. */
 data class FeedItem(val summary: EntrySummary, val kind: String, val text: String, val reactions: Set<String>, val comments: Int = 0)
 
+/** A calendar day: how many entries and their average mood (-2..2, null when no mood was set). */
+data class DayInfo(val day: String, val entries: Int, val mood: Double?)
+
+/** A calendar event; [time] is "HH:MM", null for all day. */
+data class EventItem(val id: String, val day: String, val title: String, val time: String?)
+
 /** A reply in an entry's thread, shown in full. */
 data class Comment(val summary: EntrySummary, val text: String)
 
@@ -98,6 +104,7 @@ internal const val FAVORITE_FIELD = "favorite"
 internal const val MOOD_FIELD = "mood"
 internal const val PINNED_FIELD = "pinned"
 internal const val PARENT_FIELD = "parent"
+internal const val START_FIELD = "start"
 
 /** The tag registry (ADR-021): a system entry whose fields are `cat:<tag key>` = category. Fixed id, so devices share it. */
 internal const val TAG_REGISTRY_ID = "system-tags"
@@ -296,6 +303,24 @@ class JournalRepository(
         }.asFlow().mapToList(context)
 
     fun commentCount(parentId: String): Flow<Long> = q.commentCount(parentId).asFlow().mapToOne(context)
+
+    // Calendar (5.1)
+
+    /** Days of [fromDay]..[toDay] that have entries, keyed by day. */
+    fun monthDays(fromDay: String, toDay: String): Flow<Map<String, DayInfo>> =
+        q.monthDays(fromDay, toDay) { day, entries, mood -> DayInfo(day, entries.toInt(), mood) }.asFlow().mapToList(context)
+            .map { days -> days.associateBy { it.day } }
+
+    fun events(fromDay: String, toDay: String): Flow<List<EventItem>> = q.events(fromDay, toDay) { id, day, title, start ->
+        EventItem(id, day, title, start?.substringAfter('T', "")?.takeIf { it.isNotEmpty() })
+    }.asFlow().mapToList(context)
+
+    /** An event on [day], at [time] ("HH:MM") or all day: an entry of kind "event" whose text is the title. */
+    fun createEvent(day: String, title: String, time: String?): String = db.transactionWithResult {
+        val id = createEntry(day, kind = "event", body = textBody(title, random))
+        setField(id, START_FIELD, time?.let { "${day}T$it" } ?: day)
+        id
+    }
 
     fun setPinned(id: String, pinned: Boolean) = setField(id, PINNED_FIELD, if (pinned) "true" else null)
 

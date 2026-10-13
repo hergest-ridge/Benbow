@@ -79,6 +79,21 @@
     <string name="tag_remove">Убрать тег %1$s</string>
     <string name="add">Добавить</string>
     <string name="cancel">Отмена</string>
+    <string name="export">Экспорт</string>
+    <string name="more_export">Весь дневник одним архивом</string>
+    <string name="export_archive_title">Весь дневник</string>
+    <string name="export_archive_text">ZIP-архив: каждая запись в Markdown и JSON, рядом фото и файлы. Открывается без приложения, устроен так же, как копия на сервере.</string>
+    <string name="export_with_media">С фото и файлами</string>
+    <string name="export_save">Сохранить архив…</string>
+    <string name="export_progress">%1$d из %2$d</string>
+    <string name="export_done">Готово. Записей: %1$d, файлов: %2$d.</string>
+    <plurals name="export_missing">
+        <item quantity="one">%1$d файл не попал в архив: его нет на этом устройстве, а сервер недоступен. Список — в README.md внутри. Повторите экспорт, когда сервер будет рядом.</item>
+        <item quantity="few">%1$d файла не попали в архив: их нет на этом устройстве, а сервер недоступен. Список — в README.md внутри. Повторите экспорт, когда сервер будет рядом.</item>
+        <item quantity="many">%1$d файлов не попали в архив: их нет на этом устройстве, а сервер недоступен. Список — в README.md внутри. Повторите экспорт, когда сервер будет рядом.</item>
+        <item quantity="other">%1$d файла не попали в архив: их нет на этом устройстве, а сервер недоступен. Список — в README.md внутри. Повторите экспорт, когда сервер будет рядом.</item>
+    </plurals>
+    <string name="export_failed">Не получилось сохранить: %1$s</string>
     <string name="widget_no_entries">Сегодня пока без записей</string>
     <plurals name="widget_entries">
         <item quantity="one">%1$d запись сегодня</item>

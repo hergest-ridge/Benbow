@@ -4,9 +4,14 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
 import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
+import java.io.OutputStream
 
 @Composable
 internal actual fun rememberCopy(): (String) -> Boolean {
@@ -29,4 +34,16 @@ internal actual fun rememberShare(): (String) -> Boolean {
             true
         }
     }
+}
+
+@Composable
+internal actual fun rememberSaveFile(mime: String, onPicked: (open: (() -> OutputStream)?) -> Unit): (String) -> Unit {
+    val context = LocalContext.current
+    val callback by rememberUpdatedState(onPicked)
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(mime),
+    ) { uri ->
+        callback(uri?.let { { context.contentResolver.openOutputStream(it, "w") ?: error("Can't write $it") } })
+    }
+    return { name -> launcher.launch(name) }
 }

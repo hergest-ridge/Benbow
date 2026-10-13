@@ -27,6 +27,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.benbow.app.resources.Res
+import app.benbow.app.resources.export
+import app.benbow.app.resources.more_export
 import app.benbow.app.resources.more_reminders
 import app.benbow.app.resources.more_tagline
 import app.benbow.app.resources.more_tags
@@ -68,6 +70,7 @@ private fun MoreList(status: SyncStatus, nav: Navigator) {
         }
         MoreItem(Icons.Label, stringResource(Res.string.tags), stringResource(Res.string.more_tags)) { nav.open(Route.Tags) }
         MoreItem(Icons.Delete, stringResource(Res.string.trash), stringResource(Res.string.more_trash)) { nav.open(Route.Trash) }
+        MoreItem(Icons.Download, stringResource(Res.string.export), stringResource(Res.string.more_export)) { nav.open(Route.Export) }
     }
 }
 

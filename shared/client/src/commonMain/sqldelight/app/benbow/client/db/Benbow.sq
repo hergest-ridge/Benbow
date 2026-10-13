@@ -112,6 +112,11 @@ ON CONFLICT(id) DO UPDATE SET
 allEntries:
 SELECT id, kind, day, created_at, head_rev, body, fields, field_clocks, attachments FROM entry;
 
+-- Everything but app registries, oldest first: the archive export.
+exportEntries:
+SELECT id, kind, day, created_at, head_rev, body, conflict_heads, fields, field_clocks, attachments FROM entry
+WHERE kind != 'system' ORDER BY day, created_at;
+
 -- :match is an FTS query built by SearchIndex.match (never raw user input); null filters are off.
 search:
 SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry

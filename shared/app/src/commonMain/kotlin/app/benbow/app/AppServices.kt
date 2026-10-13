@@ -1,7 +1,10 @@
 package app.benbow.app
 
 import app.benbow.client.ApiCache
+import app.benbow.client.ArchiveExport
 import app.benbow.client.Due
+import app.benbow.client.ExportProgress
+import app.benbow.client.ExportReport
 import app.benbow.client.JournalRepository
 import app.benbow.client.MediaStore
 import app.benbow.client.Pairing
@@ -23,6 +26,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import java.io.File
+import java.io.OutputStream
 import java.time.LocalDateTime
 import kotlin.concurrent.Volatile
 import kotlin.time.Clock
@@ -34,6 +38,17 @@ fun interface ReminderClock {
 
 /** Where the app should go when something outside opens it (a launcher shortcut, the widget). */
 enum class AppLaunch { NewEntry, AnswerPrompt }
+
+/** The archive export, which runs in the app scope so leaving the screen doesn't stop it. */
+sealed interface ExportState {
+    data object Idle : ExportState
+
+    data class Running(val progress: ExportProgress?) : ExportState
+
+    data class Done(val report: ExportReport) : ExportState
+
+    data class Failed(val reason: String) : ExportState
+}
 
 sealed interface AppMessage {
     data class AttachFailed(val reason: String) : AppMessage
@@ -73,6 +88,24 @@ class AppServices(
         now = now,
     )
     val settings get() = Settings(db)
+
+    val export = MutableStateFlow<ExportState>(ExportState.Idle)
+
+    /** Writes the whole journal as a ZIP ([ArchiveExport]) after committing any left-over drafts, so it holds what's on screen. */
+    fun exportArchive(open: () -> OutputStream, withMedia: Boolean) {
+        if (export.value is ExportState.Running) return
+        export.value = ExportState.Running(null)
+        scope.launch {
+            export.value = try {
+                repo.commitLeftoverDrafts()
+                ExportState.Done(ArchiveExport(db, media).write(open(), withMedia, today()) { export.value = ExportState.Running(it) })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                ExportState.Failed(e.message ?: e::class.simpleName.orEmpty())
+            }
+        }
+    }
 
     /** Things the user must hear about (shown as a snackbar). */
     val messages = MutableSharedFlow<AppMessage>(extraBufferCapacity = 8)

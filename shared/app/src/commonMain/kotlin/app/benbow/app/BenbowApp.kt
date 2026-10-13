@@ -98,6 +98,8 @@ internal sealed interface Route {
 
     data object Server : Route
 
+    data object Export : Route
+
     /** The last tab: everything that doesn't need a tab of its own. */
     data object More : Route
 }
@@ -242,6 +244,7 @@ private fun AppNavigation(services: AppServices, backStack: SnapshotStateList<Ro
             entry<Route.Reminders> { RemindersScreen(services, nav, it) }
             entry<Route.Trash> { TrashScreen(services, nav) }
             entry<Route.Server> { ServerScreen(services, nav) }
+            entry<Route.Export> { ExportScreen(services, nav) }
         },
     )
 }

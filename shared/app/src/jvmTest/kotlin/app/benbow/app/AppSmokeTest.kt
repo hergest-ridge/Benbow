@@ -34,6 +34,7 @@ import java.util.Properties
 import javax.imageio.ImageIO
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /** Drives the real app (in-memory DB, not paired) through the main flows and keeps screenshots for review. */
 @OptIn(ExperimentalTestApi::class)
@@ -312,6 +313,21 @@ class AppSmokeTest {
         onNodeWithText("Сохранить").click()
         waitUntil(timeoutMillis = 5_000) { closed }
         assertEquals("Статья про сон", runBlocking { services.repo.journal().first().single().title })
+    }
+
+    @Test
+    fun theWholeJournalExportsFromMore() = runDesktopComposeUiTest(width = 412, height = 860) {
+        services.repo.createNote(services.today(), "Для архива")
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Для архива"), 5_000)
+        onNodeWithText("Ещё").click()
+        onNodeWithText("Экспорт").click()
+        waitUntilExactlyOneExists(hasText("Сохранить архив…"), 5_000)
+        val out = ByteArrayOutputStream()
+        services.exportArchive({ out }, withMedia = true) // the save dialog is the platform's; from here on it's the app
+        waitUntilExactlyOneExists(hasText("Готово", substring = true), 5_000)
+        screenshot("25-export")
+        assertTrue(out.size() > 0)
     }
 
     @Test

@@ -1,16 +1,7 @@
 package app.benbow.server.backup
 
-import app.benbow.core.content.DocumentCodec
-import app.benbow.core.content.DocumentFormatException
-import app.benbow.core.content.MarkdownExporter
-import app.benbow.core.content.TextBlock
-import app.benbow.core.content.toPlainText
+import app.benbow.core.content.EntryExport
 import app.benbow.core.sync.EntryState
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -19,71 +10,23 @@ import kotlin.io.path.writeText
 
 /**
  * Human-readable disaster-recovery copy (data-safety.md#backups): one `.md` per entry with YAML
- * front matter, plus a `.json` sidecar holding the canonical document and metadata losslessly.
- * File names depend only on day and id, so a changed title never orphans an old file.
+ * front matter, plus a `.json` sidecar holding the canonical document and metadata losslessly
+ * (the format is [EntryExport], shared with the app's archive export).
  * [media] finds the placed file of a SHA-256 (null while it hasn't been uploaded).
  */
 class MarkdownMirror(private val root: Path, private val media: (String) -> Path? = { null }) {
-    private val exporter = MarkdownExporter()
-    private val json = Json { prettyPrint = true }
-
     fun write(entry: EntryState, body: String?) {
         if (entry.kind == "system") return // registries (e.g. tag categories) are app data, not notes
-        val (year, month) = entry.day.split("-").let { it.getOrElse(0) { "0000" } to it.getOrElse(1) { "00" } }
-        val dir = root.resolve(year).resolve(month).createDirectories()
-        val base = "${entry.day}_${entry.id.takeLast(12).replace(Regex("[^A-Za-z0-9-]"), "_")}"
-        val document = body?.let {
-            try {
-                DocumentCodec.decode(it)
-            } catch (_: DocumentFormatException) {
-                null
+        val dir = root.resolve(EntryExport.folder(entry)).createDirectories()
+        val base = EntryExport.baseName(entry)
+        val markdown = EntryExport.markdown(entry, body, missing = "not uploaded yet") { a ->
+            media(a.meta.sha256)?.let { file ->
+                runCatching { dir.relativize(file).joinToString("/") }.getOrElse { file.toUri().toString() }
             }
         }
-        val title = (document?.blocks?.firstOrNull() as? TextBlock)?.let { block -> block.children.joinToString("") { it.text } }.orEmpty()
-        val frontMatter = buildString {
-            appendLine("---")
-            appendLine("id: ${yaml(entry.id)}")
-            appendLine("kind: ${yaml(entry.kind)}")
-            appendLine("day: ${yaml(entry.day)}")
-            appendLine("title: ${yaml(title.take(120))}")
-            entry.head?.let { appendLine("revision: ${yaml(it)}") }
-            if (entry.conflictHeads.isNotEmpty()) appendLine("conflict: [${entry.conflictHeads.joinToString(", ") { yaml(it) }}]")
-            // Namespaced fields (ADR-021) read as lists; everything else as plain keys.
-            val fields = entry.fields.mapNotNull { (k, v) -> v.value?.let { k to it } }.toMap().toSortedMap()
-            val tags = fields.filterKeys { it.startsWith("tag:") }.values.sortedBy { it.lowercase() }
-            val reactions = fields.keys.filter { it.startsWith("reaction:") }.map { it.removePrefix("reaction:") }
-            fields.filterKeys { !it.startsWith("tag:") && !it.startsWith("reaction:") }.forEach { (k, v) -> appendLine("$k: ${yaml(v)}") }
-            if (tags.isNotEmpty()) appendLine("tags: [${tags.joinToString(", ") { yaml(it) }}]")
-            if (reactions.isNotEmpty()) appendLine("reactions: [${reactions.joinToString(", ") { yaml(it) }}]")
-            appendLine("---")
-        }
-        val markdown = when {
-            body == null -> ""
-            document == null -> "<!-- body could not be decoded; see the .json sidecar -->"
-            else -> exporter.export(document)
-        }
-        atomicWrite(dir.resolve("$base.md"), frontMatter + "\n" + markdown + "\n" + attachments(entry, dir))
-        val sidecar: JsonObject = buildJsonObject {
-            put("entry", Json.encodeToJsonElement(EntryState.serializer(), entry))
-            put("body", body?.let { JsonPrimitive(it) } ?: JsonPrimitive(""))
-            put("plain_text", document?.toPlainText() ?: "")
-        }
-        atomicWrite(dir.resolve("$base.json"), json.encodeToString(JsonObject.serializer(), sidecar) + "\n")
+        atomicWrite(dir.resolve("$base.md"), markdown)
+        atomicWrite(dir.resolve("$base.json"), EntryExport.sidecar(entry, body))
     }
-
-    /** Present attachments as links relative to the note, so the folder stays browsable without the app. */
-    private fun attachments(entry: EntryState, dir: Path): String {
-        val visible = entry.attachments.values.filter { it.present }.sortedBy { it.position }
-        if (visible.isEmpty()) return ""
-        return visible.joinToString("\n", prefix = "\n", postfix = "\n") { a ->
-            val label = (a.caption ?: a.meta.name ?: a.meta.kind).replace('[', '(').replace(']', ')')
-            val file = media(a.meta.sha256) ?: return@joinToString "<!-- ${a.meta.kind} ${a.meta.sha256} not uploaded yet -->"
-            val link = runCatching { dir.relativize(file).joinToString("/") }.getOrElse { file.toUri().toString() } // another drive
-            if (a.meta.kind == "image") "![$label](<$link>)" else "[$label](<$link>)"
-        }
-    }
-
-    private fun yaml(value: String): String = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\""
 
     private fun atomicWrite(target: Path, text: String) {
         val tmp = target.resolveSibling(target.fileName.toString() + ".tmp")

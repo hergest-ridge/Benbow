@@ -16,8 +16,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableSharedFlow
 import java.io.File
 import kotlin.time.Clock
+
+sealed interface AppMessage {
+    data class AttachFailed(val reason: String) : AppMessage
+}
 
 /**
  * Everything the screens need, created once per process by the platform app (it supplies the SQLite
@@ -42,6 +47,9 @@ class AppServices(driver: SqlDriver, mediaDir: File, val platform: String, val d
         now = now,
     )
     val settings get() = Settings(db)
+
+    /** Things the user must hear about (shown as a snackbar). */
+    val messages = MutableSharedFlow<AppMessage>(extraBufferCapacity = 8)
 
     init {
         repo.commitLeftoverDrafts()

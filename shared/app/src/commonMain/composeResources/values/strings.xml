@@ -58,6 +58,17 @@
     <string name="sync_incompatible">Нужно обновление</string>
     <string name="sync_attention">Требует внимания</string>
 
+    <string name="media_gallery">Фото и видео</string>
+    <string name="media_camera">Снять фото</string>
+    <string name="media_voice">Голосовая заметка: удерживайте</string>
+    <string name="media_recording">Запись… отпустите, чтобы сохранить</string>
+    <string name="media_mic_denied">Чтобы записывать голос, разрешите доступ к микрофону</string>
+    <string name="media_file">Добавить файл</string>
+    <string name="media_open">Открыть в другом приложении</string>
+    <string name="media_remove">Убрать</string>
+    <string name="media_remove_confirm">Убрать вложение из записи? Файл останется на сервере и в истории.</string>
+    <string name="media_unavailable">Файл сейчас недоступен: %1$s</string>
+    <string name="attach_failed">Не удалось добавить файл: %1$s</string>
     <string name="trash_empty">Корзина пуста</string>
     <string name="trash_hint">Записи из корзины не удаляются: их можно вернуть в любой момент.</string>
 

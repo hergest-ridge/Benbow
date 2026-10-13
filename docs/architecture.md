@@ -58,6 +58,7 @@ Dependency rule: `apps/{android,desktop} → shared/app → shared/{ui,client} �
 - DI: a plain `AppServices` object created by the platform app (enough for one process-wide graph; Koin if it grows). Navigation: Navigation 3 with a ViewModel store per entry. Images: Coil 3.
 - Editor screen: typing goes to a `DraftSession` (draft within 400 ms, revision after 30 s idle / 2 min typing / leaving / app stop). Text arriving from sync or a restored version replaces the editor content only if the user hasn't typed since it was loaded or last committed.
 - UI smoke test: `shared/app` jvmTest drives the whole app headless and writes screenshots to `shared/app/build/screens`.
+- Media UI (3.3): common gallery strip, journal covers, full-screen viewer (pinch/double-tap zoom) with Coil 3; `MediaBar` and `MediaPlayer` are expect/actual. Android: Photo Picker (no permission), camera via `TakePicture` into `files/capture` through a FileProvider (the temp file is deleted only after a successful import), hold-to-record voice (AAC .m4a, `RECORD_AUDIO`), previews from EXIF-rotated bitmaps and video frames, playback with Media3 `PlayerView`. Desktop: file dialog, ImageIO previews, video/audio opened in the system player. Modules whose targets are all JVM (android + jvm) may use JDK APIs in commonMain.
 - Performance: immutable UI models, stable keys and `contentType` in lazy lists, paging by cursor, prefetch of adjacent entries, baseline profiles, R8 full mode.
 
 ## Server internals

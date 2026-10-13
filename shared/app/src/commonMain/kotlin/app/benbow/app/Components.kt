@@ -38,6 +38,7 @@ import app.benbow.app.resources.sync_waiting
 import app.benbow.app.resources.sync_wrong_server
 import app.benbow.app.resources.untitled
 import app.benbow.client.EntrySummary
+import app.benbow.client.MediaStore
 import app.benbow.client.SyncResult
 import app.benbow.client.SyncStatus
 import org.jetbrains.compose.resources.pluralStringResource
@@ -50,7 +51,7 @@ internal fun BackButton(onClick: () -> Unit) {
 
 /** A journal entry in a list: time, title, a few lines of preview. */
 @Composable
-internal fun EntryCard(entry: EntrySummary, onClick: () -> Unit, trailing: @Composable (() -> Unit)? = null) {
+internal fun EntryCard(entry: EntrySummary, onClick: () -> Unit, media: MediaStore? = null, trailing: @Composable (() -> Unit)? = null) {
     val colors = MaterialTheme.colorScheme
     Surface(
         onClick = onClick,
@@ -88,6 +89,7 @@ internal fun EntryCard(entry: EntrySummary, onClick: () -> Unit, trailing: @Comp
                     )
                 }
             }
+            if (media != null) entry.cover?.let { CoverThumb(media, it, entry.mediaCount) }
             trailing?.invoke()
         }
     }

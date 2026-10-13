@@ -79,6 +79,15 @@ class DraftSession(
         return scope.launch { commitNow() }
     }
 
+    /** The entry's id, creating the entry now if it has none yet (attaching a photo to a new entry). */
+    suspend fun ensureEntry(): String = mutex.withLock {
+        entryId ?: run {
+            val text = unsaved.exchange(null)
+            val body = text?.let { DocumentCodec.encode(it.toDocument()) } ?: JournalRepository.emptyBody()
+            repo.createEntry(day, body = body).also { id.value = it }
+        }
+    }
+
     private suspend fun save() = mutex.withLock {
         val text = unsaved.exchange(null) ?: return@withLock
         val body = DocumentCodec.encode(text.toDocument())

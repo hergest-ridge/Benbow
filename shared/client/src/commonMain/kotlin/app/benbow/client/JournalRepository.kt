@@ -193,10 +193,10 @@ class JournalRepository(
         width: Int? = null,
         height: Int? = null,
         durationMs: Long? = null,
-        previewSha256: String? = null,
+        preview: MediaFile? = null,
     ): String = db.transactionWithResult {
         val entry = q.selectEntry(entryId).executeAsOneOrNull() ?: error("No entry $entryId")
-        q.putMedia(file.sha256, file.path, file.size, file.mime, "captured", 0, file.name, file.capturedAt, now())
+        for (f in listOfNotNull(file, preview)) q.putMedia(f.sha256, f.path, f.size, f.mime, "captured", 0, f.name, f.capturedAt, now())
         val current = decodeAttachments(entry.attachments)
         val meta = AttachmentMeta(
             id = newId(),
@@ -209,7 +209,7 @@ class JournalRepository(
             height = height,
             durationMs = durationMs,
             capturedAt = file.capturedAt,
-            previewSha256 = previewSha256,
+            previewSha256 = preview?.sha256,
         )
         val position = (current.values.maxOfOrNull { it.position } ?: 0.0) + 1
         val state = AttachmentState(meta, position, hlc = clock.next())

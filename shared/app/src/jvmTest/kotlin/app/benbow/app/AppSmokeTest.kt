@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -15,8 +16,12 @@ import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.test.waitUntilExactlyOneExists
 import app.benbow.client.db.BenbowDb
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import java.awt.Color
+import java.awt.image.BufferedImage
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.Properties
 import javax.imageio.ImageIO
@@ -75,6 +80,44 @@ class AppSmokeTest {
         waitUntilExactlyOneExists(hasText("Подключиться"))
         screenshot("06-server")
         assertEquals(1, runBlocking { services.repo.journal().first().size })
+    }
+
+    /** A picture: warm sky over a dark sea, so the screenshots show whether it renders. */
+    private fun picture(width: Int = 1600, height: Int = 1200): ByteArray {
+        val image = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
+        image.createGraphics().apply {
+            color = Color(0xE8, 0xA8, 0x5A)
+            fillRect(0, 0, width, height * 7 / 12)
+            color = Color(0x1F, 0x4E, 0x6E)
+            fillRect(0, height * 7 / 12, width, height * 5 / 12)
+            dispose()
+        }
+        return ByteArrayOutputStream().also { ImageIO.write(image, "jpg", it) }.toByteArray()
+    }
+
+    @Test
+    fun attachedPhotoShowsInTheEntryTheJournalAndFullScreen() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val bytes = picture()
+        val entry = services.repo.createNote(services.today(), "Закат на море")
+        val image = ImageIO.read(bytes.inputStream())
+        runBlocking {
+            services.attach({ entry }, { bytes.inputStream() }) {
+                MediaProbe("image/jpeg", "IMG_1.jpg", "image", image.width, image.height, preview = picture(512, 384))
+            }.join()
+        }
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Закат на море"), 5_000)
+        runBlocking { delay(1_500) } // Coil decodes on its own threads, outside the test's idling
+        waitForIdle()
+        screenshot("07-journal-cover")
+
+        onNodeWithText("Закат на море").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasClickAction()).fetchSemanticsNodes().size > 3 }
+        runBlocking { delay(1_000) }
+        waitForIdle()
+        screenshot("08-editor-gallery")
+        assertEquals(1, runBlocking { services.repo.entry(entry).first()!!.attachments.size })
+        assertEquals(2L, runBlocking { services.media.pendingCount().first() }, "the file and its preview wait for the server")
     }
 
     @Test

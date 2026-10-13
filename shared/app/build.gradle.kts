@@ -28,6 +28,14 @@ kotlin {
             implementation(libs.lifecycle.viewmodel.navigation3)
             implementation(libs.navigation3.ui)
             implementation(libs.kotlinx.datetime)
+            implementation(libs.coil.compose)
+        }
+        // Capture (Photo Picker, camera, voice) and playback live in the platform source sets.
+        androidMain.dependencies {
+            implementation(libs.androidx.activity.compose)
+            implementation(libs.media3.exoplayer)
+            implementation(libs.media3.ui)
+            implementation(libs.androidx.exifinterface)
         }
         // Headless UI smoke test of the whole app on desktop; it also writes screenshots to build/screens.
         jvmTest.dependencies {

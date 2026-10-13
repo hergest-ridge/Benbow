@@ -131,7 +131,7 @@ internal fun JournalScreen(services: AppServices, nav: Navigator) {
                     groups.forEach { group ->
                         stickyHeader(key = "day:${group.day}") { DayHeader(group.day) }
                         items(group.entries, key = { it.id }) { entry ->
-                            EntryCard(entry, onClick = { nav.open(Route.Editor(entry.id, entry.day)) })
+                            EntryCard(entry, onClick = { nav.open(Route.Editor(entry.id, entry.day)) }, media = services.media)
                         }
                     }
                 }

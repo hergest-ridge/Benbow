@@ -91,6 +91,9 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
 
     fun onEdited(text: RichText) = session.onChange(text)
 
+    /** For attachments: a new entry is created on the first one. */
+    suspend fun ensureEntryId(): String = session.ensureEntry()
+
     fun commit() {
         session.commit()
     }
@@ -192,7 +195,14 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                 },
             )
         },
-        bottomBar = { if (editor != null) EditorToolbar(editor, Modifier.navigationBarsPadding().imePadding()) },
+        bottomBar = {
+            if (editor != null) {
+                Column(Modifier.navigationBarsPadding().imePadding()) {
+                    MediaBar(services, vm::ensureEntryId)
+                    EditorToolbar(editor)
+                }
+            }
+        },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
             if (detail?.conflictHeads?.isNotEmpty() == true) {
@@ -205,6 +215,9 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
             }
             if (detail?.inTrash == true) {
                 Banner(stringResource(Res.string.in_trash_banner), stringResource(Res.string.restore), onAction = vm::restoreFromTrash)
+            }
+            detail?.attachments?.let { attachments ->
+                AttachmentStrip(services.media, attachments) { nav.open(Route.Media(detail.id, it.meta.id)) }
             }
             when {
                 vm.broken -> Text(

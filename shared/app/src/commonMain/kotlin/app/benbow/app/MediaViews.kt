@@ -9,11 +9,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -38,13 +43,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import app.benbow.app.resources.Res
+import app.benbow.app.resources.attachments
 import app.benbow.client.MediaStore
 import app.benbow.core.sync.AttachmentState
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.CancellationException
+import org.jetbrains.compose.resources.stringResource
 import java.io.File
 
 internal sealed interface MediaLoad {
@@ -158,14 +168,23 @@ internal fun CoverThumb(media: MediaStore, sha256: String, count: Int) {
     }
 }
 
-/** Full-screen picture: pinch to zoom, drag when zoomed, double tap to zoom in or back. */
+/**
+ * Full-screen picture: pinch to zoom, drag when zoomed, double tap to zoom in or back. Not zoomed, one-finger drags pass
+ * through (the pager swipes, a pull down closes); [onZoom] says when that changes, [onTap] reports a single tap.
+ */
 @Composable
-internal fun ZoomableImage(file: File, modifier: Modifier = Modifier) {
+internal fun ZoomableImage(file: File, modifier: Modifier = Modifier, onZoom: (Boolean) -> Unit = {}, onTap: () -> Unit = {}) {
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
-    val state = rememberTransformableState { zoom, pan, _ ->
-        scale = (scale * zoom).coerceIn(1f, 6f)
-        offset = if (scale == 1f) Offset.Zero else offset + pan * scale
+    val zoom = { value: Float ->
+        val was = scale > 1f
+        scale = value
+        if (scale == 1f) offset = Offset.Zero
+        if (was != scale > 1f) onZoom(scale > 1f)
+    }
+    val state = rememberTransformableState { change, pan, _ ->
+        zoom((scale * change).coerceIn(1f, 6f))
+        if (scale > 1f) offset += pan * scale
     }
     AsyncImage(
         model = file,
@@ -174,16 +193,9 @@ internal fun ZoomableImage(file: File, modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxSize()
             .pointerInput(Unit) {
-                detectTapGestures(onDoubleTap = {
-                    if (scale > 1f) {
-                        scale = 1f
-                        offset = Offset.Zero
-                    } else {
-                        scale = 2.5f
-                    }
-                })
+                detectTapGestures(onTap = { onTap() }, onDoubleTap = { zoom(if (scale > 1f) 1f else 2.5f) })
             }
-            .transformable(state)
+            .transformable(state, canPan = { scale > 1f })
             .graphicsLayer(scaleX = scale, scaleY = scale, translationX = offset.x, translationY = offset.y),
     )
 }
@@ -191,4 +203,60 @@ internal fun ZoomableImage(file: File, modifier: Modifier = Modifier) {
 @Composable
 internal fun Loading(modifier: Modifier = Modifier) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+}
+
+/**
+ * A post's pictures and videos as one swipeable card (the first one's shape, within reason): a counter and dots when there
+ * are several, a play button and length on videos. A tap opens the full-screen viewer at that item.
+ */
+@Composable
+internal fun MediaCarousel(
+    media: MediaStore,
+    items: List<AttachmentState>,
+    onOpen: (AttachmentState) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (items.isEmpty()) return
+    val pager = rememberPagerState { items.size }
+    val first = items.first().meta
+    val ratio = if ((first.width ?: 0) > 0 && (first.height ?: 0) > 0) first.width!!.toFloat() / first.height!! else 4f / 3
+    val shape = RoundedCornerShape(12.dp)
+    val label = stringResource(Res.string.attachments)
+    Box(
+        modifier.fillMaxWidth().aspectRatio(ratio.coerceIn(0.8f, 1.9f)).clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh).semantics { contentDescription = label },
+    ) {
+        HorizontalPager(pager, key = { items[it].meta.id }, modifier = Modifier.fillMaxSize()) { page ->
+            val item = items[page]
+            Box(Modifier.fillMaxSize().clickable { onOpen(item) }, contentAlignment = Alignment.Center) {
+                item.visual?.let { sha ->
+                    val load by rememberMediaFile(media, sha)
+                    (load as? MediaLoad.Ready)?.let { AsyncImage(it.file, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
+                }
+                if (item.meta.kind == "video") {
+                    PlayBadge()
+                    item.meta.durationMs?.let { ms -> Chip(durationLabel(ms), Modifier.align(Alignment.BottomStart).padding(8.dp)) }
+                }
+            }
+        }
+        if (items.size > 1) {
+            Chip("${pager.currentPage + 1}/${items.size}", Modifier.align(Alignment.TopEnd).padding(8.dp))
+            Row(
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                repeat(items.size.coerceAtMost(10)) { i ->
+                    val on = i == pager.currentPage.coerceAtMost(9)
+                    Box(Modifier.size(if (on) 7.dp else 6.dp).background(Color.White.copy(alpha = if (on) 0.95f else 0.55f), CircleShape))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Chip(text: String, modifier: Modifier = Modifier) {
+    Surface(color = Color.Black.copy(alpha = 0.55f), contentColor = Color.White, shape = RoundedCornerShape(10.dp), modifier = modifier) {
+        Text(text, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp))
+    }
 }

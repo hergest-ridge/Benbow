@@ -1,12 +1,14 @@
 package app.benbow.app
 
 import androidx.compose.foundation.layout.size
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
@@ -19,6 +21,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.test.waitUntilExactlyOneExists
 import androidx.compose.ui.unit.dp
@@ -422,6 +425,46 @@ class AppSmokeTest {
         onNodeWithText("Сочетания клавиш").click()
         waitUntilExactlyOneExists(hasText("Ctrl+N"), 5_000)
         screenshot("36-shortcuts")
+    }
+
+    /** A finger drag in small steps, the way a pager or a pull-to-close sees a real swipe. */
+    private fun androidx.compose.ui.test.TouchInjectionScope.drag(from: Offset, by: Offset) {
+        down(from)
+        repeat(12) { moveBy(by / 12f, delayMillis = 16) }
+        up()
+    }
+
+    @Test
+    fun picturesSwipeInTheFeedAndFullScreen() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val entry = services.repo.createNote(services.today(), "Три снимка с моря")
+        runBlocking {
+            repeat(3) { i ->
+                val bytes = picture()
+                val image = ImageIO.read(bytes.inputStream())
+                services.attach({ entry }, { bytes.inputStream() }) {
+                    MediaProbe("image/jpeg", "IMG_$i.jpg", "image", image.width, image.height, preview = picture(512, 384))
+                }.join()
+            }
+        }
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Три снимка с моря"), 5_000)
+        onNodeWithText("Лента").click()
+        waitUntilExactlyOneExists(hasText("1/3"), 5_000)
+        runBlocking { delay(1_000) } // Coil decodes off the test's idling
+        waitForIdle()
+        screenshot("37-feed-carousel")
+        onNodeWithContentDescription("Вложения").performTouchInput { drag(center, Offset(-width * 0.7f, 0f)) }
+        waitUntilExactlyOneExists(hasText("2/3"), 5_000)
+
+        onNodeWithContentDescription("Вложения").performTouchInput { click(center) }
+        waitUntilExactlyOneExists(hasText("2 / 3"), 5_000)
+        runBlocking { delay(800) }
+        waitForIdle()
+        screenshot("38-viewer")
+        onRoot().performTouchInput { drag(center, Offset(-width * 0.7f, 0f)) }
+        waitUntilExactlyOneExists(hasText("3 / 3"), 5_000)
+        onRoot().performTouchInput { drag(center, Offset(0f, height * 0.35f)) }
+        waitUntilExactlyOneExists(hasText("Три снимка с моря"), 5_000) // back in the feed
     }
 
     @Test

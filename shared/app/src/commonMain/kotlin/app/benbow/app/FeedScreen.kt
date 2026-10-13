@@ -45,6 +45,7 @@ import app.benbow.app.resources.comments
 import app.benbow.app.resources.feed_empty
 import app.benbow.app.resources.feed_title
 import app.benbow.client.FeedItem
+import app.benbow.core.sync.AttachmentState
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -122,6 +123,7 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
                         row.item,
                         onOpen = { nav.open(Route.Editor(row.item.summary.id, row.item.summary.day, readOnly = true)) },
                         onComments = { nav.open(Route.Editor(row.item.summary.id, row.item.summary.day, readOnly = true)) },
+                        onOpenMedia = { nav.open(Route.Media(row.item.summary.id, it.meta.id)) },
                     ) { emoji, on ->
                         vm.react(row.item.summary.id, emoji, on)
                     }
@@ -138,6 +140,7 @@ private fun FeedBubble(
     item: FeedItem,
     onOpen: () -> Unit,
     onComments: () -> Unit,
+    onOpenMedia: (AttachmentState) -> Unit,
     onReact: (String, Boolean) -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
@@ -153,17 +156,7 @@ private fun FeedBubble(
             }),
         ) {
             Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                entry.cover?.let { sha ->
-                    val load by rememberMediaFile(services.media, sha)
-                    (load as? MediaLoad.Ready)?.let {
-                        AsyncImage(
-                            it.file,
-                            null,
-                            Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(12.dp)),
-                            contentScale = ContentScale.Crop,
-                        )
-                    }
-                }
+                if (item.media.isNotEmpty()) MediaCarousel(services.media, item.media, onOpenMedia)
                 if (item.text.isNotBlank()) {
                     Text(
                         item.text,
@@ -194,11 +187,6 @@ private fun FeedBubble(
                     Box(Modifier.weight(1f))
                     if (entry.favorite) Text("★", style = MaterialTheme.typography.labelMedium, color = colors.primary)
                     moodEmoji(entry.mood)?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
-                    if (entry.mediaCount >
-                        1
-                    ) {
-                        Text("+${entry.mediaCount - 1}", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
-                    }
                     Text(timeLabel(entry.createdAt), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
                 }
             }

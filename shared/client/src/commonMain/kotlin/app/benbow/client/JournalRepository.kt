@@ -55,8 +55,15 @@ data class EntrySummary(
 
 data class TagCount(val name: String, val uses: Int, val category: String? = null)
 
-/** An entry as the feed shows it: notes in full, journal entries as a preview. */
-data class FeedItem(val summary: EntrySummary, val kind: String, val text: String, val reactions: Set<String>, val comments: Int = 0)
+/** An entry as the feed shows it: notes in full, journal entries as a preview; [media] = its pictures and videos in order. */
+data class FeedItem(
+    val summary: EntrySummary,
+    val kind: String,
+    val text: String,
+    val reactions: Set<String>,
+    val comments: Int = 0,
+    val media: List<AttachmentState> = emptyList(),
+)
 
 /** A calendar day: how many entries and their average mood (-2..2, null when no mood was set). */
 data class DayInfo(val day: String, val entries: Int, val mood: Double?)
@@ -112,6 +119,9 @@ internal const val AT_FIELD = "at"
 internal const val REPEAT_FIELD = "repeat"
 internal const val DONE_FIELD = "done"
 internal const val BACKGROUND_FIELD = "background"
+
+/** Attachments shown as pictures (a video by its preview frame). */
+private val VISUAL_KINDS = setOf("image", "video")
 
 /** The tag registry (ADR-021): a system entry whose fields are `cat:<tag key>` = category. Fixed id, so devices share it. */
 internal const val TAG_REGISTRY_ID = "system-tags"
@@ -397,7 +407,7 @@ class JournalRepository(
 
     /** Newest first; the feed draws it bottom-up like a chat. */
     fun feed(limit: Long = 300): Flow<List<FeedItem>> =
-        q.feed(limit) { id, kind, day, createdAt, title, preview, body, conflictHeads, mediaCount, cover, fields, comments ->
+        q.feed(limit) { id, kind, day, createdAt, title, preview, body, conflictHeads, mediaCount, cover, fields, attachments, comments ->
             val summary = summaryOf(id, day, createdAt, title, preview, conflictHeads, mediaCount, cover, fields)
             val text = if (kind == "journal") {
                 listOf(title, preview).filter { it.isNotBlank() }.joinToString("\n")
@@ -405,7 +415,8 @@ class JournalRepository(
                 plainText(body).take(FEED_TEXT_MAX)
             }
             val reactions = decodeFields(fields).filter { it.key.startsWith(REACTION_PREFIX) && it.value != null }.keys
-            FeedItem(summary, kind, text, reactions.map { it.removePrefix(REACTION_PREFIX) }.toSet(), comments.toInt())
+            val media = decodeAttachments(attachments).values.filter { it.present && it.meta.kind in VISUAL_KINDS }.sortedBy { it.position }
+            FeedItem(summary, kind, text, reactions.map { it.removePrefix(REACTION_PREFIX) }.toSet(), comments.toInt(), media)
         }.asFlow().mapToList(context)
 
     /** Builds the search index after an update changed it (or on the first start); quick otherwise. */

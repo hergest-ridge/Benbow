@@ -51,6 +51,7 @@ internal fun PostView(
     onOpenMedia: (String) -> Unit,
     onOpenComment: (Comment) -> Unit,
     onReact: (String, Boolean) -> Unit,
+    ribbon: Boolean,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.verticalScroll(rememberScrollState())) {
@@ -65,7 +66,7 @@ internal fun PostView(
                 detail.tags.forEach { TagChip(it) }
             }
         }
-        AttachmentStrip(services.media, detail.attachments) { onOpenMedia(it.meta.id) }
+        if (ribbon) AttachmentStrip(services.media, detail.attachments) { onOpenMedia(it.meta.id) }
         BenbowEditor(state = editor, readOnly = true, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp))
         Reactions(detail.reactions, onReact, Modifier.padding(horizontal = 16.dp))
         HorizontalDivider(Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)

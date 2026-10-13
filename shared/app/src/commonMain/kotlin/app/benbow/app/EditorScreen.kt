@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -20,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -28,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
@@ -41,6 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.benbow.app.resources.Res
+import app.benbow.app.resources.attachments
 import app.benbow.app.resources.background
 import app.benbow.app.resources.background_none
 import app.benbow.app.resources.comment_hint
@@ -74,6 +78,7 @@ import app.benbow.core.content.MarkdownExporter
 import app.benbow.core.content.toDocument
 import app.benbow.core.content.toPlainText
 import app.benbow.core.content.toRichText
+import app.benbow.core.text.Atom
 import app.benbow.core.text.RichText
 import app.benbow.ui.editor.BenbowEditor
 import app.benbow.ui.editor.EditorState
@@ -246,6 +251,11 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     var menu by remember { mutableStateOf(false) }
     var pickingBackground by remember { mutableStateOf(false) }
     var dropping by remember { mutableStateOf(false) }
+    // The attachments ribbon: open by default unless every attachment already sits in the text; the clip toggles it.
+    var ribbonChoice by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    val attachments = detail?.attachments.orEmpty()
+    val inline = editor?.model?.paragraphs?.mapNotNullTo(HashSet()) { (it.atom as? Atom.Attachment)?.ref }.orEmpty()
+    val ribbon = attachments.isNotEmpty() && (ribbonChoice ?: !attachments.all { it.meta.id in inline })
     LaunchedEffect(Unit) {
         services.shortcuts.collect {
             if (it == Shortcut.Save && !vm.reading) {
@@ -284,6 +294,13 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                     Text(label, style = MaterialTheme.typography.titleMedium)
                 },
                 actions = {
+                    if (attachments.isNotEmpty()) {
+                        TextButton({ ribbonChoice = !ribbon }) {
+                            val tint = if (ribbon) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                            Icon(Icons.Attach, stringResource(Res.string.attachments), tint = tint, modifier = Modifier.size(20.dp))
+                            Text(" ${attachments.size}", color = tint, style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
                     val favorite = detail?.favorite == true
                     IconButton(vm::toggleFavorite) {
                         Icon(
@@ -430,6 +447,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                     onOpenMedia = { nav.open(Route.Media(detail.id, it)) },
                     onOpenComment = { nav.open(Route.Editor(it.summary.id, it.summary.day)) },
                     onReact = vm::react,
+                    ribbon = ribbon,
                     modifier = Modifier.fillMaxSize(),
                 )
                 return@Column
@@ -450,7 +468,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                     onRemoveTag = vm::removeTag,
                 )
             }
-            detail?.attachments?.let { attachments ->
+            if (ribbon && detail != null) {
                 AttachmentStrip(services.media, attachments) { nav.open(Route.Media(detail.id, it.meta.id)) }
             }
             when {

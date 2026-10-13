@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.benbow.app.resources.Res
+import app.benbow.app.resources.appearance
 import app.benbow.app.resources.export
 import app.benbow.app.resources.lock
 import app.benbow.app.resources.lock_choices
@@ -37,6 +38,7 @@ import app.benbow.app.resources.more_reminders
 import app.benbow.app.resources.more_tagline
 import app.benbow.app.resources.more_tags
 import app.benbow.app.resources.more_trash
+import app.benbow.app.resources.palette_names
 import app.benbow.app.resources.reminders
 import app.benbow.app.resources.server
 import app.benbow.app.resources.tags
@@ -69,6 +71,12 @@ private fun MoreList(services: AppServices, nav: Navigator) {
         val look = syncLook(status)
         MoreItem(Icons.Server, stringResource(Res.string.server), look?.label, look?.tone) { nav.open(Route.Server) }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        val appearance by services.appearance.collectAsStateWithLifecycle()
+        MoreItem(
+            Icons.Palette,
+            stringResource(Res.string.appearance),
+            stringArrayResource(Res.array.palette_names).getOrNull(appearance.palette.ordinal),
+        ) { nav.open(Route.Appearance) }
         MoreItem(Icons.Bell, stringResource(Res.string.reminders), stringResource(Res.string.more_reminders)) {
             nav.open(Route.Reminders())
         }

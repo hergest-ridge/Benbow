@@ -79,6 +79,20 @@
     <string name="tag_remove">Убрать тег %1$s</string>
     <string name="add">Добавить</string>
     <string name="cancel">Отмена</string>
+    <string name="appearance">Оформление</string>
+    <string name="theme_mode">Тема</string>
+    <string-array name="theme_modes">
+        <item>Как в системе</item>
+        <item>Светлая</item>
+        <item>Тёмная</item>
+    </string-array>
+    <string name="palette">Палитра</string>
+    <string-array name="palette_names">
+        <item>Таверна</item>
+        <item>Море</item>
+        <item>Пергамент</item>
+        <item>Цвета системы</item>
+    </string-array>
     <string name="lock">Блокировка</string>
     <string name="lock_enable">Блокировать приложение</string>
     <string name="lock_after">Закрывать, если не открывать</string>

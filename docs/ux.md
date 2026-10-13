@@ -33,6 +33,7 @@ As built (6.2): a Glance home-screen widget in the system (Material You) colors.
 
 ## Visual language
 The identity is the "Admiral Benbow" inn (vision.md#identity): a cozy home base, warm light, parchment, ink, maps. Apply it lightly through the palette (warm neutrals, lantern amber, sea blue), paper textures, the icon, empty states and small illustrations. Avoid pirate kitsch and themed chrome that gets in the way. Material 3 + Expressive components and motion, behind our `BenbowTheme` tokens. Optional dynamic color, curated warm palettes. Bundled fonts with full Cyrillic (e.g. a UI sans like Onest/Manrope/Inter and a reading serif like Literata/Lora for journal text; final pick in the design pass). Fonts must be bundled for offline use, including on web. Note backgrounds are theme-aware color pairs + optional illustration/texture.
+As built (6.5): "Ещё → Оформление" per device: Как в системе / Светлая / Тёмная, and palettes Таверна (default), Море, Пергамент, Цвета системы (Material You, Android). Palettes are complete M3 schemes generated from seed colors by MaterialKolor (HCT, like Material Theme Builder), so surfaces and containers carry the palette too. System bar icons follow the chosen mode.
 
 ## Psychology
 Evidence-informed practices exposed as **optional** templates, prompts and features. Never forced.

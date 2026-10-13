@@ -1,49 +1,68 @@
 package app.benbow.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import com.materialkolor.PaletteStyle
+import com.materialkolor.dynamicColorScheme
 
-// Provisional "inn" palette (lantern amber, sea blue, parchment). Final tokens come with the design pass, see docs/ux.md.
-private val LightColors = lightColorScheme(
-    primary = Color(0xFF8A5100),
-    onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFFFFDCBE),
-    onPrimaryContainer = Color(0xFF2C1600),
-    secondary = Color(0xFF2E5F7A),
-    onSecondary = Color(0xFFFFFFFF),
-    secondaryContainer = Color(0xFFC6E7FF),
-    onSecondaryContainer = Color(0xFF001E2D),
-    background = Color(0xFFFBF6EE),
-    onBackground = Color(0xFF1F1B16),
-    surface = Color(0xFFFBF6EE),
-    onSurface = Color(0xFF1F1B16),
-    surfaceVariant = Color(0xFFF0E0CF),
-    onSurfaceVariant = Color(0xFF50453A),
+/** Light, dark, or whatever the system says. */
+enum class ThemeMode { System, Light, Dark }
+
+/**
+ * The app's palettes (ux.md#visual-language): complete Material 3 schemes generated from a few seed colors, so every
+ * role (surfaces, containers) belongs to the palette. [System] uses the phone's Material You colors where there are any.
+ */
+enum class ThemePalette(
+    internal val primary: Color,
+    internal val secondary: Color,
+    internal val neutral: Color,
+    internal val style: PaletteStyle,
+) {
+    /** The inn: lantern amber, sea blue, warm wood. */
+    Inn(Color(0xFFD9822B), Color(0xFF2E5F7A), Color(0xFF8C7B6A), PaletteStyle.Fidelity),
+
+    /** The sea outside: deep blue, foam teal, a little amber. */
+    Sea(Color(0xFF1F6A94), Color(0xFF2E8A88), Color(0xFF6E7A82), PaletteStyle.TonalSpot),
+
+    /** Parchment and ink: quiet sepia, almost no color. */
+    Parchment(Color(0xFF8A6A3B), Color(0xFF6B5B45), Color(0xFF8E846F), PaletteStyle.Neutral),
+
+    System(Color(0xFFD9822B), Color(0xFF2E5F7A), Color(0xFF8C7B6A), PaletteStyle.TonalSpot),
+}
+
+/** The generated scheme for [palette] (no system colors: [System] falls back to the inn). */
+fun schemeOf(palette: ThemePalette, dark: Boolean): ColorScheme = dynamicColorScheme(
+    seedColor = palette.primary,
+    isDark = dark,
+    secondary = palette.secondary,
+    neutral = palette.neutral,
+    style = palette.style,
 )
 
-private val DarkColors = darkColorScheme(
-    primary = Color(0xFFFFB870),
-    onPrimary = Color(0xFF4A2800),
-    primaryContainer = Color(0xFF693C00),
-    onPrimaryContainer = Color(0xFFFFDCBE),
-    secondary = Color(0xFF98CDEE),
-    onSecondary = Color(0xFF00344B),
-    secondaryContainer = Color(0xFF0E4B65),
-    onSecondaryContainer = Color(0xFFC6E7FF),
-    background = Color(0xFF17130E),
-    onBackground = Color(0xFFECE0D5),
-    surface = Color(0xFF17130E),
-    onSurface = Color(0xFFECE0D5),
-    surfaceVariant = Color(0xFF50453A),
-    onSurfaceVariant = Color(0xFFD4C4B5),
-)
-
-/** Single entry point for app theming; Material 3 (and later Expressive) APIs stay behind it. */
+/**
+ * Single entry point for app theming; Material 3 (and later Expressive) APIs stay behind it.
+ * [systemColors] is the phone's Material You scheme for [ThemePalette.System], null where the platform has none.
+ */
 @Composable
-fun BenbowTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = if (darkTheme) DarkColors else LightColors, content = content)
+fun BenbowTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    palette: ThemePalette = ThemePalette.Inn,
+    systemColors: ColorScheme? = null,
+    content: @Composable () -> Unit,
+) {
+    val generated = remember(palette, darkTheme) { schemeOf(if (palette == ThemePalette.System) ThemePalette.Inn else palette, darkTheme) }
+    val scheme = if (palette == ThemePalette.System && systemColors != null) systemColors else generated
+    MaterialTheme(colorScheme = scheme, content = content)
+}
+
+/** Resolves [ThemeMode] against the system setting. */
+@Composable
+fun ThemeMode.isDark(): Boolean = when (this) {
+    ThemeMode.System -> isSystemInDarkTheme()
+    ThemeMode.Light -> false
+    ThemeMode.Dark -> true
 }

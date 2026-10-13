@@ -48,7 +48,6 @@ import app.benbow.app.resources.capture_hint
 import app.benbow.app.resources.capture_save
 import app.benbow.app.resources.capture_saving
 import app.benbow.app.resources.capture_title
-import app.benbow.ui.theme.BenbowTheme
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -97,7 +96,7 @@ fun sharedNoteText(subject: String?, text: String?): String {
  */
 @Composable
 fun QuickCapture(services: AppServices, shared: SharedContent, onClose: () -> Unit) {
-    BenbowTheme {
+    AppTheme(services) {
         var text by rememberSaveable { mutableStateOf(shared.text) }
         var saving by remember { mutableStateOf(false) }
         var error by remember { mutableStateOf<String?>(null) }

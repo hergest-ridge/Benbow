@@ -91,6 +91,13 @@ class AppServices(
 
     val lock = AppLock(Settings(db), now)
 
+    val appearance = MutableStateFlow(Appearance.load(Settings(db)))
+
+    fun setAppearance(value: Appearance) {
+        value.save(Settings(db))
+        appearance.value = value
+    }
+
     val export = MutableStateFlow<ExportState>(ExportState.Idle)
 
     /** Writes the whole journal as a ZIP ([ArchiveExport]) after committing any left-over drafts, so it holds what's on screen. */

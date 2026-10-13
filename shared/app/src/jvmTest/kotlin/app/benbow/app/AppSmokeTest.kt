@@ -350,6 +350,29 @@ class AppSmokeTest {
     }
 
     @Test
+    fun appearanceSwitchesPaletteAndLightTheme() = runDesktopComposeUiTest(width = 412, height = 860) {
+        services.repo.createNote(services.today(), "Утро у моря")
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Утро у моря"), 5_000)
+        onNodeWithText("Ещё").click()
+        onNodeWithText("Оформление").click()
+        waitUntilExactlyOneExists(hasText("Пергамент"), 5_000)
+        screenshot("28-appearance")
+        onNodeWithText("Светлая").click()
+        onNodeWithText("Море").click()
+        waitUntil(timeoutMillis = 5_000) {
+            services.appearance.value == Appearance(app.benbow.ui.theme.ThemeMode.Light, app.benbow.ui.theme.ThemePalette.Sea)
+        }
+        waitForIdle()
+        screenshot("29-appearance-sea-light")
+        onNodeWithContentDescription("Назад").click()
+        onNodeWithText("Главная").click()
+        waitUntilExactlyOneExists(hasText("Утро у моря"), 5_000)
+        screenshot("30-home-sea-light")
+        assertEquals(Appearance.load(services.settings), services.appearance.value, "kept on this device")
+    }
+
+    @Test
     fun newEntryOpenedByMistakeLeavesNothing() = runDesktopComposeUiTest(width = 412, height = 860) {
         setContent { BenbowApp(services) }
         waitUntilExactlyOneExists(hasText("Как прошёл день? Пара строк — и он сохранится."))

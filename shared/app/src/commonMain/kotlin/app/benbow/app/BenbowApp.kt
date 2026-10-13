@@ -56,7 +56,6 @@ import app.benbow.app.resources.tab_more
 import app.benbow.app.resources.tab_search
 import app.benbow.client.TagLooks
 import app.benbow.client.Templates
-import app.benbow.ui.theme.BenbowTheme
 import kotlinx.coroutines.flow.filterNotNull
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.getString
@@ -103,6 +102,8 @@ internal sealed interface Route {
     data object Export : Route
 
     data object Lock : Route
+
+    data object Appearance : Route
 
     /** The last tab: everything that doesn't need a tab of its own. */
     data object More : Route
@@ -155,7 +156,7 @@ private val still = EnterTransition.None togetherWith ExitTransition.None
 @Composable
 fun BenbowApp(services: AppServices) {
     val looks by remember { services.repo.tagLooks() }.collectAsStateWithLifecycle(TagLooks())
-    BenbowTheme {
+    AppTheme(services) {
         CompositionLocalProvider(LocalTagLooks provides looks) { AppRoot(services) }
     }
 }
@@ -275,6 +276,7 @@ private fun AppNavigation(services: AppServices, backStack: SnapshotStateList<Ro
             entry<Route.Server> { ServerScreen(services, nav) }
             entry<Route.Export> { ExportScreen(services, nav) }
             entry<Route.Lock> { LockSettingsScreen(services, nav) }
+            entry<Route.Appearance> { AppearanceScreen(services, nav) }
         },
     )
 }

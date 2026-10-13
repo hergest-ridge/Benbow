@@ -30,6 +30,7 @@ kotlin {
             api(libs.compose.ui)
             api(libs.compose.material3)
             implementation(libs.compose.components.resources)
+            implementation(libs.materialkolor)
             implementation(libs.compose.ui.tooling.preview)
         }
     }

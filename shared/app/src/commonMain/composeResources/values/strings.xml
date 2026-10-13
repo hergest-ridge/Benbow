@@ -177,6 +177,20 @@
     <string name="reminder_delete">Удалить напоминание</string>
     <string name="home_answer">Ответить</string>
     <string name="templates">Шаблоны</string>
+    <string name="checkin_title">Как вы сейчас?</string>
+    <string name="checkin_words_hint">Пара слов, если хочется</string>
+    <string name="checkin_save">Отметить</string>
+    <string name="kindness_hint">Похоже, сейчас непросто. Если хочется, можно ответить себе по-доброму:</string>
+    <string name="write">Написать</string>
+    <string name="later">Не сейчас</string>
+    <string name="review_week">Итоги недели</string>
+    <string name="review_month">Итоги месяца</string>
+    <plurals name="review_summary">
+        <item quantity="one">%1$d день с записями</item>
+        <item quantity="few">%1$d дня с записями</item>
+        <item quantity="many">%1$d дней с записями</item>
+        <item quantity="other">%1$d дня с записями</item>
+    </plurals>
     <string name="trash_empty">Корзина пуста</string>
     <string name="trash_hint">Записи из корзины не удаляются: их можно вернуть в любой момент.</string>
 

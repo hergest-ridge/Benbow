@@ -111,6 +111,7 @@ internal const val DONE_FIELD = "done"
 
 /** The tag registry (ADR-021): a system entry whose fields are `cat:<tag key>` = category. Fixed id, so devices share it. */
 internal const val TAG_REGISTRY_ID = "system-tags"
+const val EMOTIONS = "Эмоции"
 internal const val CATEGORY_PREFIX = "cat:"
 internal const val TAG_PREFIX = "tag:"
 internal const val REACTION_PREFIX = "reaction:"
@@ -322,6 +323,24 @@ class JournalRepository(
     fun createEvent(day: String, title: String, time: String?): String = db.transactionWithResult {
         val id = createEntry(day, kind = "event", body = textBody(title, random))
         setField(id, START_FIELD, time?.let { "${day}T$it" } ?: day)
+        id
+    }
+
+    // Mood check-ins (5.4)
+
+    /**
+     * A mood check-in: an entry of kind "checkin" with the mood, its emotion words as tags in the
+     * "Эмоции" category (affect labeling, ux.md#psychology) and optional words of its own.
+     */
+    fun createCheckin(day: String, mood: Int, emotions: List<String>, text: String): String = db.transactionWithResult {
+        val words = emotions.map(::tagName).filter { it.isNotEmpty() }.distinct()
+        val body = text.trim().ifEmpty { words.joinToString(", ") }
+        val id = createEntry(day, kind = "checkin", body = textBody(body, random))
+        setMood(id, mood)
+        words.forEach {
+            addTag(id, it)
+            setTagCategory(it, EMOTIONS)
+        }
         id
     }
 

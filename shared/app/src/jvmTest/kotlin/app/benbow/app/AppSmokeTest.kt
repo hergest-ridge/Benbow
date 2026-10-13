@@ -10,6 +10,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -260,6 +261,25 @@ class AppSmokeTest {
         waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.journal().first().any { it.title == "Три хороших события" } } }
         waitForIdle()
         screenshot("19-template")
+    }
+
+    @Test
+    fun aHardCheckinOffersKindness() = runDesktopComposeUiTest(width = 412, height = 860) {
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Как вы сейчас?"), 5_000)
+        onNodeWithText("🙁").click()
+        waitUntilExactlyOneExists(hasText("усталость"), 5_000)
+        onNodeWithText("усталость").click()
+        onNodeWithText("тревога").click()
+        waitForIdle()
+        screenshot("20-checkin")
+        onNodeWithText("Отметить").click()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.journal().first().any { it.mood == -1 && "усталость" in it.tags } } }
+        waitUntilExactlyOneExists(hasText("Похоже, сейчас непросто", substring = true), 5_000)
+        screenshot("21-kindness")
+        onAllNodesWithText("Написать")[0].click()
+        val question = Prompts.kindness(services.today())
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.journal().first().any { it.title == question } } }
     }
 
     @Test

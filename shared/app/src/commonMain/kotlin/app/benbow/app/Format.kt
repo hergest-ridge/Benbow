@@ -65,6 +65,7 @@ internal fun templateContext(day: String): TemplateContext {
         weekday = stringArrayResource(Res.array.weekdays)[date.dayOfWeek.isoDayNumber - 1].lowercase(),
         month = stringArrayResource(Res.array.months_nominative)[date.month.number - 1],
         prompt = Prompts.ofTheDay(day),
+        kindness = Prompts.kindness(day),
     )
 }
 

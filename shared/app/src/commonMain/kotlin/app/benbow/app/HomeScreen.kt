@@ -50,19 +50,25 @@ import app.benbow.app.resources.home_today_empty
 import app.benbow.app.resources.home_write
 import app.benbow.app.resources.menu
 import app.benbow.app.resources.reminders
+import app.benbow.app.resources.review_month
+import app.benbow.app.resources.review_summary
+import app.benbow.app.resources.review_week
 import app.benbow.app.resources.server
 import app.benbow.app.resources.tags
 import app.benbow.app.resources.trash
 import app.benbow.app.resources.years_ago
+import app.benbow.client.DayInfo
 import app.benbow.client.EntrySummary
 import app.benbow.client.Prompts
 import app.benbow.client.Templates
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus
@@ -71,6 +77,7 @@ import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.absoluteValue
+import kotlin.math.roundToInt
 import kotlin.time.Clock
 
 internal data class HomeState(
@@ -82,6 +89,9 @@ internal data class HomeState(
     /** One favorite from over a month ago, the same all day (savoring, ux.md#psychology). */
     val resurfaced: EntrySummary?,
     val daysThisMonth: Long,
+    /** Days with entries and their average mood over the last 7 and 30 days, for the review cards. */
+    val week: Pair<Int, Double?> = 0 to null,
+    val month: Pair<Int, Double?> = 0 to null,
 )
 
 internal class HomeViewModel(private val services: AppServices) : ViewModel() {
@@ -89,7 +99,22 @@ internal class HomeViewModel(private val services: AppServices) : ViewModel() {
     private val date = LocalDate.parse(today)
     private val monthStart = LocalDate(date.year, date.month, 1)
 
-    val state: StateFlow<HomeState?> = combine(
+    /** True right after a hard check-in, until written or put off. */
+    val kindness = MutableStateFlow(false)
+
+    /** Sundays offer the weekly review, the last days of a month the monthly one. */
+    val review: String? = when {
+        date.dayOfWeek == DayOfWeek.SUNDAY -> "week"
+        date.plus(3, DateTimeUnit.DAY).month != date.month -> "month"
+        else -> null
+    }
+
+    private val reviews = combine(
+        services.repo.monthDays(date.minus(6, DateTimeUnit.DAY).toString(), today),
+        services.repo.monthDays(date.minus(29, DateTimeUnit.DAY).toString(), today),
+    ) { week, month -> summary(week.values) to summary(month.values) }
+
+    private val base = combine(
         combine(services.repo.entriesForDay(today), services.repo.pinned(), services.repo.withDrafts(), ::Triple),
         combine(
             services.repo.onThisDay(today),
@@ -112,7 +137,15 @@ internal class HomeViewModel(private val services: AppServices) : ViewModel() {
             },
             days,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    }
+
+    val state: StateFlow<HomeState?> = combine(base, reviews) { home, (week, month) -> home.copy(week = week, month = month) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    fun checkin(mood: Int, emotions: List<String>, text: String) {
+        services.scope.launch { services.repo.createCheckin(services.today(), mood, emotions, text) }
+        kindness.value = mood <= -1
+    }
 
     fun quickNote(text: String) {
         if (text.isBlank()) return
@@ -126,6 +159,7 @@ internal class HomeViewModel(private val services: AppServices) : ViewModel() {
 internal fun HomeScreen(services: AppServices, nav: Navigator) {
     val vm = viewModel { HomeViewModel(services) }
     val state by vm.state.collectAsStateWithLifecycle()
+    val kindness by vm.kindness.collectAsStateWithLifecycle()
     val status by services.sync.status.collectAsStateWithLifecycle()
     var menu by remember { mutableStateOf(false) }
     var refreshUntil by remember { mutableStateOf<Int?>(null) }
@@ -183,11 +217,29 @@ internal fun HomeScreen(services: AppServices, nav: Navigator) {
         ) {
             val home = state ?: return@PullToRefreshBox
             val open = { entry: EntrySummary -> nav.open(Route.Editor(entry.id, entry.day)) }
+            val write = { template: String -> nav.open(Route.Editor(null, services.today(), opened = services.now(), template = template)) }
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
-                item(key = "prompt") {
-                    Prompt(Prompts.ofTheDay(home.today), stringResource(Res.string.home_answer)) {
-                        nav.open(Route.Editor(null, services.today(), opened = services.now(), template = Templates.PROMPT.id))
+                item(key = "checkin") { CheckinCard(vm::checkin) }
+                if (kindness) {
+                    item(key = "kindness") {
+                        KindnessCard(Prompts.kindness(home.today), onWrite = {
+                            vm.kindness.value = false
+                            write(Templates.KINDNESS.id)
+                        }, onLater = { vm.kindness.value = false })
                     }
+                }
+                vm.review?.let { kind ->
+                    item(key = "review") {
+                        val (days, mood) = if (kind == "week") home.week else home.month
+                        val face = moodEmoji(mood?.roundToInt())?.let { " · $it" }.orEmpty()
+                        ReviewCard(
+                            stringResource(if (kind == "week") Res.string.review_week else Res.string.review_month),
+                            if (days > 0) pluralStringResource(Res.plurals.review_summary, days, days) + face else "",
+                        ) { write(kind) }
+                    }
+                }
+                item(key = "prompt") {
+                    Prompt(Prompts.ofTheDay(home.today), stringResource(Res.string.home_answer)) { write(Templates.PROMPT.id) }
                 }
                 section(Res.string.home_pinned, home.pinned, services, open)
                 item(key = "today") { SectionTitle(stringResource(Res.string.home_today)) }
@@ -269,6 +321,9 @@ private fun Prompt(text: String, action: String, onAction: () -> Unit) {
         }
     }
 }
+
+private fun summary(days: Collection<DayInfo>): Pair<Int, Double?> =
+    days.size to days.mapNotNull { it.mood }.takeIf { it.isNotEmpty() }?.average()
 
 @Composable
 private fun greeting(): String {

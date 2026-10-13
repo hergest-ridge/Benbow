@@ -10,7 +10,7 @@ import kotlin.math.absoluteValue
 import kotlin.random.Random
 
 /** What `{{placeholders}}` become when a template is used: {{date}}, {{weekday}}, {{month}}, {{prompt}}. */
-data class TemplateContext(val date: String, val weekday: String, val month: String, val prompt: String)
+data class TemplateContext(val date: String, val weekday: String, val month: String, val prompt: String, val kindness: String = "")
 
 data class TemplateBlock(val text: String, val style: String = STYLE_NORMAL, val list: String? = null)
 
@@ -32,6 +32,9 @@ private fun check() = TemplateBlock("", list = "check")
 object Templates {
     /** Answering the question of the day. */
     val PROMPT = Template("prompt", "Вопрос дня", listOf(h2("{{prompt}}"), p()))
+
+    /** After a hard check-in: a kinder question (self-compassion). */
+    val KINDNESS = Template("kindness", "Доброта к себе", listOf(h2("{{kindness}}"), p()))
 
     val builtIn: List<Template> = listOf(
         Template(
@@ -93,7 +96,7 @@ object Templates {
         ),
     )
 
-    fun byId(id: String): Template? = (builtIn + PROMPT).firstOrNull { it.id == id }
+    fun byId(id: String): Template? = (builtIn + PROMPT + KINDNESS).firstOrNull { it.id == id }
 
     /** The template as a Benbow Document, placeholders filled in. */
     fun render(template: Template, context: TemplateContext, random: Random = Random.Default): String = DocumentCodec.encode(
@@ -111,9 +114,20 @@ object Templates {
         ),
     )
 
-    private fun fill(text: String, c: TemplateContext) =
-        text.replace("{{date}}", c.date).replace("{{weekday}}", c.weekday).replace("{{month}}", c.month).replace("{{prompt}}", c.prompt)
+    private fun fill(text: String, c: TemplateContext) = text.replace(
+        "{{date}}",
+        c.date,
+    ).replace(
+        "{{weekday}}",
+        c.weekday,
+    ).replace("{{month}}", c.month).replace("{{prompt}}", c.prompt).replace("{{kindness}}", c.kindness)
 }
+
+/** Words for feelings (emotional granularity): pleasant first, then hard ones. */
+val EMOTION_WORDS = listOf(
+    "радость", "спокойствие", "благодарность", "интерес", "гордость", "нежность", "надежда", "облегчение",
+    "усталость", "тревога", "грусть", "раздражение", "злость", "одиночество", "растерянность", "скука", "стыд",
+)
 
 /** Questions grouped by the practice they come from (ux.md#psychology). */
 object Prompts {

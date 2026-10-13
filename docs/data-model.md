@@ -7,7 +7,7 @@ Soft delete via `deleted_at`. Metadata fields carry `hlc` for LWW. The server is
 | Field | Notes |
 |---|---|
 | id | UUIDv7 |
-| kind | `journal` (long, day-anchored) · `post` (feed, short) · `note` (quick capture) · `comment` |
+| kind | `journal` (long, day-anchored) · `post` (feed, short) · `note` (quick capture) · `comment` · `system` · `event` · `reminder` · `checkin` (see "As built" notes below) |
 | parent_id | for comments: the entry being commented on (retrospective replies). As built (4.3): the LWW field `parent`, mirrored on the client into an indexed `parent_id` column; comments are hidden from Home/Feed lists, shown in the thread and counted on the feed |
 | space_id | default `journal`. Reserved for the writer's archive (P3) |
 | day | local date the entry belongs to. Default = local date of creation with the "day starts at" offset (e.g. 04:00) |
@@ -49,6 +49,7 @@ The server denormalizes the head into `entry_text(entry_id, title, plain_text)` 
 - `event(id, title, start_at, end_at?, all_day, tz, rrule?, entry_id?, source (local|ics:<feed_id>), external_uid?, deleted_at)`
 - As built (5.1): an entry of kind `event` (the text is the title, `day` is its date) with the LWW field `start` = "YYYY-MM-DD" (all day) or "YYYY-MM-DDTHH:MM". Events stay out of Home, Feed and the writing stats; the calendar lists them per day. End time, repeats and ICS come later.
 - `reminder(id, target_type (entry|event|none), target_id?, fire_at?, rrule?, message, done_at?, deleted_at)`. Scheduled locally on each device (no server push).
+- As built (5.4): a mood check-in is an entry of kind `checkin`: the field `mood` (-2..2), the chosen feeling words as ordinary tags in category Эмоции, the text is the user's words or else the feelings. It is a normal listed entry (Home, Feed, calendar mood tint).
 - As built (5.2): an entry of kind `reminder` (text = message) with LWW fields `at` = local "YYYY-MM-DDTHH:MM", `repeat` = daily|weekly, `done`. Repeats are computed forward from `at` (nothing is rewritten when one rings). Each device rings its own copy: Android inexact alarms (5-minute window, no exact-alarm permission, rescheduled after reboot and after each ring), a tray message on desktop while the app runs. Target links come later.
 
 ## Templates (P1)

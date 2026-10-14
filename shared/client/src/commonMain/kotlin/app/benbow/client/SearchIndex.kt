@@ -6,11 +6,12 @@ import app.benbow.core.content.DocumentFormatException
 import app.benbow.core.content.toPlainText
 
 /**
- * The on-device full-text index (`entry_search`): title, all text and tags of every entry, plus the Russian stems of
- * their words. Updated in the same transaction as the entry; rebuilt from scratch when [VERSION] changes.
+ * The on-device full-text index (`entry_search`): title, all text (with what was said in voice notes and the names of
+ * attachments) and tags of every entry, plus the Russian stems of their words. Updated in the same transaction as the
+ * entry; rebuilt from scratch when [VERSION] changes.
  */
 internal object SearchIndex {
-    const val VERSION = "3"
+    const val VERSION = "4"
     private const val VERSION_KEY = "search.version"
     private val WORD = Regex("""[\p{L}\p{N}]+""")
 
@@ -23,8 +24,12 @@ internal object SearchIndex {
         } catch (_: DocumentFormatException) {
             ""
         }
-        val tags = tagsOf(decodeFields(entry.fields)).joinToString(" ")
-        q.indexEntry(id, fold(entry.title), withStems(fold(text)), withStems(fold(tags)))
+        val fields = decodeFields(entry.fields)
+        val spoken = transcriptsOf(fields).values
+        val captions = decodeAttachments(entry.attachments).values.filter { it.present }.mapNotNull { it.caption }
+        val all = (listOf(text) + spoken + captions).filter { it.isNotBlank() }.joinToString("\n")
+        val tags = tagsOf(fields).joinToString(" ")
+        q.indexEntry(id, fold(entry.title), withStems(fold(all)), withStems(fold(tags)))
     }
 
     /** unicode61 folds case everywhere but diacritics only in Latin script: "ёлка" must still match "елка". */

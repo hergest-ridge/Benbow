@@ -11,6 +11,7 @@ import app.benbow.core.api.ReconcileRequest
 import app.benbow.core.api.ReconcileResponse
 import app.benbow.core.api.RevisionInfo
 import app.benbow.core.api.ServerInfo
+import app.benbow.core.api.SpeechModelInfo
 import app.benbow.core.api.UploadStart
 import app.benbow.core.api.UploadStatus
 import app.benbow.core.sync.PullResponse
@@ -30,12 +31,14 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.jvm.javaio.copyTo
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.io.FileOutputStream
 
 /** The server API as the client sees it (docs/sync.md#implemented-endpoints). */
 interface BenbowApi {
@@ -55,6 +58,12 @@ interface BenbowApi {
 
     /** Streams a file into [target]; returns its MIME type. */
     suspend fun downloadBlob(sha256: String, target: File): String
+
+    /** Whether the server has the speech-recognition model (7.6). */
+    suspend fun speechModel(): SpeechModelInfo
+
+    /** Continues a speech model file into [target] from its current length (a fresh start when the server can't). */
+    suspend fun downloadSpeechFile(name: String, target: File)
 }
 
 /** The finished upload didn't match its hash (corrupted on the way); start it again. */
@@ -127,6 +136,20 @@ class KtorBenbowApi(private val client: HttpClient, private val baseUrl: String,
             target.outputStream().use { response.bodyAsChannel().copyTo(it) }
             response.contentType()?.withoutParameters()?.toString() ?: "application/octet-stream"
         }
+
+    override suspend fun speechModel(): SpeechModelInfo = client.get("$baseUrl/api/v1/models/speech") { auth() }.ok().body()
+
+    override suspend fun downloadSpeechFile(name: String, target: File) {
+        val from = target.length()
+        client.prepareGet("$baseUrl/api/v1/models/speech/$name") {
+            auth()
+            if (from > 0) header(HttpHeaders.Range, "bytes=$from-")
+        }.execute { response ->
+            response.ok()
+            val append = response.status == HttpStatusCode.PartialContent
+            FileOutputStream(target, append).use { response.bodyAsChannel().copyTo(it) }
+        }
+    }
 
     private fun io.ktor.client.request.HttpRequestBuilder.auth() {
         token()?.let { bearerAuth(it) }

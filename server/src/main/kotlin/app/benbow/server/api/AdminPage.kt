@@ -1,6 +1,8 @@
 package app.benbow.server.api
 
+import app.benbow.core.api.SpeechModelSpec
 import app.benbow.server.SERVER_VERSION
+import app.benbow.server.SpeechModel
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -33,6 +35,12 @@ internal fun Route.adminRoutes(ctx: ServerContext) {
         call.respondRedirect("/")
     }
 
+    post("/admin/speech-model") {
+        if (!adminAllowed(call, ctx)) return@post call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
+        ctx.speech?.download()
+        call.respondRedirect("/")
+    }
+
     post("/admin/devices/{id}/revoke") {
         if (!adminAllowed(call, ctx)) return@post call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
         ctx.devices.revoke(call.parameters["id"]!!)
@@ -57,7 +65,9 @@ private fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replac
 private fun statusPage(ctx: ServerContext, admin: Boolean): String = buildString {
     append(
         """
-        <!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Benbow</title>
+        <!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Benbow</title>${
+            if (admin && ctx.speech?.state is SpeechModel.State.Downloading) "<meta http-equiv=\"refresh\" content=\"3\">" else ""
+        }
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>body{font-family:system-ui,sans-serif;max-width:44rem;margin:2.5rem auto;padding:0 1rem;background:#fbf6ee;color:#1f1b16}
         code{background:#f0e0cf;padding:.1rem .3rem;border-radius:.3rem;word-break:break-all}
@@ -134,5 +144,35 @@ private fun statusPage(ctx: ServerContext, admin: Boolean): String = buildString
         append("<p>Медиафайлы: $count, ${"%.1f".format(bytes / 1_073_741_824.0)} ГБ в <code>${esc(store.root.toString())}</code></p>")
     }
     ctx.dataDir?.let { append("<p>Данные: <code>${esc(it.toString())}</code></p>") }
-    append("</section></body></html>")
+    append("</section>")
+    ctx.speech?.let { append(speechSection(it)) }
+    append("</body></html>")
+}
+
+/** The one-time model download for voice transcription: the server's only request to the internet, on a click. */
+private fun speechSection(model: SpeechModel): String = buildString {
+    val mb = { bytes: Long -> "%.0f".format(bytes / 1_000_000.0) }
+    append("<section><h2>Расшифровка голосовых</h2>")
+    append(
+        "<p>Телефоны расшифровывают голосовые сами, без интернета, моделью GigaAM v3 (лицензия MIT). Взять её они могут " +
+            "только отсюда. Сервер скачивает её один раз по этой кнопке с официальной страницы sherpa-onnx на GitHub " +
+            "и сверяет каждый файл с отпечатком, записанным в программе. Других обращений в интернет у сервера нет.</p>",
+    )
+    when (val state = model.state) {
+        SpeechModel.State.Ready -> append("<p>Модель на месте (${mb(SpeechModelSpec.totalSize)} МБ). Телефоны возьмут её отсюда.</p>")
+
+        is SpeechModel.State.Downloading -> append("<p>Скачивается: ${mb(state.done)} из ${mb(state.total)} МБ…</p>")
+
+        SpeechModel.State.Missing -> append(
+            "<form method=\"post\" action=\"/admin/speech-model\"><button>Скачать модель (${mb(
+                SpeechModelSpec.archive.size + SpeechModelSpec.vad.size,
+            )} МБ)</button></form>",
+        )
+
+        is SpeechModel.State.Failed -> append(
+            "<p style=\"color:#b3261e\">Не получилось: ${esc(state.message)}</p>" +
+                "<form method=\"post\" action=\"/admin/speech-model\"><button>Попробовать ещё раз</button></form>",
+        )
+    }
+    append("</section>")
 }

@@ -8,10 +8,13 @@ import app.benbow.core.api.PushRequest
 import app.benbow.core.api.PushResponse
 import app.benbow.core.api.ReconcileRequest
 import app.benbow.core.api.ServerInfo
+import app.benbow.core.api.SpeechModelInfo
+import app.benbow.core.api.SpeechModelSpec
 import app.benbow.core.api.UploadStart
 import app.benbow.core.api.UploadStatus
 import app.benbow.core.sync.SyncRules
 import app.benbow.server.SERVER_VERSION
+import app.benbow.server.SpeechModel
 import app.benbow.server.backup.BackupStatus
 import app.benbow.server.storage.BlobStore
 import app.benbow.server.storage.Database
@@ -70,6 +73,8 @@ class ServerContext(
     val highWater: HighWater? = null,
     /** Media files; null in tests that don't need them. */
     val blobs: BlobStore? = null,
+    /** The speech-recognition model phones fetch from here (7.6); null in tests that don't need it. */
+    val speech: SpeechModel? = null,
 )
 
 data class DevicePrincipal(val deviceId: String)
@@ -246,6 +251,25 @@ fun Application.benbowModule(ctx: ServerContext) {
 
                         BlobStore.Chunk.NotFound -> call.respond(HttpStatusCode.NotFound, ApiError("not_found", "No such upload"))
                     }
+                }
+
+                /**
+                 * Whether this server has the speech-recognition model, and its pinned files. Phones check every file
+                 * against their own copy of these hashes (docs/sync.md#speech-model).
+                 */
+                get("/models/speech") {
+                    val ready = ctx.speech?.state == SpeechModel.State.Ready
+                    call.respond(SpeechModelInfo(SpeechModelSpec.ID, ready, SpeechModelSpec.files))
+                }
+
+                /**
+                 * One file of the speech model (supports Range, so a phone resumes an interrupted download).
+                 */
+                get("/models/speech/{name}") {
+                    val path = ctx.speech?.file(call.parameters["name"]!!)
+                        ?: return@get call.respond(HttpStatusCode.NotFound, ApiError("not_found", "No such model file here"))
+                    call.response.header(HttpHeaders.CacheControl, "private, max-age=31536000, immutable")
+                    call.respond(LocalPathContent(path, ContentType.Application.OctetStream))
                 }
 
                 /**

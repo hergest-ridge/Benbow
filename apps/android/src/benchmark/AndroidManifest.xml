@@ -10,5 +10,11 @@
             android:name=".BenchSeedActivity"
             android:exported="true"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- Tries the sandboxed speech recognizer on made-up speech: am start -n app.benbow.bench/app.benbow.android.BenchAsrActivity -->
+        <activity
+            android:name=".BenchAsrActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
     </application>
 </manifest>

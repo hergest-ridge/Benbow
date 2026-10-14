@@ -686,4 +686,70 @@ class AppSmokeTest {
         waitUntilExactlyOneExists(hasText("Как прошёл день? Пара строк — и он сохранится."))
         assertEquals(0, runBlocking { services.repo.journal().first().size })
     }
+
+    /** A device that can transcribe: a made-up model already in place, a recognizer that hears one sentence. */
+    private fun speakingServices(): AppServices {
+        val models = java.nio.file.Files.createTempDirectory("benbow-models").toFile()
+        val bytes = "model".toByteArray()
+        val files = listOf(app.benbow.core.api.SpeechModelFile("encoder.int8.onnx", bytes.size.toLong(), "unused"))
+        java.io.File(models, app.benbow.core.api.SpeechModelSpec.ID).apply {
+            mkdirs()
+            java.io.File(this, "encoder.int8.onnx").writeBytes(bytes)
+            java.io.File(this, "verified").writeText(app.benbow.core.api.SpeechModelSpec.ID)
+        }
+        val heard = object : Transcriber {
+            override suspend fun <T> session(
+                model: app.benbow.client.SpeechModelStore,
+                block: suspend (transcribe: suspend (java.io.File) -> String) -> T,
+            ): T = block { "Шли вдоль берега, ветер был холодный, но солнце светило ярко." }
+        }
+        return AppServices(
+            JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), BenbowDb.Schema),
+            java.nio.file.Files.createTempDirectory("benbow-media").toFile(),
+            "android",
+            "Test phone",
+            transcriber = heard,
+            modelsDir = models,
+            speechFiles = files,
+        )
+    }
+
+    @Test
+    fun aVoiceNoteBecomesTextOnATap() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val services = speakingServices()
+        val entry = services.repo.createNote(services.today(), "Мысли по дороге")
+        runBlocking {
+            val sound = ByteArray(4_000) { (it % 251).toByte() }
+            services.attach({ entry }, { sound.inputStream() }) {
+                MediaProbe("audio/mp4", "voice-1.m4a", "voice", durationMs = 42_000, capturedAt = 0)
+            }.join()
+        }
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Ещё"), 5_000)
+        onNodeWithText("Лента").performClick()
+        waitUntilExactlyOneExists(hasText("Голосовое сообщение"), 5_000)
+        val voice = services.repo.entry(entry).let { runBlocking { it.first()!! } }.attachments.single().meta.id
+        val transcript = "Шли вдоль берега, ветер был холодный, но солнце светило ярко."
+        if (runBlocking { services.repo.entry(entry).first()!!.transcripts[voice] } == null) {
+            onNodeWithContentDescription("Расшифровать").performClick()
+        }
+        waitUntilExactlyOneExists(hasText(transcript), 5_000)
+        screenshot("52-feed-transcript")
+        onNodeWithText("Мысли по дороге").performClick()
+        waitUntilExactlyOneExists(hasText(transcript), 5_000)
+        screenshot("53-post-transcript")
+        assertEquals(listOf(entry), runBlocking { services.repo.search(app.benbow.client.SearchQuery("берегом")).first().map { it.id } })
+    }
+
+    @Test
+    fun speechSettingsSayWhereTheModelComesFrom() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val services = speakingServices()
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Ещё"), 5_000)
+        onNodeWithText("Ещё").performClick()
+        waitUntilExactlyOneExists(hasText("Расшифровка голосовых"), 5_000)
+        onNodeWithText("Расшифровка голосовых").performClick()
+        waitUntilExactlyOneExists(hasText("Модель на телефоне"), 5_000)
+        screenshot("54-speech-settings")
+    }
 }

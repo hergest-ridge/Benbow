@@ -83,6 +83,7 @@ fun main(args: Array<String>) {
             backupNow = backupJobs::runNow,
             highWater = highWater,
             blobs = blobs,
+            speech = SpeechModel(dataDir.resolve("models")),
         )
     val server = embeddedServer(
         factory = Netty,

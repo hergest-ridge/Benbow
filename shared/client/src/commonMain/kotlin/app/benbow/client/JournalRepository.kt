@@ -68,6 +68,8 @@ data class FeedItem(
     val body: String = "",
     /** Voice notes and sounds, in gallery order. */
     val audio: List<AttachmentState> = emptyList(),
+    /** What was said in each voice note or sound, by attachment id (7.6). */
+    val transcripts: Map<String, String> = emptyMap(),
 )
 
 /** A calendar day: how many entries and their average mood (-2..2, null when no mood was set). */
@@ -77,7 +79,13 @@ data class DayInfo(val day: String, val entries: Int, val mood: Double?)
 data class EventItem(val id: String, val day: String, val title: String, val time: String?)
 
 /** A reply in an entry's thread, shown in full, with its pictures and files ([media], in order). */
-data class Comment(val summary: EntrySummary, val text: String, val media: List<AttachmentState> = emptyList())
+data class Comment(
+    val summary: EntrySummary,
+    val text: String,
+    val media: List<AttachmentState> = emptyList(),
+    /** What was said in each voice note or sound, by attachment id (7.6). */
+    val transcripts: Map<String, String> = emptyMap(),
+)
 
 /** What to look for; empty text and off switches match everything outside the trash. */
 data class SearchQuery(val text: String = "", val tag: String? = null, val favorites: Boolean = false, val withMedia: Boolean = false)
@@ -111,6 +119,9 @@ data class EntryDetail(
     val reactions: Set<String> get() = fields.filter {
         it.key.startsWith(REACTION_PREFIX) && it.value != null
     }.keys.map { it.removePrefix(REACTION_PREFIX) }.toSet()
+
+    /** What was said in each voice note or sound, by attachment id (7.6). */
+    val transcripts: Map<String, String> get() = transcriptsOf(fields)
 }
 
 // Entry metadata as namespaced LWW fields (ADR-021).
@@ -134,6 +145,19 @@ const val EMOTIONS = "Эмоции"
 internal const val CATEGORY_PREFIX = "cat:"
 internal const val TAG_PREFIX = "tag:"
 internal const val REACTION_PREFIX = "reaction:"
+
+/** `transcript:<attachment id>` = the text of a voice note or sound, recognized on a phone (7.6); synced like a tag. */
+internal const val TRANSCRIPT_PREFIX = "transcript:"
+
+internal fun transcriptsOf(fields: Map<String, String?>): Map<String, String> = fields.mapNotNull { (key, value) ->
+    if (key.startsWith(TRANSCRIPT_PREFIX) &&
+        value != null
+    ) {
+        key.removePrefix(TRANSCRIPT_PREFIX) to value
+    } else {
+        null
+    }
+}.toMap()
 
 /** Display names of the entry's tags, alphabetically. */
 internal fun tagsOf(fields: Map<String, String?>): List<String> =
@@ -350,7 +374,23 @@ class JournalRepository(
     private fun putAttachments(entryId: String, attachments: Map<String, AttachmentState>) {
         val (count, cover) = mediaSummary(attachments)
         q.updateAttachments(ClientJson.encodeToString(attachmentsSerializer, attachments), count.toLong(), cover, now(), entryId)
+        SearchIndex.update(db, entryId) // names of sounds are searchable
     }
+
+    /** Voice notes and sounds outside the trash that have no text yet, with their entries (7.6). */
+    fun untranscribed(): List<Pair<String, AttachmentState>> = q.allEntryIds().executeAsList().flatMap { id ->
+        val entry = q.selectEntry(id).executeAsOneOrNull() ?: return@flatMap emptyList()
+        val fields = decodeFields(entry.fields)
+        if (fields[TRASH_FIELD] == "true") return@flatMap emptyList()
+        val done = transcriptsOf(fields).keys
+        decodeAttachments(entry.attachments).values
+            .filter { it.present && (it.meta.kind == "voice" || it.meta.kind == "audio") && it.meta.id !in done }
+            .map { id to it }
+    }
+
+    /** Keeps what was said in a voice note or sound; blank removes it. */
+    fun setTranscript(entryId: String, attachmentId: String, text: String?) =
+        setField(entryId, TRANSCRIPT_PREFIX + attachmentId, text?.trim()?.takeIf { it.isNotEmpty() })
 
     fun setFavorite(id: String, favorite: Boolean) = setField(id, FAVORITE_FIELD, if (favorite) "true" else null)
 
@@ -364,7 +404,8 @@ class JournalRepository(
     fun comments(parentId: String): Flow<List<Comment>> =
         q.commentsOf(parentId) { id, day, createdAt, title, preview, conflictHeads, mediaCount, cover, fields, body, attachments ->
             val media = galleryOrder(decodeAttachments(attachments).values, body)
-            Comment(summaryOf(id, day, createdAt, title, preview, conflictHeads, mediaCount, cover, fields), plainText(body), media)
+            val summary = summaryOf(id, day, createdAt, title, preview, conflictHeads, mediaCount, cover, fields)
+            Comment(summary, plainText(body), media, transcriptsOf(decodeFields(fields)))
         }.asFlow().mapToList(context)
 
     fun commentCount(parentId: String): Flow<Long> = q.commentCount(parentId).asFlow().mapToOne(context)
@@ -465,7 +506,14 @@ class JournalRepository(
             val gallery = galleryOrder(decodeAttachments(attachments).values, body)
             val media = gallery.filter { it.meta.kind in VISUAL_KINDS }
             val audio = gallery.filter { it.meta.kind == "voice" || it.meta.kind == "audio" }
-            FeedItem(summary, kind, text, reactions.map { it.removePrefix(REACTION_PREFIX) }.toSet(), comments.toInt(), media, body, audio)
+            val transcripts = transcriptsOf(decodeFields(fields))
+            FeedItem(
+                summary, kind, text,
+                reactions.map {
+                    it.removePrefix(REACTION_PREFIX)
+                }.toSet(),
+                comments.toInt(), media, body, audio, transcripts,
+            )
         }.asFlow().mapToList(context)
 
     /** Builds the search index after an update changed it (or on the first start); quick otherwise. */

@@ -7,6 +7,8 @@ import app.benbow.core.api.PushRequest
 import app.benbow.core.api.PushResponse
 import app.benbow.core.api.RevisionInfo
 import app.benbow.core.api.ServerInfo
+import app.benbow.core.api.SpeechModelInfo
+import app.benbow.core.api.SpeechModelSpec
 import app.benbow.core.sync.CreateEntry
 import app.benbow.core.sync.OpStatus
 import app.benbow.core.sync.PullResponse
@@ -84,6 +86,17 @@ class ServerApiTest {
         val device = ctx.devices.list().single()
         ctx.devices.revoke(device.id)
         assertEquals(HttpStatusCode.Unauthorized, client.get("/api/v1/sync/pull") { bearerAuth(token) }.status)
+    }
+
+    @Test
+    fun speechModelIsOnlyForPairedDevicesAndSaysWhenItIsMissing() = withServer { ctx, client ->
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/api/v1/models/speech").status)
+        val token = client.pair(ctx)
+        val info = client.get("/api/v1/models/speech") { bearerAuth(token) }.body<SpeechModelInfo>()
+        assertEquals(SpeechModelSpec.ID, info.id)
+        assertFalse(info.ready, "this server has no model")
+        assertEquals(SpeechModelSpec.files, info.files)
+        assertEquals(HttpStatusCode.NotFound, client.get("/api/v1/models/speech/encoder.int8.onnx") { bearerAuth(token) }.status)
     }
 
     @Test

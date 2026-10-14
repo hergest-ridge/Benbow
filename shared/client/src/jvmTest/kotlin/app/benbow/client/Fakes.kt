@@ -7,6 +7,8 @@ import app.benbow.core.api.PushResponse
 import app.benbow.core.api.ReconcileResponse
 import app.benbow.core.api.RevisionInfo
 import app.benbow.core.api.ServerInfo
+import app.benbow.core.api.SpeechModelInfo
+import app.benbow.core.api.SpeechModelSpec
 import app.benbow.core.api.UploadStart
 import app.benbow.core.api.UploadStatus
 import app.benbow.core.sync.PullResponse
@@ -26,6 +28,9 @@ internal class FakeServer(val storeId: String = "store-1", val epoch: Long = 1) 
     val log = mutableListOf<SyncOp>()
     val blobs = mutableMapOf<String, ByteArray>()
     val uploads = mutableMapOf<String, Pair<UploadStart, ByteArrayOutputStream>>()
+
+    /** The speech model's files as this server would hand them out (empty = not downloaded). */
+    val speechFiles = mutableMapOf<String, ByteArray>()
 
     /** A copy of this server as a backup would have it now (files included), restored under a new epoch. */
     fun restoredCopy(epoch: Long, withFiles: Boolean = true) = FakeServer(storeId, epoch).also {
@@ -103,6 +108,17 @@ internal class FakeApi(var server: FakeServer, var serverStore: String = server.
         target.writeBytes(if (corruptDownloads) bytes.copyOf().also { it[0] = (it[0] + 1).toByte() } else bytes)
         return "image/jpeg"
     }
+
+    override suspend fun speechModel() = SpeechModelInfo(SpeechModelSpec.ID, server.speechFiles.isNotEmpty(), SpeechModelSpec.files)
+
+    /** Serves at most [speechChunk] bytes per call, like a connection that keeps dropping. */
+    override suspend fun downloadSpeechFile(name: String, target: File) {
+        val bytes = server.speechFiles[name] ?: throw ApiException(404, "not_found", "No such model file here")
+        val from = target.length().toInt()
+        target.appendBytes(bytes.copyOfRange(from, minOf(bytes.size, from + speechChunk)))
+    }
+
+    var speechChunk = Int.MAX_VALUE
 }
 
 internal fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }

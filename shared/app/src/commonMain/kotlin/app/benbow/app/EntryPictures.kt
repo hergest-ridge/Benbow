@@ -38,12 +38,19 @@ internal class EntryPictures(
     private val attachments: List<AttachmentState>,
     private val onOpen: (attachmentId: String) -> Unit,
     private val onRename: ((attachmentId: String, caption: String?) -> Unit)? = null,
+    private val entryId: String? = null,
+    private val transcripts: Map<String, String> = emptyMap(),
+    /** How tall a transcript is at a width (the editor measures it with the row's text style). */
+    private val textHeight: (String, Dp) -> Dp = { _, _ -> 0.dp },
 ) : AtomViews() {
     private fun find(atom: Atom.Attachment) = attachments.firstOrNull { it.meta.id == atom.ref }
 
     override fun pictureHeight(atom: Atom.Attachment, width: Dp): Dp {
         val meta = find(atom)?.meta ?: return 48.dp
-        if (meta.kind == "voice" || meta.kind == "audio") return 72.dp
+        if (meta.kind == "voice" || meta.kind == "audio") {
+            val text = transcripts[meta.id] ?: return 72.dp
+            return 72.dp + textHeight(text, width - TRANSCRIPT_START - TRANSCRIPT_END) + 10.dp
+        }
         if (meta.kind != "image" && meta.kind != "video") return 64.dp
         val w = meta.width ?: 0
         val h = meta.height ?: 0
@@ -68,11 +75,14 @@ internal class EntryPictures(
             }
             val meta = attachment.meta
             if (meta.kind == "voice" || meta.kind == "audio") {
-                AudioRow(
-                    services.media,
+                VoiceRow(
+                    services,
+                    entryId,
                     attachment,
+                    transcripts[meta.id],
                     Modifier.align(Alignment.Center),
                     onRename = onRename?.let { rename -> { caption -> rename(meta.id, caption) } },
+                    folded = false,
                 )
                 return@Box
             }

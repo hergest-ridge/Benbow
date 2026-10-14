@@ -87,6 +87,6 @@ Desktop client: Compose `packageMsi`. Web client: static files served by the ser
 kotlinx-coroutines, kotlinx-serialization, kotlinx-datetime, kotlinx-collections-immutable, Ktor (client and server),
 SQLDelight, Koin, Navigation 3, Coil 3, Okio (IO + SHA-256), org.jetbrains:markdown (parser), Kermit (logging),
 kotest-property, Turbine, Roborazzi. Server: sqlite-jdbc, logback, kotlinx-html, a QR generator.
-Android: WorkManager, Media3, Photo Picker, Glance (widget; 1.2.0, the latest stable on 2026-10-13), platform BiometricPrompt (app lock), Baseline Profiles.
+Android: sherpa-onnx 1.13.8 (voice transcription in an isolated process, ADR-025; official AAR in `apps/android/libs`, gitignored, SHA-256 checked; arm64-v8a only), WorkManager, Media3, Photo Picker, Glance (widget; 1.2.0, the latest stable on 2026-10-13), platform BiometricPrompt (app lock), Baseline Profiles.
 Theme: MaterialKolor 5.0.1 (com.materialkolor:material-kolor, all CMP targets) generates the palettes' M3 schemes from seed colors.
 Fonts: Meddon (OFL, google/fonts, 2026-10-14) bundled as a compose resource for the wordmark only; license in docs/licenses/.

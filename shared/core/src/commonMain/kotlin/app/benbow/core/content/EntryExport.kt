@@ -40,7 +40,8 @@ object EntryExport {
             val fields = entry.fields.mapNotNull { (k, v) -> v.value?.let { k to it } }.sortedBy { it.first }.toMap()
             val tags = fields.filterKeys { it.startsWith("tag:") }.values.sortedBy { it.lowercase() }
             val reactions = fields.keys.filter { it.startsWith("reaction:") }.map { it.removePrefix("reaction:") }
-            fields.filterKeys { !it.startsWith("tag:") && !it.startsWith("reaction:") }.forEach { (k, v) -> appendLine("$k: ${yaml(v)}") }
+            fields.filterKeys { !it.startsWith("tag:") && !it.startsWith("reaction:") && !it.startsWith(TRANSCRIPT) }
+                .forEach { (k, v) -> appendLine("$k: ${yaml(v)}") }
             if (tags.isNotEmpty()) appendLine("tags: [${tags.joinToString(", ") { yaml(it) }}]")
             if (reactions.isNotEmpty()) appendLine("reactions: [${reactions.joinToString(", ") { yaml(it) }}]")
             appendLine("---")
@@ -70,16 +71,35 @@ object EntryExport {
         },
     ) + "\n"
 
-    /** Present attachments as links relative to the note, so the folder stays browsable without the app. */
+    /**
+     * Present attachments as links relative to the note, so the folder stays browsable without the app. A voice note's
+     * transcript follows its link as a quote; one placed in the text is linked again here for its transcript.
+     */
     private fun attachments(entry: EntryState, missing: String, inline: Set<String>, link: (AttachmentState) -> String?): String {
-        val visible = entry.attachments.values.filter { it.present && it.meta.id !in inline }.sortedBy { it.position }
+        val transcripts = entry.fields.mapNotNull { (k, v) ->
+            v.value?.takeIf { k.startsWith(TRANSCRIPT) }?.let {
+                k.removePrefix(TRANSCRIPT) to
+                    it
+            }
+        }.toMap()
+        val visible = entry.attachments.values.filter {
+            it.present && (it.meta.id !in inline || it.meta.id in transcripts)
+        }.sortedBy { it.position }
         if (visible.isEmpty()) return ""
         return visible.joinToString("\n", prefix = "\n", postfix = "\n") { a ->
             val label = (a.caption ?: a.meta.name ?: a.meta.kind).replace('[', '(').replace(']', ')')
-            val path = link(a) ?: return@joinToString "<!-- ${a.meta.kind} ${a.meta.sha256} $missing -->"
-            if (a.meta.kind == "image") "![$label](<$path>)" else "[$label](<$path>)"
+            val path = link(a)
+            val line = when {
+                path == null -> "<!-- ${a.meta.kind} ${a.meta.sha256} $missing -->"
+                a.meta.kind == "image" -> "![$label](<$path>)"
+                else -> "[$label](<$path>)"
+            }
+            line + transcripts[a.meta.id]?.let { text -> "\n" + text.lines().joinToString("\n") { "> $it" } }.orEmpty()
         }
     }
+
+    /** `transcript:<attachment id>`: what was said in a voice note (7.6). */
+    private const val TRANSCRIPT = "transcript:"
 
     private fun decode(body: String?): Document? = body?.let {
         try {

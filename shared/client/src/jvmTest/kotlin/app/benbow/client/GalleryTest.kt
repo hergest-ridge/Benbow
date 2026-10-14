@@ -79,4 +79,26 @@ class GalleryTest {
         phone.engine.sync()
         assertEquals(null, phone.caption(), "blank = the default name again")
     }
+
+    @Test
+    fun aTranscriptSyncsAndMakesTheNoteFindableByWhatWasSaid() = runTest {
+        val server = FakeServer()
+        val phone = Device(server, "phone")
+        val entry = phone.repo.createNote("2026-10-14", "Голос")
+        val voice = phone.add(entry, "voice-1.m4a", 3)
+        phone.repo.setTranscript(entry, voice, "  Шли вдоль берега, ветер был холодный. ")
+        phone.repo.setCaption(entry, voice, "Прогулка")
+        assertEquals(listOf(entry), phone.repo.search(SearchQuery("берегом")).first().map { it.id }, "a word form of what was said")
+        assertEquals(listOf(entry), phone.repo.search(SearchQuery("прогулка")).first().map { it.id }, "the sound's name")
+
+        phone.engine.sync()
+        val desktop = Device(server, "desktop")
+        desktop.engine.sync()
+        assertEquals("Шли вдоль берега, ветер был холодный.", desktop.repo.entry(entry).first()!!.transcripts[voice])
+        assertEquals(listOf(entry), desktop.repo.search(SearchQuery("ветер")).first().map { it.id }, "indexed after a pull too")
+        assertEquals(mapOf(voice to "Шли вдоль берега, ветер был холодный."), desktop.repo.feed().first().single().transcripts)
+
+        desktop.repo.setTranscript(entry, voice, "")
+        assertEquals(emptyMap(), desktop.repo.entry(entry).first()!!.transcripts, "blank removes it")
+    }
 }

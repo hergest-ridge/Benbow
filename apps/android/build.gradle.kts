@@ -1,3 +1,4 @@
+import java.security.MessageDigest
 import java.util.Properties
 
 plugins {
@@ -14,6 +15,8 @@ val releaseSigning = providers.gradleProperty("benbow.signing")
     .takeIf { it.exists() }
     ?.let { f -> Properties().apply { f.inputStream().use(::load) } }
 
+val sherpaOnnx = layout.projectDirectory.file("libs/sherpa-onnx-1.13.8.aar")
+
 android {
     namespace = "app.benbow.android"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
@@ -24,9 +27,14 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "0.1.0"
+        // The owner's phones are arm64; the speech recognizer's native libraries are big (ADR-025).
+        ndk { abiFilters += "arm64-v8a" }
     }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        aidl = true
+    }
 
     signingConfigs {
         if (releaseSigning != null) {
@@ -70,7 +78,7 @@ android {
     // The profiling build shares the benchmark build's seeding tool, manifest and name.
     sourceSets.getByName("profiling") {
         manifest.srcFile("src/benchmark/AndroidManifest.xml")
-        kotlin.srcDir("src/benchmark/kotlin")
+        kotlin.directories += "src/benchmark/kotlin"
         res.srcDir("src/benchmark/res")
     }
 
@@ -92,4 +100,23 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     // Installs the baseline profile (src/main/baseline-prof.txt) on sideloaded installs too.
     implementation(libs.androidx.profileinstaller)
+    // Speech recognition (sherpa-onnx + ONNX Runtime), the official release AAR, checked below.
+    implementation(files(sherpaOnnx))
 }
+
+// The sherpa-onnx AAR is not on Maven: it's downloaded once from the official GitHub release into libs/ (gitignored)
+// and must match this SHA-256 (GitHub's published digest for v1.13.8).
+val sherpaOnnxSha256 = "633c24321e06b1fe79feafa03ea16cbc0f8a286641e2da3559bac91bdb13bd96"
+val verifySherpaOnnx by tasks.registering {
+    val aar = sherpaOnnx
+    val expected = sherpaOnnxSha256
+    inputs.file(aar)
+    doLast {
+        val f = aar.asFile
+        val actual = MessageDigest.getInstance("SHA-256").digest(f.readBytes()).joinToString("") { "%02x".format(it) }
+        check(actual == expected) {
+            "${f.name}: SHA-256 $actual, expected $expected. Download it again from github.com/k2-fsa/sherpa-onnx/releases/tag/v1.13.8"
+        }
+    }
+}
+tasks.named("preBuild") { dependsOn(verifySherpaOnnx) }

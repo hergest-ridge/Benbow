@@ -4,6 +4,7 @@ import app.benbow.core.sync.AttachmentMeta
 import app.benbow.core.sync.AttachmentState
 import app.benbow.core.sync.EntryState
 import app.benbow.core.sync.Hlc
+import app.benbow.core.sync.LwwValue
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -35,5 +36,28 @@ class EntryExportTest {
         assertTrue(text.startsWith("До\n\n![](<../media/IMG 1.jpg>)\n\nПосле"), text)
         assertEquals(1, Regex("IMG 1.jpg").findAll(markdown).count(), "the placed picture isn't repeated in the list")
         assertTrue("![IMG_2.jpg](<../media/IMG_2.jpg>)" in markdown, "the rest are listed after the text")
+    }
+
+    @Test
+    fun aVoiceNotesTranscriptFollowsItsLinkAsAQuote() {
+        val voice =
+            AttachmentState(
+                AttachmentMeta("v1", "sha-v1", 10, "audio/mp4", "voice", "voice-1.m4a"),
+                1.0,
+                caption = "Утро у моря",
+                hlc = Hlc.ZERO,
+            )
+        val entry = EntryState(
+            id = "entry-2",
+            kind = "note",
+            day = "2026-10-14",
+            createdAt = 0,
+            fields = mapOf("transcript:v1" to LwwValue("Шли вдоль берега.\nВетер был холодный.", Hlc.ZERO)),
+            attachments = mapOf("v1" to voice),
+        )
+        val body = DocumentCodec.encode(Document(listOf(TextBlock("p1", children = listOf(Span("Прогулка"))))))
+        val markdown = EntryExport.markdown(entry, body, missing = "missing") { "../media/${it.meta.name}" }
+        assertTrue("[Утро у моря](<../media/voice-1.m4a>)\n> Шли вдоль берега.\n> Ветер был холодный." in markdown, markdown)
+        assertTrue("transcript:" !in markdown.substringBefore("---\n\n"), "not a front-matter key")
     }
 }

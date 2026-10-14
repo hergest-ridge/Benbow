@@ -63,6 +63,7 @@ import app.benbow.app.resources.Res
 import app.benbow.app.resources.attach_failed
 import app.benbow.app.resources.copied
 import app.benbow.app.resources.saved
+import app.benbow.app.resources.speech_failed
 import app.benbow.app.resources.tab_calendar
 import app.benbow.app.resources.tab_feed
 import app.benbow.app.resources.tab_home
@@ -116,6 +117,8 @@ internal sealed interface Route {
     data object Export : Route
 
     data object Lock : Route
+
+    data object Speech : Route
 
     data object Appearance : Route
 
@@ -218,6 +221,7 @@ private fun AppRoot(services: AppServices) {
         services.messages.collect { message ->
             when (message) {
                 is AppMessage.AttachFailed -> snackbar.showSnackbar(getString(Res.string.attach_failed, message.reason))
+                is AppMessage.TranscriptionFailed -> snackbar.showSnackbar(getString(Res.string.speech_failed, message.reason))
                 AppMessage.Copied -> snackbar.showSnackbar(getString(Res.string.copied))
                 AppMessage.Saved -> snackbar.showSnackbar(getString(Res.string.saved))
             }
@@ -336,6 +340,7 @@ private fun AppNavigation(services: AppServices, backStack: SnapshotStateList<Ro
             entry<Route.Server> { ServerScreen(services, nav) }
             entry<Route.Export> { ExportScreen(services, nav) }
             entry<Route.Lock> { LockSettingsScreen(services, nav) }
+            entry<Route.Speech> { SpeechScreen(services, nav) }
             entry<Route.Appearance> { AppearanceScreen(services, nav) }
             entry<Route.Shortcuts> { ShortcutsScreen(nav) }
         },

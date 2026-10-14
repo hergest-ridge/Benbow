@@ -46,6 +46,8 @@ internal fun PostMedia(
     onOpen: (AttachmentState) -> Unit,
     modifier: Modifier = Modifier,
     onRename: ((attachmentId: String, caption: String?) -> Unit)? = null,
+    entryId: String? = null,
+    transcripts: Map<String, String> = emptyMap(),
 ) {
     if (attachments.isEmpty()) return
     val (visual, other) = attachments.partition { it.meta.kind == "image" || it.meta.kind == "video" }
@@ -61,7 +63,13 @@ internal fun PostMedia(
             if (it.meta.kind == "voice" ||
                 it.meta.kind == "audio"
             ) {
-                AudioRow(services.media, it, onRename = onRename?.let { rename -> { caption -> rename(it.meta.id, caption) } })
+                VoiceRow(
+                    services,
+                    entryId,
+                    it,
+                    transcripts[it.meta.id],
+                    onRename = onRename?.let { rename -> { caption -> rename(it.meta.id, caption) } },
+                )
             } else {
                 FileRow(it) { onOpen(it) }
             }

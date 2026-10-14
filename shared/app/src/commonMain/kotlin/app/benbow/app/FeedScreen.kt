@@ -258,7 +258,7 @@ private fun PostBody(
     val colors = MaterialTheme.colorScheme
     val entry = item.summary
     FeedText(body, expanded, onExpand)
-    item.audio.forEach { AudioRow(services.media, it) }
+    item.audio.forEach { VoiceRow(services, item.summary.id, it, item.transcripts[it.meta.id]) }
     if (entry.tags.isNotEmpty()) TagRibbon(entry.tags)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         item.reactions.sorted().forEach { emoji ->

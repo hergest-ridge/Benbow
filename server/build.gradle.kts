@@ -36,6 +36,7 @@ dependencies {
     implementation(libs.ktor.server.routing.openapi)
     implementation(libs.sqlite.jdbc)
     implementation(libs.logback.classic)
+    implementation(libs.commons.compress) // unpacks the speech model archive (.tar.bz2)
 
     testImplementation(libs.kotlin.test)
     testImplementation(libs.ktor.server.test.host)

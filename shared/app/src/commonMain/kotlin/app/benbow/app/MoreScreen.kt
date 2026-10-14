@@ -43,8 +43,12 @@ import app.benbow.app.resources.palette_names
 import app.benbow.app.resources.reminders
 import app.benbow.app.resources.server
 import app.benbow.app.resources.shortcuts
+import app.benbow.app.resources.speech_more_missing
+import app.benbow.app.resources.speech_more_ready
+import app.benbow.app.resources.speech_title
 import app.benbow.app.resources.tags
 import app.benbow.app.resources.trash
+import app.benbow.client.SpeechModelStore
 import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -89,6 +93,15 @@ private fun MoreList(services: AppServices, nav: Navigator) {
             MoreItem(Icons.Keyboard, stringResource(Res.string.shortcuts), stringResource(Res.string.more_shortcuts)) {
                 nav.open(Route.Shortcuts)
             }
+        }
+        services.transcriptions?.let { transcriptions ->
+            val model by transcriptions.model.state.collectAsStateWithLifecycle()
+            val ready = model == SpeechModelStore.State.Ready
+            MoreItem(
+                Icons.Transcribe,
+                stringResource(Res.string.speech_title),
+                stringResource(if (ready) Res.string.speech_more_ready else Res.string.speech_more_missing),
+            ) { nav.open(Route.Speech) }
         }
         val lockMinutes by services.lock.minutes.collectAsStateWithLifecycle()
         val lockLabel = lockMinutes?.let { m -> stringArrayResource(Res.array.lock_choices).getOrNull(AppLock.CHOICES.indexOf(m)) }

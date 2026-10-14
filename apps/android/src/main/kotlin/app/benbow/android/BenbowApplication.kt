@@ -6,6 +6,7 @@ import android.net.Network
 import android.os.Build
 import android.provider.Settings
 import androidx.sqlite.db.SupportSQLiteDatabase
+import app.benbow.android.asr.SandboxTranscriber
 import app.benbow.app.AppServices
 import app.benbow.client.KeystoreSecretBox
 import app.benbow.client.SecretBox
@@ -42,6 +43,14 @@ class BenbowApplication : Application() {
             },
         )
         val name = Settings.Global.getString(contentResolver, Settings.Global.DEVICE_NAME) ?: Build.MODEL
-        AppServices(driver, File(filesDir, "media"), platform = "android", deviceName = name, reminderClock = AlarmReminderClock(this))
+        AppServices(
+            driver,
+            File(filesDir, "media"),
+            platform = "android",
+            deviceName = name,
+            reminderClock = AlarmReminderClock(this),
+            transcriber = SandboxTranscriber(this),
+            modelsDir = File(filesDir, "models"),
+        )
     }
 }

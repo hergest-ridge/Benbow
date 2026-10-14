@@ -81,7 +81,7 @@ internal fun PostView(
             val placed = placedIn(detail.body).toSet()
             val loose = detail.attachments.filter { it.meta.id !in placed }.ifEmpty { detail.attachments }
             val layout = services.appearance.collectAsStateWithLifecycle().value.postMedia
-            PostMedia(services, loose, layout, onRename = { id, caption ->
+            PostMedia(services, loose, layout, entryId = detail.id, transcripts = detail.transcripts, onRename = { id, caption ->
                 services.scope.launch { services.repo.setCaption(detail.id, id, caption) }
             }, onOpen = {
                 onOpenMedia(it.meta.id)
@@ -180,7 +180,7 @@ internal fun CommentMedia(services: AppServices, comment: Comment, onOpen: (atta
     val third = with(LocalDensity.current) { (LocalWindowInfo.current.containerSize.width / 3).toDp() }
     val (sounds, rest) = comment.media.partition { it.meta.kind == "voice" || it.meta.kind == "audio" }
     sounds.forEach { sound ->
-        AudioRow(services.media, sound, onRename = { caption ->
+        VoiceRow(services, comment.summary.id, sound, comment.transcripts[sound.meta.id], onRename = { caption ->
             services.scope.launch { services.repo.setCaption(comment.summary.id, sound.meta.id, caption) }
         })
     }

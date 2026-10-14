@@ -8,14 +8,18 @@ import app.benbow.client.ExportReport
 import app.benbow.client.JournalRepository
 import app.benbow.client.MediaStore
 import app.benbow.client.Pairing
+import app.benbow.client.PairingException
 import app.benbow.client.ReminderItem
 import app.benbow.client.ServerHistory
 import app.benbow.client.Settings
+import app.benbow.client.SpeechModelStore
 import app.benbow.client.SyncController
 import app.benbow.client.SyncEngine
 import app.benbow.client.SyncResult
 import app.benbow.client.db.BenbowDb
 import app.benbow.client.upcoming
+import app.benbow.core.api.SpeechModelFile
+import app.benbow.core.api.SpeechModelSpec
 import app.cash.sqldelight.db.SqlDriver
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -56,6 +60,8 @@ sealed interface ExportState {
 sealed interface AppMessage {
     data class AttachFailed(val reason: String) : AppMessage
 
+    data class TranscriptionFailed(val reason: String) : AppMessage
+
     data object Copied : AppMessage
 
     data object Saved : AppMessage
@@ -74,6 +80,11 @@ class AppServices(
     private val mediaCacheBytes: Long = 2L * 1024 * 1024 * 1024,
     /** Rings reminders on this device (Android alarms, a tray message on desktop); none in tests. */
     private val reminderClock: ReminderClock? = null,
+    /** Speech to text on this device (7.6); the model is kept in [modelsDir]. None on desktop. */
+    transcriber: Transcriber? = null,
+    modelsDir: File? = null,
+    /** The model's files; tests use small made-up ones. */
+    speechFiles: List<SpeechModelFile> = SpeechModelSpec.files,
 ) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     val now: () -> Long = { Clock.System.now().toEpochMilliseconds() }
@@ -128,6 +139,17 @@ class AppServices(
     val launch = MutableStateFlow<AppLaunch?>(null)
 
     val attached = MutableSharedFlow<Attached>(extraBufferCapacity = 16)
+
+    /** Voice notes to text (7.6), where this platform can; the model comes only from the paired server. */
+    val transcriptions: Transcriptions? = if (transcriber != null && modelsDir != null) {
+        val model = SpeechModelStore(File(modelsDir, SpeechModelSpec.ID), {
+            apis(Settings(db).connection ?: throw PairingException("Not paired with a server"))
+        }, speechFiles)
+        Transcriptions(transcriber, model, repo, media, { Settings(db) }, scope) { messages.tryEmit(AppMessage.TranscriptionFailed(it)) }
+            .also { t -> scope.launch { attached.collect(t::added) } }
+    } else {
+        null
+    }
 
     /** Key combinations from the window (desktop): the app root and the open editor act on them. */
     val shortcuts = MutableSharedFlow<Shortcut>(extraBufferCapacity = 8)

@@ -39,6 +39,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
@@ -291,13 +294,23 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     val attachments = detail?.attachments.orEmpty()
     val inline = editor?.model?.paragraphs?.mapNotNullTo(HashSet()) { (it.atom as? Atom.Attachment)?.ref }.orEmpty()
     val ribbon = attachments.isNotEmpty() && (ribbonChoice ?: !attachments.all { it.meta.id in inline })
-    val pictures = remember(attachments, detail?.id) {
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val transcriptStyle = MaterialTheme.typography.bodyMedium
+    val transcripts = detail?.transcripts.orEmpty()
+    val pictures = remember(attachments, detail?.id, transcripts, transcriptStyle) {
         EntryPictures(
             services,
             attachments,
             onOpen = { id -> detail?.id?.let { nav.open(Route.Media(it, id)) } },
             onRename = { id, caption ->
                 detail?.id?.let { entry -> services.scope.launch { services.repo.setCaption(entry, id, caption) } }
+            },
+            entryId = detail?.id,
+            transcripts = transcripts,
+            textHeight = { text, width ->
+                val px = with(density) { width.roundToPx() }.coerceAtLeast(1)
+                with(density) { measurer.measure(text, transcriptStyle, constraints = Constraints(maxWidth = px)).size.height.toDp() }
             },
         )
     }

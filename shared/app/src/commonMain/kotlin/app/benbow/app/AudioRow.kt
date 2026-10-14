@@ -14,7 +14,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -44,8 +46,10 @@ import androidx.compose.ui.unit.dp
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.audio_pause
 import app.benbow.app.resources.audio_play
+import app.benbow.app.resources.speech_transcribe
 import app.benbow.app.resources.voice_note
 import app.benbow.client.MediaStore
+import app.benbow.client.SpeechModelStore
 import app.benbow.core.sync.AttachmentState
 import kotlinx.coroutines.flow.StateFlow
 import org.jetbrains.compose.resources.stringResource
@@ -80,6 +84,11 @@ internal fun AudioRow(
     attachment: AttachmentState,
     modifier: Modifier = Modifier,
     onRename: ((String?) -> Unit)? = null,
+    transcript: String? = null,
+    transcribing: Boolean = false,
+    onTranscribe: (() -> Unit)? = null,
+    /** In the text the whole transcript shows (the line is sized for it); elsewhere it folds to a few lines. */
+    folded: Boolean = true,
 ) {
     val audio = LocalAudio.current
     val now by (audio?.now ?: remember { kotlinx.coroutines.flow.MutableStateFlow<AudioNow?>(null) }).collectAsState()
@@ -92,73 +101,128 @@ internal fun AudioRow(
     var renaming by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
     Surface(color = colors.surfaceContainerHigh, shape = RoundedCornerShape(14.dp), modifier = modifier.fillMaxWidth()) {
-        Row(
-            Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            val playing = mine?.playing == true
-            Surface(
-                onClick = { if (file != null) audio?.toggle(meta.id, file, meta.mime) },
-                enabled = file != null,
-                shape = CircleShape,
-                color = colors.primary,
-                contentColor = colors.onPrimary,
-                modifier = Modifier.size(42.dp),
+        Column {
+            Row(
+                Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        if (playing) Icons.Pause else Icons.Play,
-                        stringResource(if (playing) Res.string.audio_pause else Res.string.audio_play),
-                        Modifier.size(24.dp),
-                    )
-                }
-            }
-            Column(Modifier.weight(1f)) {
-                if (renaming && onRename != null) {
-                    TitleField(attachment.caption.orEmpty(), fallback) {
-                        renaming = false
-                        onRename(it)
-                    }
-                } else {
-                    Text(
-                        title,
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = if (onRename != null) Modifier.clickable { renaming = true } else Modifier,
-                    )
-                }
-                val total = mine?.durationMs?.takeIf { it > 0 } ?: meta.durationMs ?: 0
-                if (mine != null && total > 0) {
-                    var dragging by remember { mutableStateOf<Float?>(null) }
-                    val fraction = dragging ?: (mine.positionMs.toFloat() / total).coerceIn(0f, 1f)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Slider(
-                            value = fraction,
-                            onValueChange = { dragging = it },
-                            onValueChangeFinished = {
-                                dragging?.let { audio?.seek((it * total).toLong()) }
-                                dragging = null
-                            },
-                            modifier = Modifier.weight(1f).height(28.dp),
+                val playing = mine?.playing == true
+                Surface(
+                    onClick = { if (file != null) audio?.toggle(meta.id, file, meta.mime) },
+                    enabled = file != null,
+                    shape = CircleShape,
+                    color = colors.primary,
+                    contentColor = colors.onPrimary,
+                    modifier = Modifier.size(42.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            if (playing) Icons.Pause else Icons.Play,
+                            stringResource(if (playing) Res.string.audio_pause else Res.string.audio_play),
+                            Modifier.size(24.dp),
                         )
+                    }
+                }
+                Column(Modifier.weight(1f)) {
+                    if (renaming && onRename != null) {
+                        TitleField(attachment.caption.orEmpty(), fallback) {
+                            renaming = false
+                            onRename(it)
+                        }
+                    } else {
                         Text(
-                            durationLabel((fraction * total).toLong()),
-                            style = MaterialTheme.typography.labelSmall,
+                            title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = if (onRename != null) Modifier.clickable { renaming = true } else Modifier,
+                        )
+                    }
+                    val total = mine?.durationMs?.takeIf { it > 0 } ?: meta.durationMs ?: 0
+                    if (mine != null && total > 0) {
+                        var dragging by remember { mutableStateOf<Float?>(null) }
+                        val fraction = dragging ?: (mine.positionMs.toFloat() / total).coerceIn(0f, 1f)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Slider(
+                                value = fraction,
+                                onValueChange = { dragging = it },
+                                onValueChangeFinished = {
+                                    dragging?.let { audio?.seek((it * total).toLong()) }
+                                    dragging = null
+                                },
+                                modifier = Modifier.weight(1f).height(28.dp),
+                            )
+                            Text(
+                                durationLabel((fraction * total).toLong()),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colors.onSurfaceVariant,
+                            )
+                        }
+                    } else {
+                        Text(
+                            meta.durationMs?.let(::durationLabel).orEmpty(),
+                            style = MaterialTheme.typography.labelMedium,
                             color = colors.onSurfaceVariant,
                         )
                     }
-                } else {
-                    Text(
-                        meta.durationMs?.let(::durationLabel).orEmpty(),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.onSurfaceVariant,
-                    )
                 }
+                when {
+                    transcribing -> CircularProgressIndicator(Modifier.padding(end = 8.dp).size(20.dp), strokeWidth = 2.dp)
+
+                    transcript == null && onTranscribe != null -> IconButton(onTranscribe) {
+                        Icon(Icons.Transcribe, stringResource(Res.string.speech_transcribe), tint = colors.onSurfaceVariant)
+                    }
+                }
+            }
+            if (transcript != null) {
+                var open by remember { mutableStateOf(false) }
+                Text(
+                    transcript,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = if (!folded || open) Int.MAX_VALUE else FOLDED_LINES,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth().then(if (folded) Modifier.clickable { open = !open } else Modifier)
+                        .padding(start = TRANSCRIPT_START, end = TRANSCRIPT_END, bottom = 10.dp),
+                )
             }
         }
     }
+}
+
+/** Where a transcript starts and ends in the row: under the title, past the play button. */
+internal val TRANSCRIPT_START = 64.dp
+internal val TRANSCRIPT_END = 12.dp
+private const val FOLDED_LINES = 3
+
+/** A sound with what was said in it, wired to this device's transcriber (7.6): the button shows once the model is here. */
+@Composable
+internal fun VoiceRow(
+    services: AppServices,
+    entryId: String?,
+    attachment: AttachmentState,
+    transcript: String?,
+    modifier: Modifier = Modifier,
+    onRename: ((String?) -> Unit)? = null,
+    folded: Boolean = true,
+) {
+    val transcriptions = services.transcriptions
+    val model = transcriptions?.model?.state?.collectAsState()?.value
+    val running = transcriptions?.running?.collectAsState()?.value.orEmpty()
+    AudioRow(
+        services.media,
+        attachment,
+        modifier,
+        onRename,
+        transcript = transcript,
+        transcribing = attachment.meta.id in running,
+        onTranscribe = if (transcriptions != null && entryId != null && model == SpeechModelStore.State.Ready) {
+            { transcriptions.transcribe(entryId, attachment) }
+        } else {
+            null
+        },
+        folded = folded,
+    )
 }
 
 /** The title in place: Done (or leaving the field) keeps it; blank goes back to [hint], the default name. */

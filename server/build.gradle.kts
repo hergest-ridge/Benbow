@@ -54,8 +54,10 @@ val packagingJdk = javaToolchains.compilerFor {
     languageVersion = JavaLanguageVersion.of(25)
     vendor = JvmVendorSpec.ADOPTIUM
 }
-// From `jdeps --print-module-deps` over the server classpath, plus jdk.charsets for Windows console code pages.
-val runtimeModules = "java.base,java.desktop,java.instrument,java.management,java.naming,java.sql,jdk.charsets,jdk.jfr,jdk.unsupported"
+// From `jdeps --print-module-deps` over the server classpath, plus jdk.charsets for Windows console code pages and
+// java.net.http for the speech model download. `packageServer` runs the packaged server's --self-check against it.
+val runtimeModules =
+    "java.base,java.desktop,java.instrument,java.management,java.naming,java.net.http,java.sql,jdk.charsets,jdk.jfr,jdk.unsupported"
 val windows = System.getProperty("os.name").startsWith("Windows")
 
 val jlinkRuntime = tasks.register<Exec>("jlinkRuntime") {
@@ -124,5 +126,25 @@ tasks.register<Sync>("packageServer") {
     from("packaging/winsw") {
         include("WinSW*.exe")
         rename { "benbow-server-service.exe" }
+    }
+    // The bundled runtime only has the modules listed above: start the packaged server once in self-check mode, so a
+    // missing one fails here and not as a service that won't start on the owner's PC.
+    doLast {
+        val dir = packageDir.get().asFile
+        val java = dir.resolve(if (onWindows) "runtime/bin/java.exe" else "runtime/bin/java").absolutePath
+        // Like the service, it keeps Java's loopback sockets out of %TEMP% (some Windows profiles refuse them there).
+        val sockets = dir.resolveSibling("self-check-tmp").apply { mkdirs() }.absolutePath
+        val process = ProcessBuilder(
+            java,
+            "-Djdk.net.unixdomain.tmpdir=$sockets",
+            "-cp",
+            dir.resolve("lib").absolutePath + "/*",
+            "app.benbow.server.MainKt",
+            "--self-check",
+        )
+            .redirectErrorStream(true)
+            .start()
+        val output = process.inputStream.bufferedReader().readText()
+        check(process.waitFor() == 0 && "self-check ok" in output) { "The packaged server failed its self-check:\n$output" }
     }
 }

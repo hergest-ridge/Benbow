@@ -146,7 +146,8 @@ internal fun sha256(input: InputStream): String {
  * Each range is retried on its own.
  */
 class HttpFetch(private val parts: Int = 8) : SpeechModel.Fetch {
-    private val client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build()
+    // Made on the first download, so nothing about it can stop the server from starting.
+    private val client by lazy { HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build() }
 
     override fun download(url: String, size: Long, target: Path, progress: (Long) -> Unit) {
         RandomAccessFile(target.toFile(), "rw").use { it.setLength(size) }

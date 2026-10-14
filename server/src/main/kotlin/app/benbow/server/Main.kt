@@ -25,6 +25,7 @@ const val SERVER_VERSION = "0.5.0"
 const val DEFAULT_PORT = 8765
 
 fun main(args: Array<String>) {
+    if ("--self-check" in args) return selfCheck()
     val dataDir = ServerConfig.resolveDataDir(args).createDirectories()
     // Java's NIO selector uses a unix-domain socket in %TEMP%, which fails on some Windows profiles
     // ("Unable to establish loopback connection"). Must be set before any networking code runs.
@@ -118,4 +119,16 @@ fun main(args: Array<String>) {
 private fun lockDataDir(dataDir: Path): FileLock? {
     val channel = FileChannel.open(dataDir.resolve(".lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE)
     return channel.tryLock()
+}
+
+/**
+ * Touches what the server needs beyond java.base (HTTP client, SQLite's native library, bzip2/tar) without opening any
+ * data, so `packageServer` can prove the bundled runtime has every module.
+ */
+private fun selfCheck() {
+    java.net.http.HttpClient.newHttpClient()
+    Database.inMemory().close()
+    org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream::class.java.name
+    javax.net.ssl.SSLContext.getDefault()
+    println("self-check ok")
 }

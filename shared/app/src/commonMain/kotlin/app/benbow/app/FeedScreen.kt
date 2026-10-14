@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.layout.LazyLayoutCacheWindow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -53,8 +55,10 @@ import app.benbow.app.resources.months_nominative
 import app.benbow.client.FeedItem
 import app.benbow.core.sync.AttachmentState
 import coil3.compose.AsyncImage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -65,7 +69,15 @@ import org.jetbrains.compose.resources.stringResource
 internal sealed interface FeedRow {
     val key: String
 
-    data class Item(val item: FeedItem) : FeedRow {
+    /** Rows of a kind reuse each other's composition while scrolling; posts with pictures are their own kind. */
+    val contentType: Int get() = when (this) {
+        is Month -> 0
+        is Day -> 1
+        is Item -> if (item.media.isEmpty()) 2 else 3
+    }
+
+    /** [body] is the post's text, parsed off the main thread. */
+    data class Item(val item: FeedItem, val body: FeedBody? = null) : FeedRow {
         override val key get() = item.summary.id
     }
 
@@ -80,21 +92,29 @@ internal sealed interface FeedRow {
 }
 
 /** Newest first, top down: each month's title, then each day's line above its entries. */
-internal fun feedRows(items: List<FeedItem>): List<FeedRow> = buildList {
+internal fun feedRows(items: List<FeedItem>, body: (FeedItem) -> FeedBody? = { null }): List<FeedRow> = buildList {
     items.forEachIndexed { i, item ->
         val month = item.summary.day.take(7)
         if (items.getOrNull(i - 1)?.summary?.day?.take(7) != month) add(FeedRow.Month(month))
         if (items.getOrNull(i - 1)?.summary?.day != item.summary.day) add(FeedRow.Day(item.summary.day))
-        add(FeedRow.Item(item))
+        add(FeedRow.Item(item, body(item)))
     }
 }
 
 internal val REACTIONS = listOf("❤️", "👍", "😂", "😮", "😢", "🔥")
 
 internal class FeedViewModel(private val services: AppServices) : ViewModel() {
-    val rows: StateFlow<List<FeedRow>?> = services.repo.feed().map(
-        ::feedRows,
-    ).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    // Each post's text is parsed here, once per change, not while it scrolls into view.
+    private val parsed = HashMap<String, Pair<String, FeedBody?>>()
+
+    val rows: StateFlow<List<FeedRow>?> = services.repo.feed().map { items ->
+        val rows = feedRows(items) { item ->
+            val id = item.summary.id
+            parsed[id]?.takeIf { it.first == item.body }?.second ?: feedBody(item.body).also { parsed[id] = item.body to it }
+        }
+        parsed.keys.retainAll(items.mapTo(HashSet()) { it.summary.id })
+        rows
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun react(id: String, emoji: String, on: Boolean) {
         services.scope.launch { services.repo.toggleReaction(id, emoji, on) }
@@ -102,7 +122,7 @@ internal class FeedViewModel(private val services: AppServices) : ViewModel() {
 }
 
 /** Everything as a stream, newest on top; long-press to react. Writing happens on Home. */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 internal fun FeedScreen(services: AppServices, nav: Navigator) {
     val vm = viewModel { FeedViewModel(services) }
@@ -129,11 +149,15 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
             }
             return@Scaffold
         }
+        // Posts a screen ahead (and half a screen behind) are composed in the spare time between frames, so a post
+        // scrolling in is already built: composing pictures and text in the frame it appears in drops frames.
+        val state = rememberLazyListState(cacheWindow = LazyLayoutCacheWindow(aheadFraction = 1f, behindFraction = 0.5f))
         LazyColumn(
             Modifier.padding(padding).fillMaxSize(),
+            state = state,
             contentPadding = PaddingValues(vertical = if (appearance.feedCards) 8.dp else 0.dp),
         ) {
-            items(list, key = { it.key }) { row ->
+            items(list, key = { it.key }, contentType = { it.contentType }) { row ->
                 when (row) {
                     is FeedRow.Day -> DayHeader(row.day)
 
@@ -142,6 +166,7 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
                     is FeedRow.Item -> FeedPost(
                         services,
                         row.item,
+                        row.body,
                         cards = appearance.feedCards,
                         expanded = expanded[row.item.summary.id] == true,
                         onExpand = { expanded[row.item.summary.id] = true },
@@ -166,6 +191,7 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
 private fun FeedPost(
     services: AppServices,
     item: FeedItem,
+    body: FeedBody?,
     cards: Boolean,
     expanded: Boolean,
     onExpand: () -> Unit,
@@ -188,14 +214,14 @@ private fun FeedPost(
             ) {
                 Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (item.media.isNotEmpty()) MediaCarousel(services.media, item.media, onOpenMedia)
-                    PostBody(services, item, expanded, onExpand, onComments, onReact)
+                    PostBody(services, item, body, expanded, onExpand, onComments, onReact)
                 }
             }
         } else {
             Column(Modifier.fillMaxWidth().background(tint ?: colors.background).then(open)) {
                 if (item.media.isNotEmpty()) MediaCarousel(services.media, item.media, onOpenMedia, rounded = false)
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    PostBody(services, item, expanded, onExpand, onComments, onReact)
+                    PostBody(services, item, body, expanded, onExpand, onComments, onReact)
                 }
                 HorizontalDivider(Modifier.padding(top = 4.dp), thickness = 0.5.dp, color = colors.outlineVariant)
             }
@@ -223,6 +249,7 @@ private fun FeedPost(
 private fun PostBody(
     services: AppServices,
     item: FeedItem,
+    body: FeedBody?,
     expanded: Boolean,
     onExpand: () -> Unit,
     onComments: () -> Unit,
@@ -230,7 +257,7 @@ private fun PostBody(
 ) {
     val colors = MaterialTheme.colorScheme
     val entry = item.summary
-    FeedText(item.body, expanded, onExpand)
+    FeedText(body, expanded, onExpand)
     item.audio.forEach { AudioRow(services.media, it) }
     if (entry.tags.isNotEmpty()) TagRibbon(entry.tags)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {

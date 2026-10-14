@@ -60,7 +60,7 @@ Dependency rule: `apps/{android,desktop} → shared/app → shared/{ui,client} �
 - UI smoke test: `shared/app` jvmTest drives the whole app headless and writes screenshots to `shared/app/build/screens`.
 - Media UI (3.3): common gallery strip, journal covers, full-screen viewer (pinch/double-tap zoom) with Coil 3; `MediaBar` and `MediaPlayer` are expect/actual. Android: Photo Picker (no permission), camera via `TakePicture` into `files/capture` through a FileProvider (the temp file is deleted only after a successful import), hold-to-record voice (AAC .m4a, `RECORD_AUDIO`), previews from EXIF-rotated bitmaps and video frames, playback with Media3 `PlayerView`. Desktop: file dialog, ImageIO previews, video/audio opened in the system player. Modules whose targets are all JVM (android + jvm) may use JDK APIs in commonMain.
 - Search (4.1): on-device SQLite FTS4 (`entry_search`, Android has no FTS5) over title, all text and tags, `unicode61` (case-insensitive) plus our own ё→е folding; every typed word is a prefix query, non-letters are dropped so FTS syntax can't be injected. Updated in the same transaction as the entry; rebuilt when `SearchIndex.VERSION` changes. Filters: tag (JSON path on fields), favorites, with media. Server-side FTS waits for the web client.
-- Performance: immutable UI models, stable keys and `contentType` in lazy lists, paging by cursor, prefetch of adjacent entries, baseline profiles, R8 full mode.
+- Performance: immutable UI models, stable keys and `contentType` in lazy lists, paging by cursor, prefetch of adjacent entries, baseline profile (`apps/android/src/main/baseline-prof.txt`, installed by profileinstaller), R8 without obfuscation (ADR-024), a cache window on the feed.
 
 ## Server internals
 - Single write connection (serialized writer) + read pool, like Monbooru. All mutations are transactional and append `change_log` rows in the same transaction.
@@ -79,7 +79,8 @@ Desktop client: Compose `packageMsi`. Web client: static files served by the ser
 - `shared/core`: unit + property tests (kotest-property): Markdown round-trip, diff3 merge, HLC ordering.
 - Sync: deterministic simulation (N clients + server in memory, random ops, drops, duplicates, reorders, crashes). Assert convergence and that no revision is lost.
 - Server: Ktor `testApplication` against a temp-dir SQLite. Migration tests against fixture DBs from every schema version. Backup/restore tests.
-- UI: Roborazzi screenshot tests (JVM). Desktop smoke via Compose Hot Reload MCP. Android macrobenchmarks for startup and scroll (Phase 6).
+- UI: Roborazzi screenshot tests (JVM). Desktop smoke via Compose Hot Reload MCP.
+- Android performance (6.7): `apps/benchmark` (com.android.test, self-instrumenting) drives `app.benbow.bench`, never the owner's app. `BenchSeedActivity` (benchmark/profiling builds only) fills its empty DB with made-up entries and drawn pictures. `StartupBenchmark` (cold, without compilation and with the baseline profile), `FeedBenchmark` (skim, open posts), `BaselineProfileGenerator`. The `benchmark` build is R8 like release; `profiling` is the same without R8, for collecting the profile. Results land in `apps/benchmark/build/outputs/connected_android_test_additional_output/`; Perfetto traces there can be queried with `trace_processor_shell` from benchmark-common, pushed to the phone.
 - `./gradlew check` is the single gate.
 
 ## Provisional libraries (verify versions at scaffold)

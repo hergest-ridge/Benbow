@@ -39,6 +39,7 @@ include(
     ":shared:client",
     ":shared:app",
     ":apps:android",
+    ":apps:benchmark",
     ":apps:desktop",
     ":apps:web",
     ":server",

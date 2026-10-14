@@ -56,3 +56,9 @@ Anti-patterns to avoid: streak loss shaming, forced daily prompts, gamified poin
 
 ## Performance budgets (validated in Phase 6 with macrobenchmarks)
 Cold start to Home <600 ms on the owner's phone. Entry open <100 ms. Feed scroll: no janky frames at 120 Hz. Typing: no dropped frames on a 20k-char entry.
+
+Measured in 6.7 (2026-10-14, S24+, `apps/benchmark` on the seeded bench build: 300 entries, 120 12-MP pictures; Android Studio mirroring was on, so absolute numbers are a little pessimistic):
+- Cold start (time to first frame): 388 ms before (no R8, library profiles only) → 258 ms (R8 + the app's baseline profile). APK 44 → 8 MB.
+- Feed skim (fast flings): frame overrun P90 / P95 / P99 = 2.7 / 7.1 / 16.6 ms before → 1.1 / 2.1 / 6.3 ms after parsing post text off the main thread, `contentType` and a cache window (a screen ahead, half behind). No main-thread frame over 8 ms left; by hand (adb swipes) 0.8% of frames miss the 120 Hz deadline.
+- Entry open: settled in ~50 ms (3 frames of 14–22 ms: the post screen's first composition and text layout). Back to the feed costs one ~30 ms frame: Navigation3 drops the feed while a post is open, so it is composed and laid out again. Keeping it composed needs an overlay scene; postponed (one frame at the start of a fade).
+- Typing: unchanged, see editor.md (fine to ~5k chars, long-form needs a chunked editor).

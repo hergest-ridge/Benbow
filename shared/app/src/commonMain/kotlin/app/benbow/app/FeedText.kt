@@ -59,12 +59,12 @@ private const val LINE_COST = 40
  * after a budget with "Показать ещё", which opens the rest in place.
  */
 @Composable
-internal fun FeedText(body: String, expanded: Boolean, onExpand: () -> Unit, modifier: Modifier = Modifier) {
-    val rich = remember(body) { runCatching { DocumentCodec.decode(body).toRichText() }.getOrNull() } ?: return
+internal fun FeedText(body: FeedBody?, expanded: Boolean, onExpand: () -> Unit, modifier: Modifier = Modifier) {
+    val rich = body?.rich ?: return
     val colors = MaterialTheme.colorScheme
     val dark = colors.background.luminance() < 0.5f
     val styles = remember(colors) { EditorStyles(colors, dark) }
-    val blocks = remember(rich) { blocksOf(rich) }
+    val blocks = body.blocks
     if (blocks.isEmpty()) return
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         var budget = BUDGET
@@ -109,8 +109,15 @@ internal fun FeedText(body: String, expanded: Boolean, onExpand: () -> Unit, mod
     }
 }
 
+/** A post's text, parsed once off the main thread: decoding JSON as a post scrolls in would cost frames. */
+internal class FeedBody(val rich: RichText, val blocks: List<Block>)
+
+/** Null when the body can't be read (the post then shows no text rather than failing the feed). */
+internal fun feedBody(body: String): FeedBody? =
+    runCatching { DocumentCodec.decode(body).toRichText() }.getOrNull()?.let { FeedBody(it, blocksOf(it)) }
+
 /** Paragraphs drawn together: a code block or a callout is one box; anything else is one paragraph. */
-private class Block(val paragraphs: List<Int>, val length: Int)
+internal class Block(val paragraphs: List<Int>, val length: Int)
 
 private fun blocksOf(rich: RichText): List<Block> {
     val result = ArrayList<Block>()

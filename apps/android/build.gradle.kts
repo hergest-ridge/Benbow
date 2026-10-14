@@ -43,6 +43,9 @@ android {
         // The real app (app.benbow): only release builds, so test builds can never touch its data.
         getByName("release") {
             signingConfig = signingConfigs.findByName("release")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
         // Development builds install next to it as app.benbow.debug, with their own local DB.
         getByName("debug") {
@@ -56,6 +59,19 @@ android {
             isDebuggable = false
             matchingFallbacks += "release"
         }
+        // The same without R8: baseline profiles are collected here so their names match the code as written.
+        create("profiling") {
+            initWith(getByName("benchmark"))
+            isMinifyEnabled = false
+            isShrinkResources = false
+        }
+    }
+
+    // The profiling build shares the benchmark build's seeding tool, manifest and name.
+    sourceSets.getByName("profiling") {
+        manifest.srcFile("src/benchmark/AndroidManifest.xml")
+        kotlin.srcDir("src/benchmark/kotlin")
+        res.srcDir("src/benchmark/res")
     }
 
     compileOptions {
@@ -74,4 +90,6 @@ dependencies {
     implementation(libs.androidx.work.runtime)
     implementation(libs.androidx.glance.appwidget)
     implementation(libs.androidx.activity.compose)
+    // Installs the baseline profile (src/main/baseline-prof.txt) on sideloaded installs too.
+    implementation(libs.androidx.profileinstaller)
 }

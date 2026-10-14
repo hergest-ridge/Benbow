@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!-- Macrobenchmarks read frame timings and traces of this build from the shell. -->
+        <profileable android:shell="true" />
+
+        <!-- Fills this build's own DB with made-up entries: am start -W -n app.benbow.bench/app.benbow.android.BenchSeedActivity -->
+        <activity
+            android:name=".BenchSeedActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+    </application>
+</manifest>

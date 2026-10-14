@@ -23,7 +23,6 @@ import kotlin.test.assertTrue
 class SpeechModelTest {
     private val encoder = Random(1).nextBytes(50_000)
     private val tokens = "<blk> 0\nа 1\n".toByteArray()
-    private val vad = Random(2).nextBytes(3_000)
 
     private fun sha(bytes: ByteArray) = sha256(bytes.inputStream())
 
@@ -41,11 +40,9 @@ class SpeechModelTest {
 
     private fun spec(archive: ByteArray) = SpeechModel.Spec(
         archive = SpeechModelSpec.Source("https://example.invalid/model.tar.bz2", archive.size.toLong(), sha(archive)),
-        vad = SpeechModelSpec.Source("https://example.invalid/vad.onnx", vad.size.toLong(), sha(vad), file = "silero_vad.onnx"),
         files = listOf(
             SpeechModelFile("encoder.int8.onnx", encoder.size.toLong(), sha(encoder)),
             SpeechModelFile("tokens.txt", tokens.size.toLong(), sha(tokens)),
-            SpeechModelFile("silero_vad.onnx", vad.size.toLong(), sha(vad)),
         ),
     )
 
@@ -69,7 +66,7 @@ class SpeechModelTest {
             "model/tokens.txt" to tokens,
             "model/run.sh" to "rm -rf /".toByteArray(), // not asked for: never unpacked
         )
-        val fetch = FakeFetch(mapOf("https://example.invalid/model.tar.bz2" to archive, "https://example.invalid/vad.onnx" to vad))
+        val fetch = FakeFetch(mapOf("https://example.invalid/model.tar.bz2" to archive))
         val model = SpeechModel(root, fetch, spec(archive))
         assertEquals(SpeechModel.State.Missing, model.state)
         assertNull(model.file("encoder.int8.onnx"), "nothing to serve before the download")
@@ -78,10 +75,10 @@ class SpeechModelTest {
 
         assertEquals(SpeechModel.State.Ready, model.state)
         assertContentEquals(encoder, model.file("encoder.int8.onnx")!!.readBytes())
-        assertContentEquals(vad, model.file("silero_vad.onnx")!!.readBytes())
+        assertContentEquals(tokens, model.file("tokens.txt")!!.readBytes())
         assertNull(model.file("run.sh"), "only pinned names are served")
         assertFalse(root.resolve(SpeechModelSpec.ID).resolve("run.sh").exists())
-        assertEquals(2, fetch.asked.size, "the archive and the VAD, nothing else")
+        assertEquals(1, fetch.asked.size, "the archive, nothing else")
         assertEquals(SpeechModel.State.Ready, SpeechModel(root, fetch, spec(archive)).state, "found again after a restart")
     }
 
@@ -90,7 +87,7 @@ class SpeechModelTest {
         val root = Files.createTempDirectory("benbow-speech")
         val good = archive("model/encoder.int8.onnx" to encoder, "model/tokens.txt" to tokens)
         val forged = archive("model/encoder.int8.onnx" to Random(9).nextBytes(50_000), "model/tokens.txt" to tokens)
-        val fetch = FakeFetch(mapOf("https://example.invalid/model.tar.bz2" to forged, "https://example.invalid/vad.onnx" to vad))
+        val fetch = FakeFetch(mapOf("https://example.invalid/model.tar.bz2" to forged))
         val model = SpeechModel(root, fetch, spec(good))
 
         model.runDownload()

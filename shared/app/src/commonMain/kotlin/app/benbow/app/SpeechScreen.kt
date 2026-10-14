@@ -47,6 +47,7 @@ import app.benbow.app.resources.speech_not_on_server
 import app.benbow.app.resources.speech_queue
 import app.benbow.app.resources.speech_ready
 import app.benbow.app.resources.speech_retry
+import app.benbow.app.resources.speech_server_old
 import app.benbow.app.resources.speech_title
 import app.benbow.client.SpeechModelStore
 import app.benbow.core.api.SpeechModelSpec
@@ -91,6 +92,11 @@ internal fun SpeechScreen(services: AppServices, nav: Navigator) {
                             stringResource(Res.string.speech_downloading, mb(s.done), mb(s.total)),
                             style = MaterialTheme.typography.bodyMedium,
                         )
+                    }
+
+                    SpeechModelStore.State.ServerTooOld -> {
+                        Text(stringResource(Res.string.speech_server_old), style = MaterialTheme.typography.bodyMedium)
+                        OutlinedButton({ fetch() }) { Text(stringResource(Res.string.speech_check_again)) }
                     }
 
                     SpeechModelStore.State.NotOnServer -> {

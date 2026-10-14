@@ -43,6 +43,16 @@ class SpeechModelStoreTest {
     }
 
     @Test
+    fun anOlderServerIsToldApartFromAMissingModel() = runTest {
+        val old = object : BenbowApi by FakeApi(FakeServer()) {
+            override suspend fun speechModel() = throw ApiException(404, null, "HTTP 404")
+        }
+        val store = SpeechModelStore(Files.createTempDirectory("benbow-model").toFile(), { old }, files)
+        store.fetch()
+        assertEquals(SpeechModelStore.State.ServerTooOld, store.state.value)
+    }
+
+    @Test
     fun aFileThatDoesNotMatchThePinnedHashIsThrownAway() = runTest {
         val server = FakeServer().apply {
             speechFiles["encoder.int8.onnx"] = Random(9).nextBytes(10_000) // the right size, other bytes

@@ -12,9 +12,9 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.concurrent.thread
 
-/** The model's files, as the server hands them out (sherpa-onnx's GigaAM v3 package plus Silero VAD). */
-class AsrModel(val encoder: File, val decoder: File, val joiner: File, val tokens: File, val vad: File) {
-    val files get() = listOf(encoder, decoder, joiner, tokens, vad)
+/** The model's files, as the server hands them out (sherpa-onnx's GigaAM v3 package). */
+class AsrModel(val encoder: File, val decoder: File, val joiner: File, val tokens: File) {
+    val files get() = listOf(encoder, decoder, joiner, tokens)
 }
 
 /** Binds [AsrService] for the length of [block]; the sandboxed process goes away when nothing holds it. */
@@ -47,7 +47,7 @@ suspend fun <T> Context.withAsr(block: suspend (IAsr) -> T): T {
 fun IAsr.load(model: AsrModel): String? {
     val open = model.files.map { ParcelFileDescriptor.open(it, ParcelFileDescriptor.MODE_READ_ONLY) }
     try {
-        return load(open[0], open[1], open[2], open[3], open[4])
+        return load(open[0], open[1], open[2], open[3])
     } finally {
         open.forEach { it.close() } // the sandbox got its own copies of the descriptors
     }

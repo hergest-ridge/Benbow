@@ -165,7 +165,7 @@ private fun speechSection(model: SpeechModel): String = buildString {
 
         SpeechModel.State.Missing -> append(
             "<form method=\"post\" action=\"/admin/speech-model\"><button>Скачать модель (${mb(
-                SpeechModelSpec.archive.size + SpeechModelSpec.vad.size,
+                SpeechModelSpec.archive.size,
             )} МБ)</button></form>",
         )
 

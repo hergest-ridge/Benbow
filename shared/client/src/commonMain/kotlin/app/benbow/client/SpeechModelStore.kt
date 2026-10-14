@@ -25,6 +25,9 @@ class SpeechModelStore(
         /** The server doesn't have it yet: the owner downloads it on the server's page first. */
         data object NotOnServer : State
 
+        /** The server predates the model (before 0.5.0): it has to be updated first. */
+        data object ServerTooOld : State
+
         data class Downloading(val done: Long, val total: Long) : State
 
         data object Ready : State
@@ -44,7 +47,13 @@ class SpeechModelStore(
         if (verified()) return@withContext _state.run { value = State.Ready }
         try {
             val api = api()
-            if (!api.speechModel().ready) return@withContext _state.run { value = State.NotOnServer }
+            val info = try {
+                api.speechModel()
+            } catch (e: ApiException) {
+                if (e.status == 404) return@withContext _state.run { value = State.ServerTooOld }
+                throw e
+            }
+            if (!info.ready) return@withContext _state.run { value = State.NotOnServer }
             dir.mkdirs()
             marker.delete()
             val total = files.sumOf { it.size }

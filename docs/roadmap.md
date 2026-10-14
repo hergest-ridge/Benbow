@@ -38,4 +38,4 @@ Slices (owner agreed the order on 2026-10-13): **6.1 capture from anywhere (shar
 
 ## Phase 7: Later
 Ink layer (paper mode), ICS import/export and Google Calendar, Russian stemming, inline images in text, importers, writer's archive module, backup encryption, on-device voice transcription.
-Slices (started 2026-10-14, quick daily value first): **7.1 Russian word forms in search ✅** · **7.2 inline images in text, swipeable media ✅** · 7.3 ICS import/export · 7.4 importers (sources: open question 13) · 7.5 ink layer · 7.6 on-device voice transcription (in progress: sandboxed GigaAM, model via the own server, ADR-025) · 7.7 backup encryption · later: Google Calendar (needs the owner's Google Cloud project), writer's archive.
+Slices (started 2026-10-14, quick daily value first): **7.1 Russian word forms in search ✅** · **7.2 inline images in text, swipeable media ✅** · 7.3 ICS import/export · 7.4 importers (sources: open question 13) · 7.5 ink layer · **7.6 on-device voice transcription (sandboxed GigaAM, model via the own server, ADR-025) ✅** · 7.7 backup encryption · later: Google Calendar (needs the owner's Google Cloud project), writer's archive.

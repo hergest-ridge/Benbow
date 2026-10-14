@@ -4,12 +4,9 @@ import android.media.AudioFormat
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
+import app.benbow.core.speech.resample
 import java.io.File
 import java.nio.ByteOrder
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.floor
-import kotlin.math.sin
 
 /** What the recognizer hears: mono float samples at 16 kHz. */
 const val ASR_RATE = 16_000
@@ -114,31 +111,6 @@ fun wavTo16k(bytes: ByteArray): FloatArray {
     error("no audio in the WAV")
 }
 
-/** Band-limited resampling (windowed sinc), so a 44.1 kHz voice note doesn't fold high tones into speech. */
-fun resample(input: FloatArray, from: Int, to: Int): FloatArray {
-    if (from == to || input.isEmpty()) return input
-    val ratio = from.toDouble() / to
-    val cutoff = minOf(1.0, 1 / ratio) * 0.95
-    val out = FloatArray(floor(input.size / ratio).toInt())
-    for (i in out.indices) {
-        val t = i * ratio
-        val center = floor(t).toInt()
-        var sum = 0.0
-        var weight = 0.0
-        for (k in center - TAPS + 1..center + TAPS) {
-            if (k < 0 || k >= input.size) continue
-            val x = t - k
-            val w = 0.5 + 0.5 * cos(PI * x / TAPS) // Hann window
-            val s = if (x == 0.0) cutoff else sin(PI * x * cutoff) / (PI * x)
-            sum += input[k] * s * w
-            weight += s * w
-        }
-        out[i] = if (weight == 0.0) 0f else (sum / weight).toFloat()
-    }
-    return out
-}
-
-private const val TAPS = 16
 private const val TIMEOUT_US = 10_000L
 
 /** A growable float array: a minute of 44.1 kHz audio is millions of samples. */

@@ -2,5 +2,5 @@
 # profile (collected from the non-minified `profiling` build) matches the code as written.
 -dontobfuscate
 
-# sherpa-onnx's native code reads its Kotlin config classes field by field and builds result objects by name.
--keep class com.k2fsa.sherpa.onnx.** { *; }
+# ONNX Runtime's native code creates and reads its Java classes by name.
+-keep class ai.onnxruntime.** { *; }

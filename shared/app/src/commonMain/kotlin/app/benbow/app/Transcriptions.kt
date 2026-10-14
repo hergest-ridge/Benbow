@@ -77,7 +77,9 @@ class Transcriptions internal constructor(
     /** Called for every attachment added on this device. */
     internal fun added(attached: Attached) {
         if (auto.value && (attached.kind == "voice" || attached.kind == "audio")) {
-            repo.untranscribed().firstOrNull { it.second.meta.id == attached.attachmentId }?.let { (entry, a) -> transcribe(entry, a) }
+            repo.untranscribedIn(attached.entryId).firstOrNull {
+                it.second.meta.id == attached.attachmentId
+            }?.let { (entry, a) -> transcribe(entry, a) }
         }
     }
 

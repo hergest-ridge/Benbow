@@ -4,6 +4,7 @@ import android.app.Application
 import android.net.ConnectivityManager
 import android.net.Network
 import android.os.Build
+import android.os.Process
 import android.provider.Settings
 import androidx.sqlite.db.SupportSQLiteDatabase
 import app.benbow.android.asr.SandboxTranscriber
@@ -17,6 +18,8 @@ import java.io.File
 class BenbowApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        // The speech recognizer's sandbox (AsrService) starts this class too, with no permissions: it needs none of this.
+        if (Process.isIsolated()) return
         SecretBox.current = KeystoreSecretBox()
         AlarmReminderClock.createChannel(this)
         SyncWorker.schedulePeriodic(this)

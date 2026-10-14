@@ -21,7 +21,6 @@ class SandboxTranscriber(private val context: Context) : Transcriber {
                     model.file("decoder.onnx"),
                     model.file("joiner.onnx"),
                     model.file("tokens.txt"),
-                    model.file("silero_vad.onnx"),
                 )
                 asr.load(files)?.let { error(it) }
                 block { sound -> withContext(Dispatchers.IO) { asr.transcribe(decodeTo16k(sound)) } }

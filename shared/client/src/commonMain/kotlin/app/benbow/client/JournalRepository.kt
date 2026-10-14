@@ -378,12 +378,15 @@ class JournalRepository(
     }
 
     /** Voice notes and sounds outside the trash that have no text yet, with their entries (7.6). */
-    fun untranscribed(): List<Pair<String, AttachmentState>> = q.allEntryIds().executeAsList().flatMap { id ->
-        val entry = q.selectEntry(id).executeAsOneOrNull() ?: return@flatMap emptyList()
+    fun untranscribed(): List<Pair<String, AttachmentState>> = q.allEntryIds().executeAsList().flatMap(::untranscribedIn)
+
+    /** The same for one entry. */
+    fun untranscribedIn(id: String): List<Pair<String, AttachmentState>> {
+        val entry = q.selectEntry(id).executeAsOneOrNull() ?: return emptyList()
         val fields = decodeFields(entry.fields)
-        if (fields[TRASH_FIELD] == "true") return@flatMap emptyList()
+        if (fields[TRASH_FIELD] == "true") return emptyList()
         val done = transcriptsOf(fields).keys
-        decodeAttachments(entry.attachments).values
+        return decodeAttachments(entry.attachments).values
             .filter { it.present && (it.meta.kind == "voice" || it.meta.kind == "audio") && it.meta.id !in done }
             .map { id to it }
     }

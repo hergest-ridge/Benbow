@@ -33,10 +33,10 @@ import kotlin.io.path.outputStream
 class SpeechModel(
     private val root: Path,
     private val fetch: Fetch = HttpFetch(),
-    private val spec: Spec = Spec(SpeechModelSpec.archive, SpeechModelSpec.vad, SpeechModelSpec.files),
+    private val spec: Spec = Spec(SpeechModelSpec.archive, SpeechModelSpec.files),
 ) {
     /** What to fetch and what must come out; tests use small made-up files. */
-    class Spec(val archive: SpeechModelSpec.Source, val vad: SpeechModelSpec.Source, val files: List<SpeechModelFile>)
+    class Spec(val archive: SpeechModelSpec.Source, val files: List<SpeechModelFile>)
 
     /** Downloads [url] into [target], reporting bytes as they come. */
     fun interface Fetch {
@@ -70,25 +70,23 @@ class SpeechModel(
     @Synchronized
     fun download() {
         if (state is State.Downloading || state == State.Ready) return
-        state = State.Downloading(0, spec.archive.size + spec.vad.size)
+        state = State.Downloading(0, spec.archive.size)
         Thread({ runDownload() }, "speech-model").apply { isDaemon = true }.start()
     }
 
     /** Fetches, checks and unpacks; the state says how it went. Public for tests (synchronous). */
     fun runDownload() {
         val work = root.resolve(".download").createDirectories()
-        val total = spec.archive.size + spec.vad.size
+        val total = spec.archive.size
         try {
             val done = AtomicLong()
             val archive = work.resolve("model.tar.bz2")
             fetchChecked(spec.archive, archive) { state = State.Downloading(done.addAndGet(it), total) }
-            val vad = work.resolve(spec.vad.file!!)
-            fetchChecked(spec.vad, vad) { state = State.Downloading(done.addAndGet(it), total) }
             val unpacked = unpack(archive, work)
             archive.deleteIfExists()
             dir.createDirectories()
             for (file in spec.files) {
-                val source = if (file.name == spec.vad.file) vad else unpacked.getValue(file.name)
+                val source = unpacked.getValue(file.name)
                 check(sha256(source) == file.sha256) { "${file.name} doesn't match its pinned hash" }
                 Files.move(source, dir.resolve(file.name), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
             }
@@ -110,7 +108,7 @@ class SpeechModel(
 
     /** Takes only the files the spec names (by base name) out of the archive, nothing else. */
     private fun unpack(archive: Path, work: Path): Map<String, Path> {
-        val wanted = spec.files.map { it.name }.toSet() - spec.vad.file
+        val wanted = spec.files.map { it.name }.toSet()
         val out = HashMap<String, Path>()
         TarArchiveInputStream(BZip2CompressorInputStream(archive.inputStream().buffered())).use { tar ->
             while (true) {

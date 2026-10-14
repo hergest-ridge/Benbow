@@ -78,6 +78,7 @@
     <string name="speech_download">Загрузить с сервера (%1$s МБ)</string>
     <string name="speech_downloading">Загрузка с сервера: %1$s из %2$s МБ</string>
     <string name="speech_not_on_server">На сервере модели пока нет. Откройте страницу сервера на компьютере, нажмите «Скачать модель» и вернитесь сюда.</string>
+    <string name="speech_server_old">Сервер старой версии и не умеет раздавать модель. Обновите его на компьютере, затем нажмите на его странице «Скачать модель».</string>
     <string name="speech_check_again">Проверить снова</string>
     <string name="speech_retry">Попробовать ещё раз</string>
     <string name="speech_error">Не получилось: %1$s</string>

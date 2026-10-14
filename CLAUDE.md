@@ -56,7 +56,7 @@ Android app (primary), desktop + web clients, self-hosted LAN server on Windows 
 - Git Bash rewrites `/sdcard/...` in adb arguments; prefix with `MSYS_NO_PATHCONV=1`. To pair the phone with a dev server without touching the firewall: `adb reverse tcp:<port> tcp:<port>` and connect to `127.0.0.1:<port>`.
 - `curl` (schannel) can't reach `dl.google.com`, but Java can. Use Java/Gradle for Google Maven lookups.
 - Stopping a background `:server:run` or `wasmJsBrowserDevelopmentRun` leaves the app process (java/node) alive. Free ports 8765/8080 with `netstat -ano` + `taskkill //PID <pid> //F //T`.
-- `apps/android/libs/sherpa-onnx-1.13.8.aar` (gitignored) must be there for any Android build: the official release asset from github.com/k2-fsa/sherpa-onnx (v1.13.8); the build checks its SHA-256. GitHub's file host throttles one long stream to a crawl: download big files in parallel byte ranges (a Java `HttpClient`, as the server's `HttpFetch` does).
+- GitHub's file host throttles one long stream to a crawl: download big files in parallel byte ranges (a Java `HttpClient`, as the server's `HttpFetch` does).
 - The owner's real server runs as a service on port 8765. A dev server for phone tests gets its own data dir with `port=8799` (and `host=127.0.0.1`) in `benbow.properties`; check the certificate fingerprint before pairing anything.
 - Macrobenchmarks refuse to run while Android Studio mirrors the phone (`DEVICE-MIRRORING`); for relative comparisons add `-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=DEVICE-MIRRORING`.
 - On a clean build, `kotlinWasmStoreYarnLock` may fail with "yarn.lock doesn't exist". Run `./gradlew kotlinWasmNpmInstall` once, then retry.

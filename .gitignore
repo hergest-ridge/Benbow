@@ -37,7 +37,6 @@ Thumbs.db
 
 # Third-party binaries fetched locally
 /server/packaging/winsw/*.exe
-/apps/android/libs/*.aar
 
 # Release signing key and its password (tools/create-release-key.ps1): never in git
 .benbow/

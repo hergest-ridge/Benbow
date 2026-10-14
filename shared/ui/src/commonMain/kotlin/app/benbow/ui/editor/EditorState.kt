@@ -118,6 +118,32 @@ class EditorState(initial: RichText, private val keys: BlockKeys = BlockKeys()) 
         textFieldState.edit { syncText(result.text.text, TextRange(result.selectionStart), forceSelection = true) }
     }
 
+    /** Points the atom of attachment [old] at [new] (a redrawn drawing), keeping its width and caption; undoable. */
+    fun replaceAttachment(old: String, new: String) {
+        val before = model
+        val i = before.paragraphs.indexOfFirst { (it.atom as? Atom.Attachment)?.ref == old }.takeIf { it >= 0 } ?: return
+        val atom = before.paragraphs[i].atom as Atom.Attachment
+        record(Snapshot(before, selection), typing = false)
+        model = before.withParagraph(i, before.paragraphs[i].copy(atom = atom.copy(ref = new)))
+    }
+
+    /** Takes the atom of attachment [ref] out of the text with its line; undoable. */
+    fun removeAttachment(ref: String) {
+        val before = model
+        val i = before.paragraphs.indexOfFirst { (it.atom as? Atom.Attachment)?.ref == ref }.takeIf { it >= 0 } ?: return
+        val start = before.paragraphStarts[i]
+        val end = before.paragraphEnd(i)
+        val (from, to) = when {
+            i + 1 < before.paragraphs.size -> start to end + 1
+            i > 0 -> start - 1 to end
+            else -> start to end
+        }
+        val result = before.applyUserEdit(from, to, "", emptySet(), keys)
+        record(Snapshot(before, selection), typing = false)
+        model = result.text
+        textFieldState.edit { syncText(result.text.text, TextRange(result.selectionStart), forceSelection = true) }
+    }
+
     internal fun noteSelection(selection: TextRange, previous: TextRange) {
         if (!selection.collapsed || !previous.collapsed) lastRangeSelection = TimeSource.Monotonic.markNow()
     }

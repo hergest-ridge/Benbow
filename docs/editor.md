@@ -50,6 +50,7 @@ Diary entries are small, so one text field is fine. The writer module (P3) may n
 - **Anchored mode** (now possible thanks to block `_key`s): stroke groups anchored to `(blockKey, offset in em units, x as a fraction of width)`, so margin doodles follow their paragraph when the layout reflows.
 - Paper feel: grain/noise via `RuntimeShader` (Android 13+, Skia on desktop/web), optional ruling aligned to line height.
 - Export: HTML and PDF render ink. Markdown export gets an SVG file next to it.
+- As built (7.5, ADR-026): **drawings in notes** first. A brush next to the media bar opens the drawing screen (one finger draws, two pan and zoom 1-4x; pen with width from speed, see-through marker, eraser that takes whole strokes, 11 palette colors, 3 sizes, undo/redo, "Больше места" adds half a canvas of height). Leaving it saves an SVG attachment placed at the cursor (or after the text); tapping a drawing while editing opens it again, while reading it opens the viewer. Paper pages and anchored margin marks are still to come.
 
 ## Spike checklist (Phase 1, Desktop + Android S24+, then Web)
 1. Toolbar toggles for all inline marks, with correct active state for the selection (incl. color/highlight tokens).

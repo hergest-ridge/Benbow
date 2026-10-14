@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
@@ -751,5 +752,63 @@ class AppSmokeTest {
         onNodeWithText("Расшифровка голосовых").performClick()
         waitUntilExactlyOneExists(hasText("Модель на телефоне"), 5_000)
         screenshot("54-speech-settings")
+    }
+
+    /** A line across the canvas, the way a finger draws it. */
+    private fun ComposeUiTest.drawLine(from: Offset, step: Offset) {
+        onNodeWithContentDescription("Холст").performTouchInput {
+            down(from)
+            repeat(24) { moveBy(step, delayMillis = 16) }
+            up()
+        }
+    }
+
+    @Test
+    fun aDrawingGoesInTheTextAndARedrawReplacesIt() = runDesktopComposeUiTest(width = 412, height = 860) {
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Ещё"), 5_000)
+        onNodeWithContentDescription("Новая запись").performClick()
+        waitUntilExactlyOneExists(hasContentDescription("Нарисовать"), 5_000)
+        onNodeWithContentDescription("Нарисовать").performClick()
+        waitUntilExactlyOneExists(hasContentDescription("Холст"), 5_000)
+        drawLine(Offset(40f, 60f), Offset(12f, 5f))
+        drawLine(Offset(60f, 220f), Offset(10f, -4f))
+        screenshot("55-drawing")
+        onNodeWithContentDescription("Назад").performClick()
+
+        // Back in the note: the drawing sits in the text.
+        waitUntilExactlyOneExists(hasContentDescription("Рисунок"), 5_000)
+        val entry = runBlocking { services.repo.journal().first().single().id }
+        fun drawings() = runBlocking { services.repo.entry(entry).first()!! }.let { d ->
+            d.attachments.filter { it.meta.kind == "drawing" } to
+                d.body
+        }
+        // The draft is saved a moment after the edit.
+        waitUntil(timeoutMillis = 5_000) { drawings().let { (d, body) -> d.size == 1 && d.single().meta.id in body } }
+        val (first, _) = drawings()
+        screenshot("56-editor-drawing")
+
+        // A tap opens it again; one more line and back: the text points at the new version, the old one leaves.
+        onNodeWithContentDescription("Рисунок").performClick()
+        waitUntilExactlyOneExists(hasContentDescription("Холст"), 5_000)
+        drawLine(Offset(80f, 140f), Offset(6f, 6f))
+        onNodeWithContentDescription("Назад").performClick()
+        waitUntil(timeoutMillis = 5_000) {
+            drawings().let { (d, body) -> d.singleOrNull()?.meta?.id.let { it != null && it != first.single().meta.id && it in body } }
+        }
+        val (second, secondBody) = drawings()
+        assertTrue(second.single().meta.id in secondBody)
+        assertTrue(first.single().meta.id !in secondBody, "the old version is out of the text")
+        val svg = runBlocking { services.media.file(second.single().meta.sha256).readText() }
+        assertEquals(3, app.benbow.core.ink.InkSvg.decode(svg)!!.strokes.size, "two lines and the one added")
+
+        // In the feed it's a picture like any other.
+        onNodeWithContentDescription("Назад").performClick()
+        waitUntilExactlyOneExists(hasText("Ещё"), 5_000)
+        onNodeWithText("Лента").performClick()
+        waitUntilExactlyOneExists(hasText("Моя лента"), 5_000)
+        runBlocking { delay(500) }
+        waitForIdle()
+        screenshot("57-feed-drawing")
     }
 }

@@ -91,7 +91,7 @@ object EntryExport {
             val path = link(a)
             val line = when {
                 path == null -> "<!-- ${a.meta.kind} ${a.meta.sha256} $missing -->"
-                a.meta.kind == "image" -> "![$label](<$path>)"
+                a.meta.kind == "image" || a.meta.kind == "drawing" -> "![$label](<$path>)"
                 else -> "[$label](<$path>)"
             }
             line + transcripts[a.meta.id]?.let { text -> "\n" + text.lines().joinToString("\n") { "> $it" } }.orEmpty()

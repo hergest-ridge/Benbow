@@ -140,6 +140,9 @@ class AppServices(
 
     val attached = MutableSharedFlow<Attached>(extraBufferCapacity = 16)
 
+    /** A drawing just saved (7.5): kept until the editor behind the drawing screen takes it. */
+    val drawn = MutableStateFlow<Drawn?>(null)
+
     /** Voice notes to text (7.6), where this platform can; the model comes only from the paired server. */
     val transcriptions: Transcriptions? = if (transcriber != null && modelsDir != null) {
         val model = SpeechModelStore(File(modelsDir, SpeechModelSpec.ID), {

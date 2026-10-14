@@ -99,6 +99,9 @@ internal sealed interface Route {
 
     data class Media(val entryId: String, val attachmentId: String) : Route
 
+    /** A drawing to make ([attachmentId] null) or to change. */
+    data class Drawing(val entryId: String, val attachmentId: String?) : Route
+
     data object Search : Route
 
     data object Calendar : Route
@@ -330,6 +333,7 @@ private fun AppNavigation(services: AppServices, backStack: SnapshotStateList<Ro
             entry<Route.History> { HistoryScreen(services, nav, it) }
             entry<Route.Revision> { RevisionScreen(services, nav, it) }
             entry<Route.Media> { MediaScreen(services, nav, it) }
+            entry<Route.Drawing> { DrawingScreen(services, nav, it) }
             entry<Route.Search>(metadata = TAB) { SearchScreen(services, nav) }
             entry<Route.Calendar>(metadata = TAB) { CalendarScreen(services, nav) }
             entry<Route.More>(metadata = TAB) { MoreScreen(services, nav) }

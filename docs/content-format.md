@@ -43,7 +43,7 @@ Markdown, plain text, HTML and PDF are **exports** (lossy except HTML). This fil
 |---|---|---|
 | `code` | `_key`, `language?`, `code` (string, may contain `\n`), `callout?` | monospace region with background. Plain text only (no marks). The editor merges directly adjacent code blocks with the same callout |
 | `divider` | `_key`, `variant?` (`line` · `dots` · `wave`) | atomic placeholder line |
-| `attachment` | `_key`, `ref` (attachment id), `width?` (0..1), `caption?` | inline media (7.2): a picture or video placed in the text; the file stays an attachment of the entry (gallery). Markdown links it in place, HTML shows it in place |
+| `attachment` | `_key`, `ref` (attachment id), `width?` (0..1), `caption?` | inline media (7.2): a picture, video, sound or drawing placed in the text; the file stays an attachment of the entry (gallery). Markdown links it in place, HTML shows it in place |
 | any unknown | preserved verbatim | atomic read-only chip. Never dropped or altered |
 
 **Unknown-content rule:** a block with an unknown `_type`, an unknown field, an unknown mark/markDef or an invalid value is kept **verbatim as an unknown block** (read-only chip). The rest of the document stays editable. Structurally broken JSON (no `_key`/`_type`, not an object) fails decoding, and the revision history is the fallback.
@@ -73,3 +73,6 @@ Colors, highlights and callout tones are **token names**, never raw hex. The des
   Entry metadata → YAML front matter.
 - **HTML export:** lossless, CSS generated from the palette (light theme by default). As built (6.3): `HtmlExporter` in shared/core; every style, list, callout and mark has a tag or class (spoilers keep their text under `.spoiler`), colors come from the app palette as CSS values; `HtmlExporter.page` wraps it in a print-friendly page. Used for "PDF и печать".
 - **Import** (Markdown/HTML → Document): supported constructs map back. Anything else becomes a preserved unknown block (`_type: "raw"`, `format`, `source`).
+
+## Drawings (7.5, ADR-026)
+An attachment of kind `drawing`, MIME `image/svg+xml`, name `drawing.svg`. The SVG is viewable as is (`viewBox="0 0 <width> <height>"`, one `<path>` per stroke: pens as filled outlines, markers as round-capped lines at `stroke-opacity` 0.35, colors from the light palette). Its `<metadata>` holds `<benbow-ink xmlns="https://benbow.app/ns/ink" version="1"><![CDATA[json]]></benbow-ink>` with `{"width":1000,"height":750,"strokes":[{"tool":"Pen"|"Marker","color":"<token>","size":8.0,"points":[x,y,t,...]}]}`: logical units (1000 across), t in ms from the stroke's start, x/y rounded to tenths. `color` is a palette token or `ink` (the theme's text color). Unknown fields are ignored; a file without the metadata is just a picture.

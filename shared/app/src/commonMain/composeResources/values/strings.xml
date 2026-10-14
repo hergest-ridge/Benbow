@@ -69,6 +69,15 @@
     <string name="media_remove_confirm">Убрать вложение из записи? Файл останется на сервере и в истории.</string>
     <string name="media_unavailable">Файл сейчас недоступен: %1$s</string>
     <string name="attach_failed">Не удалось добавить файл: %1$s</string>
+    <string name="drawing_title">Рисунок</string>
+    <string name="drawing_add">Нарисовать</string>
+    <string name="drawing_canvas">Холст</string>
+    <string name="drawing_pen">Перо</string>
+    <string name="drawing_marker">Маркер</string>
+    <string name="drawing_eraser">Ластик</string>
+    <string name="drawing_undo">Отменить</string>
+    <string name="drawing_redo">Вернуть</string>
+    <string name="drawing_more_room">Больше места</string>
     <string name="speech_title">Расшифровка голосовых</string>
     <string name="speech_more_ready">Голос в текст, без интернета</string>
     <string name="speech_more_missing">Модель ещё не загружена</string>

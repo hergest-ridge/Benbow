@@ -61,7 +61,8 @@ The server denormalizes the head into `entry_text(entry_id, title, plain_text)` 
 As built (5.3): built-in templates in code (`Templates`: Итоги дня, Три хороших события, Свободное письмо, Разбор мысли, Итоги недели, Итоги месяца, Письмо себе через год) rendered to a Document with placeholders filled; offered as chips in a new, empty entry. The prompts library (`Prompts`, by practice) gives the question of the day on Home. User-made templates come later.
 
 ## Ink (P2)
-`ink_layer(id, entry_id, head_ink_rev)`, `ink_revision(id, layer_id, parents, format_version, strokes_blob)` (see editor.md).
+`ink_layer(id, entry_id, head_ink_rev)`, `ink_revision(id, layer_id, parents, format_version, strokes_blob)` (see editor.md), for paper pages and margin marks later.
+As built (7.5, ADR-026): drawings in notes are attachments of kind `drawing` (an SVG with the strokes in its metadata); a redraw is a new attachment, the old link turns absent and its file stays.
 
 ## System
 - `device(id, name, platform, token_hash, created_at, last_seen_at, revoked_at)`

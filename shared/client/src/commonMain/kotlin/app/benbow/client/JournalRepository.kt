@@ -137,7 +137,7 @@ internal const val DONE_FIELD = "done"
 internal const val BACKGROUND_FIELD = "background"
 
 /** Attachments shown as pictures (a video by its preview frame). */
-private val VISUAL_KINDS = setOf("image", "video")
+private val VISUAL_KINDS = setOf("image", "video", "drawing")
 
 /** The tag registry (ADR-021): a system entry whose fields are `cat:<tag key>` = category. Fixed id, so devices share it. */
 internal const val TAG_REGISTRY_ID = "system-tags"

@@ -109,6 +109,7 @@ internal fun MediaThumb(media: MediaStore, attachment: AttachmentState, size: Dp
         contentAlignment = Alignment.Center,
     ) {
         val visual = attachment.visual
+        if (attachment.meta.kind == "drawing") DrawingPicture(media, attachment, Modifier.fillMaxSize().padding(4.dp))
         if (visual != null) {
             val load by rememberMediaFile(media, visual)
             (load as? MediaLoad.Ready)?.let { AsyncImage(it.file, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
@@ -124,7 +125,7 @@ internal fun MediaThumb(media: MediaStore, attachment: AttachmentState, size: Dp
 
             "voice", "audio" -> Badge(Icons.Mic, meta.durationMs)
 
-            "image" -> {}
+            "image", "drawing" -> {}
 
             else -> Text(
                 meta.name ?: "?",
@@ -374,6 +375,7 @@ internal fun BestPicture(
     previewOnly: Boolean = false,
 ) {
     val meta = attachment.meta
+    if (meta.kind == "drawing") return DrawingPicture(media, attachment, modifier)
     Box(modifier) {
         val preview by rememberMediaFile(media, attachment.visual)
         (preview as? MediaLoad.Ready)?.let { AsyncImage(it.file, null, Modifier.fillMaxSize(), contentScale = contentScale, alpha = alpha) }
@@ -396,7 +398,7 @@ internal fun FittedPicture(media: MediaStore, attachment: AttachmentState, carou
     val h = attachment.meta.height ?: 0
     val own = if (w > 0 && h > 0) w.toFloat() / h else null
     val far = own != null && maxOf(own / carousel, carousel / own) > 1.3f
-    if (!far) {
+    if (!far || attachment.meta.kind == "drawing") {
         BestPicture(media, attachment, Modifier.fillMaxSize())
         return
     }

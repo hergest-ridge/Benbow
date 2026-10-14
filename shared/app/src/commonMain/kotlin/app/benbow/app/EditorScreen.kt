@@ -3,6 +3,7 @@ package app.benbow.app
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -34,6 +35,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
@@ -59,6 +61,7 @@ import app.benbow.app.resources.comments_count
 import app.benbow.app.resources.conflict_banner
 import app.benbow.app.resources.conflict_choose
 import app.benbow.app.resources.copy_text
+import app.benbow.app.resources.drawing_add
 import app.benbow.app.resources.drop_to_attach
 import app.benbow.app.resources.edit
 import app.benbow.app.resources.entry_broken
@@ -124,6 +127,9 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
     /** Reading a post (from the feed): nothing is editable until the menu says so. */
     var reading by mutableStateOf(route.readOnly && route.entryId != null)
         private set
+
+    /** Where a new drawing goes: after the text when the cursor wasn't in it as the brush was tapped. */
+    var drawingAtEnd = true
 
     fun startEditing() {
         reading = false
@@ -289,6 +295,22 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
             }
         }
     }
+    LaunchedEffect(Unit) {
+        // A drawing saved on the drawing screen goes in the text (where the cursor was), or replaces the one it redraws.
+        services.drawn.collect { result ->
+            if (result == null || result.entryId != vm.entryId) return@collect
+            val state = vm.editor ?: return@collect
+            val new = result.attachmentId
+            when {
+                result.previous == null && new != null -> state.insertAtom(Atom.Attachment(new), atEnd = vm.drawingAtEnd)
+                result.previous != null && new != null -> state.replaceAttachment(result.previous, new)
+                result.previous != null -> state.removeAttachment(result.previous)
+            }
+            // The old version stays on the server (files are never deleted); it just leaves this entry.
+            result.previous?.let { old -> services.scope.launch { services.repo.removeAttachment(result.entryId, old) } }
+            services.drawn.value = null
+        }
+    }
     // The attachments ribbon: open by default unless every attachment already sits in the text; the clip toggles it.
     var ribbonChoice by rememberSaveable { mutableStateOf<Boolean?>(null) }
     val attachments = detail?.attachments.orEmpty()
@@ -302,7 +324,12 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
         EntryPictures(
             services,
             attachments,
-            onOpen = { id -> detail?.id?.let { nav.open(Route.Media(it, id)) } },
+            onOpen = { id ->
+                detail?.id?.let { entry ->
+                    val drawing = attachments.firstOrNull { it.meta.id == id }?.meta?.kind == "drawing"
+                    nav.open(if (drawing && !vm.reading) Route.Drawing(entry, id) else Route.Media(entry, id))
+                }
+            },
             onRename = { id, caption ->
                 detail?.id?.let { entry -> services.scope.launch { services.repo.setCaption(entry, id, caption) } }
             },
@@ -460,7 +487,13 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                 QuickNoteBar(onSend = vm::comment, hint = stringResource(Res.string.comment_hint))
             } else if (editor != null) {
                 Column(Modifier.navigationBarsPadding().imePadding()) {
-                    MediaBar(services, vm::ensureEntryId)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        MediaBar(services, vm::ensureEntryId, Modifier.weight(1f))
+                        IconButton({
+                            vm.drawingAtEnd = !editorFocused
+                            services.scope.launch { vm.ensureEntryId().let { id -> nav.open(Route.Drawing(id, null)) } }
+                        }) { Icon(Icons.Brush, stringResource(Res.string.drawing_add)) }
+                    }
                     EditorToolbar(editor)
                 }
             }

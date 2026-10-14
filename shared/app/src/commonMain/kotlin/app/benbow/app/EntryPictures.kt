@@ -18,11 +18,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.attachment_gone
+import app.benbow.app.resources.drawing_title
 import app.benbow.core.sync.AttachmentState
 import app.benbow.core.text.Atom
 import app.benbow.ui.editor.AtomViews
@@ -51,7 +54,7 @@ internal class EntryPictures(
             val text = transcripts[meta.id] ?: return 72.dp
             return 72.dp + textHeight(text, width - TRANSCRIPT_START - TRANSCRIPT_END) + 10.dp
         }
-        if (meta.kind != "image" && meta.kind != "video") return 64.dp
+        if (meta.kind != "image" && meta.kind != "video" && meta.kind != "drawing") return 64.dp
         val w = meta.width ?: 0
         val h = meta.height ?: 0
         val shaped = if (w > 0 && h > 0) width * (h.toFloat() / w) else width * 0.66f
@@ -86,11 +89,13 @@ internal class EntryPictures(
                 )
                 return@Box
             }
+            val label = if (meta.kind == "drawing") stringResource(Res.string.drawing_title) else null
             Box(
-                Modifier.fillMaxSize().clip(shape).background(colors.surfaceContainerHigh).clickable { onOpen(meta.id) },
+                Modifier.fillMaxSize().clip(shape).background(colors.surfaceContainerHigh).clickable { onOpen(meta.id) }
+                    .semantics { label?.let { contentDescription = it } },
                 contentAlignment = Alignment.Center,
             ) {
-                if (meta.kind == "image" || meta.kind == "video") {
+                if (meta.kind == "image" || meta.kind == "video" || meta.kind == "drawing") {
                     BestPicture(services.media, attachment, Modifier.fillMaxSize())
                     if (meta.kind == "video") PlayBadge()
                 } else {

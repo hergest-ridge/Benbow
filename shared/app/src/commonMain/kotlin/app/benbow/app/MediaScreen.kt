@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -186,6 +187,13 @@ private fun MediaPage(
                 (preview as? MediaLoad.Ready)?.let { AsyncImage(it.file, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
             }
             PlayBadge()
+            return@Box
+        }
+        if (meta.kind == "drawing") {
+            // On a sheet of paper: the ink is in the theme's text color, which a black backdrop would swallow.
+            Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp), modifier = Modifier.padding(16.dp)) {
+                DrawingPicture(services.media, attachment, Modifier.padding(8.dp))
+            }
             return@Box
         }
         when (val load = rememberMediaFile(services.media, meta.sha256).value) {

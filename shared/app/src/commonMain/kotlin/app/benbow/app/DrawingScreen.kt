@@ -45,7 +45,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.PointMode
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
@@ -236,7 +241,19 @@ private fun Paper(vm: DrawingViewModel, drawing: InkDrawing) {
         val heightPx = with(density) { maxHeight.toPx() }
         val unit = widthPx / drawing.width // px per canvas unit at zoom 1
         val canvasHeight = drawing.height * unit
-        val canvasWidthDp = maxWidth
+        val grid = remember(drawing.width, drawing.height) {
+            buildList {
+                var y = DOT_STEP
+                while (y < drawing.height) {
+                    var x = DOT_STEP
+                    while (x < drawing.width) {
+                        add(Offset(x, y))
+                        x += DOT_STEP
+                    }
+                    y += DOT_STEP
+                }
+            }
+        }
         fun clamp(o: Offset, z: Float) = Offset(
             o.x.coerceIn(minOf(0f, widthPx - widthPx * z), 0f),
             o.y.coerceIn(minOf(0f, heightPx - canvasHeight * z), 0f),
@@ -299,31 +316,29 @@ private fun Paper(vm: DrawingViewModel, drawing: InkDrawing) {
                 }
             },
         ) {
-            Canvas(
-                Modifier.size(canvasWidthDp, with(density) { canvasHeight.toDp() })
-                    .graphicsLayer {
-                        transformOrigin = TransformOrigin(0f, 0f)
-                        scaleX = zoom
-                        scaleY = zoom
-                        translationX = offset.x
-                        translationY = offset.y
-                    }
-                    .background(colors.surfaceContainerLow)
-                    .border(1.dp, colors.outlineVariant),
-            ) {
-                // A faint dot grid helps keep lines straight; it isn't part of the drawing.
-                val step = DOT_STEP * unit
-                var y = step
-                while (y < size.height) {
-                    var x = step
-                    while (x < size.width) {
-                        drawCircle(colors.outlineVariant, radius = 1.2f, center = Offset(x, y))
-                        x += step
-                    }
-                    y += step
+            // What's drawn sits on its own cached layer (redrawn only when the drawing, zoom or position changes), so a
+            // line being drawn costs one path a frame, not the whole page. Zoom is applied while drawing, not by scaling
+            // the layer, so the cache stays sharp.
+            val paper = colors.surfaceContainerLow
+            val edge = colors.outlineVariant
+            Canvas(Modifier.fillMaxSize().graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }) {
+                withTransform({
+                    translate(offset.x, offset.y)
+                    scale(zoom, zoom, Offset.Zero)
+                }) {
+                    drawRect(paper, size = Size(widthPx, canvasHeight))
+                    drawRect(edge, size = Size(widthPx, canvasHeight), style = Stroke(1.dp.toPx() / zoom))
+                    // A faint dot grid helps keep lines straight; it isn't part of the drawing.
+                    drawPoints(grid.map { it * unit }, PointMode.Points, edge, strokeWidth = 2.4f / zoom, cap = StrokeCap.Round)
+                    drawInk(shapes, drawing.width, colors.onSurface, dark)
                 }
-                drawInk(shapes, drawing.width, colors.onSurface, dark)
-                current?.let { drawInk(listOf(InkShape(it)), drawing.width, colors.onSurface, dark) }
+            }
+            Canvas(Modifier.fillMaxSize()) {
+                val line = current ?: return@Canvas
+                withTransform({
+                    translate(offset.x, offset.y)
+                    scale(zoom, zoom, Offset.Zero)
+                }) { drawInk(listOf(InkShape(line)), drawing.width, colors.onSurface, dark) }
             }
         }
     }

@@ -86,6 +86,7 @@ Client side (`shared/client`): `Pairing.probe(host, port)` connects with first-c
 - QR: admin page shows `benbow://pair?h=<host>&p=<port>&c=<code>&fp=<cert sha256>`.
 - `POST /api/v1/pair {code, device_name, platform}` → long-lived device token (stored hashed on the server, in Keystore-backed storage on Android). `Authorization: Bearer <token>`. Devices can be revoked on the admin page.
 - Transport (ADR-012): HTTPS only. The server generates a self-signed certificate on first run. Clients pin its SHA-256 fingerprint from pairing (QR `fp` or shown next to the manual code) and reject any other certificate. A certificate rotation flow re-pairs or confirms the new fingerprint on the admin page.
+- Browser (ADR-029, W2): the web client is served by the server at `/app/` and pairs only with that origin (`Pairing.probeOrigin`): no address to type, no fingerprint to compare or pin, since the browser itself has judged the certificate (a one-time warning for the self-signed one) and its fetch can't read it. The user enters only the code; the connection stores an empty fingerprint. The token lives in the page's own database (IndexedDB of that origin). A different address (IP vs host name) is a different origin, so a separate browser device with its own copy.
 - Outside the LAN: recommend Tailscale (no code needed).
 
 ## API versioning and docs

@@ -102,6 +102,7 @@ fun main(args: Array<String>) {
             speech = SpeechModel(dataDir.resolve("models")),
             calendar = calendar,
             calendarHighWater = calendarHighWater,
+            webRoot = webRoot(),
         )
     val server = embeddedServer(
         factory = Netty,
@@ -135,6 +136,12 @@ fun main(args: Array<String>) {
     )
     server.start(wait = true)
 }
+
+/** The web client's files: the package's `web` folder beside `lib`, or where `benbow.web` points (`:server:run`). */
+private fun webRoot(): Path? = System.getProperty("benbow.web")?.let(Path::of)
+    ?: runCatching {
+        Path.of(ServerContext::class.java.protectionDomain.codeSource.location.toURI()).parent.parent.resolve("web")
+    }.getOrNull()
 
 /** One server per data directory; a second instance would fight over the same store. */
 private fun lockDataDir(dataDir: Path): FileLock? {

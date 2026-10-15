@@ -1,4 +1,6 @@
 import java.security.MessageDigest
+import java.util.zip.Deflater
+import java.util.zip.GZIPOutputStream
 
 plugins {
     alias(libs.plugins.kotlin.jvm)
@@ -32,6 +34,7 @@ dependencies {
     implementation(libs.ktor.server.auth)
     implementation(libs.ktor.server.partial.content)
     implementation(libs.ktor.server.auto.head.response)
+    implementation(libs.ktor.server.conditional.headers) // 304s for the web client's files
     implementation(libs.ktor.server.swagger)
     implementation(libs.ktor.server.routing.openapi)
     implementation(libs.sqlite.jdbc)
@@ -91,6 +94,31 @@ val jlinkRuntime = tasks.register<Exec>("jlinkRuntime") {
 // SHA-256 of WinSW.NET461.exe v2.12.0 as downloaded from the official GitHub release (655872 bytes).
 val winswSha256 = "b5066b7bbdfba1293e5d15cda3caaea88fbeab35bd5b38c41c913d492aadfc4f"
 
+// The web client (ADR-029): its production build, with a gzip twin of every file for the server to send compressed.
+val webApp = tasks.register<Sync>("webApp") {
+    group = "distribution"
+    description = "The web client for the server package (served at /app/), pre-compressed."
+    dependsOn(":apps:web:wasmJsBrowserDistribution")
+    val output = layout.buildDirectory.dir("web")
+    from(rootProject.layout.projectDirectory.dir("apps/web/build/dist/wasmJs/productionExecutable"))
+    into(output)
+    doLast {
+        output.get().asFile.walkTopDown().filter { it.isFile && it.extension != "gz" }.forEach { file ->
+            val packed = object : GZIPOutputStream(file.resolveSibling(file.name + ".gz").outputStream()) {
+                init {
+                    def.setLevel(Deflater.BEST_COMPRESSION)
+                }
+            }
+            packed.use { out -> file.inputStream().use { it.copyTo(out) } }
+        }
+    }
+}
+
+// `./gradlew :server:webApp` once, then `:server:run` serves it at /app/ too.
+tasks.named<JavaExec>("run") {
+    systemProperty("benbow.web", layout.buildDirectory.dir("web").get().asFile.absolutePath)
+}
+
 tasks.register<Sync>("packageServer") {
     group = "distribution"
     description = "Self-contained server folder: bundled runtime, jars, WinSW service config and scripts."
@@ -121,6 +149,7 @@ tasks.register<Sync>("packageServer") {
     into(layout.buildDirectory.dir("package/benbow-server"))
     from(jlinkRuntime) { into("runtime") }
     from(layout.buildDirectory.dir("install/server/lib")) { into("lib") }
+    from(webApp) { into("web") }
     from("packaging/windows")
     // WinSW is not committed; drop WinSW.NET461.exe into packaging/winsw (see packaging/windows/README.txt).
     from("packaging/winsw") {

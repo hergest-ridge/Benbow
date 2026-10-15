@@ -24,6 +24,15 @@ class Pairing(private val db: BenbowDb, private val httpClient: (ServerTrust) ->
         return Probe(baseUrl, info, fingerprint ?: throw PairingException("The server presented no certificate"))
     }
 
+    /**
+     * The browser's way (ADR-029): the server is the page's own origin, whose certificate the browser has already
+     * judged, so there is no fingerprint to compare or pin (and the browser's fetch can't read one).
+     */
+    suspend fun probeOrigin(baseUrl: String): Probe {
+        val info = httpClient(ServerTrust.FirstContact {}).use { KtorBenbowApi(it, baseUrl) { null }.info() }
+        return Probe(baseUrl, info, fingerprint = "")
+    }
+
     suspend fun pair(probe: Probe, code: String, deviceName: String, platform: String): Connection {
         val previous = settings.connection
         if (previous != null && previous.storeId != probe.info.storeId) {

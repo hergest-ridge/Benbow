@@ -77,6 +77,8 @@ private fun statusPage(ctx: ServerContext, admin: Boolean): String = buildString
         <h1>⚓ Адмирал Бенбоу</h1>
         <p>Сервер работает. Версия <code>$SERVER_VERSION</code>, хранилище <code>${ctx.db.storeId}</code>.</p>
         <p>Отпечаток сертификата (SHA-256):<br><code>${ctx.tlsFingerprint}</code></p>
+        <p><a href="/app/"><b>Открыть Benbow в браузере</b></a> — на любом компьютере домашней сети: этот адрес, порт <code>${ctx.port}</code>, <code>/app/</code>.
+        Браузер один раз предупредит о самоподписанном сертификате; отпечаток выше.</p>
         <p><a href="/api/docs">Документация API</a></p>
         """.trimIndent(),
     )
@@ -87,7 +89,7 @@ private fun statusPage(ctx: ServerContext, admin: Boolean): String = buildString
     append("<section><h2>Подключить устройство</h2>")
     val active = ctx.pairing.active()
     if (active != null) {
-        append("<p>Введите на телефоне адрес этого компьютера, порт <code>${ctx.port}</code> и код:</p>")
+        append("<p>Введите на телефоне адрес этого компьютера, порт <code>${ctx.port}</code> и код (в браузере — только код):</p>")
         append("<p class=\"code\">${active.first}</p><p>Код действует до ${time(active.second)} и сработает один раз.</p>")
     }
     append(

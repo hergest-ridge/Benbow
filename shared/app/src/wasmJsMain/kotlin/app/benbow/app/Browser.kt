@@ -5,6 +5,9 @@ package app.benbow.app
 // The few browser calls the app needs (ADR-029). Bytes cross into JavaScript as base64: simple, and fast enough for
 // the files a journal holds.
 
+/** The origin this page came from: the Benbow server (or, in development, the dev server that forwards /api to one). */
+internal fun pageOrigin(): String = js("window.location.origin")
+
 /** Puts [text] on the clipboard. */
 internal fun copyText(text: String): Unit = js("navigator.clipboard.writeText(text)")
 

@@ -26,6 +26,8 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 
 // The browser's side of the app's platform pieces (ADR-029). Playback and dropping files come with W3.
 
+internal actual val pageServer: String? = pageOrigin()
+
 /** The browser has no system palette to borrow. */
 @Composable
 internal actual fun rememberSystemColors(dark: Boolean): ColorScheme? = null

@@ -63,6 +63,8 @@ import app.benbow.app.resources.server_rejected_hint
 import app.benbow.app.resources.server_rejected_title
 import app.benbow.app.resources.server_sync_now
 import app.benbow.app.resources.server_version
+import app.benbow.app.resources.server_web_code
+import app.benbow.app.resources.server_web_intro
 import app.benbow.app.resources.server_wrong_store
 import app.benbow.client.Connection
 import app.benbow.client.IoDispatcher
@@ -73,6 +75,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
+
+/** The server that served this page: the web client pairs only with it (ADR-029). Null in the apps. */
+internal expect val pageServer: String?
 
 internal class ServerViewModel(private val services: AppServices) : ViewModel() {
     var connection by mutableStateOf<Connection?>(services.settings.connection)
@@ -88,7 +93,13 @@ internal class ServerViewModel(private val services: AppServices) : ViewModel() 
     var error by mutableStateOf<String?>(null)
         private set
 
+    init {
+        // The browser already knows its server: straight to the code.
+        if (connection == null && pageServer != null) connect()
+    }
+
     fun connect() {
+        pageServer?.let { origin -> return run { probe = services.pairing.probeOrigin(origin) } }
         val portNumber = port.trim().toIntOrNull() ?: return
         run { probe = services.pairing.probe(host.trim(), portNumber) }
     }
@@ -164,6 +175,13 @@ internal fun ServerScreen(services: AppServices, nav: Navigator) {
 
 @Composable
 private fun FindServer(vm: ServerViewModel) {
+    pageServer?.let { origin ->
+        Text(stringResource(Res.string.server_web_intro, origin), style = MaterialTheme.typography.bodyLarge)
+        Button(vm::connect, enabled = !vm.busy, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(if (vm.busy) Res.string.server_connecting else Res.string.server_connect))
+        }
+        return
+    }
     Text(stringResource(Res.string.server_intro), style = MaterialTheme.typography.bodyLarge)
     OutlinedTextField(
         vm.host,
@@ -190,8 +208,12 @@ private fun FindServer(vm: ServerViewModel) {
 @Composable
 private fun ConfirmServer(vm: ServerViewModel, probe: Probe) {
     Text(stringResource(Res.string.server_version, probe.info.serverVersion), style = MaterialTheme.typography.titleMedium)
-    Text(stringResource(Res.string.server_fingerprint_check), style = MaterialTheme.typography.bodyLarge)
-    Fingerprint(probe.fingerprint)
+    if (probe.fingerprint.isEmpty()) {
+        Text(stringResource(Res.string.server_web_code), style = MaterialTheme.typography.bodyLarge)
+    } else {
+        Text(stringResource(Res.string.server_fingerprint_check), style = MaterialTheme.typography.bodyLarge)
+        Fingerprint(probe.fingerprint)
+    }
     OutlinedTextField(
         vm.code,
         { vm.code = it.filter(Char::isDigit).take(6) },
@@ -225,7 +247,7 @@ private fun Paired(services: AppServices, vm: ServerViewModel, connection: Conne
     var confirmForget by remember { mutableStateOf(false) }
 
     Text(
-        stringResource(Res.string.server_paired, connection.baseUrl.removePrefix("https://")),
+        stringResource(Res.string.server_paired, connection.baseUrl.substringAfter("://")),
         style = MaterialTheme.typography.titleMedium,
     )
     syncLook(status)?.let { Text(it.label, color = it.tone, style = MaterialTheme.typography.bodyLarge) }
@@ -282,8 +304,10 @@ private fun Paired(services: AppServices, vm: ServerViewModel, connection: Conne
         }
     }
 
-    Text(stringResource(Res.string.server_fingerprint), style = MaterialTheme.typography.titleSmall)
-    Fingerprint(connection.fingerprint)
+    if (connection.fingerprint.isNotEmpty()) {
+        Text(stringResource(Res.string.server_fingerprint), style = MaterialTheme.typography.titleSmall)
+        Fingerprint(connection.fingerprint)
+    }
 
     val canForget = status.pending == 0L && status.rejected == 0L
     OutlinedButton({

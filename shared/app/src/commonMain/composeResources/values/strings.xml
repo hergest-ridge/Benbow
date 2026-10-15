@@ -428,6 +428,8 @@
     <string name="server_host">Адрес компьютера</string>
     <string name="server_port">Порт</string>
     <string name="server_connect">Подключиться</string>
+    <string name="server_web_intro">Этот браузер подключится к серверу Benbow, с которого открыта страница: %1$s</string>
+    <string name="server_web_code">На компьютере с сервером откройте его страницу (https://localhost:8765), нажмите «Получить код» и введите код здесь.</string>
     <string name="server_connecting">Подключение…</string>
     <string name="server_fingerprint_check">Сверьте отпечаток сертификата с админ-страницей. Если он отличается, не продолжайте: это чужой сервер.</string>
     <string name="server_version">Сервер %1$s</string>

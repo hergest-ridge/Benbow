@@ -85,6 +85,8 @@ class ServerContext(
     val calendar: CalendarDatabase? = null,
     /** The calendar's own high-water mark, updated after every calendar push. */
     val calendarHighWater: HighWater? = null,
+    /** The web client's files (ADR-029); null when this package has none. */
+    val webRoot: Path? = null,
 )
 
 data class DevicePrincipal(val deviceId: String)
@@ -107,6 +109,7 @@ fun Application.benbowModule(ctx: ServerContext) {
     }
     routing {
         adminRoutes(ctx)
+        webApp(ctx.webRoot)
         route("/api/v1") {
             /**
              * Server version, supported sync protocol range and store identity.

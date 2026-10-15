@@ -49,10 +49,9 @@ import app.benbow.app.resources.speech_ready
 import app.benbow.app.resources.speech_retry
 import app.benbow.app.resources.speech_server_old
 import app.benbow.app.resources.speech_title
-import app.benbow.client.SpeechModelStore
+import app.benbow.client.IoDispatcher
+import app.benbow.client.SpeechModel
 import app.benbow.core.api.SpeechModelSpec
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
@@ -66,10 +65,10 @@ internal fun SpeechScreen(services: AppServices, nav: Navigator) {
     val auto by transcriptions.auto.collectAsStateWithLifecycle()
     val running by transcriptions.running.collectAsStateWithLifecycle()
     var left by remember { mutableIntStateOf(0) }
-    LaunchedEffect(running, state) { left = withContext(Dispatchers.IO) { transcriptions.untranscribedCount() } }
+    LaunchedEffect(running, state) { left = withContext(IoDispatcher) { transcriptions.untranscribedCount() } }
     val paired = remember { services.settings.connection != null }
     val fetch = { services.scope.launch { transcriptions.model.fetch() } }
-    val mb = { bytes: Long -> "%.0f".format(bytes / 1_000_000.0) }
+    val mb = { bytes: Long -> ((bytes + 500_000) / 1_000_000).toString() }
     Scaffold(topBar = {
         TopAppBar(navigationIcon = { BackButton(nav::back) }, title = { Text(stringResource(Res.string.speech_title)) })
     }) { padding ->
@@ -77,7 +76,7 @@ internal fun SpeechScreen(services: AppServices, nav: Navigator) {
             Card {
                 Note(stringResource(Res.string.speech_about, mb(SpeechModelSpec.totalSize)))
                 when (val s = state) {
-                    SpeechModelStore.State.Ready -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    SpeechModel.State.Ready -> Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             stringResource(Res.string.speech_ready),
                             style = MaterialTheme.typography.bodyLarge,
@@ -86,7 +85,7 @@ internal fun SpeechScreen(services: AppServices, nav: Navigator) {
                         TextButton({ transcriptions.model.delete() }) { Text(stringResource(Res.string.speech_delete)) }
                     }
 
-                    is SpeechModelStore.State.Downloading -> {
+                    is SpeechModel.State.Downloading -> {
                         LinearProgressIndicator({ s.done.toFloat() / s.total }, Modifier.fillMaxWidth())
                         Text(
                             stringResource(Res.string.speech_downloading, mb(s.done), mb(s.total)),
@@ -94,23 +93,23 @@ internal fun SpeechScreen(services: AppServices, nav: Navigator) {
                         )
                     }
 
-                    SpeechModelStore.State.ServerTooOld -> {
+                    SpeechModel.State.ServerTooOld -> {
                         Text(stringResource(Res.string.speech_server_old), style = MaterialTheme.typography.bodyMedium)
                         OutlinedButton({ fetch() }) { Text(stringResource(Res.string.speech_check_again)) }
                     }
 
-                    SpeechModelStore.State.NotOnServer -> {
+                    SpeechModel.State.NotOnServer -> {
                         Text(stringResource(Res.string.speech_not_on_server), style = MaterialTheme.typography.bodyMedium)
                         OutlinedButton({ fetch() }) { Text(stringResource(Res.string.speech_check_again)) }
                     }
 
-                    SpeechModelStore.State.Missing -> if (paired) {
+                    SpeechModel.State.Missing -> if (paired) {
                         Button({ fetch() }) { Text(stringResource(Res.string.speech_download, mb(SpeechModelSpec.totalSize))) }
                     } else {
                         Text(stringResource(Res.string.speech_need_server), style = MaterialTheme.typography.bodyMedium)
                     }
 
-                    is SpeechModelStore.State.Failed -> {
+                    is SpeechModel.State.Failed -> {
                         Text(
                             stringResource(Res.string.speech_error, s.message),
                             style = MaterialTheme.typography.bodyMedium,
@@ -120,7 +119,7 @@ internal fun SpeechScreen(services: AppServices, nav: Navigator) {
                     }
                 }
             }
-            if (state == SpeechModelStore.State.Ready) {
+            if (state == SpeechModel.State.Ready) {
                 Card {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f).padding(end = 16.dp)) {

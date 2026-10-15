@@ -2,11 +2,12 @@ package app.benbow.app
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import app.benbow.client.ByteSource
+import app.benbow.client.LocalFile
+import app.benbow.client.byteSourceOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import java.io.File
-import java.io.InputStream
 
 /** What the device read about a file when it was picked or captured. */
 internal data class MediaProbe(
@@ -36,14 +37,14 @@ internal fun kindOf(mime: String): String = when {
  */
 internal fun AppServices.attach(
     entryId: suspend () -> String,
-    open: () -> InputStream,
+    open: () -> ByteSource,
     onAttached: () -> Unit = {},
     probe: () -> MediaProbe,
 ): Job = scope.launch {
     try {
         val probe = probe()
         val file = open().use { media.import(it, probe.mime, probe.name, probe.capturedAt) }
-        val preview = probe.preview?.let { media.import(it.inputStream(), "image/jpeg", null, probe.capturedAt) }
+        val preview = probe.preview?.let { media.import(byteSourceOf(it), "image/jpeg", null, probe.capturedAt) }
         val entry = entryId()
         val id = repo.attach(entry, file, probe.kind, probe.width, probe.height, probe.durationMs, preview)
         attached.tryEmit(Attached(entry, id, probe.kind))
@@ -65,4 +66,4 @@ internal expect fun Modifier.attachOnDrop(services: AppServices, entryId: suspen
 
 /** Plays a video or audio file, or offers to open it outside the app where there is no player. */
 @Composable
-internal expect fun MediaPlayer(file: File, mime: String, modifier: Modifier = Modifier)
+internal expect fun MediaPlayer(file: LocalFile, mime: String, modifier: Modifier = Modifier)

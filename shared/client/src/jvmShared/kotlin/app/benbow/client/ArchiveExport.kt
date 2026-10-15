@@ -15,19 +15,13 @@ import java.util.zip.Deflater
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
-/** What an archive export wrote. [missing] files were neither on this device nor reachable on the server; they are listed in the README. */
-data class ExportReport(val entries: Int, val files: Int, val missing: Int)
-
-/** How far an export is ([done] of [total] steps: files first, then entries). */
-data class ExportProgress(val done: Int, val total: Int)
-
 /**
  * The whole journal as one ZIP that needs no app (data-safety.md#backups): `entries/YYYY/MM/<day>_<id>.md` + `.json` exactly
  * like the server's mirror ([EntryExport]), the files under `media/YYYY/MM/`, the calendars under `calendars/` (ADR-028),
  * and a README. Files not on this device are fetched from the server; any that can't be are named in the README and in
  * the notes, never dropped silently.
  */
-class ArchiveExport(private val db: BenbowDb, private val media: MediaStore, private val calendar: CalendarRepository? = null) {
+class ArchiveExport(private val db: BenbowDb, private val media: Media, private val calendar: CalendarRepository? = null) {
     suspend fun write(out: OutputStream, withMedia: Boolean, today: String, onProgress: (ExportProgress) -> Unit = {}): ExportReport =
         withContext(Dispatchers.IO) {
             val entries = db.benbowQueries.exportEntries().executeAsList().map { row ->

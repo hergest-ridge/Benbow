@@ -4,24 +4,25 @@ import app.benbow.client.db.BenbowDb
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
-import java.time.LocalDateTime
-import java.time.ZoneOffset
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 import java.util.Properties
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class RemindersTest {
-    private val now = LocalDateTime.of(2026, 10, 13, 20, 0)
+    private val now = LocalDateTime(2026, 10, 13, 20, 0)
 
     private fun reminder(at: String, repeat: String? = null, done: Boolean = false) = ReminderItem("r", "Записать день", at, repeat, done)
 
     @Test
     fun oneOffsRingOnceAndRepeatsRollForward() {
-        assertEquals(LocalDateTime.of(2026, 10, 13, 21, 0), reminder("2026-10-13T21:00").nextAt(now))
+        assertEquals(LocalDateTime(2026, 10, 13, 21, 0), reminder("2026-10-13T21:00").nextAt(now))
         assertEquals(null, reminder("2026-10-13T19:00").nextAt(now), "a past one-off is over")
-        assertEquals(LocalDateTime.of(2026, 10, 14, 19, 0), reminder("2026-10-01T19:00", ReminderItem.DAILY).nextAt(now))
-        assertEquals(LocalDateTime.of(2026, 10, 13, 21, 0), reminder("2026-10-01T21:00", ReminderItem.DAILY).nextAt(now))
-        assertEquals(LocalDateTime.of(2026, 10, 15, 9, 0), reminder("2026-10-01T09:00", ReminderItem.WEEKLY).nextAt(now), "Thursdays")
+        assertEquals(LocalDateTime(2026, 10, 14, 19, 0), reminder("2026-10-01T19:00", ReminderItem.DAILY).nextAt(now))
+        assertEquals(LocalDateTime(2026, 10, 13, 21, 0), reminder("2026-10-01T21:00", ReminderItem.DAILY).nextAt(now))
+        assertEquals(LocalDateTime(2026, 10, 15, 9, 0), reminder("2026-10-01T09:00", ReminderItem.WEEKLY).nextAt(now), "Thursdays")
         assertEquals(null, reminder("2026-10-13T21:00", ReminderItem.DAILY, done = true).nextAt(now))
     }
 
@@ -32,10 +33,10 @@ class RemindersTest {
             ReminderItem("b", "Скоро", "2026-10-13T21:00", null, false),
             ReminderItem("c", "Через два месяца", "2026-12-20T10:00", null, false),
         )
-        assertEquals(listOf("b", "a"), list.upcoming(now, ZoneOffset.UTC).map { it.id })
+        assertEquals(listOf("b", "a"), list.upcoming(now, TimeZone.UTC).map { it.id })
         assertEquals(
-            LocalDateTime.of(2026, 10, 13, 21, 0).toInstant(ZoneOffset.UTC).toEpochMilli(),
-            list.upcoming(now, ZoneOffset.UTC).first().atMillis,
+            LocalDateTime(2026, 10, 13, 21, 0).toInstant(TimeZone.UTC).toEpochMilliseconds(),
+            list.upcoming(now, TimeZone.UTC).first().atMillis,
         )
     }
 

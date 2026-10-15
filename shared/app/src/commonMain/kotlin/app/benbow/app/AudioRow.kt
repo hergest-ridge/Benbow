@@ -48,12 +48,12 @@ import app.benbow.app.resources.audio_pause
 import app.benbow.app.resources.audio_play
 import app.benbow.app.resources.speech_transcribe
 import app.benbow.app.resources.voice_note
-import app.benbow.client.MediaStore
-import app.benbow.client.SpeechModelStore
+import app.benbow.client.LocalFile
+import app.benbow.client.Media
+import app.benbow.client.SpeechModel
 import app.benbow.core.sync.AttachmentState
 import kotlinx.coroutines.flow.StateFlow
 import org.jetbrains.compose.resources.stringResource
-import java.io.File
 
 /** What the app is playing: one sound at a time. */
 data class AudioNow(val id: String, val playing: Boolean, val positionMs: Long, val durationMs: Long)
@@ -63,7 +63,7 @@ interface AudioPlayback {
     val now: StateFlow<AudioNow?>
 
     /** Plays [file] as [id], or pauses / resumes it when it's the current one. */
-    fun toggle(id: String, file: File, mime: String)
+    fun toggle(id: String, file: LocalFile, mime: String)
 
     fun seek(positionMs: Long)
 }
@@ -80,7 +80,7 @@ internal val LocalAudio = compositionLocalOf<AudioPlayback?> { null }
  */
 @Composable
 internal fun AudioRow(
-    media: MediaStore,
+    media: Media,
     attachment: AttachmentState,
     modifier: Modifier = Modifier,
     onRename: ((String?) -> Unit)? = null,
@@ -216,7 +216,7 @@ internal fun VoiceRow(
         onRename,
         transcript = transcript,
         transcribing = attachment.meta.id in running,
-        onTranscribe = if (transcriptions != null && entryId != null && model == SpeechModelStore.State.Ready) {
+        onTranscribe = if (transcriptions != null && entryId != null && model == SpeechModel.State.Ready) {
             { transcriptions.transcribe(entryId, attachment) }
         } else {
             null

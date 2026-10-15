@@ -22,8 +22,8 @@ import app.benbow.core.sync.SyncOp
 import app.benbow.core.sync.SyncRules
 import app.benbow.testing.InMemoryCalendarStore
 import app.benbow.testing.InMemorySyncStore
+import io.ktor.utils.io.ByteReadChannel
 import java.io.ByteArrayOutputStream
-import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
 
@@ -145,19 +145,19 @@ internal class FakeApi(var server: FakeServer, var serverStore: String = server.
         return UploadStatus(id, file.size, complete = true)
     }
 
-    override suspend fun downloadBlob(sha256: String, target: File): String {
+    override suspend fun downloadBlob(sha256: String, write: suspend (ByteReadChannel) -> Unit): String {
         val bytes = server.blobs[sha256] ?: throw ApiException(404, "not_found", "No such file")
-        target.writeBytes(if (corruptDownloads) bytes.copyOf().also { it[0] = (it[0] + 1).toByte() } else bytes)
+        write(ByteReadChannel(if (corruptDownloads) bytes.copyOf().also { it[0] = (it[0] + 1).toByte() } else bytes))
         return "image/jpeg"
     }
 
     override suspend fun speechModel() = SpeechModelInfo(SpeechModelSpec.ID, server.speechFiles.isNotEmpty(), SpeechModelSpec.files)
 
     /** Serves at most [speechChunk] bytes per call, like a connection that keeps dropping. */
-    override suspend fun downloadSpeechFile(name: String, target: File) {
+    override suspend fun downloadSpeechFile(name: String, from: Long, write: suspend (channel: ByteReadChannel, resumed: Boolean) -> Unit) {
         val bytes = server.speechFiles[name] ?: throw ApiException(404, "not_found", "No such model file here")
-        val from = target.length().toInt()
-        target.appendBytes(bytes.copyOfRange(from, minOf(bytes.size, from + speechChunk)))
+        val start = from.toInt()
+        write(ByteReadChannel(bytes.copyOfRange(start, minOf(bytes.size, start + speechChunk))), start > 0)
     }
 
     var speechChunk = Int.MAX_VALUE

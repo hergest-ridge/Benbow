@@ -2,11 +2,13 @@ package app.benbow.client
 
 import app.benbow.core.api.SpeechModelFile
 import app.benbow.core.api.SpeechModelSpec
+import io.ktor.utils.io.jvm.javaio.copyTo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
 import java.security.MessageDigest
 
 /**
@@ -18,42 +20,26 @@ class SpeechModelStore(
     private val dir: File,
     private val api: () -> BenbowApi,
     private val files: List<SpeechModelFile> = SpeechModelSpec.files,
-) {
-    sealed interface State {
-        data object Missing : State
-
-        /** The server doesn't have it yet: the owner downloads it on the server's page first. */
-        data object NotOnServer : State
-
-        /** The server predates the model (before 0.5.0): it has to be updated first. */
-        data object ServerTooOld : State
-
-        data class Downloading(val done: Long, val total: Long) : State
-
-        data object Ready : State
-
-        data class Failed(val message: String) : State
-    }
-
+) : SpeechModel {
     private val marker = File(dir, "verified")
 
-    private val _state = MutableStateFlow(if (verified()) State.Ready else State.Missing)
-    val state: StateFlow<State> = _state
+    private val _state = MutableStateFlow<SpeechModel.State>(if (verified()) SpeechModel.State.Ready else SpeechModel.State.Missing)
+    override val state: StateFlow<SpeechModel.State> = _state
 
-    fun file(name: String): File = File(dir, name)
+    override fun file(name: String): File = File(dir, name)
 
     /** Fetches what's missing from the server and checks it; safe to call again after a failure or a restart. */
-    suspend fun fetch() = withContext(Dispatchers.IO) {
-        if (verified()) return@withContext _state.run { value = State.Ready }
+    override suspend fun fetch() = withContext(Dispatchers.IO) {
+        if (verified()) return@withContext _state.run { value = SpeechModel.State.Ready }
         try {
             val api = api()
             val info = try {
                 api.speechModel()
             } catch (e: ApiException) {
-                if (e.status == 404) return@withContext _state.run { value = State.ServerTooOld }
+                if (e.status == 404) return@withContext _state.run { value = SpeechModel.State.ServerTooOld }
                 throw e
             }
-            if (!info.ready) return@withContext _state.run { value = State.NotOnServer }
+            if (!info.ready) return@withContext _state.run { value = SpeechModel.State.NotOnServer }
             dir.mkdirs()
             marker.delete()
             val total = files.sumOf { it.size }
@@ -67,8 +53,10 @@ class SpeechModelStore(
                     var stalled = 0
                     while (part.length() < spec.size) {
                         val had = part.length()
-                        api.downloadSpeechFile(spec.name, part)
-                        _state.value = State.Downloading(before + part.length(), total)
+                        api.downloadSpeechFile(spec.name, part.length()) { channel, resumed ->
+                            FileOutputStream(part, resumed).use { channel.copyTo(it) }
+                        }
+                        _state.value = SpeechModel.State.Downloading(before + part.length(), total)
                         if (part.length() <= had && ++stalled >= MAX_STALLS) error("${spec.name}: the download doesn't move")
                     }
                     if (part.length() != spec.size || sha256(part) != spec.sha256) {
@@ -78,19 +66,19 @@ class SpeechModelStore(
                     check(part.renameTo(target)) { "can't place ${spec.name}" }
                 }
                 before += spec.size
-                _state.value = State.Downloading(before, total)
+                _state.value = SpeechModel.State.Downloading(before, total)
             }
             marker.writeText(SpeechModelSpec.ID)
-            _state.value = State.Ready
+            _state.value = SpeechModel.State.Ready
         } catch (e: Exception) {
-            _state.value = State.Failed(e.message ?: e::class.simpleName.orEmpty())
+            _state.value = SpeechModel.State.Failed(e.message ?: e::class.simpleName.orEmpty())
         }
     }
 
     /** Removes the model (frees ~230 MB); it can be fetched again. */
-    fun delete() {
+    override fun delete() {
         dir.deleteRecursively()
-        _state.value = State.Missing
+        _state.value = SpeechModel.State.Missing
     }
 
     /** Checked once after the download; afterwards sizes are enough (hashing 230 MB on every start would be slow). */

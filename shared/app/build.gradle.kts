@@ -1,5 +1,7 @@
-// Screens of the Android and desktop apps (roadmap 2.4) on top of the offline-first client.
-// The web client stays thin (ADR-003) and uses :shared:ui only.
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
+
+// Screens of the app (roadmap 2.4) on top of the offline-first client: Android, desktop and, the same code, the
+// browser (ADR-029). Platform pieces live in androidMain / jvmMain / wasmJsMain, JVM-only ones in src/jvmShared.
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.kmp.library)
@@ -18,6 +20,9 @@ kotlin {
         androidResources { enable = true }
     }
 
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs { browser { testTask { enabled = false } } } // its tests run on desktop (jvmTest)
+
     sourceSets {
         commonMain.dependencies {
             api(project(":shared:ui"))
@@ -31,6 +36,12 @@ kotlin {
             implementation(libs.coil.compose)
         }
         // Capture (Photo Picker, camera, voice) and playback live in the platform source sets.
+        androidMain {
+            kotlin.srcDir("src/jvmShared/kotlin")
+        }
+        jvmMain {
+            kotlin.srcDir("src/jvmShared/kotlin")
+        }
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
             implementation(libs.media3.exoplayer)
@@ -55,3 +66,6 @@ kotlin {
 compose.resources {
     packageOfResClass = "app.benbow.app.resources"
 }
+
+// The app's UI tests run on desktop only; the browser build is a library with no test bundle (CMP-4906's check).
+tasks.matching { it.name == "checkComposeUiTestConfigurationForWasmJs" }.configureEach { enabled = false }

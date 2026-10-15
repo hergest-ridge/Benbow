@@ -9,10 +9,13 @@ import android.provider.Settings
 import androidx.sqlite.db.SupportSQLiteDatabase
 import app.benbow.android.asr.SandboxTranscriber
 import app.benbow.app.AppServices
+import app.benbow.app.mediaIn
 import app.benbow.client.KeystoreSecretBox
 import app.benbow.client.SecretBox
+import app.benbow.client.SpeechModelStore
 import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.db.BenbowDb
+import app.benbow.core.api.SpeechModelSpec
 import app.cash.sqldelight.db.QueryResult
 import app.cash.sqldelight.db.SqlSchema
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
@@ -41,12 +44,12 @@ class BenbowApplication : Application() {
             durableDriver(BenbowDb.Schema, "benbow.db"),
             // The calendar's own file (ADR-027), never mixed with the journal's.
             durableDriver(CalendarDb.Schema, "calendar.db"),
-            File(filesDir, "media"),
+            mediaIn(File(filesDir, "media")),
             platform = "android",
             deviceName = name,
             reminderClock = AlarmReminderClock(this),
             transcriber = SandboxTranscriber(this),
-            modelsDir = File(filesDir, "models"),
+            speechModel = { api -> SpeechModelStore(File(filesDir, "models/" + SpeechModelSpec.ID), api) },
         )
     }
 

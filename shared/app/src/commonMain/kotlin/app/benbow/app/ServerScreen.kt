@@ -65,12 +65,11 @@ import app.benbow.app.resources.server_sync_now
 import app.benbow.app.resources.server_version
 import app.benbow.app.resources.server_wrong_store
 import app.benbow.client.Connection
+import app.benbow.client.IoDispatcher
 import app.benbow.client.Probe
 import app.benbow.client.SyncResult
 import app.benbow.client.calendar.CalendarSyncResult
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
@@ -110,7 +109,7 @@ internal class ServerViewModel(private val services: AppServices) : ViewModel() 
     }
 
     fun forget() = run {
-        withContext(Dispatchers.IO) { services.forgetServer() }
+        withContext(IoDispatcher) { services.forgetServer() }
         connection = null
     }
 

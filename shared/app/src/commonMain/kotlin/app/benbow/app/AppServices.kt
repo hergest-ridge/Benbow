@@ -1,18 +1,22 @@
 package app.benbow.app
 
 import app.benbow.client.ApiCache
-import app.benbow.client.ArchiveExport
+import app.benbow.client.BenbowApi
+import app.benbow.client.ByteSink
+import app.benbow.client.ByteSource
+import app.benbow.client.Connection
 import app.benbow.client.Due
 import app.benbow.client.ExportProgress
 import app.benbow.client.ExportReport
+import app.benbow.client.IoDispatcher
 import app.benbow.client.JournalRepository
-import app.benbow.client.MediaStore
+import app.benbow.client.Media
 import app.benbow.client.Pairing
 import app.benbow.client.PairingException
 import app.benbow.client.ReminderItem
 import app.benbow.client.ServerHistory
 import app.benbow.client.Settings
-import app.benbow.client.SpeechModelStore
+import app.benbow.client.SpeechModel
 import app.benbow.client.SyncController
 import app.benbow.client.SyncEngine
 import app.benbow.client.SyncResult
@@ -23,27 +27,32 @@ import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.calendar.moveJournalEvents
 import app.benbow.client.db.BenbowDb
 import app.benbow.client.upcoming
-import app.benbow.core.api.SpeechModelFile
-import app.benbow.core.api.SpeechModelSpec
 import app.cash.sqldelight.db.SqlDriver
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
-import java.io.File
-import java.io.OutputStream
-import java.time.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlin.concurrent.Volatile
 import kotlin.time.Clock
 
 /** Rings reminders on this device; [schedule] replaces whatever was scheduled before. */
 fun interface ReminderClock {
     fun schedule(due: List<Due>)
+}
+
+/** Makes this device's media store: a folder on Android and desktop, memory in the browser (ADR-029). */
+fun interface MediaFactory {
+    fun create(db: BenbowDb, apis: (Connection) -> BenbowApi, now: () -> Long): Media
+}
+
+/** Makes the speech model where the device can transcribe (Android, 7.6); [api] reaches the paired server. */
+fun interface SpeechModelFactory {
+    fun create(api: () -> BenbowApi): SpeechModel
 }
 
 /** A file just attached to [entryId]: an open editor of that entry places pictures and videos in its text. */
@@ -83,27 +92,25 @@ sealed interface AppMessage {
 class AppServices(
     driver: SqlDriver,
     calendarDriver: SqlDriver,
-    mediaDir: File,
+    mediaStore: MediaFactory,
     val platform: String,
     val deviceName: String,
     /** Large media files kept on this device beyond what still has to reach the server. */
     private val mediaCacheBytes: Long = 2L * 1024 * 1024 * 1024,
     /** Rings reminders on this device (Android alarms, a tray message on desktop); none in tests. */
     private val reminderClock: ReminderClock? = null,
-    /** Speech to text on this device (7.6); the model is kept in [modelsDir]. None on desktop. */
+    /** Speech to text on this device (7.6) and its model; none on desktop and in the browser. */
     transcriber: Transcriber? = null,
-    modelsDir: File? = null,
-    /** The model's files; tests use small made-up ones. */
-    speechFiles: List<SpeechModelFile> = SpeechModelSpec.files,
+    speechModel: SpeechModelFactory? = null,
 ) {
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    val scope = CoroutineScope(SupervisorJob() + IoDispatcher)
     val now: () -> Long = { Clock.System.now().toEpochMilliseconds() }
     private val db = BenbowDb(driver)
     private val apis = ApiCache()
     val repo = JournalRepository(db, now)
     val pairing = Pairing(db)
     val history = ServerHistory(db, apis)
-    val media = MediaStore(mediaDir, db, apis, now)
+    val media: Media = mediaStore.create(db, apis, now)
     private val engine = SyncEngine(db, apis, now)
     private val calendarDb = CalendarDb(calendarDriver)
     val calendar = CalendarRepository(calendarDb, now)
@@ -113,7 +120,7 @@ class AppServices(
     internal val calendarImports = CalendarImports(calendar, scope)
 
     /** Opens a calendar file from outside (Android's "Открыть с помощью"): its preview comes up. */
-    fun importCalendarFile(name: String, open: () -> java.io.InputStream) {
+    fun importCalendarFile(name: String, open: () -> ByteSource) {
         calendarImports.open(name, open)
         launch.value = AppLaunch.CalendarImport
     }
@@ -141,19 +148,14 @@ class AppServices(
 
     val export = MutableStateFlow<ExportState>(ExportState.Idle)
 
-    /** Writes the whole journal as a ZIP ([ArchiveExport]) after committing any left-over drafts, so it holds what's on screen. */
-    fun exportArchive(open: () -> OutputStream, withMedia: Boolean) {
+    /** Writes the whole journal as a ZIP ([writeArchive]) after committing any left-over drafts, so it holds what's on screen. */
+    fun exportArchive(open: () -> ByteSink, withMedia: Boolean) {
         if (export.value is ExportState.Running) return
         export.value = ExportState.Running(null)
         scope.launch {
             export.value = try {
                 repo.commitLeftoverDrafts()
-                ExportState.Done(
-                    ArchiveExport(db, media, calendar).write(open(), withMedia, today()) {
-                        export.value =
-                            ExportState.Running(it)
-                    },
-                )
+                ExportState.Done(writeArchive(db, media, calendar, open(), withMedia, today()) { export.value = ExportState.Running(it) })
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -174,10 +176,8 @@ class AppServices(
     val drawn = MutableStateFlow<Drawn?>(null)
 
     /** Voice notes to text (7.6), where this platform can; the model comes only from the paired server. */
-    val transcriptions: Transcriptions? = if (transcriber != null && modelsDir != null) {
-        val model = SpeechModelStore(File(modelsDir, SpeechModelSpec.ID), {
-            apis(Settings(db).connection ?: throw PairingException("Not paired with a server"))
-        }, speechFiles)
+    val transcriptions: Transcriptions? = if (transcriber != null && speechModel != null) {
+        val model = speechModel.create { apis(Settings(db).connection ?: throw PairingException("Not paired with a server")) }
         Transcriptions(transcriber, model, repo, media, { Settings(db) }, scope) { messages.tryEmit(AppMessage.TranscriptionFailed(it)) }
             .also { t -> scope.launch { attached.collect(t::added) } }
     } else {
@@ -207,7 +207,7 @@ class AppServices(
 
     /** Puts the next rings on the clock; called on every change and after a repeating reminder rang. */
     fun rescheduleReminders() {
-        reminderClock?.schedule(reminders.upcoming(LocalDateTime.now()))
+        reminderClock?.schedule(reminders.upcoming(Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())))
     }
 
     /**

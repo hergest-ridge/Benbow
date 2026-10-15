@@ -14,6 +14,8 @@ Re-verify exact versions at scaffold time. Facts below were gathered from web so
 
 ## Persistence (KMP)
 - Room 3.0 alpha: wasmJs runtime resolves, but room-paging lacks wasmJs.
+- SQLite in the browser (checked 2026-10-15): `@sqlite.org/sqlite-wasm` 3.53.4 has FTS5 and JSON but no FTS4; sql.js 1.14.2 (SQLite 3.49.1) has FTS3/FTS4, unicode61 and JSON, synchronous API; its `export()` closes and reopens the DB (statements freed), about 20 ms for 50 MB in Node.
+- Compose resources on wasm load asynchronously: a text is empty and a string array is an empty list on the first frame unless preloaded (`getString` fills the per-item cache).
 - SQLDelight web worker driver is in-memory by default. OPFS persistence is community-maintained (May 2026). Teams report moving web to thin clients. → Web = thin client (ADR-003).
 
 ## Ktor

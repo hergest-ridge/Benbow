@@ -20,7 +20,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
-import app.benbow.client.MediaStore
+import app.benbow.client.Media
+import app.benbow.client.readAllText
 import app.benbow.core.ink.InkDrawing
 import app.benbow.core.ink.InkGeometry
 import app.benbow.core.ink.InkStroke
@@ -55,13 +56,17 @@ internal class InkShape(val stroke: InkStroke) {
  * the undo history), so ending a line builds one outline, not all of them again.
  */
 internal class InkShapes {
-    private var cache = java.util.IdentityHashMap<InkStroke, InkShape>()
+    // By identity (a stroke object is reused as is); strokes are mostly appended, so the same index usually matches.
+    private var cache: List<Pair<InkStroke, InkShape>> = emptyList()
 
     fun of(strokes: List<InkStroke>): List<InkShape> {
-        val next = java.util.IdentityHashMap<InkStroke, InkShape>(strokes.size)
-        val shapes = strokes.map { stroke -> (cache[stroke] ?: InkShape(stroke)).also { next[stroke] = it } }
+        val previous = cache
+        val next = strokes.mapIndexed { i, stroke ->
+            val known = previous.getOrNull(i)?.takeIf { it.first === stroke } ?: previous.firstOrNull { it.first === stroke }
+            stroke to (known?.second ?: InkShape(stroke))
+        }
         cache = next
-        return shapes
+        return next.map { it.second }
     }
 }
 
@@ -95,7 +100,7 @@ internal fun InkCanvas(drawing: InkDrawing, modifier: Modifier = Modifier) {
 
 /** A drawing attachment, read from its file (parsed off the main thread, kept for the session). */
 @Composable
-internal fun DrawingPicture(media: MediaStore, attachment: AttachmentState, modifier: Modifier = Modifier) {
+internal fun DrawingPicture(media: Media, attachment: AttachmentState, modifier: Modifier = Modifier) {
     val drawing by rememberDrawing(media, attachment)
     Box(modifier, contentAlignment = Alignment.Center) {
         drawing?.let { InkCanvas(it) }
@@ -103,29 +108,27 @@ internal fun DrawingPicture(media: MediaStore, attachment: AttachmentState, modi
 }
 
 @Composable
-internal fun rememberDrawing(media: MediaStore, attachment: AttachmentState) =
+internal fun rememberDrawing(media: Media, attachment: AttachmentState) =
     produceState(DrawingCache[attachment.meta.sha256], attachment.meta.sha256) {
         if (value != null) return@produceState
         val sha = attachment.meta.sha256
         value = runCatching {
             withContext(Dispatchers.Default) {
                 val file = media.localFile(sha) ?: media.file(sha)
-                InkSvg.decode(file.readText())
+                InkSvg.decode(file.readAllText())
             }
         }.getOrNull()?.also { DrawingCache[sha] = it }
     }
 
-/** Parsed drawings by file hash (files never change, so they never go stale). */
+/** Parsed drawings by file hash (files never change, so they never go stale). Used on the main thread only. */
 internal object DrawingCache {
-    private val map = object : LinkedHashMap<String, InkDrawing>(16, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, InkDrawing>?) = size > 48
-    }
+    private val map = LinkedHashMap<String, InkDrawing>() // least recently used first: a use moves it to the end
 
-    @Synchronized
-    operator fun get(sha: String): InkDrawing? = map[sha]
+    operator fun get(sha: String): InkDrawing? = map.remove(sha)?.also { map[sha] = it }
 
-    @Synchronized
     operator fun set(sha: String, drawing: InkDrawing) {
+        map.remove(sha)
         map[sha] = drawing
+        if (map.size > 48) map.remove(map.keys.first())
     }
 }

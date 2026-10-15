@@ -5,6 +5,7 @@ import androidx.compose.ui.window.TrayState
 import androidx.compose.ui.window.application
 import app.benbow.app.AppServices
 import app.benbow.app.BenbowDesktop
+import app.benbow.app.mediaIn
 import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.db.BenbowDb
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
@@ -34,7 +35,7 @@ fun main() {
     services = AppServices(
         driver,
         calendarDriver,
-        mediaDir = File(dir, "media"),
+        mediaStore = mediaIn(File(dir, "media")),
         platform = "desktop",
         deviceName = System.getenv("COMPUTERNAME") ?: InetAddress.getLocalHost().hostName,
         mediaCacheBytes = 10L * 1024 * 1024 * 1024, // the PC has room; originals open without waiting

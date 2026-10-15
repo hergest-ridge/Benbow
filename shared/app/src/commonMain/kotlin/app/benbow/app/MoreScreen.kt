@@ -48,7 +48,7 @@ import app.benbow.app.resources.speech_more_ready
 import app.benbow.app.resources.speech_title
 import app.benbow.app.resources.tags
 import app.benbow.app.resources.trash
-import app.benbow.client.SpeechModelStore
+import app.benbow.client.SpeechModel
 import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -96,7 +96,7 @@ private fun MoreList(services: AppServices, nav: Navigator) {
         }
         services.transcriptions?.let { transcriptions ->
             val model by transcriptions.model.state.collectAsStateWithLifecycle()
-            val ready = model == SpeechModelStore.State.Ready
+            val ready = model == SpeechModel.State.Ready
             MoreItem(
                 Icons.Transcribe,
                 stringResource(Res.string.speech_title),

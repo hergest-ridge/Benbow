@@ -8,6 +8,9 @@ import app.benbow.app.resources.comments
 import app.benbow.app.resources.months_genitive
 import app.benbow.app.resources.not_on_device
 import app.benbow.app.resources.weekdays
+import app.benbow.client.IoDispatcher
+import app.benbow.client.LocalFile
+import app.benbow.client.uri
 import app.benbow.core.content.AttachmentBlock
 import app.benbow.core.content.DocumentCodec
 import app.benbow.core.content.DocumentFormatException
@@ -19,7 +22,6 @@ import app.benbow.core.content.TextBlock
 import app.benbow.core.sync.AttachmentState
 import app.benbow.ui.theme.BenbowPalette
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDate
@@ -27,7 +29,6 @@ import kotlinx.datetime.isoDayNumber
 import kotlinx.datetime.number
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.getStringArray
-import java.io.File
 
 /** A page to print or save as PDF: its title and full HTML. */
 internal class PrintPage(val title: String, val html: String)
@@ -36,7 +37,7 @@ internal class PrintPage(val title: String, val html: String)
  * One entry as a printable page: date, mood and tags on top, the text (HtmlExporter, light palette), then its pictures
  * and its comments. Pictures not on this device are fetched from the server; if that fails the page says so.
  */
-internal suspend fun AppServices.entryPage(id: String): PrintPage? = withContext(Dispatchers.IO) {
+internal suspend fun AppServices.entryPage(id: String): PrintPage? = withContext(IoDispatcher) {
     val entry = repo.entry(id).first() ?: return@withContext null
     val document = try {
         DocumentCodec.decode(entry.body)
@@ -66,7 +67,7 @@ internal suspend fun AppServices.entryPage(id: String): PrintPage? = withContext
             "image" -> files[a.meta.id]
             "video" -> a.visual?.let { fileOf(it) }
             else -> null
-        }?.toPath()?.toUri()?.toString()
+        }?.uri()
     }
     val missing = getString(Res.string.not_on_device)
     val label = { a: AttachmentState -> a.caption ?: a.meta.name ?: a.meta.kind }
@@ -103,7 +104,7 @@ internal suspend fun AppServices.entryPage(id: String): PrintPage? = withContext
             when {
                 file == null -> append("<p class=\"file\">📎 $label — ").append(escape(missing)).append("</p>\n")
 
-                a.meta.kind == "image" -> append("<figure><img src=\"").append(file.toPath().toUri()).append("\" alt=\"$label\">")
+                a.meta.kind == "image" -> append("<figure><img src=\"").append(file.uri()).append("\" alt=\"$label\">")
                     .append(a.caption?.let { "<figcaption>${escape(it)}</figcaption>" }.orEmpty()).append("</figure>\n")
 
                 else -> append("<p class=\"file\">📎 $label</p>\n")
@@ -136,7 +137,7 @@ private fun Color.css(): String {
 internal expect fun rememberPrint(): (PrintPage) -> Unit
 
 /** The file of [sha256], from this device or the server; null when neither has it now. */
-private suspend fun AppServices.fileOf(sha256: String): File? = media.localFile(sha256) ?: try {
+private suspend fun AppServices.fileOf(sha256: String): LocalFile? = media.localFile(sha256) ?: try {
     media.file(sha256)
 } catch (e: CancellationException) {
     throw e

@@ -1,7 +1,11 @@
 package app.benbow.client
 
-import java.time.LocalDateTime
-import java.time.ZoneId
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.daysUntil
+import kotlinx.datetime.plus
+import kotlinx.datetime.toInstant
 
 /** A reminder (an entry of kind "reminder"): [at] is local "YYYY-MM-DDTHH:MM", [repeat] daily, weekly or null. */
 data class ReminderItem(val id: String, val text: String, val at: String, val repeat: String?, val done: Boolean) {
@@ -13,14 +17,13 @@ data class ReminderItem(val id: String, val text: String, val at: String, val re
         if (done) return null
         val first = runCatching { LocalDateTime.parse(at) }.getOrNull() ?: return null
         val step = when (repeat) {
-            DAILY -> 1L
-            WEEKLY -> 7L
-            else -> return first.takeIf { !it.isBefore(now) }
+            DAILY -> 1
+            WEEKLY -> 7
+            else -> return first.takeIf { it >= now }
         }
-        if (!first.isBefore(now)) return first
-        val behind = java.time.Duration.between(first, now).toDays() / step
-        var next = first.plusDays(behind * step)
-        while (next.isBefore(now)) next = next.plusDays(step)
+        if (first >= now) return first
+        var next = first.plusDays(first.date.daysUntil(now.date) / step * step)
+        while (next < now) next = next.plusDays(step)
         return next
     }
 
@@ -34,9 +37,15 @@ data class ReminderItem(val id: String, val text: String, val at: String, val re
 data class Due(val id: String, val text: String, val atMillis: Long)
 
 /** The next [limit] rings within [days] from [now], soonest first. */
-fun List<ReminderItem>.upcoming(now: LocalDateTime, zone: ZoneId = ZoneId.systemDefault(), days: Long = 30, limit: Int = 64): List<Due> =
-    mapNotNull { r ->
-        r.nextAt(now)?.takeIf { it.isBefore(now.plusDays(days)) }?.let { Due(r.id, r.text, it.atZone(zone).toInstant().toEpochMilli()) }
-    }
-        .sortedBy { it.atMillis }
-        .take(limit)
+fun List<ReminderItem>.upcoming(
+    now: LocalDateTime,
+    zone: TimeZone = TimeZone.currentSystemDefault(),
+    days: Int = 30,
+    limit: Int = 64,
+): List<Due> = mapNotNull { r ->
+    r.nextAt(now)?.takeIf { it < now.plusDays(days) }?.let { Due(r.id, r.text, it.toInstant(zone).toEpochMilliseconds()) }
+}
+    .sortedBy { it.atMillis }
+    .take(limit)
+
+private fun LocalDateTime.plusDays(days: Int) = LocalDateTime(date.plus(days, DateTimeUnit.DAY), time)

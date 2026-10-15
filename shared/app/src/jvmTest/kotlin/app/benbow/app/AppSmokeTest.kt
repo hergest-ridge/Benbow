@@ -61,7 +61,7 @@ class AppSmokeTest {
     private val services = AppServices(
         JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), BenbowDb.Schema),
         JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), CalendarDb.Schema),
-        java.nio.file.Files.createTempDirectory("benbow-media").toFile(),
+        mediaIn(java.nio.file.Files.createTempDirectory("benbow-media").toFile()),
         "desktop",
         "Test PC",
     )
@@ -785,19 +785,20 @@ class AppSmokeTest {
         }
         val heard = object : Transcriber {
             override suspend fun <T> session(
-                model: app.benbow.client.SpeechModelStore,
+                model: app.benbow.client.SpeechModel,
                 block: suspend (transcribe: suspend (java.io.File) -> String) -> T,
             ): T = block { "Шли вдоль берега, ветер был холодный, но солнце светило ярко." }
         }
         return AppServices(
             JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), BenbowDb.Schema),
             JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), CalendarDb.Schema),
-            java.nio.file.Files.createTempDirectory("benbow-media").toFile(),
+            mediaIn(java.nio.file.Files.createTempDirectory("benbow-media").toFile()),
             "android",
             "Test phone",
             transcriber = heard,
-            modelsDir = models,
-            speechFiles = files,
+            speechModel = { api ->
+                app.benbow.client.SpeechModelStore(java.io.File(models, app.benbow.core.api.SpeechModelSpec.ID), api, files)
+            },
         )
     }
 

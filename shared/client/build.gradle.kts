@@ -1,5 +1,7 @@
-// Offline-first client data layer for Android and desktop (docs/sync.md): local DB, outbox, sync, pinned TLS.
-// The web client is thin (ADR-003) and doesn't use this module.
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
+
+// Offline-first client data layer (docs/sync.md): local DB, outbox, sync, pinned TLS. Android and desktop, and the
+// browser (ADR-029): the same code, with the browser's fetch, SQLite built for wasm and media kept in memory.
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.serialization)
@@ -15,6 +17,12 @@ kotlin {
         namespace = "app.benbow.client"
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()
+    }
+
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs {
+        browser { testTask { enabled = false } }
+        nodejs() // the tests run in Node: the browser driver's logic with an in-memory shelf
     }
 
     sourceSets {
@@ -36,6 +44,15 @@ kotlin {
         jvmMain {
             kotlin.srcDir("src/jvmShared/kotlin")
             dependencies { implementation(libs.ktor.client.okhttp) }
+        }
+        wasmJsMain.dependencies {
+            implementation(libs.ktor.client.js)
+            // SQLite in the browser, with FTS4 (ADR-029); its .wasm file is copied next to the web app's script.
+            implementation(npm("sql.js", libs.versions.sqljs.get()))
+        }
+        wasmJsTest.dependencies {
+            implementation(libs.kotlin.test)
+            implementation(libs.kotlinx.coroutines.test)
         }
         jvmTest.dependencies {
             implementation(libs.kotlin.test)

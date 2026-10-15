@@ -71,6 +71,8 @@ import app.benbow.app.resources.drawing_pen
 import app.benbow.app.resources.drawing_redo
 import app.benbow.app.resources.drawing_title
 import app.benbow.app.resources.drawing_undo
+import app.benbow.client.byteSourceOf
+import app.benbow.client.readAllText
 import app.benbow.core.ink.InkDrawing
 import app.benbow.core.ink.InkGeometry
 import app.benbow.core.ink.InkStroke
@@ -92,7 +94,7 @@ internal suspend fun AppServices.saveDrawing(entryId: String, previous: String?,
         return
     }
     val svg = InkSvg.encode(drawing, ::svgColor).encodeToByteArray()
-    val file = media.import(svg.inputStream(), InkSvg.MIME, "drawing.svg", now())
+    val file = media.import(byteSourceOf(svg), InkSvg.MIME, "drawing.svg", now())
     val id = repo.attach(entryId, file, "drawing", drawing.width, drawing.height)
     drawn.value = Drawn(entryId, previous, id)
 }
@@ -126,7 +128,7 @@ internal class DrawingViewModel(private val services: AppServices, private val e
                 val attachment = services.repo.entry(entryId).first()?.attachments?.firstOrNull { it.meta.id == attachmentId }
                 drawing = attachment?.let { a ->
                     runCatching {
-                        InkSvg.decode((services.media.localFile(a.meta.sha256) ?: services.media.file(a.meta.sha256)).readText())
+                        InkSvg.decode((services.media.localFile(a.meta.sha256) ?: services.media.file(a.meta.sha256)).readAllText())
                     }
                         .getOrNull()
                 } ?: InkDrawing()

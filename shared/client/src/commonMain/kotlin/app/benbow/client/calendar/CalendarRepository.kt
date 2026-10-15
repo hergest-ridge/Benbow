@@ -200,7 +200,7 @@ class CalendarRepository(
         val names = records.filter { (_, v) -> v[CalendarField.DELETED] != "true" }
             .mapNotNull { (id, v) -> v[CalendarField.NAME]?.takeIf { it.isNotBlank() }?.let { it.trim().lowercase() to id } }
             .toMap(HashMap())
-        if (records[MY_CALENDAR]?.get(CalendarField.NAME).isNullOrBlank()) names.putIfAbsent(MY_CALENDAR_NAME.lowercase(), MY_CALENDAR)
+        if (records[MY_CALENDAR]?.get(CalendarField.NAME).isNullOrBlank()) names.getOrPut(MY_CALENDAR_NAME.lowercase()) { MY_CALENDAR }
         return names
     }
 

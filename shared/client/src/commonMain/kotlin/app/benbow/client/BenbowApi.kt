@@ -39,10 +39,8 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
-import io.ktor.utils.io.jvm.javaio.copyTo
+import io.ktor.utils.io.ByteReadChannel
 import kotlinx.serialization.json.Json
-import java.io.File
-import java.io.FileOutputStream
 
 /** The server API as the client sees it (docs/sync.md#implemented-endpoints). */
 interface BenbowApi {
@@ -65,14 +63,17 @@ interface BenbowApi {
     /** Appends [data] at [offset]. A wrong offset is not an error: the answer carries the offset to continue from. */
     suspend fun uploadChunk(id: String, offset: Long, data: ByteArray): UploadStatus
 
-    /** Streams a file into [target]; returns its MIME type. */
-    suspend fun downloadBlob(sha256: String, target: File): String
+    /** Streams a file to [write]; returns its MIME type. */
+    suspend fun downloadBlob(sha256: String, write: suspend (ByteReadChannel) -> Unit): String
 
     /** Whether the server has the speech-recognition model (7.6). */
     suspend fun speechModel(): SpeechModelInfo
 
-    /** Continues a speech model file into [target] from its current length (a fresh start when the server can't). */
-    suspend fun downloadSpeechFile(name: String, target: File)
+    /**
+     * A speech model file from byte [from] on (a Range request); [write] learns whether the server continued there
+     * (`resumed`) or sent it from the start.
+     */
+    suspend fun downloadSpeechFile(name: String, from: Long, write: suspend (channel: ByteReadChannel, resumed: Boolean) -> Unit)
 }
 
 /** The finished upload didn't match its hash (corrupted on the way); start it again. */
@@ -151,24 +152,22 @@ class KtorBenbowApi(private val client: HttpClient, private val baseUrl: String,
         }
     }
 
-    override suspend fun downloadBlob(sha256: String, target: File): String = client.prepareGet("$baseUrl/api/v1/blobs/$sha256") { auth() }
-        .execute { response ->
+    override suspend fun downloadBlob(sha256: String, write: suspend (ByteReadChannel) -> Unit): String =
+        client.prepareGet("$baseUrl/api/v1/blobs/$sha256") { auth() }.execute { response ->
             response.ok()
-            target.outputStream().use { response.bodyAsChannel().copyTo(it) }
+            write(response.bodyAsChannel())
             response.contentType()?.withoutParameters()?.toString() ?: "application/octet-stream"
         }
 
     override suspend fun speechModel(): SpeechModelInfo = client.get("$baseUrl/api/v1/models/speech") { auth() }.ok().body()
 
-    override suspend fun downloadSpeechFile(name: String, target: File) {
-        val from = target.length()
+    override suspend fun downloadSpeechFile(name: String, from: Long, write: suspend (channel: ByteReadChannel, resumed: Boolean) -> Unit) {
         client.prepareGet("$baseUrl/api/v1/models/speech/$name") {
             auth()
             if (from > 0) header(HttpHeaders.Range, "bytes=$from-")
         }.execute { response ->
             response.ok()
-            val append = response.status == HttpStatusCode.PartialContent
-            FileOutputStream(target, append).use { response.bodyAsChannel().copyTo(it) }
+            write(response.bodyAsChannel(), response.status == HttpStatusCode.PartialContent)
         }
     }
 

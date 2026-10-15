@@ -62,6 +62,7 @@ import app.benbow.app.resources.months_nominative
 import app.benbow.app.resources.next
 import app.benbow.app.resources.previous
 import app.benbow.app.resources.weekdays_short
+import app.benbow.client.ByteSink
 import app.benbow.client.DayInfo
 import app.benbow.client.EntrySummary
 import app.benbow.client.calendar.CalendarEvent
@@ -88,7 +89,6 @@ import kotlinx.datetime.number
 import kotlinx.datetime.plus
 import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
-import java.io.OutputStream
 import kotlin.math.absoluteValue
 
 internal fun LocalDate.monthStart() = LocalDate(year, month, 1)
@@ -192,7 +192,7 @@ internal class CalendarViewModel(private val services: AppServices) : ViewModel(
     fun deleteCalendar(calendar: CalendarItem) = write { deleteCalendar(calendar.id) }
 
     /** Writes [calendar] as an `.ics` file where the user chose to save it (ADR-028). */
-    fun saveIcs(calendar: CalendarItem, name: String, open: () -> OutputStream) {
+    fun saveIcs(calendar: CalendarItem, name: String, open: () -> ByteSink) {
         services.scope.launch {
             try {
                 open().use { it.write(services.calendar.exportIcs(calendar, name, services.now()).encodeToByteArray()) }

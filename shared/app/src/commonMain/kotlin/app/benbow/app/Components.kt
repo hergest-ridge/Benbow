@@ -46,7 +46,7 @@ import app.benbow.app.resources.sync_waiting
 import app.benbow.app.resources.sync_wrong_server
 import app.benbow.app.resources.untitled
 import app.benbow.client.EntrySummary
-import app.benbow.client.MediaStore
+import app.benbow.client.Media
 import app.benbow.client.SyncResult
 import app.benbow.client.SyncStatus
 import org.jetbrains.compose.resources.pluralStringResource
@@ -62,7 +62,7 @@ internal fun BackButton(onClick: () -> Unit) {
 internal fun EntryCard(
     entry: EntrySummary,
     onClick: () -> Unit,
-    media: MediaStore? = null,
+    media: Media? = null,
     showDay: Boolean = false,
     trailing: @Composable (() -> Unit)? = null,
 ) {

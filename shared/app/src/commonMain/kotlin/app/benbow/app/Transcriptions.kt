@@ -1,9 +1,10 @@
 package app.benbow.app
 
 import app.benbow.client.JournalRepository
-import app.benbow.client.MediaStore
+import app.benbow.client.LocalFile
+import app.benbow.client.Media
 import app.benbow.client.Settings
-import app.benbow.client.SpeechModelStore
+import app.benbow.client.SpeechModel
 import app.benbow.core.sync.AttachmentState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
@@ -11,12 +12,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.io.File
 
 /** Turns sounds into text on this device (Android: GigaAM in a sandboxed process, 7.6); absent where it can't. */
 interface Transcriber {
     /** Opens the recognizer once for several files (loading the model takes a moment) and runs [block] with it. */
-    suspend fun <T> session(model: SpeechModelStore, block: suspend (transcribe: suspend (File) -> String) -> T): T
+    suspend fun <T> session(model: SpeechModel, block: suspend (transcribe: suspend (LocalFile) -> String) -> T): T
 }
 
 /**
@@ -26,9 +26,9 @@ interface Transcriber {
  */
 class Transcriptions internal constructor(
     private val transcriber: Transcriber,
-    val model: SpeechModelStore,
+    val model: SpeechModel,
     private val repo: JournalRepository,
-    private val media: MediaStore,
+    private val media: Media,
     private val settings: () -> Settings,
     private val scope: CoroutineScope,
     private val failed: (String) -> Unit,
@@ -61,7 +61,7 @@ class Transcriptions internal constructor(
 
     /** Queues one sound; ignored when it's already waiting or the model isn't here. */
     fun transcribe(entryId: String, attachment: AttachmentState) {
-        if (model.state.value != SpeechModelStore.State.Ready) return
+        if (model.state.value != SpeechModel.State.Ready) return
         val id = attachment.meta.id
         if (id in _running.value) return
         _running.update { it + id }

@@ -2,7 +2,7 @@ package app.benbow.android.asr
 
 import android.content.Context
 import app.benbow.app.Transcriber
-import app.benbow.client.SpeechModelStore
+import app.benbow.client.SpeechModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -13,7 +13,7 @@ import java.io.File
  * happens there.
  */
 class SandboxTranscriber(private val context: Context) : Transcriber {
-    override suspend fun <T> session(model: SpeechModelStore, block: suspend (transcribe: suspend (File) -> String) -> T): T =
+    override suspend fun <T> session(model: SpeechModel, block: suspend (transcribe: suspend (File) -> String) -> T): T =
         withContext(Dispatchers.IO) {
             context.withAsr { asr ->
                 val files = AsrModel(

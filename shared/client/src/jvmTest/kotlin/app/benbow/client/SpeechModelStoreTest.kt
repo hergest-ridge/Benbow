@@ -24,17 +24,17 @@ class SpeechModelStoreTest {
         val api = FakeApi(server).apply { speechChunk = 3_000 } // every request drops after 3 KB
         val dir = Files.createTempDirectory("benbow-model").toFile()
         val store = SpeechModelStore(dir, { api }, files)
-        assertEquals(SpeechModelStore.State.Missing, store.state.value)
+        assertEquals(SpeechModel.State.Missing, store.state.value)
 
         store.fetch()
-        assertEquals(SpeechModelStore.State.NotOnServer, store.state.value, "the owner hasn't downloaded it on the server")
+        assertEquals(SpeechModel.State.NotOnServer, store.state.value, "the owner hasn't downloaded it on the server")
 
         server.speechFiles += mapOf("encoder.int8.onnx" to encoder, "tokens.txt" to tokens)
         store.fetch()
-        assertEquals(SpeechModelStore.State.Ready, store.state.value)
+        assertEquals(SpeechModel.State.Ready, store.state.value)
         assertContentEquals(encoder, store.file("encoder.int8.onnx").readBytes())
         assertEquals(
-            SpeechModelStore.State.Ready,
+            SpeechModel.State.Ready,
             SpeechModelStore(dir, {
                 error("no network needed")
             }, files).state.value,
@@ -49,7 +49,7 @@ class SpeechModelStoreTest {
         }
         val store = SpeechModelStore(Files.createTempDirectory("benbow-model").toFile(), { old }, files)
         store.fetch()
-        assertEquals(SpeechModelStore.State.ServerTooOld, store.state.value)
+        assertEquals(SpeechModel.State.ServerTooOld, store.state.value)
     }
 
     @Test
@@ -63,7 +63,7 @@ class SpeechModelStoreTest {
 
         store.fetch()
 
-        assertIs<SpeechModelStore.State.Failed>(store.state.value)
+        assertIs<SpeechModel.State.Failed>(store.state.value)
         assertFalse(store.file("encoder.int8.onnx").exists())
         assertFalse(dir.listFiles()!!.any { it.name.endsWith(".part") }, "the bad download is gone")
     }

@@ -52,9 +52,12 @@ import app.benbow.client.ReminderItem
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
 import kotlinx.datetime.plus
+import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.resources.stringResource
-import java.time.LocalDateTime
+import kotlin.time.Clock
 
 /** Gentle, opt-in reminders (ux.md#psychology): upcoming first, a one-tap evening nudge, nothing nagging. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -70,7 +73,7 @@ internal fun RemindersScreen(services: AppServices, nav: Navigator, route: Route
     Scaffold(topBar = {
         TopAppBar(navigationIcon = { BackButton(nav::back) }, title = { Text(stringResource(Res.string.reminders)) })
     }) { padding ->
-        val now = LocalDateTime.now()
+        val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
         val all = reminders ?: return@Scaffold
         val (upcoming, past) = all.partition { it.nextAt(now) != null }
         LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -117,7 +120,7 @@ private fun ReminderRow(services: AppServices, reminder: ReminderItem, now: Loca
         Column(Modifier.weight(1f)) {
             Text(reminder.text, style = MaterialTheme.typography.bodyLarge)
             val whenText = (next ?: runCatching { LocalDateTime.parse(reminder.at) }.getOrNull())?.let { at ->
-                "${dayLabel(at.toLocalDate().toString())}, ${at.toLocalTime().toString().take(5)}"
+                "${dayLabel(at.date.toString())}, ${at.time.toString().take(5)}"
             }.orEmpty()
             val repeat = when (reminder.repeat) {
                 ReminderItem.DAILY -> " · " + stringResource(Res.string.reminder_daily).lowercase()

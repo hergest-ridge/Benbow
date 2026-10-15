@@ -51,6 +51,7 @@ import app.benbow.app.resources.import_unreadable
 import app.benbow.app.resources.import_working
 import app.benbow.app.resources.import_zones
 import app.benbow.app.resources.months_genitive
+import app.benbow.client.ByteSource
 import app.benbow.client.SWATCHES
 import app.benbow.client.calendar.CalendarRepository
 import app.benbow.client.calendar.IcsImport
@@ -58,6 +59,7 @@ import app.benbow.client.calendar.ImportCalendar
 import app.benbow.client.calendar.ImportChoice
 import app.benbow.client.calendar.ImportResult
 import app.benbow.client.calendar.summary
+import app.benbow.client.readUpTo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,7 +70,6 @@ import kotlinx.datetime.number
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
-import java.io.InputStream
 
 internal sealed interface CalendarImportState {
     data object Idle : CalendarImportState
@@ -96,11 +97,11 @@ internal sealed interface CalendarImportState {
 internal class CalendarImports(private val calendar: CalendarRepository, private val scope: CoroutineScope) {
     val state = MutableStateFlow<CalendarImportState>(CalendarImportState.Idle)
 
-    fun open(name: String, open: () -> InputStream) {
+    fun open(name: String, open: () -> ByteSource) {
         state.value = CalendarImportState.Reading
         scope.launch {
             state.value = try {
-                val bytes = open().use { it.readNBytes(MAX_FILE + 1) }
+                val bytes = open().use { it.readUpTo(MAX_FILE + 1) }
                 require(bytes.size <= MAX_FILE) { "the file is over ${MAX_FILE / 1024 / 1024} MB" }
                 val calendars = IcsImport.read(name, bytes).filter { it.events.isNotEmpty() || it.unreadable > 0 }
                 if (calendars.isEmpty()) {

@@ -1,5 +1,6 @@
 package app.benbow.client.calendar
 
+import app.benbow.client.unzipFiles
 import app.benbow.core.calendar.EventField
 import app.benbow.core.calendar.Ics
 import app.benbow.core.calendar.IcsCalendar
@@ -14,8 +15,6 @@ import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
-import java.io.ByteArrayInputStream
-import java.util.zip.ZipInputStream
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -67,21 +66,8 @@ object IcsImport {
         }
     }
 
-    private fun unzip(bytes: ByteArray): List<Pair<String, ByteArray>> {
-        val files = mutableListOf<Pair<String, ByteArray>>()
-        var total = 0L
-        ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
-            while (true) {
-                val entry = zip.nextEntry ?: break
-                if (entry.isDirectory || !entry.name.endsWith(".ics", ignoreCase = true)) continue
-                val data = zip.readBytes()
-                total += data.size
-                require(total <= MAX_UNPACKED) { "The archive unpacks to more than ${MAX_UNPACKED / 1024 / 1024} MB" }
-                files += entry.name to data
-            }
-        }
-        return files
-    }
+    private fun unzip(bytes: ByteArray): List<Pair<String, ByteArray>> =
+        unzipFiles(bytes, MAX_UNPACKED).filter { (name, _) -> name.endsWith(".ics", ignoreCase = true) }
 
     private fun convert(calendar: IcsCalendar, fallbackName: String, zone: TimeZone): ImportCalendar {
         var unknown = 0

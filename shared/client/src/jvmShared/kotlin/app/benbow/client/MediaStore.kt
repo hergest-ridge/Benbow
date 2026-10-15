@@ -5,6 +5,7 @@ import app.benbow.core.api.UploadStart
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToOne
 import app.cash.sqldelight.coroutines.mapToOneOrNull
+import io.ktor.utils.io.jvm.javaio.copyTo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.Flow
@@ -24,7 +25,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Media files on this device, stored by SHA-256 under [root] (docs/sync.md#blobs). Importing copies
+ * Media files on Android and desktop, stored by SHA-256 under [root] (docs/sync.md#blobs). Importing copies
  * the source into app storage first, so deleting it from the gallery later can't lose it. A captured
  * file stays until the server confirmed it; downloaded files are a cache.
  */
@@ -34,30 +35,31 @@ class MediaStore(
     private val apiFor: (Connection) -> BenbowApi,
     private val now: () -> Long,
     private val chunkSize: Int = 8 * 1024 * 1024,
-) {
+) : Media {
     private val q get() = db.benbowQueries
     private val incoming = File(root, ".incoming")
     private val downloads = ConcurrentHashMap<String, Mutex>()
 
     /** Copies [input] into the media folder (fsynced, then renamed into place). Doesn't touch the DB: attach it next. */
-    suspend fun import(input: InputStream, mime: String, name: String?, capturedAt: Long?): MediaFile = withContext(Dispatchers.IO) {
-        incoming.mkdirs()
-        val tmp = File(incoming, UUID.randomUUID().toString())
-        val digest = MessageDigest.getInstance("SHA-256")
-        val size = FileOutputStream(tmp).use { out ->
-            val counted = DigestOutputStream(out, digest)
-            val n = input.copyTo(counted)
-            counted.flush()
-            out.fd.sync()
-            n
+    override suspend fun import(input: InputStream, mime: String, name: String?, capturedAt: Long?): MediaFile =
+        withContext(Dispatchers.IO) {
+            incoming.mkdirs()
+            val tmp = File(incoming, UUID.randomUUID().toString())
+            val digest = MessageDigest.getInstance("SHA-256")
+            val size = FileOutputStream(tmp).use { out ->
+                val counted = DigestOutputStream(out, digest)
+                val n = input.copyTo(counted)
+                counted.flush()
+                out.fd.sync()
+                n
+            }
+            val sha = digest.digest().toHex()
+            val target = place(tmp, sha)
+            MediaFile(sha, size, mime, target.absolutePath, name, capturedAt)
         }
-        val sha = digest.digest().toHex()
-        val target = place(tmp, sha)
-        MediaFile(sha, size, mime, target.absolutePath, name, capturedAt)
-    }
 
     /** The file if it is on this device, without network. */
-    fun localFile(sha256: String): File? {
+    override fun localFile(sha256: String): File? {
         val row = q.selectMedia(sha256).executeAsOneOrNull() ?: return null
         val file = File(row.path).takeIf { it.exists() } ?: return null
         q.touchMedia(now(), sha256)
@@ -65,7 +67,7 @@ class MediaStore(
     }
 
     /** The file, downloaded and verified first when it isn't here yet. */
-    suspend fun file(sha256: String): File {
+    override suspend fun file(sha256: String): File {
         localFile(sha256)?.let { return it }
         return downloads.computeIfAbsent(sha256) { Mutex() }.withLock {
             localFile(sha256) ?: download(sha256)
@@ -73,7 +75,7 @@ class MediaStore(
     }
 
     /** True while a file captured here hasn't been confirmed by the server ("not safe yet"). */
-    fun awaitingUpload(sha256: String): Flow<Boolean> = q.selectMedia(sha256).asFlow().mapToOneOrNull(Dispatchers.Default).map {
+    override fun awaitingUpload(sha256: String): Flow<Boolean> = q.selectMedia(sha256).asFlow().mapToOneOrNull(Dispatchers.Default).map {
         it != null && it.origin == "captured" && it.uploaded == 0L
     }
 
@@ -82,7 +84,9 @@ class MediaStore(
      * may go: downloads, and captured files confirmed more than [settleMs] ago. Previews (small) stay so
      * lists never wait. Returns the bytes freed; an evicted file is downloaded again when needed.
      */
-    fun evict(capBytes: Long, settleMs: Long = SETTLE_MS): Long {
+    override fun evict(capBytes: Long): Long = evict(capBytes, SETTLE_MS)
+
+    fun evict(capBytes: Long, settleMs: Long): Long {
         val candidates = q.evictable(SMALL_FILE, now() - settleMs).executeAsList()
         var total = candidates.sumOf { it.size }
         var freed = 0L
@@ -98,13 +102,13 @@ class MediaStore(
     }
 
     /** Files captured here that the server hasn't confirmed yet. */
-    fun pendingCount(): Flow<Long> = q.pendingUploadCount().asFlow().mapToOne(Dispatchers.Default)
+    override fun pendingCount(): Flow<Long> = q.pendingUploadCount().asFlow().mapToOne(Dispatchers.Default)
 
     /**
      * Uploads every captured file the server hasn't confirmed, resuming where the server stopped.
      * Returns how many finished. A file is marked uploaded only after the server verified it (S7).
      */
-    suspend fun uploadPending(): Int = withContext(Dispatchers.IO) {
+    override suspend fun uploadPending(): Int = withContext(Dispatchers.IO) {
         val connection = Settings(db).connection ?: return@withContext 0
         val api = apiFor(connection)
         var finished = 0
@@ -145,7 +149,7 @@ class MediaStore(
         incoming.mkdirs()
         val tmp = File(incoming, UUID.randomUUID().toString())
         val mime = try {
-            apiFor(connection).downloadBlob(sha256, tmp)
+            apiFor(connection).downloadBlob(sha256) { channel -> tmp.outputStream().use { channel.copyTo(it) } }
         } catch (e: Exception) {
             tmp.delete()
             throw e

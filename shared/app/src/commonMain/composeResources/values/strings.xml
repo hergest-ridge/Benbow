@@ -450,4 +450,6 @@
     <string name="server_forget">Отключить сервер</string>
     <string name="server_forget_confirm">Устройство забудет сервер и очистит локальную копию записей. На сервере всё останется.</string>
     <string name="server_forget_blocked">Нельзя отключить, пока есть несинхронизированные изменения.</string>
+    <!-- Web (ADR-029) -->
+    <string name="web_open_elsewhere">Benbow уже открыт в другой вкладке этого браузера. Продолжайте там: две вкладки с одной базой могли бы затереть изменения друг друга.</string>
 </resources>

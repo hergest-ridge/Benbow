@@ -48,15 +48,15 @@ import app.benbow.app.resources.capture_hint
 import app.benbow.app.resources.capture_save
 import app.benbow.app.resources.capture_saving
 import app.benbow.app.resources.capture_title
+import app.benbow.client.ByteSource
+import app.benbow.client.IoDispatcher
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
-import java.io.InputStream
 
 /** What the capture sheet starts with: text and files another app shared, or nothing (the tile, a shortcut). */
 class SharedContent internal constructor(val text: String, internal val files: List<SharedFile>) {
@@ -74,7 +74,7 @@ class SharedFile internal constructor(
     internal val mime: String,
     /** What Coil can show as a thumbnail (a content URI on Android), null for no picture. */
     internal val thumbnail: Any?,
-    internal val open: () -> InputStream,
+    internal val open: () -> ByteSource,
     internal val probe: () -> MediaProbe,
 )
 
@@ -106,7 +106,7 @@ fun QuickCapture(services: AppServices, shared: SharedContent, onClose: () -> Un
             error = null
             scope.launch {
                 val failures = mutableListOf<String>()
-                withContext(Dispatchers.IO) {
+                withContext(IoDispatcher) {
                     val listener = launch(start = CoroutineStart.UNDISPATCHED) {
                         services.messages.collect { if (it is AppMessage.AttachFailed) failures += it.reason }
                     }

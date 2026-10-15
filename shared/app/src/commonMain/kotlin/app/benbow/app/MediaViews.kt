@@ -61,7 +61,8 @@ import androidx.compose.ui.zIndex
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.attachments
 import app.benbow.app.resources.in_text
-import app.benbow.client.MediaStore
+import app.benbow.client.LocalFile
+import app.benbow.client.Media
 import app.benbow.core.sync.AttachmentState
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
@@ -69,19 +70,18 @@ import coil3.request.ImageRequest
 import coil3.size.Size
 import kotlinx.coroutines.CancellationException
 import org.jetbrains.compose.resources.stringResource
-import java.io.File
 
 internal sealed interface MediaLoad {
     data object Loading : MediaLoad
 
-    data class Ready(val file: File) : MediaLoad
+    data class Ready(val file: LocalFile) : MediaLoad
 
     data class Unavailable(val reason: String) : MediaLoad
 }
 
 /** The file by its hash: at once when it's on the device, otherwise after a verified download. */
 @Composable
-internal fun rememberMediaFile(media: MediaStore, sha256: String?): State<MediaLoad> = produceState<MediaLoad>(MediaLoad.Loading, sha256) {
+internal fun rememberMediaFile(media: Media, sha256: String?): State<MediaLoad> = produceState<MediaLoad>(MediaLoad.Loading, sha256) {
     if (sha256 == null) return@produceState
     value = media.localFile(sha256)?.let { MediaLoad.Ready(it) } ?: try {
         MediaLoad.Ready(media.file(sha256))
@@ -101,7 +101,7 @@ internal fun durationLabel(ms: Long): String {
 internal val AttachmentState.visual: String? get() = meta.previewSha256 ?: meta.sha256.takeIf { meta.kind == "image" }
 
 @Composable
-internal fun MediaThumb(media: MediaStore, attachment: AttachmentState, size: Dp, onClick: () -> Unit) {
+internal fun MediaThumb(media: Media, attachment: AttachmentState, size: Dp, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Box(
         Modifier.size(size).clip(RoundedCornerShape(12.dp)).background(colors.surfaceContainerHigh).clickable(onClick = onClick)
@@ -155,7 +155,7 @@ private fun Badge(icon: androidx.compose.ui.graphics.vector.ImageVector, duratio
  */
 @Composable
 internal fun AttachmentStrip(
-    media: MediaStore,
+    media: Media,
     attachments: List<AttachmentState>,
     onOpen: (AttachmentState) -> Unit,
     placed: Set<String> = emptySet(),
@@ -241,7 +241,7 @@ private val GAP = 8.dp
 
 /** A cover in the journal list, with "+N" when the entry has more. */
 @Composable
-internal fun CoverThumb(media: MediaStore, sha256: String, count: Int) {
+internal fun CoverThumb(media: Media, sha256: String, count: Int) {
     val load by rememberMediaFile(media, sha256)
     Box(
         Modifier.padding(
@@ -271,7 +271,7 @@ internal fun CoverThumb(media: MediaStore, sha256: String, count: Int) {
  * through (the pager swipes, a pull down closes); [onZoom] says when that changes, [onTap] reports a single tap.
  */
 @Composable
-internal fun ZoomableImage(file: File, modifier: Modifier = Modifier, onZoom: (Boolean) -> Unit = {}, onTap: () -> Unit = {}) {
+internal fun ZoomableImage(file: LocalFile, modifier: Modifier = Modifier, onZoom: (Boolean) -> Unit = {}, onTap: () -> Unit = {}) {
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     val zoom = { value: Float ->
@@ -312,7 +312,7 @@ internal fun Loading(modifier: Modifier = Modifier) {
  */
 @Composable
 internal fun MediaCarousel(
-    media: MediaStore,
+    media: Media,
     items: List<AttachmentState>,
     onOpen: (AttachmentState) -> Unit,
     modifier: Modifier = Modifier,
@@ -367,7 +367,7 @@ private fun Chip(text: String, modifier: Modifier = Modifier) {
  */
 @Composable
 internal fun BestPicture(
-    media: MediaStore,
+    media: Media,
     attachment: AttachmentState,
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop,
@@ -393,7 +393,7 @@ internal fun BestPicture(
  * dimmed copy of itself (a tall photo after a wide one doesn't lose most of its sides).
  */
 @Composable
-internal fun FittedPicture(media: MediaStore, attachment: AttachmentState, carousel: Float) {
+internal fun FittedPicture(media: Media, attachment: AttachmentState, carousel: Float) {
     val w = attachment.meta.width ?: 0
     val h = attachment.meta.height ?: 0
     val own = if (w > 0 && h > 0) w.toFloat() / h else null

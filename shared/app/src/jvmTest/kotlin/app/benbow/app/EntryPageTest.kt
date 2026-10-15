@@ -15,7 +15,7 @@ class EntryPageTest {
     private val services = AppServices(
         JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), BenbowDb.Schema),
         JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), CalendarDb.Schema),
-        Files.createTempDirectory("benbow-media").toFile(),
+        mediaIn(Files.createTempDirectory("benbow-media").toFile()),
         "desktop",
         "Test PC",
     )

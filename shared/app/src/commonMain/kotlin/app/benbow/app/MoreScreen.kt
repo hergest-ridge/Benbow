@@ -36,6 +36,7 @@ import app.benbow.app.resources.more_lock_off
 import app.benbow.app.resources.more_lock_on
 import app.benbow.app.resources.more_reminders
 import app.benbow.app.resources.more_shortcuts
+import app.benbow.app.resources.more_shortcuts_web
 import app.benbow.app.resources.more_tagline
 import app.benbow.app.resources.more_tags
 import app.benbow.app.resources.more_trash
@@ -89,8 +90,14 @@ private fun MoreList(services: AppServices, nav: Navigator) {
         MoreItem(Icons.Label, stringResource(Res.string.tags), stringResource(Res.string.more_tags)) { nav.open(Route.Tags) }
         MoreItem(Icons.Delete, stringResource(Res.string.trash), stringResource(Res.string.more_trash)) { nav.open(Route.Trash) }
         MoreItem(Icons.Download, stringResource(Res.string.export), stringResource(Res.string.more_export)) { nav.open(Route.Export) }
-        if (services.platform == "desktop") {
-            MoreItem(Icons.Keyboard, stringResource(Res.string.shortcuts), stringResource(Res.string.more_shortcuts)) {
+        if (services.platform == "desktop" || services.platform == "web") {
+            MoreItem(
+                Icons.Keyboard,
+                stringResource(Res.string.shortcuts),
+                stringResource(
+                    if (services.platform == "web") Res.string.more_shortcuts_web else Res.string.more_shortcuts,
+                ),
+            ) {
                 nav.open(Route.Shortcuts)
             }
         }

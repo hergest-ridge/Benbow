@@ -502,7 +502,8 @@ class AppSmokeTest {
 
         services.shortcuts.tryEmit(Shortcut.NewEntry)
         waitUntilExactlyOneExists(hasText("Итоги дня"), 5_000) // the templates of a new, empty entry
-        onNode(hasSetTextAction()).performTextInput("Набрано с клавиатуры")
+        // Home's quick note stays on the left beside the new entry: type into the entry.
+        onNode(hasSetTextAction() and !hasText("Заметка…")).performTextInput("Набрано с клавиатуры")
         services.shortcuts.tryEmit(Shortcut.Save)
         waitUntilExactlyOneExists(hasText("Сохранено"), 5_000)
         waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.journal().first().any { it.title == "Набрано с клавиатуры" } } }
@@ -513,6 +514,32 @@ class AppSmokeTest {
         onNodeWithText("Сочетания клавиш").click()
         waitUntilExactlyOneExists(hasText("Ctrl+N"), 5_000)
         screenshot("36-shortcuts")
+    }
+
+    @Test
+    fun aWideWindowShowsTheEntryBesideTheList() = runDesktopComposeUiTest(width = 1280, height = 820) {
+        services.repo.createNote(services.today(), "Первая в ленте")
+        services.repo.createNote(services.today(), "Вторая в ленте")
+        setContent { BenbowApp(services) }
+        onNodeWithText("Лента").performClick()
+        waitUntilExactlyOneExists(hasText("Откройте запись слева", substring = true), 5_000)
+        screenshot("58-wide-feed")
+
+        // The post opens on the right; the feed stays on the left (each text shows twice while it is open).
+        onNodeWithText("Первая в ленте").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Первая в ленте").fetchSemanticsNodes().size == 2 }
+        assertEquals(1, onAllNodesWithText("Вторая в ленте").fetchSemanticsNodes().size, "the feed is still there")
+        screenshot("59-wide-post")
+
+        // Another post from the list takes its place instead of stacking on it; Back then closes the right side.
+        onAllNodesWithText("Вторая в ленте")[0].performClick()
+        waitUntil(timeoutMillis = 5_000) {
+            onAllNodesWithText("Вторая в ленте").fetchSemanticsNodes().size == 2 &&
+                onAllNodesWithText("Первая в ленте").fetchSemanticsNodes().size == 1
+        }
+        onNodeWithContentDescription("Назад").performClick()
+        waitUntilExactlyOneExists(hasText("Откройте запись слева", substring = true), 5_000)
+        screenshot("60-wide-closed")
     }
 
     /** A finger drag in small steps, the way a pager or a pull-to-close sees a real swipe. */

@@ -27,6 +27,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.shortcut_list
+import app.benbow.app.resources.shortcut_list_web
 import app.benbow.app.resources.shortcuts
 import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
@@ -58,14 +59,29 @@ fun shortcutOf(key: Key, ctrl: Boolean, alt: Boolean): Shortcut? = when {
     else -> null
 }
 
+/**
+ * In the browser (ADR-029) Ctrl+N (a new window) and Ctrl+1…5 (its tabs) belong to the browser, so the app takes Alt+N
+ * and Alt+1…5; Ctrl+F and Ctrl+S are the app's (the page is a canvas: the browser's find and save see nothing).
+ * Back is the browser's own (Alt+←, a mouse's side button), which the app follows. [code] is KeyboardEvent.code.
+ */
+fun webShortcutOf(code: String, ctrl: Boolean, alt: Boolean): Shortcut? = when {
+    alt && !ctrl && code == "KeyN" -> Shortcut.NewEntry
+    ctrl && !alt && code == "KeyF" -> Shortcut.Search
+    ctrl && !alt && code == "KeyS" -> Shortcut.Save
+    alt && !ctrl && code in WEB_DIGITS -> Shortcut.Tab(WEB_DIGITS.indexOf(code))
+    else -> null
+}
+
+private val WEB_DIGITS = listOf("Digit1", "Digit2", "Digit3", "Digit4", "Digit5")
+
 fun shortcutOf(event: KeyEvent): Shortcut? =
     if (event.type != KeyEventType.KeyDown) null else shortcutOf(event.key, event.isCtrlPressed || event.isMetaPressed, event.isAltPressed)
 
-/** "Ещё → Сочетания клавиш" (desktop): what each combination does. */
+/** "Ещё → Сочетания клавиш" (desktop and the browser, each with its own keys): what each combination does. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ShortcutsScreen(nav: Navigator) {
-    val lines = stringArrayResource(Res.array.shortcut_list)
+internal fun ShortcutsScreen(nav: Navigator, web: Boolean) {
+    val lines = stringArrayResource(if (web) Res.array.shortcut_list_web else Res.array.shortcut_list)
     Scaffold(topBar = {
         TopAppBar(navigationIcon = { BackButton(nav::back) }, title = { Text(stringResource(Res.string.shortcuts)) })
     }) { padding ->

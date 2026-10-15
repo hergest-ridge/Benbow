@@ -7,6 +7,7 @@ import io.ktor.http.withCharset
 import io.ktor.server.http.content.CompressedFileType
 import io.ktor.server.http.content.staticFiles
 import io.ktor.server.plugins.conditionalheaders.ConditionalHeaders
+import io.ktor.server.response.header
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
@@ -37,9 +38,24 @@ fun Route.webApp(root: Path?) {
         staticFiles("/", root.toFile()) {
             preCompressed(CompressedFileType.GZIP)
             cacheControl { file -> if (HASHED.matches(file.name)) FOREVER else REVALIDATE }
+            modify { _, call ->
+                call.response.header("Content-Security-Policy", CONTENT_SECURITY_POLICY)
+                call.response.header("Referrer-Policy", "no-referrer")
+                call.response.header("X-Content-Type-Options", "nosniff")
+            }
         }
     }
 }
+
+/**
+ * The page talks to this server and nothing else: no fonts, scripts or requests from elsewhere, whatever a library
+ * might try (Compose for Web fetches missing glyphs from Google's font CDN; the app bundles its emoji instead).
+ * WebAssembly needs 'wasm-unsafe-eval'; pictures and players use blob: URLs; the loading screen has inline styles.
+ */
+internal const val CONTENT_SECURITY_POLICY =
+    "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; " +
+        "media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; " +
+        "frame-ancestors 'none'; form-action 'self'"
 
 private val HASHED = Regex("[0-9a-f]{16,}\\.\\w+")
 private val FOREVER = listOf(CacheControl.MaxAge(365 * 24 * 3600, visibility = CacheControl.Visibility.Public))

@@ -17,4 +17,15 @@ class ShortcutsTest {
         }
         assertEquals(null, shortcutOf(Key.N, ctrl = false, alt = false), "plain typing")
     }
+
+    @Test
+    fun theBrowserKeepsItsOwnKeys() {
+        assertEquals(Shortcut.NewEntry, webShortcutOf("KeyN", ctrl = false, alt = true))
+        assertEquals(null, webShortcutOf("KeyN", ctrl = true, alt = false), "Ctrl+N opens a browser window")
+        assertEquals(Shortcut.Tab(1), webShortcutOf("Digit2", ctrl = false, alt = true))
+        assertEquals(null, webShortcutOf("Digit2", ctrl = true, alt = false), "Ctrl+2 is the browser's second tab")
+        assertEquals(Shortcut.Search, webShortcutOf("KeyF", ctrl = true, alt = false))
+        assertEquals(Shortcut.Save, webShortcutOf("KeyS", ctrl = true, alt = false))
+        assertEquals(null, webShortcutOf("KeyB", ctrl = true, alt = false), "the editor's bold")
+    }
 }

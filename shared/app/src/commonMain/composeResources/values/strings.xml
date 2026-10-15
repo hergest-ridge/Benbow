@@ -29,6 +29,7 @@
     <string name="journal_empty_text">Напишите пару строк о сегодняшнем дне — внизу, или откройте большую запись.</string>
     <string name="quick_note_hint">Заметка…</string>
     <string name="new_entry">Новая запись</string>
+    <string name="detail_empty">Откройте запись слева — она появится здесь. Или начните новую.</string>
     <string name="send">Сохранить заметку</string>
     <string name="menu">Меню</string>
     <string name="back">Назад</string>
@@ -135,12 +136,23 @@
     <string name="drop_to_attach">Отпустите, чтобы прикрепить к записи</string>
     <string name="shortcuts">Сочетания клавиш</string>
     <string name="more_shortcuts">Ctrl+N, Ctrl+F и другие</string>
+    <string name="more_shortcuts_web">Alt+N, Ctrl+F и другие</string>
     <string-array name="shortcut_list">
         <item>Ctrl+N|Новая запись</item>
         <item>Ctrl+F|Поиск</item>
         <item>Ctrl+1 … Ctrl+5|Главная, Лента, Календарь, Поиск, Ещё</item>
         <item>Ctrl+S|Сохранить версию записи</item>
         <item>Alt+←|Назад</item>
+        <item>Ctrl+B, I, U, E|Жирный, курсив, подчёркнутый, код</item>
+        <item>Ctrl+Z, Ctrl+Y|Отменить, повторить</item>
+    </string-array>
+    <string-array name="shortcut_list_web">
+        <item>Alt+N|Новая запись</item>
+        <item>Ctrl+F|Поиск</item>
+        <item>Alt+1 … Alt+5|Главная, Лента, Календарь, Поиск, Ещё</item>
+        <item>Ctrl+S|Сохранить версию записи</item>
+        <item>Alt+←|Назад (и кнопка «Назад» браузера)</item>
+        <item>Ctrl+V|Вставить картинку из буфера в запись</item>
         <item>Ctrl+B, I, U, E|Жирный, курсив, подчёркнутый, код</item>
         <item>Ctrl+Z, Ctrl+Y|Отменить, повторить</item>
     </string-array>

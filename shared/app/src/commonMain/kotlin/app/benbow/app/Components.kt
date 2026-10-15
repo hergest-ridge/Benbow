@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -71,6 +72,8 @@ internal fun EntryCard(
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
         color = swatch(entry.background) ?: colors.surfaceContainerLow,
+        // Open beside the list (a wide window): framed, so the eye finds it.
+        border = if (LocalOpenEntry.current == entry.id) BorderStroke(2.dp, colors.primary) else null,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
     ) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {

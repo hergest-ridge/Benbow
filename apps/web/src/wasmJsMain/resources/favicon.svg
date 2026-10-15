@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <!-- The app icon (shared/app composeResources/drawable/app_icon.xml): the inn's lantern over the night sea. -->
+  <path fill="#1F3B4D" d="M22,0h64a22,22 0,0 1,22 22v64a22,22 0,0 1,-22 22h-64a22,22 0,0 1,-22 -22v-64a22,22 0,0 1,22 -22z"/>
+  <path fill="#26485D" d="M0,82q13.5,-6 27,0t27,0t27,0t27,0v4a22,22 0,0 1,-22 22h-64a22,22 0,0 1,-22 -22z"/>
+  <g transform="translate(54 54) scale(1.4) translate(-54 -54)">
+    <path fill="#FFB35C" fill-opacity="0.16" d="M54,26a28,28 0,1 1,0 56a28,28 0,1 1,0 -56z"/>
+    <path fill="none" stroke="#E8B577" stroke-width="2.6" d="M54,23.5a5,5 0,1 1,0 10a5,5 0,1 1,0 -10z"/>
+    <path fill="#E8B577" d="M47,32.5h14v2.5h-14zM44,42l5.5,-7h9l5.5,7z"/>
+    <path fill="#FFB35C" d="M47.5,42h13a2.5,2.5 0,0 1,2.5 2.5v20a2.5,2.5 0,0 1,-2.5 2.5h-13a2.5,2.5 0,0 1,-2.5 -2.5v-20a2.5,2.5 0,0 1,2.5 -2.5z"/>
+    <path fill="#FFF3D1" d="M54,47c3,4 5,7 5,10a5,5 0,0 1,-10 0c0,-3 2,-6 5,-10z"/>
+    <path fill="#FFC96B" d="M54,53c1.5,2 2.5,3.5 2.5,5a2.5,2.5 0,0 1,-5 0c0,-1.5 1,-3 2.5,-5z"/>
+    <path fill="none" stroke="#E8B577" stroke-width="2.4" d="M47.5,42h13a2.5,2.5 0,0 1,2.5 2.5v20a2.5,2.5 0,0 1,-2.5 2.5h-13a2.5,2.5 0,0 1,-2.5 -2.5v-20a2.5,2.5 0,0 1,2.5 -2.5z"/>
+    <path fill="#E8B577" d="M43,67h22l-3,6h-16zM46.5,73h15v2.5h-15z"/>
+  </g>
+</svg>

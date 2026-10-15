@@ -8,7 +8,9 @@ import app.benbow.app.AppServices
 import app.benbow.app.BenbowApp
 import app.benbow.app.MediaFactory
 import app.benbow.app.WebNotice
+import app.benbow.app.WithBundledFonts
 import app.benbow.app.installWebImages
+import app.benbow.app.installWebShortcuts
 import app.benbow.app.preloadTexts
 import app.benbow.client.BrowserMedia
 import app.benbow.client.BrowserShelf
@@ -18,6 +20,7 @@ import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.db.BenbowDb
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 
@@ -25,13 +28,25 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
     MainScope().launch {
+        try {
+            start()
+        } catch (e: Throwable) {
+            showStartupError(e.message ?: e::class.simpleName.orEmpty())
+            throw e
+        }
+    }
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+private suspend fun start() {
+    coroutineScope {
         val texts = async { preloadTexts() }
         val shelf = try {
             BrowserShelf.claim()
         } catch (e: OpenElsewhereException) {
             hideLoading()
             ComposeViewport { WebNotice.OpenElsewhere() }
-            return@launch
+            return@coroutineScope
         }
         val journal = BrowserSqlDriver.open("benbow.db", BenbowDb.Schema, shelf)
         val calendar = BrowserSqlDriver.open("calendar.db", CalendarDb.Schema, shelf)
@@ -59,9 +74,9 @@ fun main() {
             unsaved
         }
         installWebImages()
+        installWebShortcuts(services)
         texts.await()
-        hideLoading()
-        ComposeViewport { BenbowApp(services) }
+        ComposeViewport { WithBundledFonts(onReady = ::hideLoading) { BenbowApp(services) } }
     }
 }
 
@@ -87,4 +102,21 @@ private fun whenHidden(block: () -> Unit): Unit = js(
     "{ document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') block(); }); }",
 )
 
-private fun hideLoading(): Unit = js("{ document.getElementById('loading')?.remove(); }")
+/** Fades the page's loading screen out once the first frame is ready. */
+private fun hideLoading(): Unit = js(
+    "{ const el = document.getElementById('loading'); if (el) { el.classList.add('gone'); setTimeout(() => el.remove(), 300); } }",
+)
+
+/** The loading screen says what went wrong instead of spinning forever. */
+private fun showStartupError(message: String): Unit = js(
+    """{
+        const el = document.getElementById('loading');
+        if (el) {
+            el.querySelector('.bar')?.remove();
+            const p = document.createElement('div');
+            p.className = 'error';
+            p.textContent = 'Benbow не запустился: ' + message + '. Обновите страницу; если повторится, откройте её в другом браузере.';
+            el.appendChild(p);
+        }
+    }""",
+)

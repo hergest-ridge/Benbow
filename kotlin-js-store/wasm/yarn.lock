@@ -2,6 +2,11 @@
 # yarn lockfile v1
 
 
+"@fontsource/noto-color-emoji@5.3.1":
+  version "5.3.1"
+  resolved "https://registry.yarnpkg.com/@fontsource/noto-color-emoji/-/noto-color-emoji-5.3.1.tgz#76c41be66b96bb3fd203d5708aa9841cf668a2d2"
+  integrity sha512-g7gLb7aznnC50pkW78d7UnXiQcmVMQUpEXXOT4rNK6N3l90Rh7KV6Lp4MzfaHijVajA3kjy0aX9N1pvvj+Cprg==
+
 "@js-joda/core@3.2.0":
   version "3.2.0"
   resolved "https://registry.yarnpkg.com/@js-joda/core/-/core-3.2.0.tgz#3e61e21b7b2b8a6be746df1335cf91d70db2a273"

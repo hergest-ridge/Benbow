@@ -1,5 +1,6 @@
 package app.benbow.app
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -205,11 +206,21 @@ private fun FeedPost(
     var picking by remember { mutableStateOf(false) }
     val tint = swatch(entry.background)
     val open = Modifier.combinedClickable(onClick = onOpen, onLongClick = { picking = true })
-    Box(Modifier.fillMaxWidth().then(if (cards) Modifier.padding(horizontal = 12.dp, vertical = 4.dp) else Modifier)) {
+    val shown = LocalOpenEntry.current == entry.id // open beside the feed (a wide window)
+    Box(
+        Modifier.fillMaxWidth().then(
+            when {
+                cards -> Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                shown -> Modifier.background(colors.primary.copy(alpha = 0.08f))
+                else -> Modifier
+            },
+        ),
+    ) {
         if (cards) {
             Surface(
                 color = tint ?: colors.surfaceContainerLow,
                 shape = RoundedCornerShape(18.dp),
+                border = if (shown) BorderStroke(2.dp, colors.primary) else null,
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).then(open),
             ) {
                 Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

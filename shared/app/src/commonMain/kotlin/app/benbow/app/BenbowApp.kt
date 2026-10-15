@@ -40,6 +40,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
@@ -58,6 +60,8 @@ import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDe
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.scene.Scene
+import androidx.navigation3.scene.SceneStrategy
+import androidx.navigation3.scene.SinglePaneSceneStrategy
 import androidx.navigation3.ui.NavDisplay
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.attach_failed
@@ -73,6 +77,8 @@ import app.benbow.app.resources.tab_search
 import app.benbow.client.TagLooks
 import app.benbow.client.Templates
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
@@ -137,10 +143,17 @@ internal sealed interface Route {
     data object More : Route
 }
 
-internal class Navigator(private val stack: SnapshotStateList<Route>) {
+/**
+ * The app's back stack. The list screens' navigator ([forList]) replaces what is open beside the list on a wide window
+ * (picking another entry), instead of stacking it.
+ */
+internal class Navigator(private val stack: SnapshotStateList<Route>, private val replacesDetail: () -> Boolean = { false }) {
     fun open(route: Route) {
+        if (replacesDetail()) while (stack.size > 1 && stack.last() !in TAB_ROUTES) stack.removeAt(stack.lastIndex)
         stack += route
     }
+
+    fun forList(twoPane: () -> Boolean) = Navigator(stack, twoPane)
 
     fun back() {
         if (stack.size > 1) stack.removeAt(stack.lastIndex)
@@ -161,6 +174,8 @@ internal class Navigator(private val stack: SnapshotStateList<Route>) {
 
 private class Tab(val route: Route, val label: StringResource, val icon: ImageVector)
 
+private val TAB_ROUTES = setOf(Route.Home, Route.Feed, Route.Calendar, Route.Search, Route.More)
+
 private val TABS = listOf(
     Tab(Route.Home, Res.string.tab_home, Icons.Home),
     Tab(Route.Feed, Res.string.tab_feed, Icons.Feed),
@@ -180,7 +195,7 @@ private fun AnimatedContentTransitionScope<Scene<Route>>.betweenTabs() = initial
 
 private val still = EnterTransition.None togetherWith ExitTransition.None
 
-/** Root of the Android and desktop apps. */
+/** Root of the Android, desktop and web apps. */
 @Composable
 fun BenbowApp(services: AppServices) {
     val looks by remember { services.repo.tagLooks() }.collectAsStateWithLifecycle(TagLooks())
@@ -202,6 +217,26 @@ private fun AppRoot(services: AppServices) {
     val backStack = remember { mutableStateListOf<Route>(Route.Home) }
     val nav = remember(backStack) { Navigator(backStack) }
     val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    PlatformAddress(backStack, nav) { link ->
+        when (link) {
+            is Link.Tab -> nav.selectTab(link.route)
+
+            is Link.Page -> {
+                nav.selectTab(Route.More)
+                nav.open(link.route)
+            }
+
+            Link.NewEntry -> nav.open(Route.Editor(null, services.today(), opened = services.now()))
+
+            is Link.Entry -> scope.launch {
+                val entry = services.repo.entry(link.id).first() ?: return@launch
+                nav.selectTab(Route.Feed)
+                nav.open(Route.Editor(entry.id, entry.day, readOnly = true))
+                if (link.comments) nav.open(Route.Comments(entry.id))
+            }
+        }
+    }
     LaunchedEffect(Unit) {
         services.launch.filterNotNull().collect { request ->
             services.launch.value = null
@@ -266,19 +301,22 @@ private fun AppFrame(
     // Wide windows (desktop, tablets): a rail on the left and the screens centred at a readable width. The tree keeps
     // the same shape in both, so resizing across the line never rebuilds the screens.
     val top = backStack.lastOrNull()
-    val tabs = top in TABS.map { it.route }
+    val tabs = top in TAB_ROUTES
+    val current = backStack.lastOrNull { it in TAB_ROUTES }
     var barHeight by remember { mutableIntStateOf(0) }
     val bar = with(LocalDensity.current) { barHeight.toDp() }
     BoxWithConstraints(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val wide = maxWidth >= WIDE
+        val twoPane = maxWidth >= TWO_PANE
         Row(Modifier.fillMaxSize()) {
-            if (wide && tabs) {
+            // Beside an open entry the list stays, and so does the rail; the viewer and drawing take the whole window.
+            if (wide && (tabs || (twoPane && top != null && !top.fullWindow))) {
                 NavigationRail {
                     Spacer(Modifier.height(8.dp))
                     TABS.forEach { tab ->
                         val label = stringResource(tab.label)
                         NavigationRailItem(
-                            selected = top == tab.route,
+                            selected = current == tab.route,
                             onClick = { nav.selectTab(tab.route) },
                             icon = { Icon(tab.icon, label) },
                             label = { Text(label) },
@@ -298,8 +336,8 @@ private fun AppFrame(
                     ),
                     contentAlignment = Alignment.TopCenter,
                 ) {
-                    Box(Modifier.fillMaxHeight().widthIn(max = if (wide) READABLE else Dp.Infinity)) {
-                        AppNavigation(services, backStack, nav)
+                    Box(Modifier.fillMaxHeight().widthIn(max = if (wide && !twoPane) READABLE else Dp.Infinity)) {
+                        AppNavigation(services, backStack, nav, twoPane)
                     }
                     SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().imePadding())
                 }
@@ -325,13 +363,37 @@ private fun AppFrame(
 private val WIDE = 840.dp
 
 /** How wide a screen grows in a big window: lines of text stay readable. */
-private val READABLE = 820.dp
+internal val READABLE = 820.dp
+
+private val Route.fullWindow get() = this is Route.Media || this is Route.Drawing
 
 @Composable
-private fun AppNavigation(services: AppServices, backStack: SnapshotStateList<Route>, nav: Navigator) {
+private fun AppNavigation(services: AppServices, backStack: SnapshotStateList<Route>, nav: Navigator, twoPane: Boolean) {
+    val pane by rememberUpdatedState(twoPane)
+    val listNav = remember(nav) { nav.forList { pane } }
+    val strategies = remember(twoPane) {
+        if (twoPane) {
+            listOf(ListDetailStrategy { DetailPlaceholder { nav.open(Route.Editor(null, services.today(), opened = services.now())) } })
+        } else {
+            emptyList()
+        }
+    }
+    val openEntry = (backStack.lastOrNull() as? Route.Editor)?.entryId?.takeIf { twoPane }
+    CompositionLocalProvider(LocalOpenEntry provides openEntry) { Screens(services, backStack, nav, listNav, strategies) }
+}
+
+@Composable
+private fun Screens(
+    services: AppServices,
+    backStack: SnapshotStateList<Route>,
+    nav: Navigator,
+    listNav: Navigator,
+    strategies: List<SceneStrategy<Route>>,
+) {
     NavDisplay(
         backStack = backStack,
         onBack = nav::back,
+        sceneStrategies = strategies + SinglePaneSceneStrategy(),
         transitionSpec = {
             if (betweenTabs()) still else fadeIn(tween(FADE_MILLIS)) togetherWith ExitTransition.KeepUntilTransitionsFinished
         },
@@ -339,16 +401,16 @@ private fun AppNavigation(services: AppServices, backStack: SnapshotStateList<Ro
         predictivePopTransitionSpec = { if (betweenTabs()) still else EnterTransition.None togetherWith fadeOut() },
         entryDecorators = listOf(rememberSaveableStateHolderNavEntryDecorator(), rememberViewModelStoreNavEntryDecorator()),
         entryProvider = entryProvider {
-            entry<Route.Home>(metadata = TAB) { HomeScreen(services, nav) }
-            entry<Route.Feed>(metadata = TAB) { FeedScreen(services, nav) }
+            entry<Route.Home>(metadata = TAB) { HomeScreen(services, listNav) }
+            entry<Route.Feed>(metadata = TAB) { FeedScreen(services, listNav) }
             entry<Route.Editor> { EditorScreen(services, nav, it) }
             entry<Route.History> { HistoryScreen(services, nav, it) }
             entry<Route.Revision> { RevisionScreen(services, nav, it) }
-            entry<Route.Media> { MediaScreen(services, nav, it) }
-            entry<Route.Drawing> { DrawingScreen(services, nav, it) }
-            entry<Route.Search>(metadata = TAB) { SearchScreen(services, nav) }
-            entry<Route.Calendar>(metadata = TAB) { CalendarScreen(services, nav) }
-            entry<Route.More>(metadata = TAB) { MoreScreen(services, nav) }
+            entry<Route.Media>(metadata = FULL_WINDOW) { MediaScreen(services, nav, it) }
+            entry<Route.Drawing>(metadata = FULL_WINDOW) { DrawingScreen(services, nav, it) }
+            entry<Route.Search>(metadata = TAB) { SearchScreen(services, listNav) }
+            entry<Route.Calendar>(metadata = TAB) { CalendarScreen(services, listNav) }
+            entry<Route.More>(metadata = TAB) { MoreScreen(services, listNav) }
             entry<Route.Comments> { CommentsScreen(services, nav, it) }
             entry<Route.Tags> { TagsScreen(services, nav) }
             entry<Route.Reminders> { RemindersScreen(services, nav, it) }
@@ -359,7 +421,7 @@ private fun AppNavigation(services: AppServices, backStack: SnapshotStateList<Ro
             entry<Route.Lock> { LockSettingsScreen(services, nav) }
             entry<Route.Speech> { SpeechScreen(services, nav) }
             entry<Route.Appearance> { AppearanceScreen(services, nav) }
-            entry<Route.Shortcuts> { ShortcutsScreen(nav) }
+            entry<Route.Shortcuts> { ShortcutsScreen(nav, web = services.platform == "web") }
         },
     )
 }

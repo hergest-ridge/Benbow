@@ -133,6 +133,7 @@
     <string name="attachment_gone">Вложение удалено</string>
     <string name="saved">Сохранено</string>
     <string name="save_failed">Не получилось сохранить: %1$s</string>
+    <string name="reminder_now">Напоминание: %1$s</string>
     <string name="drop_to_attach">Отпустите, чтобы прикрепить к записи</string>
     <string name="shortcuts">Сочетания клавиш</string>
     <string name="more_shortcuts">Ctrl+N, Ctrl+F и другие</string>
@@ -189,7 +190,7 @@
     <string name="more_lock_on">Закрывается через %1$s</string>
     <string name="lock_note">Открывается отпечатком, лицом или блокировкой экрана телефона. Быстрая заметка из шторки, виджета и «Поделиться» работает без разблокировки: она ничего не показывает из дневника.</string>
     <string name="lock_unavailable">Сначала задайте блокировку экрана в настройках телефона: PIN, рисунок или отпечаток.</string>
-    <string name="lock_desktop">На компьютере блокировки пока нет.</string>
+    <string name="lock_desktop">На компьютере и в браузере блокировки пока нет.</string>
     <string name="lock_closed">Дневник закрыт</string>
     <string name="lock_open">Открыть</string>
     <string name="lock_prompt">Открыть Benbow</string>

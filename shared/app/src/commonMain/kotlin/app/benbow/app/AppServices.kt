@@ -84,6 +84,9 @@ sealed interface AppMessage {
     data object Saved : AppMessage
 
     data class SaveFailed(val reason: String) : AppMessage
+
+    /** A reminder rang where the system can't show it (the browser without permission for notifications). */
+    data class Reminder(val text: String) : AppMessage
 }
 
 /**

@@ -8,12 +8,17 @@ import app.benbow.core.sync.EntryState
 import app.benbow.core.sync.Hlc
 import app.benbow.core.sync.LwwValue
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.OutputStream
-import java.util.zip.Deflater
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
+import kotlin.time.Clock
+
+/** Where an archive's files go: a ZIP stream in the apps, a ZIP built from blobs in the browser (ADR-029). */
+interface ArchiveWriter {
+    /** A text file (compressed where the writer can). */
+    suspend fun text(path: String, text: String)
+
+    /** A media file as it is: photos and videos are compressed already. */
+    suspend fun file(path: String, file: LocalFile)
+}
 
 /**
  * The whole journal as one ZIP that needs no app (data-safety.md#backups): `entries/YYYY/MM/<day>_<id>.md` + `.json` exactly
@@ -21,9 +26,14 @@ import java.util.zip.ZipOutputStream
  * and a README. Files not on this device are fetched from the server; any that can't be are named in the README and in
  * the notes, never dropped silently.
  */
-class ArchiveExport(private val db: BenbowDb, private val media: Media, private val calendar: CalendarRepository? = null) {
-    suspend fun write(out: OutputStream, withMedia: Boolean, today: String, onProgress: (ExportProgress) -> Unit = {}): ExportReport =
-        withContext(Dispatchers.IO) {
+class ArchiveExport(
+    private val db: BenbowDb,
+    private val media: Media,
+    private val calendar: CalendarRepository? = null,
+    private val now: () -> Long = { Clock.System.now().toEpochMilliseconds() },
+) {
+    suspend fun write(zip: ArchiveWriter, withMedia: Boolean, today: String, onProgress: (ExportProgress) -> Unit = {}): ExportReport =
+        withContext(IoDispatcher) {
             val entries = db.benbowQueries.exportEntries().executeAsList().map { row ->
                 val values = decodeFields(row.fields)
                 val clocks = decodeClocks(row.field_clocks)
@@ -49,7 +59,7 @@ class ArchiveExport(private val db: BenbowDb, private val media: Media, private 
             var done = 0
             val placed = HashMap<String, String>() // sha256 -> path inside the archive
             val missing = mutableListOf<AttachmentState>()
-            ZipOutputStream(out.buffered()).use { zip ->
+            run {
                 val names = HashSet<String>()
                 for ((entry, attachment) in wanted) {
                     val file = media.localFile(attachment.meta.sha256) ?: try {
@@ -63,15 +73,11 @@ class ArchiveExport(private val db: BenbowDb, private val media: Media, private 
                         missing += attachment
                     } else {
                         val path = "media/${EntryExport.folder(entry)}/" + uniqueName(attachment, names)
-                        zip.setLevel(Deflater.NO_COMPRESSION) // photos and videos are compressed already
-                        zip.putNextEntry(ZipEntry(path))
-                        file.inputStream().use { it.copyTo(zip) }
-                        zip.closeEntry()
+                        zip.file(path, file)
                         placed[attachment.meta.sha256] = path
                     }
                     onProgress(ExportProgress(++done, total))
                 }
-                zip.setLevel(Deflater.DEFAULT_COMPRESSION)
                 val why = if (withMedia) {
                     "is not in this export (not on the device, server unreachable)"
                 } else {
@@ -84,7 +90,7 @@ class ArchiveExport(private val db: BenbowDb, private val media: Media, private 
                     zip.text(dir + EntryExport.baseName(entry) + ".json", EntryExport.sidecar(entry, body))
                     onProgress(ExportProgress(++done, total))
                 }
-                val calendars = calendar?.exportFiles(System.currentTimeMillis()).orEmpty()
+                val calendars = calendar?.exportFiles(now()).orEmpty()
                 calendars.forEach { zip.text("calendars/" + it.name, it.text) }
                 zip.text(
                     "README.md",
@@ -102,12 +108,6 @@ class ArchiveExport(private val db: BenbowDb, private val media: Media, private 
             }
             ExportReport(entries.size, placed.size, missing.size)
         }
-
-    private fun ZipOutputStream.text(path: String, text: String) {
-        putNextEntry(ZipEntry(path))
-        write(text.encodeToByteArray())
-        closeEntry()
-    }
 
     /** The original file name where there is one, made safe and unique; otherwise kind and the start of the hash. */
     private fun uniqueName(a: AttachmentState, taken: MutableSet<String>): String {

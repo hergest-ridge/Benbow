@@ -66,6 +66,7 @@ import androidx.navigation3.ui.NavDisplay
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.attach_failed
 import app.benbow.app.resources.copied
+import app.benbow.app.resources.reminder_now
 import app.benbow.app.resources.save_failed
 import app.benbow.app.resources.saved
 import app.benbow.app.resources.speech_failed
@@ -274,6 +275,7 @@ private fun AppRoot(services: AppServices) {
                 AppMessage.Copied -> snackbar.showSnackbar(getString(Res.string.copied))
                 AppMessage.Saved -> snackbar.showSnackbar(getString(Res.string.saved))
                 is AppMessage.SaveFailed -> snackbar.showSnackbar(getString(Res.string.save_failed, message.reason))
+                is AppMessage.Reminder -> snackbar.showSnackbar(getString(Res.string.reminder_now, message.text), withDismissAction = true)
             }
         }
     }

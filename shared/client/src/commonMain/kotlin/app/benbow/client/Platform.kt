@@ -35,4 +35,4 @@ expect fun ByteSink.writeAll(bytes: ByteArray)
 expect val IoDispatcher: CoroutineDispatcher
 
 /** The files of a ZIP archive (name, bytes), refusing more than [maxTotal] bytes unpacked. */
-expect fun unzipFiles(bytes: ByteArray, maxTotal: Long): List<Pair<String, ByteArray>>
+expect suspend fun unzipFiles(bytes: ByteArray, maxTotal: Long): List<Pair<String, ByteArray>>

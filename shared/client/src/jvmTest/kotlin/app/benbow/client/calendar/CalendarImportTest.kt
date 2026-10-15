@@ -4,6 +4,7 @@ import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.core.calendar.EventField
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import java.io.ByteArrayOutputStream
@@ -35,7 +36,7 @@ class CalendarImportTest {
         }
     }.toByteArray()
 
-    private fun read(text: String) = IcsImport.read("calendar.ics", text.encodeToByteArray(), warsaw).single()
+    private fun read(text: String) = runBlocking { IcsImport.read("calendar.ics", text.encodeToByteArray(), warsaw) }.single()
 
     private fun ImportCalendar.byTitle(title: String) = events.single { it.fields[EventField.TITLE] == title }.fields
 
@@ -115,7 +116,7 @@ class CalendarImportTest {
                 ics("Годовщины", "UID:2\nSUMMARY:Свадьба\nDTSTART;VALUE=DATE:20261103\nRRULE:FREQ=YEARLY"),
             "readme.txt" to "not a calendar",
         )
-        val calendars = IcsImport.read("calendar-export.zip", bytes, warsaw)
+        val calendars = runBlocking { IcsImport.read("calendar-export.zip", bytes, warsaw) }
         assertEquals(listOf("me@gmail.com", "Годовщины"), calendars.map { it.name })
         assertEquals(listOf(1, 1), calendars.map { it.events.size })
     }

@@ -53,7 +53,7 @@ object IcsImport {
     /** A ZIP bigger than this unpacked is refused (no zip bombs). */
     private const val MAX_UNPACKED = 200L * 1024 * 1024
 
-    fun read(fileName: String, bytes: ByteArray, zone: TimeZone = TimeZone.currentSystemDefault()): List<ImportCalendar> {
+    suspend fun read(fileName: String, bytes: ByteArray, zone: TimeZone = TimeZone.currentSystemDefault()): List<ImportCalendar> {
         val texts = if (bytes.size > 1 && bytes[0] == 'P'.code.toByte() &&
             bytes[1] == 'K'.code.toByte()
         ) {
@@ -66,7 +66,7 @@ object IcsImport {
         }
     }
 
-    private fun unzip(bytes: ByteArray): List<Pair<String, ByteArray>> =
+    private suspend fun unzip(bytes: ByteArray): List<Pair<String, ByteArray>> =
         unzipFiles(bytes, MAX_UNPACKED).filter { (name, _) -> name.endsWith(".ics", ignoreCase = true) }
 
     private fun convert(calendar: IcsCalendar, fallbackName: String, zone: TimeZone): ImportCalendar {

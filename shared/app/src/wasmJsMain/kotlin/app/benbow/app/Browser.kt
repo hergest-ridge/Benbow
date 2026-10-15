@@ -31,6 +31,16 @@ internal fun saveDownload(name: String, mime: String, bytes: JsAny): Unit = js(
     }""",
 )
 
+/** Hands a Blob to the browser's downloads, named [name]. */
+internal fun saveBlob(name: String, blob: JsAny): Unit = js(
+    """{
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 600000);
+    }""",
+)
+
 /** The browser's file dialog; [onFiles] gets the chosen File objects (an array). */
 internal fun pickFiles(accept: String, multiple: Boolean, onFiles: (JsAny) -> Unit): Unit = js(
     """{

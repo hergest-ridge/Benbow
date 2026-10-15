@@ -25,7 +25,7 @@ actual fun ByteSink.writeAll(bytes: ByteArray) = write(bytes)
 
 actual val IoDispatcher: CoroutineDispatcher = Dispatchers.IO
 
-actual fun unzipFiles(bytes: ByteArray, maxTotal: Long): List<Pair<String, ByteArray>> {
+actual suspend fun unzipFiles(bytes: ByteArray, maxTotal: Long): List<Pair<String, ByteArray>> {
     val files = mutableListOf<Pair<String, ByteArray>>()
     var total = 0L
     ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->

@@ -73,7 +73,8 @@ The browser has no fsync'd files; its lasting storage is IndexedDB of the page's
 - **Media (S3, S7):** a picked, dropped or pasted file is stored as a Blob in IndexedDB (`media/<sha256>`, SHA-256 by WebCrypto) before the entry refers to it, uploaded from the stored blob in slices, and kept by the same rule as the apps (7 days after the server verified it, only over the cap). Downloads are verified against their hash before they are kept.
 - **One owner:** one tab holds the data (Web Locks); a second tab of the same origin refuses to open it, since two in-memory copies would overwrite each other's snapshots.
 - **Migrations (S10) and damage:** the old file is kept beside the new one (`<name>.before-v<N>-<time>`) before migrating; a file that fails `quick_check` is kept aside (`<name>.damaged-<time>`), never deleted, and an empty DB fills again from the server.
-- Covered by `shared/client` wasm tests in Node (`BrowserSqlDriverTest`, `BrowserMediaTest`, with an in-memory shelf).
+- **Export (W5):** "Ещё → Экспорт" works in the browser too: the same `ArchiveExport` (now common code behind `ArchiveWriter`) builds the ZIP from parts, the media as the Blobs from IndexedDB (never read whole into memory; CRC-32 read in slices), ZIP64 where sizes need it, and hands it to the browser's downloads.
+- Covered by `shared/client` wasm tests in Node (`BrowserSqlDriverTest`, `BrowserMediaTest`, `ZipTest`, with an in-memory shelf).
 
 ## Calendar store (ADR-027, 7.3a)
 Events matter less than entries and will outnumber them, so they live in their own files (server `calendar.sqlite`, client `calendar.db`) and calendar code never opens the journal DB. The one exception is moving the 5.1 events (`moveJournalEvents`, on every start, idempotent): it reads them and only trashes the old entries (soft delete).

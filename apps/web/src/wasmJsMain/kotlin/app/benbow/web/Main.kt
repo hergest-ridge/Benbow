@@ -4,7 +4,9 @@ package app.benbow.web
 
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.window.ComposeViewport
+import app.benbow.app.AppMessage
 import app.benbow.app.AppServices
+import app.benbow.app.BrowserReminderClock
 import app.benbow.app.BenbowApp
 import app.benbow.app.MediaFactory
 import app.benbow.app.WebNotice
@@ -12,10 +14,12 @@ import app.benbow.app.WithBundledFonts
 import app.benbow.app.installWebImages
 import app.benbow.app.installWebShortcuts
 import app.benbow.app.preloadTexts
+import app.benbow.app.showNotification
 import app.benbow.client.BrowserMedia
 import app.benbow.client.BrowserShelf
 import app.benbow.client.BrowserSqlDriver
 import app.benbow.client.OpenElsewhereException
+import app.benbow.client.installTimeZones
 import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.db.BenbowDb
 import kotlinx.coroutines.MainScope
@@ -39,6 +43,7 @@ fun main() {
 
 @OptIn(ExperimentalComposeUiApi::class)
 private suspend fun start() {
+    installTimeZones()
     coroutineScope {
         val texts = async { preloadTexts() }
         val shelf = try {
@@ -50,13 +55,19 @@ private suspend fun start() {
         }
         val journal = BrowserSqlDriver.open("benbow.db", BenbowDb.Schema, shelf)
         val calendar = BrowserSqlDriver.open("calendar.db", CalendarDb.Schema, shelf)
-        val services = AppServices(
+        lateinit var services: AppServices
+        val reminders = BrowserReminderClock(
+            MainScope(),
+            ring = { text -> if (!showNotification(text)) services.messages.tryEmit(AppMessage.Reminder(text)) },
+        ) { services.rescheduleReminders() }
+        services = AppServices(
             journal,
             calendar,
             mediaStore = MediaFactory { db, apis, now -> BrowserMedia(db, apis, now, shelf) },
             platform = "web",
             deviceName = browserName(),
             mediaCacheBytes = 2L * 1024 * 1024 * 1024, // downloads kept in IndexedDB; the PC has room
+            reminderClock = reminders,
         )
         val media = services.media as BrowserMedia
         // Hidden (another tab, minimized, closing): typing becomes a revision and everything goes to browser storage now.

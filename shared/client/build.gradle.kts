@@ -49,6 +49,9 @@ kotlin {
             implementation(libs.ktor.client.js)
             // SQLite in the browser, with FTS4 (ADR-029); its .wasm file is copied next to the web app's script.
             implementation(npm("sql.js", libs.versions.sqljs.get()))
+            // Time zones by name (an ICS file's TZID, the device's zone): kotlinx-datetime reads them from js-joda's database.
+            // 2.23.0 is the last release for the @js-joda/core 3.x that kotlinx-datetime 0.8 uses.
+            implementation(npm("@js-joda/timezone", "2.23.0"))
         }
         wasmJsTest.dependencies {
             implementation(libs.kotlin.test)

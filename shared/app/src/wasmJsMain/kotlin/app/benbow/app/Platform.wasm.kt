@@ -33,8 +33,9 @@ internal actual fun rememberSystemColors(dark: Boolean): ColorScheme? = null
 @Composable
 internal actual fun rememberDeviceAuth(): DeviceAuth? = null
 
+/** The browser asks whether this site may show notifications (for reminders while the tab is open). */
 @Composable
-internal actual fun rememberNotificationPermission(): () -> Unit = {}
+internal actual fun rememberNotificationPermission(): () -> Unit = ::askForNotifications
 
 /** Prints through a new tab: the browser's Print there also saves a PDF. */
 @Composable

@@ -49,5 +49,4 @@ actual fun ByteSink.writeAll(bytes: ByteArray) = write(bytes)
 
 actual val IoDispatcher: CoroutineDispatcher = Dispatchers.Default
 
-actual fun unzipFiles(bytes: ByteArray, maxTotal: Long): List<Pair<String, ByteArray>> =
-    throw UnsupportedOperationException("ZIP archives open in the desktop and Android apps for now; pick the .ics files instead")
+actual suspend fun unzipFiles(bytes: ByteArray, maxTotal: Long): List<Pair<String, ByteArray>> = readZip(bytes, maxTotal)

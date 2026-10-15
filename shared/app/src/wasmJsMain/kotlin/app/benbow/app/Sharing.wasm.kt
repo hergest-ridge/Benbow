@@ -44,15 +44,25 @@ internal actual fun rememberSaveFile(mime: String, onPicked: (open: (() -> ByteS
     onPicked { DownloadSink(name, mime) }
 }
 
-/** Collects what is written; closing it hands the whole file to the browser as a download. */
-private class DownloadSink(private val name: String, private val mime: String) : ByteSink() {
+/**
+ * Collects what is written; closing it hands the whole file to the browser as a download. A file built elsewhere as a
+ * Blob (the journal's ZIP) is handed over whole with [deliver] instead.
+ */
+internal class DownloadSink(private val name: String, private val mime: String) : ByteSink() {
     private val parts = ArrayList<ByteArray>()
+    private var delivered = false
 
     override fun write(bytes: ByteArray) {
         parts += bytes.copyOf()
     }
 
+    fun deliver(blob: JsAny) {
+        delivered = true
+        saveBlob(name, blob)
+    }
+
     override fun close() {
+        if (delivered) return
         val all = ByteArray(parts.sumOf { it.size })
         var at = 0
         for (part in parts) {

@@ -3,6 +3,8 @@ package app.benbow.server
 import app.benbow.core.calendar.CalendarKind
 import app.benbow.core.calendar.CalendarOp
 import app.benbow.core.calendar.CalendarRules
+import app.benbow.core.calendar.Ics
+import app.benbow.core.calendar.IcsTime
 import app.benbow.core.sync.CreateEntry
 import app.benbow.core.sync.Hlc
 import app.benbow.core.sync.SyncRules
@@ -25,6 +27,7 @@ import kotlin.io.path.exists
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.name
 import kotlin.io.path.readBytes
+import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -91,6 +94,45 @@ class CalendarStoreTest {
         assertEquals(null, jobs.status.lastError)
         assertEquals(2, db.backups!!.history().size, "the journal still got its snapshot")
         assertEquals(1, mirror.resolve("calendar").listDirectoryEntries("*.sqlite").size, "the journal's run keeps the calendar's copies")
+        db.close()
+    }
+
+    @Test
+    fun theMirrorHasAnIcsPerCalendarAndFollowsRenames() {
+        val db = Database.open(dir, "test")
+        val calendar = CalendarDatabase.open(dir, "test", db.storeId)
+        val jobs = BackupJobs(db, dir, null, calendar = calendar)
+        val rules = CalendarRules(SqliteCalendarStore(calendar))
+        rules.push(
+            listOf(
+                CalendarOp("c1", CalendarKind.CALENDAR, "work", mapOf("name" to "Работа", "color" to "storm"), Hlc(1, 0, "phone")),
+                event("e1", "Врач", 2),
+                CalendarOp(
+                    "e2",
+                    CalendarKind.EVENT,
+                    "e2",
+                    mapOf("title" to "Созвон", "start" to "2026-10-15T10:00", "calendar" to "work"),
+                    Hlc(3, 0, "phone"),
+                ),
+            ),
+        )
+        jobs.runCalendar()
+        val export = dir.resolve("export/calendars")
+        assertEquals(
+            setOf("Мои события.ics", "Работа.ics", "calendar.json"),
+            export.listDirectoryEntries().map {
+                it.name
+            }.filter { !it.startsWith(".") }.toSet(),
+        )
+        val work = Ics.parse(export.resolve("Работа.ics").readText()).single()
+        assertEquals(listOf("Созвон"), work.events.map { it.summary })
+        assertEquals(IcsTime("20261015T100000"), work.events.single().start, "floating local time (ADR-028)")
+
+        rules.push(listOf(CalendarOp("c2", CalendarKind.CALENDAR, "work", mapOf("name" to "Офис"), Hlc(4, 0, "phone"))))
+        jobs.runCalendar()
+        assertTrue(export.resolve("Офис.ics").exists())
+        assertFalse(export.resolve("Работа.ics").exists(), "a renamed calendar's old file goes")
+        calendar.close()
         db.close()
     }
 

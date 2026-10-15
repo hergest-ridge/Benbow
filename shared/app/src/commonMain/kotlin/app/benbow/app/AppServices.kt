@@ -71,6 +71,8 @@ sealed interface AppMessage {
     data object Copied : AppMessage
 
     data object Saved : AppMessage
+
+    data class SaveFailed(val reason: String) : AppMessage
 }
 
 /**
@@ -137,7 +139,12 @@ class AppServices(
         scope.launch {
             export.value = try {
                 repo.commitLeftoverDrafts()
-                ExportState.Done(ArchiveExport(db, media).write(open(), withMedia, today()) { export.value = ExportState.Running(it) })
+                ExportState.Done(
+                    ArchiveExport(db, media, calendar).write(open(), withMedia, today()) {
+                        export.value =
+                            ExportState.Running(it)
+                    },
+                )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

@@ -58,6 +58,17 @@ class SqliteCalendarStore(private val db: CalendarDatabase, private val deviceId
         Unit
     }
 
+    /** Every record, for the mirror. */
+    fun all(): List<CalendarRecord> = query { c ->
+        c.prepareStatement("SELECT kind, id, fields FROM records ORDER BY kind, id").use { st ->
+            st.executeQuery().use { rs ->
+                buildList {
+                    while (rs.next()) add(CalendarRecord(rs.getString(1), rs.getString(2), Json.decodeFromString(rs.getString(3))))
+                }
+            }
+        }
+    }
+
     override fun appendChange(kind: String, id: String): Long = query { c ->
         c.prepareStatement("INSERT INTO change_log(kind, record_id, at) VALUES (?, ?, ?)").use { st ->
             st.setString(1, kind)

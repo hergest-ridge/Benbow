@@ -2,6 +2,8 @@ package app.benbow.client.calendar
 
 import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.core.calendar.CalendarKind
+import app.benbow.core.calendar.EventField
+import app.benbow.core.calendar.MY_CALENDAR
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest

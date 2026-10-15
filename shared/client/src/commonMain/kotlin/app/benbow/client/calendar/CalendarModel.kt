@@ -1,42 +1,15 @@
 package app.benbow.client.calendar
 
 import app.benbow.client.SWATCHES
+import app.benbow.core.calendar.MY_CALENDAR
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.daysUntil
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 
-/** The built-in calendar of events made in Benbow («Мои события»); it has no record until it is renamed or recolored. */
-const val MY_CALENDAR = "mine"
-
 /** Its color until the owner picks another (a Keep palette name, like tag colors). */
 const val MY_CALENDAR_COLOR = "sage"
-
-/** Fields of an event record (docs/data-model.md#calendar). */
-object EventField {
-    const val CALENDAR = "calendar"
-    const val TITLE = "title"
-    const val START = "start"
-    const val END = "end"
-    const val DESCRIPTION = "description"
-    const val LOCATION = "location"
-    const val RRULE = "rrule"
-
-    /** Days the series skips, "YYYY-MM-DD" separated by commas. */
-    const val EXDATE = "exdate"
-    const val DELETED = "deleted"
-}
-
-/** Fields of a calendar record. */
-object CalendarField {
-    const val NAME = "name"
-    const val COLOR = "color"
-
-    /** "false" hides it (the checkbox); absent = shown. */
-    const val VISIBLE = "visible"
-    const val DELETED = "deleted"
-}
 
 /**
  * A calendar event; [start] and [end] are local "YYYY-MM-DD" (all day) or "YYYY-MM-DDTHH:MM". For a repeating

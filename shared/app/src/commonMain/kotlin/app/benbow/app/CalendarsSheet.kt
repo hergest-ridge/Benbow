@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.calendar_calendars
 import app.benbow.app.resources.calendar_delete
+import app.benbow.app.resources.calendar_export
 import app.benbow.app.resources.calendar_my_events
 import app.benbow.app.resources.calendar_name_hint
 import app.benbow.app.resources.calendar_new
@@ -47,6 +48,7 @@ internal fun CalendarsSheet(
     onVisible: (CalendarItem, Boolean) -> Unit,
     onSave: (calendar: CalendarItem?, name: String?, color: String?) -> Unit,
     onDelete: (CalendarItem) -> Unit,
+    onExport: (CalendarItem) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var editing by remember { mutableStateOf<CalendarItem?>(null) }
@@ -85,6 +87,7 @@ internal fun CalendarsSheet(
             suggestedColor = SWATCHES.firstOrNull { color -> calendars.none { it.color == color } } ?: SWATCHES.first(),
             onSave = { name, color -> onSave(target, name, color) },
             onDelete = target?.takeIf { !it.builtIn }?.let { { onDelete(it) } },
+            onExport = target?.let { { onExport(it) } },
             onDismiss = {
                 editing = null
                 creating = false
@@ -100,6 +103,7 @@ private fun CalendarDialog(
     suggestedColor: String,
     onSave: (String?, String?) -> Unit,
     onDelete: (() -> Unit)?,
+    onExport: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
     val initialName = calendar?.let { it.name ?: stringResource(Res.string.calendar_my_events) }.orEmpty()
@@ -117,6 +121,12 @@ private fun CalendarDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 SwatchPicker(color, noneLabel = null, onPick = { picked -> picked?.let { color = it } })
+                if (onExport != null) {
+                    TextButton({
+                        onExport()
+                        onDismiss()
+                    }) { Text(stringResource(Res.string.calendar_export)) }
+                }
                 if (onDelete != null) {
                     TextButton({
                         onDelete()

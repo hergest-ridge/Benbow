@@ -55,6 +55,7 @@ import app.benbow.app.resources.calendar_empty
 import app.benbow.app.resources.calendar_entry
 import app.benbow.app.resources.calendar_event
 import app.benbow.app.resources.calendar_more
+import app.benbow.app.resources.calendar_my_events
 import app.benbow.app.resources.calendar_until
 import app.benbow.app.resources.months_genitive
 import app.benbow.app.resources.months_nominative
@@ -66,9 +67,11 @@ import app.benbow.client.EntrySummary
 import app.benbow.client.calendar.CalendarEvent
 import app.benbow.client.calendar.CalendarItem
 import app.benbow.client.calendar.CalendarRepository
-import app.benbow.client.calendar.MY_CALENDAR
 import app.benbow.client.calendar.defaultCalendarColor
+import app.benbow.core.calendar.CalendarExport
 import app.benbow.core.calendar.CalendarKind
+import app.benbow.core.calendar.MY_CALENDAR
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -85,6 +88,7 @@ import kotlinx.datetime.number
 import kotlinx.datetime.plus
 import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
+import java.io.OutputStream
 import kotlin.math.absoluteValue
 
 internal fun LocalDate.monthStart() = LocalDate(year, month, 1)
@@ -187,6 +191,20 @@ internal class CalendarViewModel(private val services: AppServices) : ViewModel(
 
     fun deleteCalendar(calendar: CalendarItem) = write { deleteCalendar(calendar.id) }
 
+    /** Writes [calendar] as an `.ics` file where the user chose to save it (ADR-028). */
+    fun saveIcs(calendar: CalendarItem, name: String, open: () -> OutputStream) {
+        services.scope.launch {
+            try {
+                open().use { it.write(services.calendar.exportIcs(calendar, name, services.now()).encodeToByteArray()) }
+                services.messages.tryEmit(AppMessage.Saved)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                services.messages.tryEmit(AppMessage.SaveFailed(e.message ?: e::class.simpleName.orEmpty()))
+            }
+        }
+    }
+
     private fun write(block: CalendarRepository.() -> Unit) {
         services.scope.launch { services.calendar.block() }
     }
@@ -209,6 +227,13 @@ internal fun CalendarScreen(services: AppServices, nav: Navigator) {
     val today = remember { LocalDate.parse(services.today()) }
     var sheet by remember { mutableStateOf<EventSheetRequest?>(null) }
     var showCalendars by remember { mutableStateOf(false) }
+    var exporting by remember { mutableStateOf<CalendarItem?>(null) }
+    val defaultName = stringResource(Res.string.calendar_my_events)
+    val saveIcs = rememberSaveFile("text/calendar") { open ->
+        val calendar = exporting
+        exporting = null
+        if (open != null && calendar != null) vm.saveIcs(calendar, calendar.name ?: defaultName, open)
+    }
     var unfolded by remember(selected) { mutableStateOf(false) }
     val colors = remember(calendars) { calendars.associate { it.id to it.color } }
     val colorOf = { event: CalendarEvent -> colors[event.calendar] ?: defaultCalendarColor(event.calendar) }
@@ -314,6 +339,10 @@ internal fun CalendarScreen(services: AppServices, nav: Navigator) {
             onVisible = vm::setVisible,
             onSave = vm::saveCalendar,
             onDelete = vm::deleteCalendar,
+            onExport = { calendar ->
+                exporting = calendar
+                saveIcs(CalendarExport.fileName(calendar.name ?: defaultName, calendar.id))
+            },
             onDismiss = { showCalendars = false },
         )
     }

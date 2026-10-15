@@ -33,10 +33,10 @@ import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.test.waitUntilExactlyOneExists
 import androidx.compose.ui.unit.dp
 import app.benbow.client.Prompts
-import app.benbow.client.calendar.EventField
 import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.db.BenbowDb
 import app.benbow.core.calendar.CalendarKind
+import app.benbow.core.calendar.EventField
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first

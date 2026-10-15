@@ -65,7 +65,7 @@ import app.benbow.app.resources.event_title_hint
 import app.benbow.app.resources.event_write
 import app.benbow.client.calendar.CalendarEvent
 import app.benbow.client.calendar.CalendarItem
-import app.benbow.client.calendar.EventField
+import app.benbow.core.calendar.EventField
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone

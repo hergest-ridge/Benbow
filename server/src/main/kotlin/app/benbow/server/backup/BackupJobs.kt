@@ -119,7 +119,10 @@ class BackupJobs(
         return taken != null
     }
 
-    /** The calendar's pass: a verified snapshot when it changed, pruning, and its copy to `<mirror>/calendar`. */
+    /**
+     * The calendar's pass: a verified snapshot when it changed, pruning, its copy to `<mirror>/calendar`, and the
+     * `.ics` files in `export/calendars` (ADR-028).
+     */
     fun runCalendar(now: Long = System.currentTimeMillis(), reason: String = "scheduled"): Boolean {
         val store = calendar ?: return false
         val backups = store.backups ?: return false
@@ -131,6 +134,7 @@ class BackupJobs(
         if (taken != null) log.info("Calendar snapshot {} verified ({} rows)", taken.file, taken.rows.values.sum())
         backups.prune(Retention.keep(backups.history(), now))
         mirror?.let { copySnapshots(backups, it.resolve("calendar"), it.resolve("calendar").resolve("manifest.json")) }
+        if (CalendarMirror(dataDir.resolve("export").resolve("calendars")).update(store)) log.info("Calendar mirror written")
         status = status.copy(calendarSnapshotAt = backups.history().lastOrNull()?.createdAt, calendarError = null)
         return taken != null
     }

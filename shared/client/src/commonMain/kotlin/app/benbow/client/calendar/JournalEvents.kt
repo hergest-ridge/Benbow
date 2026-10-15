@@ -5,6 +5,8 @@ import app.benbow.client.START_FIELD
 import app.benbow.client.db.BenbowDb
 import app.benbow.client.decodeFields
 import app.benbow.core.calendar.CalendarKind
+import app.benbow.core.calendar.EventField
+import app.benbow.core.calendar.MY_CALENDAR
 import app.benbow.core.content.DocumentCodec
 import app.benbow.core.content.DocumentFormatException
 import app.benbow.core.content.toPlainText

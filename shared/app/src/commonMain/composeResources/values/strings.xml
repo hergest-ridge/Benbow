@@ -131,6 +131,7 @@
     <string name="feed_cards_hint">Выключите, чтобы посты шли без рамок и фото занимали всю ширину</string>
     <string name="attachment_gone">Вложение удалено</string>
     <string name="saved">Сохранено</string>
+    <string name="save_failed">Не получилось сохранить: %1$s</string>
     <string name="drop_to_attach">Отпустите, чтобы прикрепить к записи</string>
     <string name="shortcuts">Сочетания клавиш</string>
     <string name="more_shortcuts">Ctrl+N, Ctrl+F и другие</string>
@@ -345,6 +346,7 @@
     <string name="calendar_new">+ Новый календарь</string>
     <string name="calendar_name_hint">Название календаря</string>
     <string name="calendar_delete">Удалить календарь</string>
+    <string name="calendar_export">Сохранить .ics</string>
     <string name="calendar_more">ещё %1$d</string>
     <string name="calendar_until">до %1$s</string>
     <string name="trash_calendar">Календарь</string>

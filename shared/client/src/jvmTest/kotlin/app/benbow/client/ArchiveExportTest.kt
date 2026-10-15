@@ -1,6 +1,10 @@
 package app.benbow.client
 
+import app.benbow.client.calendar.CalendarRepository
+import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.db.BenbowDb
+import app.benbow.core.calendar.Ics
+import app.benbow.core.calendar.IcsTime
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -84,5 +88,26 @@ class ArchiveExportTest {
             "was left out (exported without files)" in
                 files.entries.single { it.key.endsWith(".md") && it.key != "README.md" }.value.decodeToString(),
         )
+    }
+
+    @Test
+    fun calendarsTravelAsIcsFilesAndAJson() = runTest {
+        val calendar =
+            CalendarRepository(CalendarDb(JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), CalendarDb.Schema)), { time++ })
+        calendar.createEvent("2026-10-14", "Врач", "09:30")
+        val work = calendar.createCalendar("Работа", "storm")
+        calendar.createEvent("2026-10-15", "Созвон", null, calendar = work)
+        repo.createNote("2026-10-13", "Запись")
+
+        val out = ByteArrayOutputStream()
+        ArchiveExport(db, media, calendar).write(out, withMedia = false, today = "2026-10-15")
+        val files = unzip(out.toByteArray())
+
+        val mine = Ics.parse(files.getValue("calendars/Мои события.ics").decodeToString()).single()
+        assertEquals(listOf("Врач"), mine.events.map { it.summary })
+        assertEquals(IcsTime("20261014T093000"), mine.events.single().start)
+        assertEquals("Работа", Ics.parse(files.getValue("calendars/Работа.ics").decodeToString()).single().name)
+        assertTrue("Созвон" in files.getValue("calendars/calendar.json").decodeToString())
+        assertTrue("- Calendars: 2" in files.getValue("README.md").decodeToString())
     }
 }

@@ -1,5 +1,6 @@
 package app.benbow.client
 
+import app.benbow.client.calendar.CalendarRepository
 import app.benbow.client.db.BenbowDb
 import app.benbow.core.content.EntryExport
 import app.benbow.core.sync.AttachmentState
@@ -22,10 +23,11 @@ data class ExportProgress(val done: Int, val total: Int)
 
 /**
  * The whole journal as one ZIP that needs no app (data-safety.md#backups): `entries/YYYY/MM/<day>_<id>.md` + `.json` exactly
- * like the server's mirror ([EntryExport]), the files under `media/YYYY/MM/`, and a README. Files not on this device
- * are fetched from the server; any that can't be are named in the README and in the notes, never dropped silently.
+ * like the server's mirror ([EntryExport]), the files under `media/YYYY/MM/`, the calendars under `calendars/` (ADR-028),
+ * and a README. Files not on this device are fetched from the server; any that can't be are named in the README and in
+ * the notes, never dropped silently.
  */
-class ArchiveExport(private val db: BenbowDb, private val media: MediaStore) {
+class ArchiveExport(private val db: BenbowDb, private val media: MediaStore, private val calendar: CalendarRepository? = null) {
     suspend fun write(out: OutputStream, withMedia: Boolean, today: String, onProgress: (ExportProgress) -> Unit = {}): ExportReport =
         withContext(Dispatchers.IO) {
             val entries = db.benbowQueries.exportEntries().executeAsList().map { row ->
@@ -88,7 +90,21 @@ class ArchiveExport(private val db: BenbowDb, private val media: MediaStore) {
                     zip.text(dir + EntryExport.baseName(entry) + ".json", EntryExport.sidecar(entry, body))
                     onProgress(ExportProgress(++done, total))
                 }
-                zip.text("README.md", readme(today, entries.size, placed.size, withMedia, missing))
+                val calendars = calendar?.exportFiles(System.currentTimeMillis()).orEmpty()
+                calendars.forEach { zip.text("calendars/" + it.name, it.text) }
+                zip.text(
+                    "README.md",
+                    readme(
+                        today,
+                        entries.size,
+                        placed.size,
+                        withMedia,
+                        missing,
+                        calendars.count {
+                            it.name.endsWith(".ics")
+                        },
+                    ),
+                )
             }
             ExportReport(entries.size, placed.size, missing.size)
         }
@@ -109,20 +125,27 @@ class ArchiveExport(private val db: BenbowDb, private val media: MediaStore) {
         return (name.substring(0, dot) + "-" + a.meta.sha256.take(8) + name.substring(dot)).also { taken.add(it.lowercase()) }
     }
 
-    private fun readme(today: String, entries: Int, files: Int, withMedia: Boolean, missing: List<AttachmentState>) = buildString {
-        appendLine("# Benbow export, $today")
-        appendLine()
-        appendLine("Every entry is a Markdown file under `entries/YEAR/MONTH/` with its metadata in the front matter, plus a `.json`")
-        appendLine("file next to it with the exact text (Benbow Document, docs/content-format.md) and metadata. Pictures and files")
-        appendLine("are under `media/` and linked from the notes. Nothing here needs the app to be read.")
-        appendLine()
-        appendLine("- Entries: $entries")
-        appendLine("- Files: $files" + if (withMedia) "" else " (exported without files)")
-        if (missing.isNotEmpty()) {
+    private fun readme(today: String, entries: Int, files: Int, withMedia: Boolean, missing: List<AttachmentState>, calendars: Int) =
+        buildString {
+            appendLine("# Benbow export, $today")
             appendLine()
-            appendLine("## Not included (${missing.size})")
-            appendLine("These were neither on the device nor reachable on the server at export time; the server still keeps them.")
-            missing.forEach { appendLine("- ${it.meta.name ?: it.meta.kind} (${it.meta.sha256})") }
+            appendLine("Every entry is a Markdown file under `entries/YEAR/MONTH/` with its metadata in the front matter, plus a `.json`")
+            appendLine("file next to it with the exact text (Benbow Document, docs/content-format.md) and metadata. Pictures and files")
+            appendLine("are under `media/` and linked from the notes. Nothing here needs the app to be read.")
+            appendLine()
+            appendLine("- Entries: $entries")
+            appendLine("- Files: $files" + if (withMedia) "" else " (exported without files)")
+            if (calendars > 0) {
+                appendLine(
+                    "- Calendars: $calendars, one `.ics` each under `calendars/` (any calendar app opens them; times are local, as written);",
+                )
+                appendLine("  `calendars/calendar.json` has every calendar and event as stored, deleted ones included")
+            }
+            if (missing.isNotEmpty()) {
+                appendLine()
+                appendLine("## Not included (${missing.size})")
+                appendLine("These were neither on the device nor reachable on the server at export time; the server still keeps them.")
+                missing.forEach { appendLine("- ${it.meta.name ?: it.meta.kind} (${it.meta.sha256})") }
+            }
         }
-    }
 }

@@ -4,8 +4,13 @@ import app.benbow.client.ClientJson
 import app.benbow.client.PairingException
 import app.benbow.client.RejectedOp
 import app.benbow.client.calendar.db.CalendarDb
+import app.benbow.core.calendar.CalendarExport
+import app.benbow.core.calendar.CalendarField
 import app.benbow.core.calendar.CalendarKind
 import app.benbow.core.calendar.CalendarOp
+import app.benbow.core.calendar.EventField
+import app.benbow.core.calendar.MY_CALENDAR
+import app.benbow.core.calendar.MY_CALENDAR_NAME
 import app.benbow.core.uuidV7
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
@@ -123,6 +128,22 @@ class CalendarRepository(
             it.id to decodeValues(it.fields)
         }.filter { it.second[CalendarField.DELETED] == "true" }.map { calendarItem(it.first, it.second, 0) }
     }
+
+    /** Every calendar as an `.ics` file plus `calendar.json` (ADR-028), for the archive export. */
+    fun exportFiles(now: Long): List<CalendarExport.File> = CalendarExport.files(
+        q.allCalendars().executeAsList().map { CalendarExport.Record(it.id, decodeValues(it.fields)) },
+        q.allEvents().executeAsList().map { CalendarExport.Record(it.id, decodeValues(it.fields)) },
+        MY_CALENDAR_NAME,
+        now,
+    )
+
+    /** One calendar as an `.ics` file named [name]: what it shows, in floating local times. */
+    fun exportIcs(calendar: CalendarItem, name: String, now: Long): String = CalendarExport.ics(
+        name,
+        calendar.color,
+        q.allEvents().executeAsList().filter { it.calendar == calendar.id }.map { CalendarExport.Record(it.id, decodeValues(it.fields)) },
+        now,
+    )
 
     /** Sets [fields] of a record: shown at once, sent with the next sync. Nothing to set, nothing sent. */
     fun put(kind: String, id: String, fields: Map<String, String?>) {

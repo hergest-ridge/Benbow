@@ -321,6 +321,34 @@
     <string name="event_time_hint">Время, ЧЧ:ММ</string>
     <string name="event_save">Сохранить</string>
     <string name="event_delete">Удалить</string>
+    <string name="event_new">Новое событие</string>
+    <string name="event_end_add">+ Окончание</string>
+    <string name="event_end_time_hint">До, ЧЧ:ММ</string>
+    <string name="event_end_clear">Без окончания</string>
+    <string name="event_location_hint">Место</string>
+    <string name="event_description_hint">Заметка</string>
+    <string name="event_repeat_custom">Свой повтор</string>
+    <string-array name="event_repeats">
+        <item>Не повторять</item>
+        <item>Каждый день</item>
+        <item>Каждую неделю</item>
+        <item>Каждый месяц</item>
+        <item>Каждый год</item>
+    </string-array>
+    <string name="event_write">Написать об этом</string>
+    <string name="event_pick_day">Выбрать</string>
+    <string name="event_delete_series_question">Это повторяющееся событие. Что удалить?</string>
+    <string name="event_delete_day">Только этот день</string>
+    <string name="event_delete_series">Всю серию</string>
+    <string name="calendar_calendars">Календари</string>
+    <string name="calendar_my_events">Мои события</string>
+    <string name="calendar_new">+ Новый календарь</string>
+    <string name="calendar_name_hint">Название календаря</string>
+    <string name="calendar_delete">Удалить календарь</string>
+    <string name="calendar_more">ещё %1$d</string>
+    <string name="calendar_until">до %1$s</string>
+    <string name="trash_calendar">Календарь</string>
+    <string name="trash_calendar_item">Календарь «%1$s»</string>
     <string name="previous">Назад</string>
     <string name="next">Вперёд</string>
     <string name="reminders">Напоминания</string>

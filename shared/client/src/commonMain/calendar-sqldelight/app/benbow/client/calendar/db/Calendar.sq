@@ -68,7 +68,8 @@ INSERT INTO calendar(id, fields, field_clocks, updated_at) VALUES (?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET fields = excluded.fields, field_clocks = excluded.field_clocks, updated_at = excluded.updated_at;
 
 -- Events on any day of :fromDay..:toDay (a multi-day event shows on each of its days), outside the trash.
--- All-day ones sort before timed ones of the same day ("YYYY-MM-DD" < "YYYY-MM-DDTHH:MM").
+-- All-day ones sort before timed ones of the same day ("YYYY-MM-DD" < "YYYY-MM-DDTHH:MM"). A repeating event's
+-- end_day is its rule's last day (or 9999-12-31), so it is found for every range it may show in.
 eventsBetween:
 SELECT * FROM event
 WHERE deleted = 0 AND start_day <= :toDay AND end_day >= :fromDay
@@ -76,6 +77,12 @@ ORDER BY start, id;
 
 allEvents:
 SELECT * FROM event;
+
+trashedEvents:
+SELECT * FROM event WHERE deleted = 1 ORDER BY updated_at DESC;
+
+eventCounts:
+SELECT calendar, COUNT(*) AS events FROM event WHERE deleted = 0 GROUP BY calendar;
 
 allCalendars:
 SELECT * FROM calendar;

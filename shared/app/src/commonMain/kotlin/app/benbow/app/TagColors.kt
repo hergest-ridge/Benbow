@@ -54,13 +54,20 @@ internal fun swatch(name: String?): Color? {
     return Color(if (MaterialTheme.colorScheme.background.luminance() < 0.5f) dark else light)
 }
 
+/** A calendar's mark (grid dots and bars, the day's strip): the shade that stands out against the theme. */
+@Composable
+internal fun markColor(name: String?): Color? {
+    val (light, dark) = SHADES[name] ?: return null
+    return Color(if (MaterialTheme.colorScheme.background.luminance() < 0.5f) light else dark)
+}
+
 /** A tag's chip color: its own, else its category's, else a quiet neutral. */
 @Composable
 internal fun tagColor(tag: String): Color = swatch(LocalTagLooks.current.color(tag)) ?: MaterialTheme.colorScheme.surfaceContainerHighest
 
-/** Pick one of the colors, or [noneLabel] for none (back to the default). */
+/** Pick one of the colors, or [noneLabel] for none (back to the default); without [noneLabel] a color is a must. */
 @Composable
-internal fun SwatchPicker(selected: String?, noneLabel: String, onPick: (String?) -> Unit, modifier: Modifier = Modifier) {
+internal fun SwatchPicker(selected: String?, noneLabel: String?, onPick: (String?) -> Unit, modifier: Modifier = Modifier) {
     val names = stringArrayResource(Res.array.swatch_names)
     FlowRow(
         modifier,
@@ -68,7 +75,7 @@ internal fun SwatchPicker(selected: String?, noneLabel: String, onPick: (String?
         verticalArrangement = Arrangement.spacedBy(8.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        FilterChip(selected == null, { onPick(null) }, { Text(noneLabel) })
+        if (noneLabel != null) FilterChip(selected == null, { onPick(null) }, { Text(noneLabel) })
         SWATCHES.forEachIndexed { i, name ->
             val on = name == selected
             Box(

@@ -114,6 +114,13 @@ object Templates {
         ),
     )
 
+    /** [text] as a heading and an empty line to write on: an entry about a calendar event ("Написать об этом"). */
+    fun heading(text: String, random: Random = Random.Default): String = render(
+        Template("heading", "", listOf(h2(text), p())),
+        TemplateContext("", "", "", ""),
+        random,
+    )
+
     private fun fill(text: String, c: TemplateContext) = text.replace(
         "{{date}}",
         c.date,

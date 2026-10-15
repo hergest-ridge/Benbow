@@ -16,6 +16,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.isRoot
+import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -32,12 +33,17 @@ import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.test.waitUntilExactlyOneExists
 import androidx.compose.ui.unit.dp
 import app.benbow.client.Prompts
+import app.benbow.client.calendar.EventField
 import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.db.BenbowDb
+import app.benbow.core.calendar.CalendarKind
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.plus
 import java.awt.Color
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
@@ -247,34 +253,60 @@ class AppSmokeTest {
     @Test
     fun calendarShowsTheMonthAndTakesAnEvent() = runDesktopComposeUiTest(width = 412, height = 860) {
         val today = services.today()
+        val day = { shift: Int -> LocalDate.parse(today).plus(shift, DateTimeUnit.DAY).toString() }
         val good = services.repo.createNote(today, "Хороший день")
         services.repo.setMood(good, 2)
+        val work = services.calendar.createCalendar("Работа", "storm")
+        val trip = services.calendar.createEvent(day(2), "Командировка", null, calendar = work)
+        services.calendar.put(CalendarKind.EVENT, trip, mapOf(EventField.END to day(5)))
+        val yoga = services.calendar.createEvent(day(-7), "Йога", "19:00")
+        services.calendar.put(CalendarKind.EVENT, yoga, mapOf(EventField.RRULE to "FREQ=WEEKLY"))
         setContent { BenbowApp(services) }
         waitUntilExactlyOneExists(hasText("Хороший день"), 5_000)
         onNodeWithText("Календарь").click()
         waitUntilExactlyOneExists(hasText("+ Событие"), 5_000)
         onNodeWithText("+ Событие").click()
-        waitForIdle()
+        waitUntilExactlyOneExists(hasText("Новое событие"), 5_000)
         onAllNodes(hasSetTextAction())[0].performTextInput("Врач")
         onAllNodes(hasSetTextAction())[1].performTextInput("9:30")
+        screenshot("16a-new-event")
         onNodeWithText("Добавить").click()
-        waitUntil(timeoutMillis = 5_000) { runBlocking { services.calendar.events(today, today).first().size == 1 } }
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.calendar.events(today, today).first().size == 2 } }
         waitUntilExactlyOneExists(hasText("09:30"), 5_000)
+        waitForIdle()
         screenshot("16-calendar")
 
-        // The event lives in the calendar's own file (ADR-027): it opens as an event, not as a journal entry.
+        // The event lives in the calendar's own file (ADR-027): it opens in its sheet, not as a journal entry.
         onNodeWithText("Врач").click()
         waitUntilExactlyOneExists(hasText("Сохранить"), 5_000)
         screenshot("16b-event")
         onAllNodes(hasSetTextAction() and hasText("Врач"))[0].performTextReplacement("Стоматолог")
         onNodeWithText("Сохранить").click()
         waitUntil(timeoutMillis = 5_000) {
-            runBlocking {
-                services.calendar.events(today, today).first().singleOrNull()?.title ==
-                    "Стоматолог"
-            }
+            runBlocking { services.calendar.events(today, today).first().any { it.title == "Стоматолог" } }
         }
         assertEquals(listOf("Хороший день"), runBlocking { services.repo.journal().first().map { it.title } })
+
+        // "Написать об этом": a new journal entry headed by the event's title.
+        waitUntilExactlyOneExists(hasText("Стоматолог"), 5_000)
+        onNodeWithText("Стоматолог").click()
+        waitUntilExactlyOneExists(hasText("Написать об этом"), 5_000)
+        onNodeWithText("Написать об этом").click()
+        waitUntil(timeoutMillis = 5_000) {
+            onAllNodes(hasSetTextAction() and hasText("Стоматолог", substring = true)).fetchSemanticsNodes().isNotEmpty()
+        }
+        screenshot("16d-write")
+        onNodeWithContentDescription("Назад").click()
+
+        // The calendars: a checkbox hides one on the grid.
+        waitUntilExactlyOneExists(hasContentDescription("Календари"), 5_000)
+        onNodeWithContentDescription("Календари").click()
+        waitUntilExactlyOneExists(hasText("Работа"), 5_000)
+        screenshot("16c-calendars")
+        onAllNodes(isToggleable())[1].click()
+        waitUntil(timeoutMillis = 5_000) {
+            runBlocking { services.calendar.events(day(2), day(5)).first().none { it.title == "Командировка" } }
+        }
     }
 
     @Test

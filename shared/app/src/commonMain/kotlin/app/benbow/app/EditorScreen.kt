@@ -153,7 +153,14 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
     /** Fills a new, still empty entry with a template; the draft starts right away. */
     fun applyTemplate(id: String, context: TemplateContext) {
         val template = Templates.byId(id) ?: return
-        val text = DocumentCodec.decode(Templates.render(template, context)).toRichText()
+        start(Templates.render(template, context))
+    }
+
+    /** Starts a new, still empty entry with [text] as its heading ("Написать об этом" from an event). */
+    fun applyHeading(text: String) = start(Templates.heading(text))
+
+    private fun start(body: String) {
+        val text = DocumentCodec.decode(body).toRichText()
         show(text, head = shownHead)
         session.onChange(text)
     }
@@ -555,6 +562,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
             if (editor != null && vm.isBlankNew) {
                 val context = templateContext(route.day)
                 LaunchedEffect(route.template) { route.template?.let { vm.applyTemplate(it, context) } }
+                LaunchedEffect(route.heading) { route.heading?.let(vm::applyHeading) }
                 TemplateRow { vm.applyTemplate(it, context) }
             }
             if (editor != null && !vm.broken) {

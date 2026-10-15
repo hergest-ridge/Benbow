@@ -82,8 +82,9 @@ internal sealed interface Route {
     data object Feed : Route
 
     /**
-     * [entryId] = null opens a new entry ([template] fills it); [opened] keeps two new-entry screens apart.
-     * [readOnly] opens it as a post with its comments (from the feed); the menu switches to editing.
+     * [entryId] = null opens a new entry ([template] fills it, or [heading] starts it, e.g. an event's title);
+     * [opened] keeps two new-entry screens apart. [readOnly] opens it as a post with its comments (from the feed);
+     * the menu switches to editing.
      */
     data class Editor(
         val entryId: String?,
@@ -91,6 +92,7 @@ internal sealed interface Route {
         val opened: Long = 0,
         val template: String? = null,
         val readOnly: Boolean = false,
+        val heading: String? = null,
     ) : Route
 
     data class History(val entryId: String) : Route

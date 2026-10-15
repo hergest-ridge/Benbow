@@ -120,6 +120,8 @@ class CalendarSync(private val db: CalendarDb, private val now: () -> Long) {
         while (true) {
             val page = api.calendarPull(cursor(), BATCH)
             db.transaction {
+                // The newest clock of the page is enough to keep this device's writes after everything it saw.
+                page.changes.flatMap { it.fields.values }.maxByOrNull { it.hlc }?.let { clock.observe(it.hlc) }
                 page.changes.forEach(::apply)
                 q.putValue(CURSOR, page.nextCursor.toString())
             }
@@ -129,7 +131,6 @@ class CalendarSync(private val db: CalendarDb, private val now: () -> Long) {
     }
 
     private fun apply(record: CalendarRecord) {
-        record.fields.values.forEach { clock.observe(it.hlc) }
         if (q.pendingCountFor(record.kind, record.id).executeAsOne() > 0) return // local writes win until the server has them
         db.storeRecord(record.kind, record.id, record.fields.mapValues { it.value.value }, record.fields.mapValues { it.value.hlc }, now())
     }

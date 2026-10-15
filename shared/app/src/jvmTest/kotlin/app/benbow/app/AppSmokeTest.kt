@@ -251,6 +251,39 @@ class AppSmokeTest {
     }
 
     @Test
+    fun aGoogleExportImportsWithAPreviewAndCanBeUndone() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val today = services.today()
+        val ics = { name: String, events: String -> "BEGIN:VCALENDAR\r\nX-WR-CALNAME:$name\r\n$events\r\nEND:VCALENDAR" }
+        val work = ics(
+            "Работа",
+            (1..12).joinToString("\r\n") {
+                "BEGIN:VEVENT\r\nUID:w$it\r\nSUMMARY:Созвон $it\r\nDTSTART:202610${it + 10}T100000Z\r\nEND:VEVENT"
+            },
+        )
+        val birthdays =
+            ics("Годовщины", "BEGIN:VEVENT\r\nUID:b1\r\nSUMMARY:Свадьба\r\nDTSTART;VALUE=DATE:20151103\r\nRRULE:FREQ=YEARLY\r\nEND:VEVENT")
+        val zip = java.io.ByteArrayOutputStream().also { out ->
+            java.util.zip.ZipOutputStream(out).use { z ->
+                for ((name, text) in listOf("work.ics" to work, "anniversaries.ics" to birthdays)) {
+                    z.putNextEntry(java.util.zip.ZipEntry(name))
+                    z.write(text.encodeToByteArray())
+                }
+            }
+        }.toByteArray()
+        setContent { BenbowApp(services) }
+        services.importCalendarFile("calendar-export.zip") { zip.inputStream() }
+        waitUntilExactlyOneExists(hasText("Годовщины"), 5_000)
+        screenshot("17-import-preview")
+        onNodeWithText("Перенести 13 событий").click()
+        waitUntilExactlyOneExists(hasText("Отменить импорт"), 5_000)
+        screenshot("17b-import-done")
+        assertEquals(listOf("Годовщины", "Работа"), runBlocking { services.calendar.calendars().first().drop(1).mapNotNull { it.name } })
+        onNodeWithText("Отменить импорт").click()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.calendar.calendars().first().size == 1 } }
+        assertEquals(today, services.today())
+    }
+
+    @Test
     fun calendarShowsTheMonthAndTakesAnEvent() = runDesktopComposeUiTest(width = 412, height = 860) {
         val today = services.today()
         val day = { shift: Int -> LocalDate.parse(today).plus(shift, DateTimeUnit.DAY).toString() }

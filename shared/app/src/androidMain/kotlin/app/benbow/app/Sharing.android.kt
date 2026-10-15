@@ -2,8 +2,11 @@ package app.benbow.app
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
+import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -34,6 +37,28 @@ internal actual fun rememberShare(): (String) -> Boolean {
             true
         }
     }
+}
+
+@Composable
+internal actual fun rememberOpenFile(mimes: List<String>, onPicked: (PickedFile?) -> Unit): () -> Unit {
+    val context = LocalContext.current
+    val callback by rememberUpdatedState(onPicked)
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        callback(
+            uri?.let {
+                PickedFile(context.displayName(it) ?: "calendar.ics") {
+                    context.contentResolver.openInputStream(it)
+                        ?: error("Can't read $it")
+                }
+            },
+        )
+    }
+    return { launcher.launch(mimes.toTypedArray()) }
+}
+
+/** The name the providing app gives a content URI (a file's name in Downloads, Drive, ...). */
+fun Context.displayName(uri: Uri): String? = contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+    if (it.moveToFirst()) it.getString(0) else null
 }
 
 @Composable

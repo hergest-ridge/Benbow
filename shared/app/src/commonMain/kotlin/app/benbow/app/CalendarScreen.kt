@@ -229,6 +229,12 @@ internal fun CalendarScreen(services: AppServices, nav: Navigator) {
     var showCalendars by remember { mutableStateOf(false) }
     var exporting by remember { mutableStateOf<CalendarItem?>(null) }
     val defaultName = stringResource(Res.string.calendar_my_events)
+    val openFile = rememberOpenFile(listOf("*/*")) { file ->
+        if (file != null) {
+            services.calendarImports.open(file.name, file.open)
+            nav.open(Route.CalendarImport)
+        }
+    }
     val saveIcs = rememberSaveFile("text/calendar") { open ->
         val calendar = exporting
         exporting = null
@@ -342,6 +348,10 @@ internal fun CalendarScreen(services: AppServices, nav: Navigator) {
             onExport = { calendar ->
                 exporting = calendar
                 saveIcs(CalendarExport.fileName(calendar.name ?: defaultName, calendar.id))
+            },
+            onImport = {
+                showCalendars = false
+                openFile()
             },
             onDismiss = { showCalendars = false },
         )

@@ -28,6 +28,7 @@ import app.benbow.app.resources.Res
 import app.benbow.app.resources.calendar_calendars
 import app.benbow.app.resources.calendar_delete
 import app.benbow.app.resources.calendar_export
+import app.benbow.app.resources.calendar_import
 import app.benbow.app.resources.calendar_my_events
 import app.benbow.app.resources.calendar_name_hint
 import app.benbow.app.resources.calendar_new
@@ -49,6 +50,7 @@ internal fun CalendarsSheet(
     onSave: (calendar: CalendarItem?, name: String?, color: String?) -> Unit,
     onDelete: (CalendarItem) -> Unit,
     onExport: (CalendarItem) -> Unit,
+    onImport: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     var editing by remember { mutableStateOf<CalendarItem?>(null) }
@@ -78,6 +80,7 @@ internal fun CalendarsSheet(
                 }
             }
             TextButton({ creating = true }, Modifier.padding(horizontal = 12.dp)) { Text(stringResource(Res.string.calendar_new)) }
+            TextButton(onImport, Modifier.padding(horizontal = 12.dp)) { Text(stringResource(Res.string.calendar_import)) }
         }
     }
     val target = editing

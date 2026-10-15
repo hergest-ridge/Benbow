@@ -21,6 +21,18 @@ internal actual fun rememberShare(): (String) -> Boolean = { text ->
     false
 }
 
+/** The system's open dialog; on Windows the pattern in the name field filters, elsewhere the name filter. */
+@Composable
+internal actual fun rememberOpenFile(mimes: List<String>, onPicked: (PickedFile?) -> Unit): () -> Unit = {
+    val dialog = FileDialog(null as Frame?, null, FileDialog.LOAD).apply {
+        file = "*.ics;*.zip"
+        setFilenameFilter { _, name -> name.endsWith(".ics", ignoreCase = true) || name.endsWith(".zip", ignoreCase = true) }
+        isVisible = true // modal
+    }
+    val chosen = dialog.file?.let { File(dialog.directory, it) }
+    onPicked(chosen?.let { file -> PickedFile(file.name) { file.inputStream() } })
+}
+
 @Composable
 internal actual fun rememberSaveFile(mime: String, onPicked: (open: (() -> OutputStream)?) -> Unit): (String) -> Unit = { name ->
     val dialog = FileDialog(null as Frame?, name, FileDialog.SAVE).apply {

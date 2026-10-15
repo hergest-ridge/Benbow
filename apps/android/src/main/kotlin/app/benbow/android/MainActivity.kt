@@ -10,6 +10,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.lifecycleScope
 import app.benbow.app.AppLaunch
 import app.benbow.app.BenbowApp
+import app.benbow.app.displayName
 import app.benbow.ui.theme.ThemeMode
 import kotlinx.coroutines.launch
 
@@ -45,7 +46,15 @@ class MainActivity : ComponentActivity() {
     private fun handle(intent: Intent) {
         when (intent.action) {
             Shortcuts.ACTION_NEW_ENTRY -> services.launch.value = AppLaunch.NewEntry
+
             ACTION_ANSWER_PROMPT -> services.launch.value = AppLaunch.AnswerPrompt
+
+            // "Открыть с помощью" on an .ics file: its import preview (7.3d).
+            Intent.ACTION_VIEW -> intent.data?.let { uri ->
+                services.importCalendarFile(displayName(uri) ?: "calendar.ics") {
+                    contentResolver.openInputStream(uri) ?: error("Can't read $uri")
+                }
+            }
         }
     }
 

@@ -49,8 +49,8 @@ fun interface ReminderClock {
 /** A file just attached to [entryId]: an open editor of that entry places pictures and videos in its text. */
 data class Attached(val entryId: String, val attachmentId: String, val kind: String)
 
-/** Where the app should go when something outside opens it (a launcher shortcut, the widget). */
-enum class AppLaunch { NewEntry, AnswerPrompt }
+/** Where the app should go when something outside opens it (a launcher shortcut, the widget, an .ics file). */
+enum class AppLaunch { NewEntry, AnswerPrompt, CalendarImport }
 
 /** The archive export, which runs in the app scope so leaving the screen doesn't stop it. */
 sealed interface ExportState {
@@ -108,6 +108,15 @@ class AppServices(
     private val calendarDb = CalendarDb(calendarDriver)
     val calendar = CalendarRepository(calendarDb, now)
     private val calendarSync = CalendarSync(calendarDb, now)
+
+    /** Reading and importing a calendar file (7.3d). */
+    internal val calendarImports = CalendarImports(calendar, scope)
+
+    /** Opens a calendar file from outside (Android's "Открыть с помощью"): its preview comes up. */
+    fun importCalendarFile(name: String, open: () -> java.io.InputStream) {
+        calendarImports.open(name, open)
+        launch.value = AppLaunch.CalendarImport
+    }
 
     /** The calendar's last sync, shown apart from the journal's: its trouble never fails the journal's sync. */
     val calendarStatus = MutableStateFlow<CalendarSyncResult?>(null)

@@ -145,16 +145,86 @@ class CalendarRepository(
         now,
     )
 
+    /** UIDs of the events already here, the trash included: an import leaves them out. */
+    fun knownUids(): Set<String> = q.allEvents().executeAsList().mapNotNullTo(HashSet()) { decodeValues(it.fields)[EventField.UID] }
+
+    /**
+     * Imports the chosen calendars as one batch (7.3d): each goes into the calendar of the same name, or a new one in
+     * [ImportChoice.color]; events already here (by UID) and, with [from], those over before that day are left out.
+     * Every event and new calendar carries the batch id, so [undoImport] can take them back.
+     */
+    fun import(choices: List<ImportChoice>, from: String?): ImportResult {
+        val batch = uuidV7(now())
+        val known = knownUids().toMutableSet()
+        val byName = calendarsByName()
+        val calendars = mutableListOf<Pair<String, Map<String, String?>>>()
+        val events = mutableListOf<Pair<String, Map<String, String?>>>()
+        var already = 0
+        for (choice in choices) {
+            val name = choice.calendar.name.trim()
+            val target = byName[name.lowercase()] ?: uuidV7(now()).also {
+                calendars += it to mapOf(CalendarField.NAME to name, CalendarField.COLOR to choice.color, EventField.IMPORT to batch)
+                byName[name.lowercase()] = it
+            }
+            for (event in choice.calendar.events) {
+                if (from != null && event.lastDay < from) continue
+                if (!known.add(event.uid)) {
+                    already++
+                    continue
+                }
+                events +=
+                    uuidV7(now()) to
+                    event.fields + mapOf(EventField.UID to event.uid, EventField.CALENDAR to target, EventField.IMPORT to batch)
+            }
+        }
+        putAll(CalendarKind.CALENDAR, calendars)
+        putAll(CalendarKind.EVENT, events)
+        return ImportResult(batch, events.size, calendars.size, already)
+    }
+
+    /** "Отменить импорт": the batch's events and the calendars it made go to the trash (they can come back from there). */
+    fun undoImport(batch: String): Int {
+        val trash = mapOf(EventField.DELETED to "true")
+        val events = q.allEvents().executeAsList().filter { decodeValues(it.fields)[EventField.IMPORT] == batch }.map { it.id to trash }
+        val calendars = q.allCalendars().executeAsList().filter {
+            decodeValues(it.fields)[EventField.IMPORT] == batch
+        }.map { it.id to trash }
+        putAll(CalendarKind.EVENT, events)
+        putAll(CalendarKind.CALENDAR, calendars)
+        return events.size
+    }
+
+    /** Calendars outside the trash by lowercase name; the built-in one under its default name until renamed. */
+    private fun calendarsByName(): MutableMap<String, String> {
+        val records = q.allCalendars().executeAsList().associate { it.id to decodeValues(it.fields) }
+        val names = records.filter { (_, v) -> v[CalendarField.DELETED] != "true" }
+            .mapNotNull { (id, v) -> v[CalendarField.NAME]?.takeIf { it.isNotBlank() }?.let { it.trim().lowercase() to id } }
+            .toMap(HashMap())
+        if (records[MY_CALENDAR]?.get(CalendarField.NAME).isNullOrBlank()) names.putIfAbsent(MY_CALENDAR_NAME.lowercase(), MY_CALENDAR)
+        return names
+    }
+
     /** Sets [fields] of a record: shown at once, sent with the next sync. Nothing to set, nothing sent. */
     fun put(kind: String, id: String, fields: Map<String, String?>) {
         if (fields.isEmpty()) return
-        db.transaction {
-            val hlc = CalendarClock(db, now).next()
-            val (values, clocks) = db.recordState(kind, id)
-            db.storeRecord(kind, id, values + fields, clocks + fields.mapValues { hlc }, now())
-            val op = CalendarOp(uuidV7(now()), kind, id, fields, hlc)
-            q.enqueue(op.opId, kind, id, ClientJson.encodeToString(CalendarOp.serializer(), op), now())
+        db.transaction { putInTransaction(kind, id, fields) }
+    }
+
+    /** Many records, 500 to a transaction (an import of thousands of events stays quick, the outbox gets one op each). */
+    private fun putAll(kind: String, records: List<Pair<String, Map<String, String?>>>) {
+        for (chunk in records.chunked(500)) {
+            db.transaction {
+                chunk.forEach { (id, fields) -> if (fields.isNotEmpty()) putInTransaction(kind, id, fields) }
+            }
         }
+    }
+
+    private fun putInTransaction(kind: String, id: String, fields: Map<String, String?>) {
+        val hlc = CalendarClock(db, now).next()
+        val (values, clocks) = db.recordState(kind, id)
+        db.storeRecord(kind, id, values + fields, clocks + fields.mapValues { hlc }, now())
+        val op = CalendarOp(uuidV7(now()), kind, id, fields, hlc)
+        q.enqueue(op.opId, kind, id, ClientJson.encodeToString(CalendarOp.serializer(), op), now())
     }
 
     fun pendingCount(): Flow<Long> = q.pendingCount().asFlow().mapToOne(context)

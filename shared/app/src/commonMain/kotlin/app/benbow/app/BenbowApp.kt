@@ -118,6 +118,9 @@ internal sealed interface Route {
 
     data object Trash : Route
 
+    /** A calendar file's preview and import (7.3d); the file is in [AppServices.calendarImports]. */
+    data object CalendarImport : Route
+
     data object Server : Route
 
     data object Export : Route
@@ -207,6 +210,11 @@ private fun AppRoot(services: AppServices) {
                     nav.selectTab(Route.Home)
                     val template = Templates.PROMPT.id.takeIf { request == AppLaunch.AnswerPrompt }
                     nav.open(Route.Editor(null, services.today(), opened = services.now(), template = template))
+                }
+
+                AppLaunch.CalendarImport -> {
+                    nav.selectTab(Route.Calendar)
+                    nav.open(Route.CalendarImport)
                 }
             }
         }
@@ -345,6 +353,7 @@ private fun AppNavigation(services: AppServices, backStack: SnapshotStateList<Ro
             entry<Route.Tags> { TagsScreen(services, nav) }
             entry<Route.Reminders> { RemindersScreen(services, nav, it) }
             entry<Route.Trash> { TrashScreen(services, nav) }
+            entry<Route.CalendarImport> { CalendarImportScreen(services, nav) }
             entry<Route.Server> { ServerScreen(services, nav) }
             entry<Route.Export> { ExportScreen(services, nav) }
             entry<Route.Lock> { LockSettingsScreen(services, nav) }

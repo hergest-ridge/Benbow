@@ -57,6 +57,12 @@ data class CalendarEvent(
     }
 }
 
+/** A calendar from a file and the color it gets if it becomes a new calendar here. */
+data class ImportChoice(val calendar: ImportCalendar, val color: String)
+
+/** What an import did: [already] events were here (same UID) and left out. */
+data class ImportResult(val batch: String, val events: Int, val calendars: Int, val already: Int)
+
 /** A calendar as its panel shows it; [name] null = the built-in default name. */
 data class CalendarItem(val id: String, val name: String?, val color: String, val visible: Boolean, val events: Int = 0) {
     val builtIn: Boolean get() = id == MY_CALENDAR

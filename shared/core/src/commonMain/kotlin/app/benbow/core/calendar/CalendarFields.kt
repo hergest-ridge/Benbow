@@ -21,6 +21,9 @@ object EventField {
 
     /** The ICS UID it came with (7.3d); exports keep it, so other calendars recognise the event. */
     const val UID = "uid"
+
+    /** The import batch it came in with (7.3d), so "Отменить импорт" finds it; calendars made by an import carry it too. */
+    const val IMPORT = "import"
     const val DELETED = "deleted"
 }
 

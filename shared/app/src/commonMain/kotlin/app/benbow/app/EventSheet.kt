@@ -295,7 +295,7 @@ private fun RepeatMenu(rule: String?, onPick: (String?) -> Unit) {
 /** A day from the date picker (it speaks UTC midnights). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DayPicker(initial: LocalDate, onPick: (LocalDate) -> Unit, onDismiss: () -> Unit) {
+internal fun DayPicker(initial: LocalDate, onPick: (LocalDate) -> Unit, onDismiss: () -> Unit) {
     val state = rememberDatePickerState(initialSelectedDateMillis = initial.atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds())
     DatePickerDialog(
         onDismissRequest = onDismiss,

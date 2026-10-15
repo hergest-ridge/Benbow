@@ -347,6 +347,36 @@
     <string name="calendar_name_hint">Название календаря</string>
     <string name="calendar_delete">Удалить календарь</string>
     <string name="calendar_export">Сохранить .ics</string>
+    <string name="calendar_import">Импорт из файла…</string>
+    <string name="import_title">Импорт календарей</string>
+    <string name="import_reading">Читаю файл…</string>
+    <string name="import_working">Переношу события…</string>
+    <string name="import_empty">В файле нет календарей. Подойдёт .ics или ZIP из экспорта Google Календаря.</string>
+    <string name="import_failed">Не получилось прочитать файл: %1$s</string>
+    <string name="import_hint">Отметьте календари, которые перенести. Каждый станет календарём с тем же названием; события, которые уже есть, не задвоятся. Нажатие на кружок меняет цвет.</string>
+    <string name="import_period_all">Всё</string>
+    <string name="import_period_future">Будущие</string>
+    <string name="import_period_from">С %1$s</string>
+    <plurals name="import_events">
+        <item quantity="one">%1$d событие</item>
+        <item quantity="few">%1$d события</item>
+        <item quantity="many">%1$d событий</item>
+        <item quantity="other">%1$d события</item>
+    </plurals>
+    <plurals name="import_go">
+        <item quantity="one">Перенести %1$d событие</item>
+        <item quantity="few">Перенести %1$d события</item>
+        <item quantity="many">Перенести %1$d событий</item>
+        <item quantity="other">Перенести %1$d события</item>
+    </plurals>
+    <string name="import_already">%1$d уже есть</string>
+    <string name="import_unreadable">%1$d не прочитать</string>
+    <string name="import_zones">%1$d с незнакомым поясом</string>
+    <string name="import_done">Перенесено событий: %1$d, новых календарей: %2$d.</string>
+    <string name="import_done_already">Уже были и не задвоились: %1$d.</string>
+    <string name="import_undo">Отменить импорт</string>
+    <string name="import_undone">Импорт отменён. Событий в корзине: %1$d; новые календари тоже там, их можно вернуть.</string>
+    <string name="import_finish">Готово</string>
     <string name="calendar_more">ещё %1$d</string>
     <string name="calendar_until">до %1$s</string>
     <string name="trash_calendar">Календарь</string>

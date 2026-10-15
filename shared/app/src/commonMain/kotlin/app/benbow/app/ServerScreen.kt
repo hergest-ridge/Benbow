@@ -38,6 +38,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.retry
 import app.benbow.app.resources.server
+import app.benbow.app.resources.server_calendar_problem
+import app.benbow.app.resources.server_calendar_unsupported
 import app.benbow.app.resources.server_cancel
 import app.benbow.app.resources.server_code
 import app.benbow.app.resources.server_connect
@@ -65,6 +67,7 @@ import app.benbow.app.resources.server_wrong_store
 import app.benbow.client.Connection
 import app.benbow.client.Probe
 import app.benbow.client.SyncResult
+import app.benbow.client.calendar.CalendarSyncResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -107,13 +110,14 @@ internal class ServerViewModel(private val services: AppServices) : ViewModel() 
     }
 
     fun forget() = run {
-        withContext(Dispatchers.IO) { services.pairing.forget() }
+        withContext(Dispatchers.IO) { services.forgetServer() }
         connection = null
     }
 
     fun retryRejected() {
         services.scope.launch {
             services.repo.retryRejected()
+            services.calendar.retryRejected()
             services.sync.requestSync()
         }
     }
@@ -215,7 +219,10 @@ private fun ConfirmServer(vm: ServerViewModel, probe: Probe) {
 @Composable
 private fun Paired(services: AppServices, vm: ServerViewModel, connection: Connection) {
     val status by services.sync.status.collectAsStateWithLifecycle()
-    val rejected by services.repo.rejectedOps().collectAsStateWithLifecycle(emptyList())
+    val rejectedEntries by services.repo.rejectedOps().collectAsStateWithLifecycle(emptyList())
+    val rejectedEvents by services.calendar.rejectedOps().collectAsStateWithLifecycle(emptyList())
+    val rejected = rejectedEntries + rejectedEvents
+    val calendar by services.calendarStatus.collectAsStateWithLifecycle()
     var confirmForget by remember { mutableStateOf(false) }
 
     Text(
@@ -238,6 +245,24 @@ private fun Paired(services: AppServices, vm: ServerViewModel, connection: Conne
 
         is SyncResult.Failed -> Text(
             stringResource(Res.string.server_error, last.reason),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        else -> {}
+    }
+    // The calendar syncs on its own channel (ADR-027); its trouble shows apart and never stops the journal.
+    when (val last = calendar) {
+        CalendarSyncResult.Unsupported -> Text(
+            stringResource(Res.string.server_calendar_unsupported),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        CalendarSyncResult.WrongServer -> Text(stringResource(Res.string.server_wrong_store), color = MaterialTheme.colorScheme.error)
+
+        is CalendarSyncResult.Incompatible -> Text(stringResource(Res.string.server_incompatible), color = MaterialTheme.colorScheme.error)
+
+        is CalendarSyncResult.Failed -> Text(
+            stringResource(Res.string.server_calendar_problem, last.reason),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 

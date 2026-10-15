@@ -15,12 +15,19 @@ import kotlin.io.path.exists
  * Runs with the server stopped. Nothing is deleted: the replaced files move to `db/replaced-<time>`.
  * The restored store gets an epoch past every epoch this data folder has seen, so paired devices
  * notice and re-upload what the snapshot lacks (docs/sync.md#store-identity).
+ * `--restore-calendar` does the same for the calendar file alone (ADR-027); the journal stays as it is.
  */
 object Restore {
     class Result(val snapshot: Path, val storeId: String, val epoch: Long, val replacedInto: Path?, val otherStore: Boolean)
 
-    fun run(dataDir: Path, which: String): Result {
-        val backups = Backups(dataDir)
+    /** Which live database a restore puts back: its file in `db/`, its snapshots and its high-water mark. */
+    class Target(val file: String, val backups: (Path) -> Backups, val highWater: (Path) -> HighWater)
+
+    val JOURNAL = Target("benbow.sqlite", ::Backups) { HighWater(it) }
+    val CALENDAR = Target("calendar.sqlite", { Backups.calendar(it) }) { HighWater(it, CALENDAR_HIGH_WATER) }
+
+    fun run(dataDir: Path, which: String, target: Target = JOURNAL): Result {
+        val backups = target.backups(dataDir)
         val snapshot = if (which == "latest") {
             backups.history().filter { it.verified }.maxByOrNull { it.createdAt }?.let(backups::file)
                 ?: error("No verified snapshot in ${backups.directory}")
@@ -31,12 +38,12 @@ object Restore {
         val restored = inspect(snapshot) ?: error("$snapshot is not a healthy Benbow database (integrity check failed)")
 
         val dbDir = dataDir.resolve("db").createDirectories()
-        val live = dbDir.resolve(DB_FILE)
+        val live = dbDir.resolve(target.file)
         val current = if (live.exists()) inspect(live) else null // null also when the live file is corrupt
-        val mark = HighWater(dataDir).read()
+        val mark = target.highWater(dataDir).read()
         val epoch = maxOf(restored.epoch, current?.epoch ?: 0, mark?.epoch ?: 0) + 1
 
-        val files = listOf(DB_FILE, "$DB_FILE-wal", "$DB_FILE-shm").map(dbDir::resolve).filter { it.exists() }
+        val files = listOf(target.file, "${target.file}-wal", "${target.file}-shm").map(dbDir::resolve).filter { it.exists() }
         val kept = if (files.isEmpty()) {
             null
         } else {
@@ -51,7 +58,7 @@ object Restore {
                 check(it.executeUpdate() == 1) { "store_meta.epoch missing in $snapshot" }
             }
         }
-        HighWater(dataDir).write(HighWater.Mark(restored.storeId, epoch, restored.cursor))
+        target.highWater(dataDir).write(HighWater.Mark(restored.storeId, epoch, restored.cursor))
         val otherStore = (current?.storeId ?: mark?.storeId)?.let { it != restored.storeId } == true
         return Result(snapshot, restored.storeId, epoch, kept, otherStore)
     }
@@ -76,6 +83,7 @@ object Restore {
     } catch (_: SQLException) {
         null
     }
-
-    private const val DB_FILE = "benbow.sqlite"
 }
+
+/** The calendar store's high-water mark, next to the journal's (ADR-027). */
+const val CALENDAR_HIGH_WATER = "calendar-high-water.properties"

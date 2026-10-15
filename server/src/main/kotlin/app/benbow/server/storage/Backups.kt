@@ -27,11 +27,13 @@ data class BackupRecord(
 
 /**
  * Verified SQLite snapshots (data-safety.md#backups, S9). A snapshot counts only after it was
- * reopened, passed `integrity_check` and matched the row counts of the source.
+ * reopened, passed `integrity_check` and matched the row counts of the source. The journal's live in
+ * `backups/db`, the calendar's apart in `backups/calendar` (ADR-027), each with its own manifest.
  */
-class Backups(dataDir: Path) {
-    val directory: Path = dataDir.resolve("backups").resolve("db")
-    private val manifest: Path = dataDir.resolve("backups").resolve("manifest.json")
+class Backups(val directory: Path, val manifest: Path, private val prefix: String = "benbow") {
+    /** The journal's snapshots. */
+    constructor(dataDir: Path) : this(dataDir.resolve("backups").resolve("db"), dataDir.resolve("backups").resolve("manifest.json"))
+
     private val json = Json { prettyPrint = true }
 
     /** Must be called with exclusive access to [connection] (no writes in between counting and copying). */
@@ -40,7 +42,7 @@ class Backups(dataDir: Path) {
         val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
         // Two runs in one second (button + schedule) get distinct names; nothing is ever overwritten.
         val target = generateSequence(1) { it + 1 }
-            .map { n -> directory.resolve(if (n == 1) "benbow-$stamp-$reason.sqlite" else "benbow-$stamp-$reason-$n.sqlite") }
+            .map { n -> directory.resolve(if (n == 1) "$prefix-$stamp-$reason.sqlite" else "$prefix-$stamp-$reason-$n.sqlite") }
             .first { !it.exists() }
         val expected = rowCounts(connection)
         connection.createStatement().use { it.execute("VACUUM INTO '${target.toString().replace("'", "''")}'") }
@@ -66,6 +68,14 @@ class Backups(dataDir: Path) {
     }
 
     fun file(record: BackupRecord): Path = directory.resolve(record.file)
+
+    companion object {
+        /** The calendar store's snapshots (ADR-027), never mixed with the journal's. */
+        fun calendar(dataDir: Path): Backups {
+            val directory = dataDir.resolve("backups").resolve("calendar")
+            return Backups(directory, directory.resolve("manifest.json"), "calendar")
+        }
+    }
 
     private fun verify(file: Path, expected: Map<String, Long>): Boolean =
         DriverManager.getConnection("jdbc:sqlite:file:${file.toUri().path}?mode=ro").use { c ->

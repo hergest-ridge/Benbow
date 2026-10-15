@@ -21,8 +21,11 @@ Service (run the scripts as Administrator)
   uninstall-service.cmd               removes the service and the firewall rule; data stays.
   restore-backup.cmd [latest|<file>] [data folder]
                                       stops the service, puts a verified snapshot back as the live
-                                      database (the old one is kept in dbeplaced-<time>), starts it.
+                                      database (the old one is kept in db\replaced-<time>), starts it.
                                       Paired devices re-upload what the snapshot lacks.
+  restore-calendar.cmd [latest|<file>] [data folder]
+                                      the same for the calendar file alone (ADR-027); the journal
+                                      is not touched.
   - starts automatically (delayed) after boot, restarts on failure
   - opens TCP 8765 in the Windows firewall for private networks
   - logs: <data folder>\logs (server), <install folder>\service-logs (wrapper)

@@ -1,5 +1,6 @@
 package app.benbow.core.api
 
+import app.benbow.core.calendar.CalendarInfo
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -22,4 +23,6 @@ data class ServerInfo(
     @SerialName("schema_version") val schemaVersion: Int,
     /** Latest change-log sequence (server 0.3.0+). Lower than a client's cursor means the store went back in time. */
     val cursor: Long? = null,
+    /** The calendar store, synced on its own channel (server 0.6.0+, ADR-027). */
+    val calendar: CalendarInfo? = null,
 )

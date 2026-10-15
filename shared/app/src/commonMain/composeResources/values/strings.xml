@@ -319,6 +319,8 @@
     <string name="calendar_all_day">весь день</string>
     <string name="event_title_hint">Что запланировано</string>
     <string name="event_time_hint">Время, ЧЧ:ММ</string>
+    <string name="event_save">Сохранить</string>
+    <string name="event_delete">Удалить</string>
     <string name="previous">Назад</string>
     <string name="next">Вперёд</string>
     <string name="reminders">Напоминания</string>
@@ -381,6 +383,8 @@
     <string name="server_sync_now">Синхронизировать</string>
     <string name="server_wrong_store">По этому адресу отвечает другое хранилище. Синхронизация остановлена, ваши изменения сохранены на устройстве.</string>
     <string name="server_incompatible">Версии приложения и сервера несовместимы. Обновите то, что старее; изменения ждут на устройстве.</string>
+    <string name="server_calendar_unsupported">Сервер пока без календаря: события ждут на устройстве, пока его не обновят.</string>
+    <string name="server_calendar_problem">Календарь не синхронизировался: %1$s</string>
     <string name="server_rejected_title">Сервер не принял изменения</string>
     <string name="server_rejected_hint">Они сохранены на устройстве. Повторите после обновления сервера.</string>
     <string name="server_forget">Отключить сервер</string>

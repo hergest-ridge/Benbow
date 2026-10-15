@@ -1,5 +1,7 @@
 package app.benbow.server.backup
 
+import app.benbow.server.calendar.CalendarDatabase
+import app.benbow.server.storage.Backups
 import app.benbow.server.storage.BlobStore
 import app.benbow.server.storage.Database
 import app.benbow.server.storage.SqliteSyncStore
@@ -19,20 +21,41 @@ import kotlin.io.path.name
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
 
-data class BackupStatus(val lastSnapshotAt: Long?, val lastMirrorAt: Long?, val lastExportSeq: Long, val lastError: String?)
+data class BackupStatus(
+    val lastSnapshotAt: Long?,
+    val lastMirrorAt: Long?,
+    val lastExportSeq: Long,
+    val lastError: String?,
+    /** The calendar's own snapshots (ADR-027); its failures are reported here, apart from the journal's. */
+    val calendarSnapshotAt: Long? = null,
+    val calendarError: String? = null,
+)
 
 /**
  * Periodic safety jobs: a verified snapshot when anything changed, GFS pruning, a copy to the
  * second location, and the Markdown mirror of changed entries. Failures are logged and shown on
- * the admin page; they never stop the server.
+ * the admin page; they never stop the server. The calendar store gets the same snapshots in a step of its
+ * own after the journal's: whatever happens there never stops or fails the journal's backup (ADR-027).
  */
-class BackupJobs(private val db: Database, private val dataDir: Path, private val mirror: Path?, private val blobs: BlobStore? = null) {
+class BackupJobs(
+    private val db: Database,
+    private val dataDir: Path,
+    private val mirror: Path?,
+    private val blobs: BlobStore? = null,
+    private val calendar: CalendarDatabase? = null,
+) {
     private val log = LoggerFactory.getLogger("benbow.backup")
     private val executor = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "benbow-backup").apply { isDaemon = true } }
     private val exportStateFile = dataDir.resolve("export").resolve(".last-seq")
 
     @Volatile
-    var status = BackupStatus(db.backups?.history()?.lastOrNull()?.createdAt, null, readExportSeq(), null)
+    var status = BackupStatus(
+        db.backups?.history()?.lastOrNull()?.createdAt,
+        null,
+        readExportSeq(),
+        null,
+        calendar?.backups?.history()?.lastOrNull()?.createdAt,
+    )
         private set
 
     fun start(intervalMinutes: Long) {
@@ -54,6 +77,12 @@ class BackupJobs(private val db: Database, private val dataDir: Path, private va
         } catch (e: Exception) {
             log.error("Backup run failed", e)
             status = status.copy(lastError = "${e::class.simpleName}: ${e.message}")
+        }
+        try {
+            runCalendar(reason = reason)
+        } catch (e: Exception) {
+            log.error("Calendar backup failed", e)
+            status = status.copy(calendarError = "${e::class.simpleName}: ${e.message}")
         }
     }
 
@@ -90,14 +119,36 @@ class BackupJobs(private val db: Database, private val dataDir: Path, private va
         return taken != null
     }
 
+    /** The calendar's pass: a verified snapshot when it changed, pruning, and its copy to `<mirror>/calendar`. */
+    fun runCalendar(now: Long = System.currentTimeMillis(), reason: String = "scheduled"): Boolean {
+        val store = calendar ?: return false
+        val backups = store.backups ?: return false
+        val taken = store.locked { c ->
+            val seq = store.latestCursor()
+            val last = backups.history().lastOrNull { it.verified }
+            if (last != null && last.seq >= seq) null else backups.snapshot(c, reason, seq)
+        }
+        if (taken != null) log.info("Calendar snapshot {} verified ({} rows)", taken.file, taken.rows.values.sum())
+        backups.prune(Retention.keep(backups.history(), now))
+        mirror?.let { copySnapshots(backups, it.resolve("calendar"), it.resolve("calendar").resolve("manifest.json")) }
+        status = status.copy(calendarSnapshotAt = backups.history().lastOrNull()?.createdAt, calendarError = null)
+        return taken != null
+    }
+
     /** Copies snapshots missing in the mirror (verified by SHA-256) and prunes ones the source pruned. */
     private fun copyToMirror(): Boolean {
         val target = mirror ?: return false
-        if (!target.isAbsolute) {
-            error("backup.mirror must be an absolute path (use / in benbow.properties), got '$target'")
-        }
-        val dir = target.resolve("db").createDirectories()
         val backups = db.backups ?: return false
+        copySnapshots(backups, target.resolve("db"), target.resolve("manifest.json"))
+        return true
+    }
+
+    /** Verified copies of [backups]' snapshots in [dir] (a folder of their own), then their manifest. */
+    private fun copySnapshots(backups: Backups, dir: Path, manifestCopy: Path) {
+        if (!dir.isAbsolute) {
+            error("backup.mirror must be an absolute path (use / in benbow.properties), got '$mirror'")
+        }
+        dir.createDirectories()
         val wanted = backups.history().filter { it.verified }.map { it.file }.toSet()
         for (name in wanted) {
             val source = backups.directory.resolve(name)
@@ -109,12 +160,7 @@ class BackupJobs(private val db: Database, private val dataDir: Path, private va
             Files.move(tmp, copy, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
         }
         dir.listDirectoryEntries("*.sqlite").filter { it.name !in wanted }.forEach(Files::delete)
-        Files.copy(
-            dataDir.resolve("backups").resolve("manifest.json"),
-            target.resolve("manifest.json"),
-            StandardCopyOption.REPLACE_EXISTING,
-        )
-        return true
+        Files.copy(backups.manifest, manifestCopy, StandardCopyOption.REPLACE_EXISTING)
     }
 
     /** Copies media files missing in the mirror (immutable, so presence + hash is enough). Never deletes there. */

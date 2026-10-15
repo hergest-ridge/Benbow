@@ -1,0 +1,125 @@
+-- The calendar's own file on the device (ADR-027): a cache of the server's calendar store plus this device's outbox.
+-- Calendar code never opens the journal's file. An outbox row is deleted only after the server acknowledged it (S5).
+
+CREATE TABLE calendar (
+    id TEXT NOT NULL PRIMARY KEY,
+    fields TEXT NOT NULL DEFAULT '{}',
+    -- HLC of each field value, so a re-push after a server restore keeps last-writer-wins correct.
+    field_clocks TEXT NOT NULL DEFAULT '{}',
+    updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE event (
+    id TEXT NOT NULL PRIMARY KEY,
+    fields TEXT NOT NULL DEFAULT '{}',
+    field_clocks TEXT NOT NULL DEFAULT '{}',
+    -- Derived from fields on every write, so the calendar's queries read no JSON.
+    calendar TEXT NOT NULL,
+    title TEXT NOT NULL,
+    start TEXT,
+    start_day TEXT,
+    end_day TEXT,
+    deleted INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX event_by_days ON event(start_day, end_day);
+
+CREATE TABLE outbox (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    op_id TEXT NOT NULL UNIQUE,
+    kind TEXT NOT NULL,
+    record_id TEXT NOT NULL,
+    op TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    state TEXT NOT NULL DEFAULT 'pending',
+    last_error TEXT
+);
+
+CREATE INDEX outbox_by_record ON outbox(kind, record_id, state);
+
+CREATE TABLE kv (
+    key TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+selectEvent:
+SELECT * FROM event WHERE id = ?;
+
+selectCalendar:
+SELECT * FROM calendar WHERE id = ?;
+
+upsertEvent:
+INSERT INTO event(id, fields, field_clocks, calendar, title, start, start_day, end_day, deleted, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(id) DO UPDATE SET
+    fields = excluded.fields,
+    field_clocks = excluded.field_clocks,
+    calendar = excluded.calendar,
+    title = excluded.title,
+    start = excluded.start,
+    start_day = excluded.start_day,
+    end_day = excluded.end_day,
+    deleted = excluded.deleted,
+    updated_at = excluded.updated_at;
+
+upsertCalendar:
+INSERT INTO calendar(id, fields, field_clocks, updated_at) VALUES (?, ?, ?, ?)
+ON CONFLICT(id) DO UPDATE SET fields = excluded.fields, field_clocks = excluded.field_clocks, updated_at = excluded.updated_at;
+
+-- Events on any day of :fromDay..:toDay (a multi-day event shows on each of its days), outside the trash.
+-- All-day ones sort before timed ones of the same day ("YYYY-MM-DD" < "YYYY-MM-DDTHH:MM").
+eventsBetween:
+SELECT * FROM event
+WHERE deleted = 0 AND start_day <= :toDay AND end_day >= :fromDay
+ORDER BY start, id;
+
+allEvents:
+SELECT * FROM event;
+
+allCalendars:
+SELECT * FROM calendar;
+
+eventCount:
+SELECT COUNT(*) FROM event;
+
+clearRecords {
+    DELETE FROM event;
+    DELETE FROM calendar;
+}
+
+enqueue:
+INSERT INTO outbox(op_id, kind, record_id, op, created_at) VALUES (?, ?, ?, ?, ?);
+
+pendingOps:
+SELECT * FROM outbox WHERE state = 'pending' ORDER BY seq LIMIT ?;
+
+acknowledge:
+DELETE FROM outbox WHERE op_id = ? AND state = 'pending';
+
+reject:
+UPDATE outbox SET state = 'rejected', last_error = ? WHERE op_id = ?;
+
+pendingCountFor:
+SELECT COUNT(*) FROM outbox WHERE kind = ? AND record_id = ? AND state = 'pending';
+
+pendingCount:
+SELECT COUNT(*) FROM outbox WHERE state = 'pending';
+
+rejectedCount:
+SELECT COUNT(*) FROM outbox WHERE state = 'rejected';
+
+rejectedOps:
+SELECT * FROM outbox WHERE state = 'rejected' ORDER BY seq;
+
+retryRejected:
+UPDATE outbox SET state = 'pending', last_error = NULL WHERE state = 'rejected';
+
+getValue:
+SELECT value FROM kv WHERE key = ?;
+
+putValue:
+INSERT INTO kv(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+
+deleteValue:
+DELETE FROM kv WHERE key = ?;

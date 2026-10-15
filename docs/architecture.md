@@ -22,6 +22,7 @@
                                                             ▼
                          benbow-server (Windows service, Ktor/JVM)
                          ├─ <data>/db/benbow.sqlite   (WAL, synchronous=FULL)
+                         ├─ <data>/db/calendar.sqlite (the calendar's own store, ADR-027)
                          ├─ <media root>/YYYY/MM/...  (user-chosen folder, immutable files)
                          ├─ <data>/backups/           (verified snapshots, GFS retention)
                          ├─ <backup target>/          (second disk / NAS / cloud folder mirror)

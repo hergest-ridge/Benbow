@@ -1,0 +1,147 @@
+package app.benbow.server
+
+import app.benbow.core.calendar.CalendarKind
+import app.benbow.core.calendar.CalendarOp
+import app.benbow.core.calendar.CalendarRules
+import app.benbow.core.sync.CreateEntry
+import app.benbow.core.sync.Hlc
+import app.benbow.core.sync.SyncRules
+import app.benbow.server.backup.BackupJobs
+import app.benbow.server.calendar.CalendarDatabase
+import app.benbow.server.calendar.SqliteCalendarStore
+import app.benbow.server.storage.CALENDAR_HIGH_WATER
+import app.benbow.server.storage.Database
+import app.benbow.server.storage.HighWater
+import app.benbow.server.storage.Restore
+import app.benbow.server.storage.SqliteSyncStore
+import app.benbow.testing.CalendarSimulation
+import io.kotest.property.Arb
+import io.kotest.property.arbitrary.long
+import io.kotest.property.checkAll
+import kotlinx.coroutines.test.runTest
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import kotlin.io.path.exists
+import kotlin.io.path.listDirectoryEntries
+import kotlin.io.path.name
+import kotlin.io.path.readBytes
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+
+/** The calendar store beside the journal (ADR-027): its own file, snapshots, restore and epoch. */
+class CalendarStoreTest {
+    private val dir = Files.createTempDirectory("benbow-calendar")
+
+    private fun event(op: String, title: String, wall: Long, id: String = "e1") =
+        CalendarOp(op, CalendarKind.EVENT, id, mapOf("title" to title, "start" to "2026-10-14"), Hlc(wall, 0, "phone"))
+
+    @Test
+    fun calendarSimulationHoldsOnSqlite() = runTest {
+        val simulation = CalendarSimulation { SqliteCalendarStore(CalendarDatabase.inMemory()) }
+        checkAll(150, Arb.long()) { seed -> simulation.run(seed) }
+        simulation.assertRetriesCovered()
+    }
+
+    @Test
+    fun theCalendarHasItsOwnFileAndRefusesAnotherStoresFile() {
+        val storeId = Database.open(dir, "0.6.0").use { it.storeId }
+        CalendarDatabase.open(dir, "0.6.0", storeId).use { calendar ->
+            assertEquals(storeId, calendar.storeId)
+            assertEquals(1, calendar.epoch)
+            CalendarRules(SqliteCalendarStore(calendar)).push(listOf(event("o1", "Врач", 1)))
+        }
+        assertTrue(dir.resolve("db/calendar.sqlite").exists())
+        CalendarDatabase.open(dir, "0.7.0", storeId).close()
+        assertEquals(
+            listOf("calendar"),
+            dir.resolve("backups/calendar").listDirectoryEntries("*.sqlite").map { it.name.substringBefore('-') },
+            "a new server version snapshots the calendar first, in its own folder",
+        )
+        assertFalse(dir.resolve("backups/db").exists(), "and leaves the journal's snapshots alone")
+        assertFailsWith<IllegalStateException> { CalendarDatabase.open(dir, "0.7.0", "another-store") }
+        Database.open(dir, "0.7.0").close() // the journal opens whatever the calendar file is
+    }
+
+    @Test
+    fun calendarSnapshotsLiveApartAndItsFailureNeverStopsTheJournal() {
+        val mirror = Files.createTempDirectory("benbow-calendar-mirror")
+        val db = Database.open(dir, "test")
+        val calendar = CalendarDatabase.open(dir, "test", db.storeId)
+        val jobs = BackupJobs(db, dir, mirror, calendar = calendar)
+        SyncRules(SqliteSyncStore(db)).push(listOf(CreateEntry("j1", "entry-1", "journal", "2026-10-15", 1)))
+        CalendarRules(SqliteCalendarStore(calendar)).push(listOf(event("c1", "Врач", 1)))
+
+        jobs.runNow()
+        assertNotNull(jobs.status.calendarSnapshotAt)
+        assertEquals(null, jobs.status.calendarError)
+        assertEquals(1, mirror.resolve("calendar").listDirectoryEntries("*.sqlite").size)
+        assertTrue(mirror.resolve("calendar/manifest.json").exists())
+        assertFalse(jobs.runCalendar(), "nothing changed: no new calendar snapshot")
+        assertEquals(1, mirror.resolve("db").listDirectoryEntries("*.sqlite").size, "the journal's copies sit in their own folder")
+
+        calendar.close() // the calendar breaks
+        SyncRules(SqliteSyncStore(db)).push(listOf(CreateEntry("j2", "entry-2", "journal", "2026-10-15", 2)))
+        Thread.sleep(1_100) // snapshot names have second resolution
+        jobs.runNow()
+        assertNotNull(jobs.status.calendarError)
+        assertEquals(null, jobs.status.lastError)
+        assertEquals(2, db.backups!!.history().size, "the journal still got its snapshot")
+        assertEquals(1, mirror.resolve("calendar").listDirectoryEntries("*.sqlite").size, "the journal's run keeps the calendar's copies")
+        db.close()
+    }
+
+    @Test
+    fun restoringTheCalendarLeavesTheJournalAsItIs() {
+        val db = Database.open(dir, "test")
+        val storeId = db.storeId
+        HighWater(dir).check(db)
+        db.close()
+        val journalBefore = dir.resolve("db/benbow.sqlite").readBytes()
+        val calendar = CalendarDatabase.open(dir, "test", storeId)
+        val highWater = HighWater(dir, CALENDAR_HIGH_WATER)
+        highWater.check(calendar)
+        val rules = CalendarRules(SqliteCalendarStore(calendar))
+        rules.push(listOf(event("o1", "Врач", 1)))
+        calendar.locked { calendar.backups!!.snapshot(it, "drill", calendar.latestCursor()) }
+        rules.push(listOf(event("o2", "Стоматолог", 2)))
+        highWater.record(calendar)
+        calendar.close()
+
+        val result = Restore.run(dir, "latest", Restore.CALENDAR)
+        assertEquals(2, result.epoch)
+        assertTrue(result.replacedInto!!.resolve("calendar.sqlite").exists(), "the replaced calendar is kept")
+        assertTrue(journalBefore.contentEquals(dir.resolve("db/benbow.sqlite").readBytes()), "the journal file is untouched")
+        CalendarDatabase.open(dir, "test", storeId).use { restored ->
+            assertEquals(2, restored.epoch)
+            assertFalse(highWater.check(restored), "a proper restore needs no second bump")
+            val title = SqliteCalendarStore(restored).record(CalendarKind.EVENT, "e1")!!.fields.getValue("title").value
+            assertEquals("Врач", title)
+        }
+        Database.open(dir, "test").use { assertEquals(1, it.epoch, "the journal's epoch stays") }
+    }
+
+    @Test
+    fun aCalendarFileCopiedBackByHandIsNoticedAtStartup() {
+        val storeId = Database.open(dir, "test").use { it.storeId }
+        val highWater = HighWater(dir, CALENDAR_HIGH_WATER)
+        val old = Files.createTempFile("calendar", ".sqlite")
+        CalendarDatabase.open(dir, "test", storeId).use { calendar ->
+            highWater.check(calendar)
+            CalendarRules(SqliteCalendarStore(calendar)).push(listOf(event("o1", "Врач", 1)))
+            calendar.locked { calendar.backups!!.snapshot(it, "drill", calendar.latestCursor()) }
+            Files.copy(calendar.backups!!.file(calendar.backups!!.history().last()), old, StandardCopyOption.REPLACE_EXISTING)
+            CalendarRules(SqliteCalendarStore(calendar)).push(listOf(event("o2", "Стоматолог", 2)))
+            highWater.record(calendar)
+        }
+        Files.copy(old, dir.resolve("db/calendar.sqlite"), StandardCopyOption.REPLACE_EXISTING)
+        listOf("calendar.sqlite-wal", "calendar.sqlite-shm").forEach { Files.deleteIfExists(dir.resolve("db").resolve(it)) }
+        CalendarDatabase.open(dir, "test", storeId).use { reopened ->
+            assertTrue(highWater.check(reopened))
+            assertEquals(2, reopened.epoch)
+        }
+    }
+}

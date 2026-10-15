@@ -157,9 +157,11 @@ SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, 
 WHERE json_extract(fields, '$.favorite') = 'true' AND day <= :lastDay AND json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system', 'event', 'reminder')
 ORDER BY day;
 
+-- Days with writing: reminders (and pre-7.3a events) aren't writing.
 daysWritten:
 SELECT COUNT(DISTINCT day) FROM entry
-WHERE (day BETWEEN :fromDay AND :toDay) AND json_extract(fields, '$.deleted') IS NOT 'true' AND kind != 'system';
+WHERE (day BETWEEN :fromDay AND :toDay) AND json_extract(fields, '$.deleted') IS NOT 'true'
+  AND kind NOT IN ('system', 'event', 'reminder');
 
 -- Feed: newest first (the list is drawn bottom-up), with bodies to show notes in full.
 feed:
@@ -195,11 +197,10 @@ WHERE (day BETWEEN :fromDay AND :toDay) AND json_extract(fields, '$.deleted') IS
   AND kind NOT IN ('comment', 'system', 'event', 'reminder')
 GROUP BY day;
 
--- Events (kind "event"): the title is the text, "start" is "YYYY-MM-DD" (all day) or "YYYY-MM-DDTHH:MM".
-events:
-SELECT id, day, title, json_extract(fields, '$.start') AS start FROM entry
-WHERE kind = 'event' AND (day BETWEEN :fromDay AND :toDay) AND json_extract(fields, '$.deleted') IS NOT 'true'
-ORDER BY day, start;
+-- Events made before 7.3a (kind "event", the text is the title): moved once to the calendar's own file (ADR-027).
+journalEvents:
+SELECT id, day, body, fields FROM entry
+WHERE kind = 'event' AND json_extract(fields, '$.deleted') IS NOT 'true';
 
 -- Reminders (5.2): kind "reminder", text = message, fields at = "YYYY-MM-DDTHH:MM", repeat = daily|weekly, done.
 reminders:

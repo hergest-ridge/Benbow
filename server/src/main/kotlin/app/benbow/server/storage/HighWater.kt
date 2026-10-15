@@ -14,10 +14,10 @@ import kotlin.io.path.outputStream
  * put back in time by copying a file instead of `--restore` is noticed at startup and gets a new epoch,
  * so devices reconcile instead of trusting cursors that now point at reused change numbers (S11).
  */
-class HighWater(dataDir: Path) {
+class HighWater(dataDir: Path, name: String = "high-water.properties") {
     data class Mark(val storeId: String, val epoch: Long, val cursor: Long)
 
-    private val file = dataDir.resolve("db").resolve("high-water.properties")
+    private val file = dataDir.resolve("db").resolve(name)
 
     fun read(): Mark? {
         if (!file.exists()) return null
@@ -28,7 +28,7 @@ class HighWater(dataDir: Path) {
     @Synchronized
     fun write(mark: Mark) {
         file.parent.createDirectories()
-        val tmp = file.resolveSibling("high-water.properties.tmp")
+        val tmp = file.resolveSibling("${file.fileName}.tmp")
         val props = Properties().apply {
             setProperty("store_id", mark.storeId)
             setProperty("epoch", mark.epoch.toString())
@@ -38,10 +38,10 @@ class HighWater(dataDir: Path) {
         Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
     }
 
-    fun record(db: Database) = write(Mark(db.storeId, db.epoch, db.latestCursor()))
+    fun record(db: EpochStore) = write(Mark(db.storeId, db.epoch, db.latestCursor()))
 
     /** At startup: moves [db] to a new epoch if it is behind what this store already reached. Returns true if it did. */
-    fun check(db: Database): Boolean {
+    fun check(db: EpochStore): Boolean {
         val mark = read()
         val behind = mark != null &&
             mark.storeId == db.storeId &&

@@ -23,9 +23,12 @@ Losing or corrupting data is unacceptable from v1. Every storage, sync, migratio
   benbow.properties          config (host, port, TLS keystore password)
   tls/server.keystore        self-signed certificate (back it up: clients pin its fingerprint)
   db/benbow.sqlite(-wal,-shm)
+  db/calendar.sqlite(-wal,-shm)   calendar store (ADR-027, 7.3a), never mixed with the journal
+  db/calendar-high-water.properties   the calendar's own high-water mark
   tmp/uploads/               in-progress resumable uploads
   thumbs/                    derived previews (regenerable, not backed up)
   backups/db/                verified DB snapshots
+  backups/calendar/          the calendar's verified snapshots and their own manifest.json
   backups/manifest.json      backup history + verification results
   export/                    human-readable Markdown mirror (see below)
   logs/
@@ -43,6 +46,7 @@ Media paths are human-readable on purpose: if the app ever dies, the files can s
 - **Export mirror:** periodic export of every entry to `export/YYYY/MM/YYYY-MM-DD HHmm <title>.md` (rich Markdown with YAML front matter: id, kind, day, tags, mood, favorite, attachments as relative links) **plus** a `.json` sidecar with the canonical Document and metadata (lossless). This is the disaster-recovery format that needs no app. Optionally a local git repo for free history.
 - **Archive export from the app** (6.3): "Ещё → Экспорт" writes one ZIP wherever the user picks: `entries/YYYY/MM/` in exactly the mirror's format (`EntryExport` in shared/core, used by both), the files under `media/YYYY/MM/` (original names, de-duplicated by hash), and a README with counts. Left-over drafts are committed first. Files not on the device are fetched from the server; any that can't be are named in the README and as a comment in the note, never dropped silently. Read-only otherwise.
 - **Status visible:** the admin page and the client settings show last backup time, last verification, and last mirror sync. The UI warns if the latest backup is older than 48 hours.
+- **Calendar (ADR-027, 7.3a):** `calendar.sqlite` gets its own snapshots in `backups/calendar/` (`calendar-YYYYMMDD-HHMMSS-<reason>.sqlite` and a manifest of their own) with the same verification (S9), GFS retention, pre-migration and pre-update snapshots, and a copy to `<backup.mirror>/calendar/`. It runs as a step of its own after the journal's: its failure shows apart on the admin page and never stops or fails the journal's snapshot. From 7.3c the mirror and the app's ZIP get `calendars/<name>.ics`, one file per calendar, readable by any calendar app.
 
 Implemented (server 0.2.0): `Backups` (VACUUM INTO + reopen + integrity_check + row-count match, manifest.json), `BackupJobs` (snapshot on change every `backup.intervalMinutes`, `Retention` GFS pruning, verified SHA-256 copy to `backup.mirror`, Markdown mirror in `<data>/export`), pre-migration and pre-update snapshots in `Database.open`, revisions protected by SQLite triggers (no UPDATE/DELETE). Config paths in `benbow.properties` must use `/` (Java properties treat `\` as an escape); a relative mirror path is rejected.
 
@@ -62,10 +66,18 @@ Implemented (server 0.2.0): `Backups` (VACUUM INTO + reopen + integrity_check + 
 - Exclude the DB from Android Auto Backup. Restoring a stale cache onto a new phone would confuse sync. Device recovery happens through a fresh pull.
 - Every device cache doubles as a partial backup. After a server restore, clients can re-upload what the server lacks (see `sync.md`).
 
+## Calendar store (ADR-027, 7.3a)
+Events matter less than entries and will outnumber them, so they live in their own files (server `calendar.sqlite`, client `calendar.db`) and calendar code never opens the journal DB. The one exception is moving the 5.1 events (`moveJournalEvents`, on every start, idempotent): it reads them and only trashes the old entries (soft delete).
+- The calendar file carries the journal's store id; a file of another store is refused. If it doesn't open (corrupt, another store's), the server logs it, the admin page says so and the journal runs as usual.
+- Kept: S2 atomicity, S3 durability (WAL + `synchronous=FULL` on both sides, since the outbox lives only there), S4 idempotency, S5 nothing silently dropped, S6 soft delete (calendar trash, explicit purge), S9 verified backups, S10 safe migrations (own `user_version`, snapshot before migrating), S11 (own epoch), unknown fields survive.
+- Not applied: S1 and S8. Fields are LWW without revisions, so concurrent offline edits of the same field keep the later one. That is acceptable for events, and an imported calendar can always be imported again from its file.
+- The client's `calendar.db` is excluded from Android Auto Backup like the journal DB.
+
 ## Disaster recovery runbook
 1. Server DB corrupt or a bad change → run `restore-backup.cmd` as Administrator (default: newest verified snapshot; or `restore-backup.cmd <file>`; snapshots from the mirror work too). It stops the service, moves the current DB to `<data>/db/replaced-<time>` (nothing is deleted), puts the snapshot in place with a new epoch and starts the service. Paired devices see the new epoch and reconcile: they re-upload entries, head revisions and field values the snapshot lacks; a lost edit of an entry that exists in the snapshot comes back as a second head (conflict) for the user to pick. Copying a snapshot by hand also works: `db/high-water.properties` lets the server notice the regression at startup and bump the epoch itself.
 2. PC dead → install the server on a new PC → point it at the backup target → restore → re-pair devices.
 3. App unusable → the Markdown mirror plus the media folder are readable as plain files.
+4. Calendar file corrupt or a bad calendar change → run `restore-calendar.cmd` as Administrator (`--restore-calendar latest|<file>`): only `calendar.sqlite` goes back (the replaced one moves to `db/replaced-<time>`), the journal stays as it is. The calendar epoch goes up and devices re-push what they have. Last resort: import the calendars again from their `.ics` files (7.3d).
 
 ## Drills
 Automated (run by `./gradlew check`): client kill mid-typing (`DraftSessionTest`), leftover drafts at startup, lost request/response (`ClientSyncTest`), server restore healed by device caches (`ClientSyncTest`, `EndToEndTest.restoredServerIsHealedByThePhone` over real HTTPS), restore tool and hand-copied DB detection (`RestoreTest`).

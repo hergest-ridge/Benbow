@@ -37,6 +37,8 @@ class HomeTest {
         assertEquals(listOf("Свежее избранное"), repo.withDrafts().first().map { it.title })
         assertEquals(listOf("Старое избранное"), repo.favoritesUpTo("2026-09-13").first().map { it.title }, "resurfacing skips recent ones")
         assertEquals(2, repo.daysWritten("2026-10-01", "2026-10-31").first(), "distinct days, not entries")
+        repo.createReminder("Позвонить маме", "2026-10-20T18:00", null)
+        assertEquals(2, repo.daysWritten("2026-10-01", "2026-10-31").first(), "a reminder isn't writing")
         repo.commitDraft(b)
         assertEquals(emptyList(), repo.withDrafts().first())
     }

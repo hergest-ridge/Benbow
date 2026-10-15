@@ -12,10 +12,16 @@ import app.benbow.core.api.SpeechModelInfo
 import app.benbow.core.api.SpeechModelSpec
 import app.benbow.core.api.UploadStart
 import app.benbow.core.api.UploadStatus
+import app.benbow.core.calendar.CalendarInfo
+import app.benbow.core.calendar.CalendarProtocol
+import app.benbow.core.calendar.CalendarPushRequest
+import app.benbow.core.calendar.CalendarRules
 import app.benbow.core.sync.SyncRules
 import app.benbow.server.SERVER_VERSION
 import app.benbow.server.SpeechModel
 import app.benbow.server.backup.BackupStatus
+import app.benbow.server.calendar.CalendarDatabase
+import app.benbow.server.calendar.SqliteCalendarStore
 import app.benbow.server.storage.BlobStore
 import app.benbow.server.storage.Database
 import app.benbow.server.storage.Devices
@@ -75,6 +81,10 @@ class ServerContext(
     val blobs: BlobStore? = null,
     /** The speech-recognition model phones fetch from here (7.6); null in tests that don't need it. */
     val speech: SpeechModel? = null,
+    /** The calendar store (ADR-027); null when it didn't open: the journal works without it. */
+    val calendar: CalendarDatabase? = null,
+    /** The calendar's own high-water mark, updated after every calendar push. */
+    val calendarHighWater: HighWater? = null,
 )
 
 data class DevicePrincipal(val deviceId: String)
@@ -82,6 +92,7 @@ data class DevicePrincipal(val deviceId: String)
 private const val MAX_OPS_PER_PUSH = 500
 private const val MAX_PULL_LIMIT = 500
 private const val MAX_RECONCILE = 2_000
+private val NO_CALENDAR = ApiError("no_calendar", "The calendar store is off on this server; see its log")
 
 // KDoc on routes feeds the generated OpenAPI summaries, so ktlint's "no KDoc in blocks" rule is off here.
 @Suppress("ktlint:standard:kdoc")
@@ -111,6 +122,7 @@ fun Application.benbowModule(ctx: ServerContext) {
                         ctx.db.epoch,
                         Migrations.SCHEMA_VERSION,
                         ctx.db.latestCursor(),
+                        ctx.calendar?.let { CalendarInfo(CalendarProtocol.VERSION, it.epoch, it.latestCursor()) },
                     ),
                 )
             }
@@ -171,6 +183,40 @@ fun Application.benbowModule(ctx: ServerContext) {
                     val cursor = call.request.queryParameters["cursor"]?.toLongOrNull() ?: 0
                     val limit = (call.request.queryParameters["limit"]?.toIntOrNull() ?: 200).coerceIn(1, MAX_PULL_LIMIT)
                     call.respond(SyncRules(SqliteSyncStore(ctx.db)).pull(cursor, limit))
+                }
+
+                /**
+                 * Applies the device's calendar ops in order, each in its own transaction; repeats are no-ops.
+                 * The calendar is a store of its own beside the journal (ADR-027).
+                 */
+                post("/calendar/push") {
+                    val calendar = ctx.calendar ?: return@post call.respond(HttpStatusCode.ServiceUnavailable, NO_CALENDAR)
+                    val request = call.receive<CalendarPushRequest>()
+                    if (request.protocol != CalendarProtocol.VERSION) {
+                        call.respond(
+                            HttpStatusCode.Conflict,
+                            ApiError("protocol", "Server speaks calendar protocol ${CalendarProtocol.VERSION}"),
+                        )
+                        return@post
+                    }
+                    if (request.ops.size > MAX_OPS_PER_PUSH) {
+                        call.respond(HttpStatusCode.PayloadTooLarge, ApiError("too_many_ops", "At most $MAX_OPS_PER_PUSH ops per push"))
+                        return@post
+                    }
+                    val device = call.principal<DevicePrincipal>()!!.deviceId
+                    val results = CalendarRules(SqliteCalendarStore(calendar, device)).push(request.ops)
+                    ctx.calendarHighWater?.record(calendar)
+                    call.respond(PushResponse(results))
+                }
+
+                /**
+                 * Calendars and events changed after the cursor, oldest change first.
+                 */
+                get("/calendar/pull") {
+                    val calendar = ctx.calendar ?: return@get call.respond(HttpStatusCode.ServiceUnavailable, NO_CALENDAR)
+                    val cursor = call.request.queryParameters["cursor"]?.toLongOrNull() ?: 0
+                    val limit = (call.request.queryParameters["limit"]?.toIntOrNull() ?: 200).coerceIn(1, MAX_PULL_LIMIT)
+                    call.respond(CalendarRules(SqliteCalendarStore(calendar)).pull(cursor, limit))
                 }
 
                 /**

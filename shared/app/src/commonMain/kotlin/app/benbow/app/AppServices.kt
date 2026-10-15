@@ -16,6 +16,11 @@ import app.benbow.client.SpeechModelStore
 import app.benbow.client.SyncController
 import app.benbow.client.SyncEngine
 import app.benbow.client.SyncResult
+import app.benbow.client.calendar.CalendarRepository
+import app.benbow.client.calendar.CalendarSync
+import app.benbow.client.calendar.CalendarSyncResult
+import app.benbow.client.calendar.db.CalendarDb
+import app.benbow.client.calendar.moveJournalEvents
 import app.benbow.client.db.BenbowDb
 import app.benbow.client.upcoming
 import app.benbow.core.api.SpeechModelFile
@@ -28,6 +33,7 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.OutputStream
@@ -69,10 +75,12 @@ sealed interface AppMessage {
 
 /**
  * Everything the screens need, created once per process by the platform app (it supplies the SQLite
- * driver). Writes run in [scope], which outlives screens, so a closing editor still gets its commit.
+ * drivers: the journal's file and the calendar's own, ADR-027). Writes run in [scope], which outlives
+ * screens, so a closing editor still gets its commit.
  */
 class AppServices(
     driver: SqlDriver,
+    calendarDriver: SqlDriver,
     mediaDir: File,
     val platform: String,
     val deviceName: String,
@@ -95,11 +103,17 @@ class AppServices(
     val history = ServerHistory(db, apis)
     val media = MediaStore(mediaDir, db, apis, now)
     private val engine = SyncEngine(db, apis, now)
+    private val calendarDb = CalendarDb(calendarDriver)
+    val calendar = CalendarRepository(calendarDb, now)
+    private val calendarSync = CalendarSync(calendarDb, now)
+
+    /** The calendar's last sync, shown apart from the journal's: its trouble never fails the journal's sync. */
+    val calendarStatus = MutableStateFlow<CalendarSyncResult?>(null)
     val sync = SyncController(
         scope = scope,
         sync = ::syncAll,
-        pending = repo.pendingCount(),
-        rejected = repo.rejectedCount(),
+        pending = combine(repo.pendingCount(), calendar.pendingCount()) { journal, calendar -> journal + calendar },
+        rejected = combine(repo.rejectedCount(), calendar.rejectedCount()) { journal, calendar -> journal + calendar },
         pendingMedia = media.pendingCount(),
         now = now,
     )
@@ -162,6 +176,7 @@ class AppServices(
 
     init {
         repo.commitLeftoverDrafts()
+        scope.launch { moveJournalEvents(db, repo, calendar) }
         sync.start()
         scope.launch { repo.prepareSearch() }
         if (reminderClock != null) {
@@ -179,10 +194,24 @@ class AppServices(
         reminderClock?.schedule(reminders.upcoming(LocalDateTime.now()))
     }
 
-    /** Text first (small, the outbox), then files captured here; a failed upload retries with backoff. */
+    /**
+     * Unpairs. The calendar and the journal each refuse while something of theirs hasn't reached the server;
+     * then both caches are cleared (they belong to that server's store).
+     */
+    fun forgetServer() {
+        calendar.checkSynced()
+        pairing.forget()
+        calendar.forget()
+    }
+
+    /**
+     * Text first (small, the outbox), then the calendar on its own channel (ADR-027), then files captured here;
+     * a failed upload retries with backoff.
+     */
     private suspend fun syncAll(): SyncResult {
         val result = engine.sync()
         if (result !is SyncResult.Done) return result
+        Settings(db).connection?.let { calendarStatus.value = calendarSync.sync(apis(it), it) }
         return try {
             media.uploadPending()
             media.evict(mediaCacheBytes)

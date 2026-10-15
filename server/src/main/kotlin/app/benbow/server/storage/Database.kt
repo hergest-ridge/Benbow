@@ -7,17 +7,29 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 import kotlin.io.path.createDirectories
 
+/** What [HighWater] watches: a store's identity, epoch and latest change (data-safety S11). */
+interface EpochStore {
+    val storeId: String
+    val epoch: Long
+
+    fun latestCursor(): Long
+
+    fun bumpEpoch(to: Long)
+}
+
 /**
  * The server's single SQLite connection with the durability settings of docs/data-safety.md
  * (S2, S3, S10). All access is serialized through one lock, like SQLite's single writer.
  */
-class Database private constructor(private val connection: Connection, val backups: Backups?) : AutoCloseable {
+class Database private constructor(private val connection: Connection, val backups: Backups?) :
+    AutoCloseable,
+    EpochStore {
     private val lock = ReentrantLock()
 
-    val storeId: String = locked { meta(it, "store_id") }
+    override val storeId: String = locked { it.meta("store_id") }
 
     @Volatile
-    var epoch: Long = locked { meta(it, "epoch").toLong() }
+    override var epoch: Long = locked { it.meta("epoch").toLong() }
         private set
 
     fun <T> locked(block: (Connection) -> T): T = lock.withLock { block(connection) }
@@ -37,7 +49,7 @@ class Database private constructor(private val connection: Connection, val backu
     }
 
     /** Latest change-log sequence (0 for an empty store). */
-    fun latestCursor(): Long = locked { c ->
+    override fun latestCursor(): Long = locked { c ->
         c.createStatement().use { st ->
             st.executeQuery("SELECT COALESCE(MAX(seq), 0) FROM change_log").use { rs ->
                 rs.next()
@@ -47,9 +59,9 @@ class Database private constructor(private val connection: Connection, val backu
     }
 
     /** A new epoch tells devices the store went back in time and must be reconciled (docs/sync.md#store-identity). */
-    fun bumpEpoch(to: Long) = transaction { c ->
+    override fun bumpEpoch(to: Long) = transaction { c ->
         require(to > epoch) { "Epoch can only grow ($epoch -> $to)" }
-        setMeta(c, "epoch", to.toString())
+        c.setMeta("epoch", to.toString())
         epoch = to
     }
 
@@ -67,56 +79,53 @@ class Database private constructor(private val connection: Connection, val backu
             val file = dataDir.resolve("db").createDirectories().resolve("benbow.sqlite")
             val connection = DriverManager.getConnection("jdbc:sqlite:$file")
             val backups = Backups(dataDir)
-            configure(connection)
+            configureDurable(connection)
             val schema = connection.userVersion()
             if (schema in 1 until Migrations.SCHEMA_VERSION) {
                 backups.snapshot(connection, "pre-migration-v$schema")
             } else if (schema >= 1) {
-                val previous = metaOrNull(connection, "server_version")
+                val previous = connection.metaOrNull("server_version")
                 if (previous != serverVersion) backups.snapshot(connection, "pre-update-${previous ?: "unknown"}")
             }
             Migrations.apply(connection)
-            setMeta(connection, "server_version", serverVersion)
+            connection.setMeta("server_version", serverVersion)
             return Database(connection, backups)
         }
 
         /** Throwaway database for tests: same schema and rules, no files, no backups. */
         fun inMemory(): Database {
             val connection = DriverManager.getConnection("jdbc:sqlite::memory:")
-            configure(connection)
+            configureDurable(connection)
             Migrations.apply(connection)
             return Database(connection, backups = null)
         }
+    }
+}
 
-        private fun configure(connection: Connection) {
-            connection.createStatement().use { st ->
-                st.execute("PRAGMA journal_mode=WAL")
-                st.execute("PRAGMA synchronous=FULL")
-                st.execute("PRAGMA foreign_keys=ON")
-                st.execute("PRAGMA busy_timeout=5000")
-                val check = st.executeQuery("PRAGMA quick_check").use { rs -> if (rs.next()) rs.getString(1) else "no result" }
-                check(check == "ok") { "Database integrity check failed: $check. Restore from a verified backup." }
-            }
-        }
+/** WAL, full fsync, foreign keys; refuses a file that fails `quick_check` (data-safety S3, integrity checks). */
+internal fun configureDurable(connection: Connection) {
+    connection.createStatement().use { st ->
+        st.execute("PRAGMA journal_mode=WAL")
+        st.execute("PRAGMA synchronous=FULL")
+        st.execute("PRAGMA foreign_keys=ON")
+        st.execute("PRAGMA busy_timeout=5000")
+        val check = st.executeQuery("PRAGMA quick_check").use { rs -> if (rs.next()) rs.getString(1) else "no result" }
+        check(check == "ok") { "Database integrity check failed: $check. Restore from a verified backup." }
+    }
+}
 
-        private fun meta(connection: Connection, key: String): String = metaOrNull(connection, key) ?: error("store_meta.$key missing")
+internal fun Connection.meta(key: String): String = metaOrNull(key) ?: error("store_meta.$key missing")
 
-        private fun metaOrNull(connection: Connection, key: String): String? =
-            connection.prepareStatement("SELECT value FROM store_meta WHERE key = ?").use { st ->
-                st.setString(1, key)
-                st.executeQuery().use { rs -> if (rs.next()) rs.getString(1) else null }
-            }
+internal fun Connection.metaOrNull(key: String): String? = prepareStatement("SELECT value FROM store_meta WHERE key = ?").use { st ->
+    st.setString(1, key)
+    st.executeQuery().use { rs -> if (rs.next()) rs.getString(1) else null }
+}
 
-        private fun setMeta(connection: Connection, key: String, value: String) {
-            connection.prepareStatement(
-                "INSERT INTO store_meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            )
-                .use { st ->
-                    st.setString(1, key)
-                    st.setString(2, value)
-                    st.executeUpdate()
-                }
-        }
+internal fun Connection.setMeta(key: String, value: String) {
+    prepareStatement("INSERT INTO store_meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").use { st ->
+        st.setString(1, key)
+        st.setString(2, value)
+        st.executeUpdate()
     }
 }
 

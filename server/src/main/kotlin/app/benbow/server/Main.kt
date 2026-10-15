@@ -3,7 +3,9 @@ package app.benbow.server
 import app.benbow.server.api.ServerContext
 import app.benbow.server.api.benbowModule
 import app.benbow.server.backup.BackupJobs
+import app.benbow.server.calendar.CalendarDatabase
 import app.benbow.server.storage.BlobStore
+import app.benbow.server.storage.CALENDAR_HIGH_WATER
 import app.benbow.server.storage.Database
 import app.benbow.server.storage.Devices
 import app.benbow.server.storage.HighWater
@@ -21,7 +23,7 @@ import java.nio.file.StandardOpenOption
 import kotlin.io.path.createDirectories
 import kotlin.system.exitProcess
 
-const val SERVER_VERSION = "0.5.0"
+const val SERVER_VERSION = "0.6.0"
 const val DEFAULT_PORT = 8765
 
 fun main(args: Array<String>) {
@@ -38,9 +40,11 @@ fun main(args: Array<String>) {
         log.error("Another Benbow server is already using {}. Stop it first (service: sc stop BenbowServer).", dataDir)
         exitProcess(2)
     }
-    val restore = args.indexOf("--restore")
+    val restoreCalendar = args.indexOf("--restore-calendar")
+    val restore = if (restoreCalendar >= 0) restoreCalendar else args.indexOf("--restore")
     if (restore >= 0) {
-        val result = Restore.run(dataDir, args.getOrNull(restore + 1) ?: "latest")
+        val target = if (restoreCalendar >= 0) Restore.CALENDAR else Restore.JOURNAL
+        val result = Restore.run(dataDir, args.getOrNull(restore + 1) ?: "latest", target)
         log.info(
             "Restored {} as the live database: store {}, new epoch {}. Previous files: {}",
             result.snapshot,
@@ -65,13 +69,24 @@ fun main(args: Array<String>) {
             db.epoch,
         )
     }
+    // The calendar is a store of its own (ADR-027): if its file can't be opened, the journal still runs.
+    val calendarHighWater = HighWater(dataDir, CALENDAR_HIGH_WATER)
+    val calendar = try {
+        CalendarDatabase.open(dataDir, SERVER_VERSION, db.storeId).also { opened ->
+            val behind = calendarHighWater.check(opened)
+            if (behind) log.warn("The calendar file is behind what it reached before. New calendar epoch {}.", opened.epoch)
+        }
+    } catch (e: Exception) {
+        log.error("The calendar store didn't open; the journal works without it. Restore it with restore-calendar.cmd", e)
+        null
+    }
     val tls = TlsMaterial.ensure(dataDir, config.tlsPassword)
     log.info("Benbow server {} | data {} | store {} epoch {}", SERVER_VERSION, dataDir, db.storeId, db.epoch)
     log.info("HTTPS on {}:{} | certificate SHA-256 {}", config.host, config.port, tls.fingerprint)
 
     val blobs = BlobStore(db, config.mediaRoot ?: dataDir.resolve("media"))
     blobs.adoptUntracked().takeIf { it > 0 }?.let { log.warn("Recorded {} media files the database didn't know (after a restore?)", it) }
-    val backupJobs = BackupJobs(db, dataDir, config.backupMirror, blobs).also { it.start(config.backupIntervalMinutes) }
+    val backupJobs = BackupJobs(db, dataDir, config.backupMirror, blobs, calendar).also { it.start(config.backupIntervalMinutes) }
     val context =
         ServerContext(
             db = db,
@@ -85,6 +100,8 @@ fun main(args: Array<String>) {
             highWater = highWater,
             blobs = blobs,
             speech = SpeechModel(dataDir.resolve("models")),
+            calendar = calendar,
+            calendarHighWater = calendarHighWater,
         )
     val server = embeddedServer(
         factory = Netty,
@@ -109,6 +126,10 @@ fun main(args: Array<String>) {
             backupJobs.stop()
             highWater.record(db)
             db.close()
+            calendar?.let {
+                calendarHighWater.record(it)
+                it.close()
+            }
             lock.release()
         },
     )
@@ -128,6 +149,7 @@ private fun lockDataDir(dataDir: Path): FileLock? {
 private fun selfCheck() {
     java.net.http.HttpClient.newHttpClient()
     Database.inMemory().close()
+    CalendarDatabase.inMemory().close()
     org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream::class.java.name
     javax.net.ssl.SSLContext.getDefault()
     println("self-check ok")

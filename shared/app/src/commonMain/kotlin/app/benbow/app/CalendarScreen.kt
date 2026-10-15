@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -52,6 +53,9 @@ import app.benbow.app.resources.calendar_all_day
 import app.benbow.app.resources.calendar_empty
 import app.benbow.app.resources.calendar_entry
 import app.benbow.app.resources.calendar_event
+import app.benbow.app.resources.cancel
+import app.benbow.app.resources.event_delete
+import app.benbow.app.resources.event_save
 import app.benbow.app.resources.event_time_hint
 import app.benbow.app.resources.event_title_hint
 import app.benbow.app.resources.months_nominative
@@ -60,7 +64,7 @@ import app.benbow.app.resources.previous
 import app.benbow.app.resources.weekdays_short
 import app.benbow.client.DayInfo
 import app.benbow.client.EntrySummary
-import app.benbow.client.EventItem
+import app.benbow.client.calendar.CalendarEvent
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -104,9 +108,10 @@ internal class CalendarViewModel(private val services: AppServices) : ViewModel(
     val days: StateFlow<Map<String, DayInfo>> = month.flatMapLatest { services.repo.monthDays(it.toString(), it.monthEnd().toString()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
+    /** From the calendar's own file (ADR-027), never from the journal. */
     @OptIn(ExperimentalCoroutinesApi::class)
-    val events: StateFlow<List<EventItem>> = month.flatMapLatest {
-        services.repo.events(it.minus(7, DateTimeUnit.DAY).toString(), it.monthEnd().plus(7, DateTimeUnit.DAY).toString())
+    val events: StateFlow<List<CalendarEvent>> = month.flatMapLatest {
+        services.calendar.events(it.minus(7, DateTimeUnit.DAY).toString(), it.monthEnd().plus(7, DateTimeUnit.DAY).toString())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -124,7 +129,15 @@ internal class CalendarViewModel(private val services: AppServices) : ViewModel(
 
     fun addEvent(title: String, time: String?) {
         val day = selected.value.toString()
-        services.scope.launch { services.repo.createEvent(day, title, time) }
+        services.scope.launch { services.calendar.createEvent(day, title, time) }
+    }
+
+    fun saveEvent(event: CalendarEvent, title: String, time: String?) {
+        services.scope.launch { services.calendar.updateEvent(event.id, title, time?.let { "${event.day}T$it" } ?: event.day) }
+    }
+
+    fun deleteEvent(event: CalendarEvent) {
+        services.scope.launch { services.calendar.moveToTrash(event.id) }
     }
 }
 
@@ -140,6 +153,7 @@ internal fun CalendarScreen(services: AppServices, nav: Navigator) {
     val entries by vm.entries.collectAsStateWithLifecycle()
     val today = remember { LocalDate.parse(services.today()) }
     var adding by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<CalendarEvent?>(null) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -152,7 +166,7 @@ internal fun CalendarScreen(services: AppServices, nav: Navigator) {
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
-            MonthGrid(month, selected, today, days, events.map { it.day }.toSet(), onSelect = vm::select)
+            MonthGrid(month, selected, today, days, { day -> events.any { it.covers(day) } }, onSelect = vm::select)
             HorizontalDivider(Modifier.padding(top = 4.dp))
             var drag by remember { mutableStateOf(0f) }
             LazyColumn(
@@ -189,12 +203,10 @@ internal fun CalendarScreen(services: AppServices, nav: Navigator) {
                         }
                     }
                 }
-                val dayEvents = events.filter { it.day == selected.toString() }
+                val dayEvents = events.filter { it.covers(selected.toString()) }
                 items(dayEvents, key = { "e" + it.id }) { event ->
                     Row(
-                        Modifier.fillMaxWidth().clickable {
-                            nav.open(Route.Editor(event.id, event.day))
-                        }.padding(horizontal = 24.dp, vertical = 10.dp),
+                        Modifier.fillMaxWidth().clickable { editing = event }.padding(horizontal = 24.dp, vertical = 10.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Text(
@@ -220,6 +232,14 @@ internal fun CalendarScreen(services: AppServices, nav: Navigator) {
             }
         }
     }
+    editing?.let { event ->
+        EventDialog(
+            event,
+            onSave = { title, time -> vm.saveEvent(event, title, time) },
+            onDelete = { vm.deleteEvent(event) },
+            onDismiss = { editing = null },
+        )
+    }
 }
 
 @Composable
@@ -228,7 +248,7 @@ private fun MonthGrid(
     selected: LocalDate,
     today: LocalDate,
     days: Map<String, DayInfo>,
-    eventDays: Set<String>,
+    hasEvents: (String) -> Boolean,
     onSelect: (LocalDate) -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
@@ -272,7 +292,7 @@ private fun MonthGrid(
                             )
                             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                                 repeat(minOf(info?.entries ?: 0, 3)) { Box(Modifier.size(4.dp).background(colors.primary, CircleShape)) }
-                                if (key in eventDays) Box(Modifier.size(4.dp).background(colors.secondary, RoundedCornerShape(1.dp)))
+                                if (hasEvents(key)) Box(Modifier.size(4.dp).background(colors.secondary, RoundedCornerShape(1.dp)))
                             }
                         }
                     }
@@ -280,6 +300,48 @@ private fun MonthGrid(
             }
         }
     }
+}
+
+/** An event's title and time, or its removal. The fuller event sheet comes with the calendar layer (7.3b). */
+@Composable
+private fun EventDialog(event: CalendarEvent, onSave: (String, String?) -> Unit, onDelete: () -> Unit, onDismiss: () -> Unit) {
+    var title by remember(event.id) { mutableStateOf(event.title) }
+    var time by remember(event.id) { mutableStateOf(event.time.orEmpty()) }
+    val parsed = parseTime(time)
+    val valid = title.isNotBlank() && (time.isBlank() || parsed != null)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(fullDateLabel(event.day)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(title, { title = it }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    time,
+                    { time = it },
+                    placeholder = { Text(stringResource(Res.string.event_time_hint)) },
+                    singleLine = true,
+                    isError = time.isNotBlank() && parsed == null,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton({
+                onSave(title.trim(), parsed)
+                onDismiss()
+            }, enabled = valid) { Text(stringResource(Res.string.event_save)) }
+        },
+        dismissButton = {
+            Row {
+                TextButton({
+                    onDelete()
+                    onDismiss()
+                }) { Text(stringResource(Res.string.event_delete), color = MaterialTheme.colorScheme.error) }
+                TextButton(onDismiss) { Text(stringResource(Res.string.cancel)) }
+            }
+        },
+    )
 }
 
 @Composable

@@ -11,7 +11,10 @@ import app.benbow.android.asr.SandboxTranscriber
 import app.benbow.app.AppServices
 import app.benbow.client.KeystoreSecretBox
 import app.benbow.client.SecretBox
+import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.db.BenbowDb
+import app.cash.sqldelight.db.QueryResult
+import app.cash.sqldelight.db.SqlSchema
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
 import java.io.File
 
@@ -33,21 +36,11 @@ class BenbowApplication : Application() {
 
     /** One per process: the local DB, outbox and sync outlive activities. */
     val services: AppServices by lazy {
-        val driver = AndroidSqliteDriver(
-            schema = BenbowDb.Schema,
-            context = this,
-            name = "benbow.db",
-            callback = object : AndroidSqliteDriver.Callback(BenbowDb.Schema) {
-                override fun onConfigure(db: SupportSQLiteDatabase) {
-                    db.enableWriteAheadLogging()
-                    // Drafts and the outbox exist only on this device until synced: no lost commits on power loss.
-                    db.query("PRAGMA synchronous = FULL").close()
-                }
-            },
-        )
         val name = Settings.Global.getString(contentResolver, Settings.Global.DEVICE_NAME) ?: Build.MODEL
         AppServices(
-            driver,
+            durableDriver(BenbowDb.Schema, "benbow.db"),
+            // The calendar's own file (ADR-027), never mixed with the journal's.
+            durableDriver(CalendarDb.Schema, "calendar.db"),
             File(filesDir, "media"),
             platform = "android",
             deviceName = name,
@@ -56,4 +49,17 @@ class BenbowApplication : Application() {
             modelsDir = File(filesDir, "models"),
         )
     }
+
+    private fun durableDriver(schema: SqlSchema<QueryResult.Value<Unit>>, name: String) = AndroidSqliteDriver(
+        schema = schema,
+        context = this,
+        name = name,
+        callback = object : AndroidSqliteDriver.Callback(schema) {
+            override fun onConfigure(db: SupportSQLiteDatabase) {
+                db.enableWriteAheadLogging()
+                // Drafts and the outboxes exist only on this device until synced: no lost commits on power loss.
+                db.query("PRAGMA synchronous = FULL").close()
+            }
+        },
+    )
 }

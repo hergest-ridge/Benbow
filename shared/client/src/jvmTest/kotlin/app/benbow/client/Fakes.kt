@@ -11,10 +11,16 @@ import app.benbow.core.api.SpeechModelInfo
 import app.benbow.core.api.SpeechModelSpec
 import app.benbow.core.api.UploadStart
 import app.benbow.core.api.UploadStatus
+import app.benbow.core.calendar.CalendarInfo
+import app.benbow.core.calendar.CalendarOp
+import app.benbow.core.calendar.CalendarProtocol
+import app.benbow.core.calendar.CalendarPullResponse
+import app.benbow.core.calendar.CalendarRules
 import app.benbow.core.sync.PullResponse
 import app.benbow.core.sync.RevisionRecord
 import app.benbow.core.sync.SyncOp
 import app.benbow.core.sync.SyncRules
+import app.benbow.testing.InMemoryCalendarStore
 import app.benbow.testing.InMemorySyncStore
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -22,10 +28,16 @@ import java.io.IOException
 import java.security.MessageDigest
 
 /** The server's rules over an in-memory store, plus a blob store; [log] lets a test take a "backup". */
-internal class FakeServer(val storeId: String = "store-1", val epoch: Long = 1) {
+internal class FakeServer(val storeId: String = "store-1", val epoch: Long = 1, val calendarEpoch: Long = 1) {
     val store = InMemorySyncStore()
     val rules = SyncRules(store)
     val log = mutableListOf<SyncOp>()
+
+    /** The calendar store (ADR-027); off = a server older than 0.6.0. */
+    var calendarOn = true
+    val calendarStore = InMemoryCalendarStore()
+    val calendarRules = CalendarRules(calendarStore)
+    val calendarLog = mutableListOf<CalendarOp>()
     val blobs = mutableMapOf<String, ByteArray>()
     val uploads = mutableMapOf<String, Pair<UploadStart, ByteArrayOutputStream>>()
 
@@ -33,10 +45,21 @@ internal class FakeServer(val storeId: String = "store-1", val epoch: Long = 1) 
     val speechFiles = mutableMapOf<String, ByteArray>()
 
     /** A copy of this server as a backup would have it now (files included), restored under a new epoch. */
-    fun restoredCopy(epoch: Long, withFiles: Boolean = true) = FakeServer(storeId, epoch).also {
+    fun restoredCopy(epoch: Long, withFiles: Boolean = true) = FakeServer(storeId, epoch, calendarEpoch).also {
         it.rules.push(log)
         it.log += log
         if (withFiles) it.blobs += blobs
+        it.calendarRules.push(calendarLog)
+        it.calendarLog += calendarLog
+    }
+
+    /** This server with only its calendar put back to [ops] (a calendar snapshot) under a new calendar epoch. */
+    fun calendarRestoredTo(ops: List<CalendarOp>, calendarEpoch: Long) = FakeServer(storeId, epoch, calendarEpoch).also {
+        it.rules.push(log)
+        it.log += log
+        it.blobs += blobs
+        it.calendarRules.push(ops)
+        it.calendarLog += ops
     }
 }
 
@@ -60,6 +83,15 @@ internal class FakeApi(var server: FakeServer, var serverStore: String = server.
         server.epoch,
         2,
         server.store.changesSince(0, Int.MAX_VALUE).lastOrNull()?.first ?: 0,
+        if (server.calendarOn) {
+            CalendarInfo(
+                CalendarProtocol.VERSION,
+                server.calendarEpoch,
+                server.calendarStore.changesSince(0, Int.MAX_VALUE).lastOrNull()?.seq ?: 0,
+            )
+        } else {
+            null
+        },
     )
 
     override suspend fun pair(code: String, deviceName: String, platform: String): PairResponse = error("not used")
@@ -79,6 +111,16 @@ internal class FakeApi(var server: FakeServer, var serverStore: String = server.
     override suspend fun revision(id: String): RevisionRecord = error("not used")
 
     override suspend fun reconcile(entries: List<KnownEntry>): ReconcileResponse = server.rules.reconcile(entries)
+
+    override suspend fun calendarPush(ops: List<CalendarOp>): PushResponse {
+        if (dropRequest) throw IOException("request lost")
+        val results = server.calendarRules.push(ops)
+        server.calendarLog += ops
+        if (dropResponse) throw IOException("response lost")
+        return PushResponse(results)
+    }
+
+    override suspend fun calendarPull(cursor: Long, limit: Int): CalendarPullResponse = server.calendarRules.pull(cursor, limit)
 
     override suspend fun startUpload(file: UploadStart): UploadStatus {
         uploadsRefused?.let { throw it }

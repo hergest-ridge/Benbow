@@ -14,6 +14,10 @@ import app.benbow.core.api.ServerInfo
 import app.benbow.core.api.SpeechModelInfo
 import app.benbow.core.api.UploadStart
 import app.benbow.core.api.UploadStatus
+import app.benbow.core.calendar.CalendarOp
+import app.benbow.core.calendar.CalendarProtocol
+import app.benbow.core.calendar.CalendarPullResponse
+import app.benbow.core.calendar.CalendarPushRequest
 import app.benbow.core.sync.PullResponse
 import app.benbow.core.sync.RevisionRecord
 import app.benbow.core.sync.SyncOp
@@ -49,6 +53,11 @@ interface BenbowApi {
     suspend fun revisions(entryId: String): List<RevisionInfo>
     suspend fun revision(id: String): RevisionRecord
     suspend fun reconcile(entries: List<KnownEntry>): ReconcileResponse
+
+    /** The calendar's own channel (ADR-027). */
+    suspend fun calendarPush(ops: List<CalendarOp>): PushResponse
+
+    suspend fun calendarPull(cursor: Long, limit: Int): CalendarPullResponse
 
     /** Announces a file; `complete` when the server already has it. */
     suspend fun startUpload(file: UploadStart): UploadStatus
@@ -108,6 +117,18 @@ class KtorBenbowApi(private val client: HttpClient, private val baseUrl: String,
         auth()
         contentType(ContentType.Application.Json)
         setBody(ReconcileRequest(entries))
+    }.ok().body()
+
+    override suspend fun calendarPush(ops: List<CalendarOp>): PushResponse = client.post("$baseUrl/api/v1/calendar/push") {
+        auth()
+        contentType(ContentType.Application.Json)
+        setBody(CalendarPushRequest(CalendarProtocol.VERSION, ops))
+    }.ok().body()
+
+    override suspend fun calendarPull(cursor: Long, limit: Int): CalendarPullResponse = client.get("$baseUrl/api/v1/calendar/pull") {
+        auth()
+        parameter("cursor", cursor)
+        parameter("limit", limit)
     }.ok().body()
 
     override suspend fun startUpload(file: UploadStart): UploadStatus = client.post("$baseUrl/api/v1/uploads") {

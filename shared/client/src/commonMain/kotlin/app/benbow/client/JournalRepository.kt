@@ -75,9 +75,6 @@ data class FeedItem(
 /** A calendar day: how many entries and their average mood (-2..2, null when no mood was set). */
 data class DayInfo(val day: String, val entries: Int, val mood: Double?)
 
-/** A calendar event; [time] is "HH:MM", null for all day. */
-data class EventItem(val id: String, val day: String, val title: String, val time: String?)
-
 /** A reply in an entry's thread, shown in full, with its pictures and files ([media], in order). */
 data class Comment(
     val summary: EntrySummary,
@@ -419,17 +416,6 @@ class JournalRepository(
     fun monthDays(fromDay: String, toDay: String): Flow<Map<String, DayInfo>> =
         q.monthDays(fromDay, toDay) { day, entries, mood -> DayInfo(day, entries.toInt(), mood) }.asFlow().mapToList(context)
             .map { days -> days.associateBy { it.day } }
-
-    fun events(fromDay: String, toDay: String): Flow<List<EventItem>> = q.events(fromDay, toDay) { id, day, title, start ->
-        EventItem(id, day, title, start?.substringAfter('T', "")?.takeIf { it.isNotEmpty() })
-    }.asFlow().mapToList(context)
-
-    /** An event on [day], at [time] ("HH:MM") or all day: an entry of kind "event" whose text is the title. */
-    fun createEvent(day: String, title: String, time: String?): String = db.transactionWithResult {
-        val id = createEntry(day, kind = "event", body = textBody(title, random))
-        setField(id, START_FIELD, time?.let { "${day}T$it" } ?: day)
-        id
-    }
 
     // Mood check-ins (5.4)
 

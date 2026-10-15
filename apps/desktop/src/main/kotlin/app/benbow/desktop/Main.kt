@@ -5,6 +5,7 @@ import androidx.compose.ui.window.TrayState
 import androidx.compose.ui.window.application
 import app.benbow.app.AppServices
 import app.benbow.app.BenbowDesktop
+import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.db.BenbowDb
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlinx.coroutines.CoroutineScope
@@ -22,6 +23,8 @@ fun main() {
         put("synchronous", "FULL")
     }
     val driver = JdbcSqliteDriver("jdbc:sqlite:${File(dir, "benbow.db").absolutePath}", properties, BenbowDb.Schema)
+    // The calendar's own file (ADR-027), never mixed with the journal's.
+    val calendarDriver = JdbcSqliteDriver("jdbc:sqlite:${File(dir, "calendar.db").absolutePath}", properties, CalendarDb.Schema)
     lateinit var services: AppServices
     val tray = TrayState()
     val clock = TrayReminderClock(
@@ -30,6 +33,7 @@ fun main() {
     ) { services.rescheduleReminders() }
     services = AppServices(
         driver,
+        calendarDriver,
         mediaDir = File(dir, "media"),
         platform = "desktop",
         deviceName = System.getenv("COMPUTERNAME") ?: InetAddress.getLocalHost().hostName,

@@ -15,7 +15,9 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -24,11 +26,13 @@ import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.test.waitUntilExactlyOneExists
 import androidx.compose.ui.unit.dp
 import app.benbow.client.Prompts
+import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.db.BenbowDb
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlinx.coroutines.delay
@@ -50,14 +54,16 @@ import kotlin.test.assertTrue
 class AppSmokeTest {
     private val services = AppServices(
         JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), BenbowDb.Schema),
+        JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), CalendarDb.Schema),
         java.nio.file.Files.createTempDirectory("benbow-media").toFile(),
         "desktop",
         "Test PC",
     )
 
+    /** The topmost layer: the screen, or an open dialog over it. */
     private fun SemanticsNodeInteractionsProvider.screenshot(name: String) {
         val file = File("build/screens/$name.png").apply { parentFile.mkdirs() }
-        ImageIO.write(onRoot().captureToImage().toAwtImage(), "png", file)
+        ImageIO.write(onAllNodes(isRoot()).onLast().captureToImage().toAwtImage(), "png", file)
     }
 
     @Test
@@ -252,9 +258,23 @@ class AppSmokeTest {
         onAllNodes(hasSetTextAction())[0].performTextInput("Врач")
         onAllNodes(hasSetTextAction())[1].performTextInput("9:30")
         onNodeWithText("Добавить").click()
-        waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.events(today, today).first().size == 1 } }
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.calendar.events(today, today).first().size == 1 } }
         waitUntilExactlyOneExists(hasText("09:30"), 5_000)
         screenshot("16-calendar")
+
+        // The event lives in the calendar's own file (ADR-027): it opens as an event, not as a journal entry.
+        onNodeWithText("Врач").click()
+        waitUntilExactlyOneExists(hasText("Сохранить"), 5_000)
+        screenshot("16b-event")
+        onAllNodes(hasSetTextAction() and hasText("Врач"))[0].performTextReplacement("Стоматолог")
+        onNodeWithText("Сохранить").click()
+        waitUntil(timeoutMillis = 5_000) {
+            runBlocking {
+                services.calendar.events(today, today).first().singleOrNull()?.title ==
+                    "Стоматолог"
+            }
+        }
+        assertEquals(listOf("Хороший день"), runBlocking { services.repo.journal().first().map { it.title } })
     }
 
     @Test
@@ -706,6 +726,7 @@ class AppSmokeTest {
         }
         return AppServices(
             JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), BenbowDb.Schema),
+            JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), CalendarDb.Schema),
             java.nio.file.Files.createTempDirectory("benbow-media").toFile(),
             "android",
             "Test phone",

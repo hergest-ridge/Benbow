@@ -53,5 +53,11 @@ sqldelight {
             dialect(libs.sqldelight.dialect)
             module(libs.sqldelight.json.module)
         }
+        // The calendar's own file (ADR-027): its schema and migrations never touch the journal's.
+        create("CalendarDb") {
+            packageName = "app.benbow.client.calendar.db"
+            srcDirs("src/commonMain/calendar-sqldelight")
+            dialect(libs.sqldelight.dialect)
+        }
     }
 }

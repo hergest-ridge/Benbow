@@ -127,6 +127,12 @@ private fun statusPage(ctx: ServerContext, admin: Boolean): String = buildString
                 "последняя ${time(it)}"
             } ?: "не настроена или ещё не выполнялась (backup.mirror в benbow.properties)"}</p>",
         )
+        if (ctx.calendar == null) {
+            append("<p style=\"color:#b3261e\"><b>Календарь не открылся</b> (дневник работает). Причина в журнале сервера.</p>")
+        } else {
+            append("<p>Календарь (отдельный файл): последняя копия ${status.calendarSnapshotAt?.let { time(it) } ?: "ещё не делалась"}</p>")
+        }
+        status.calendarError?.let { append("<p style=\"color:#b3261e\"><b>Ошибка копии календаря:</b> ${esc(it)}</p>") }
     }
     val backups = ctx.db.backups?.history().orEmpty().takeLast(5).reversed()
     if (backups.isEmpty()) {

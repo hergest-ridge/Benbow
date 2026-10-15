@@ -26,23 +26,4 @@ class CalendarTest {
         assertEquals(DayInfo("2026-10-05", 2, 0.5), days["2026-10-05"])
         assertEquals(null, days.getValue("2026-10-20").mood)
     }
-
-    @Test
-    fun eventsLiveInTheCalendarNotInTheJournal() = runTest {
-        repo.createEvent("2026-10-14", "Врач", "09:30")
-        repo.createEvent("2026-10-14", "День рождения Маши", null)
-        repo.createNote("2026-10-14", "Обычная запись")
-        assertEquals(
-            listOf(EventItem("x", "2026-10-14", "День рождения Маши", null), EventItem("x", "2026-10-14", "Врач", "09:30")),
-            repo.events("2026-10-01", "2026-10-31").first().map { it.copy(id = "x") },
-            "all-day first, then by time",
-        )
-        assertEquals(listOf("Обычная запись"), repo.journal().first().map { it.title })
-        assertEquals(
-            1,
-            repo.monthDays("2026-10-01", "2026-10-31").first().getValue("2026-10-14").entries,
-            "events aren't counted as writing",
-        )
-        assertEquals(1, repo.feed().first().size)
-    }
 }

@@ -7,11 +7,19 @@ import app.benbow.client.Settings
 import app.benbow.client.SyncEngine
 import app.benbow.client.SyncResult
 import app.benbow.client.apiFor
+import app.benbow.client.calendar.CalendarRepository
+import app.benbow.client.calendar.CalendarSync
+import app.benbow.client.calendar.CalendarSyncResult
+import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.db.BenbowDb
 import app.benbow.core.api.UploadStart
+import app.benbow.core.calendar.CalendarKind
 import app.benbow.server.api.ServerContext
 import app.benbow.server.api.benbowModule
+import app.benbow.server.calendar.CalendarDatabase
+import app.benbow.server.calendar.SqliteCalendarStore
 import app.benbow.server.storage.BlobStore
+import app.benbow.server.storage.CALENDAR_HIGH_WATER
 import app.benbow.server.storage.Database
 import app.benbow.server.storage.Devices
 import app.benbow.server.storage.HighWater
@@ -51,7 +59,20 @@ class EndToEndTest {
         val tls = TlsMaterial.ensure(dir, "secret")
         val highWater = HighWater(dir).also { it.check(db) }
         val blobs = BlobStore(db, dir.resolve("media"))
-        val ctx = ServerContext(db, Devices(db), PairingCodes(), tls.fingerprint, dir, port, highWater = highWater, blobs = blobs)
+        val calendar = CalendarDatabase.open(dir, "test", db.storeId)
+        val calendarHighWater = HighWater(dir, CALENDAR_HIGH_WATER).also { it.check(calendar) }
+        val ctx = ServerContext(
+            db,
+            Devices(db),
+            PairingCodes(),
+            tls.fingerprint,
+            dir,
+            port,
+            highWater = highWater,
+            blobs = blobs,
+            calendar = calendar,
+            calendarHighWater = calendarHighWater,
+        )
         private val engine = embeddedServer(
             factory = Netty,
             environment = applicationEnvironment {},
@@ -68,10 +89,14 @@ class EndToEndTest {
             engine.stop(gracePeriodMillis = 100, timeoutMillis = 2_000)
             highWater.record(db)
             db.close()
+            calendarHighWater.record(calendar)
+            calendar.close()
         }
     }
 
     private fun phone() = BenbowDb(JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), BenbowDb.Schema))
+
+    private fun phoneCalendar() = CalendarDb(JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), CalendarDb.Schema))
 
     @Test
     fun phonePairsOverPinnedHttpsAndSyncs() = runBlocking {
@@ -176,6 +201,53 @@ class EndToEndTest {
             assertEquals(2, repo.entry(yesterday).first()!!.conflictHeads.size, "and the phone shows the choice")
             assertEquals(2L, Settings(phoneDb).connection!!.epoch)
             assertIs<SyncResult.Done>(engine.sync())
+        }
+    }
+
+    /** Calendar restore drill (ADR-027): only the calendar file goes back to last night's snapshot; the journal stays. */
+    @Test
+    fun restoredCalendarIsHealedByThePhoneAndTheJournalStays() = runBlocking<Unit> {
+        val phoneDb = phone()
+        val calendarDb = phoneCalendar()
+        val repo = JournalRepository(phoneDb, System::currentTimeMillis)
+        val calendar = CalendarRepository(calendarDb, System::currentTimeMillis)
+        val engine = SyncEngine(phoneDb, { apiFor(it) }, System::currentTimeMillis)
+        val calendarSync = CalendarSync(calendarDb, System::currentTimeMillis)
+        suspend fun syncCalendar() = Settings(phoneDb).connection!!.let { calendarSync.sync(apiFor(it), it) }
+        val entry: String
+        val doctor: String
+        val trip: String
+        RunningServer().use { running ->
+            val pairing = Pairing(phoneDb)
+            pairing.pair(pairing.probe("127.0.0.1", port), running.ctx.pairing.issue().first, "Galaxy S24+", "android")
+            entry = repo.createEntry("2026-10-12", body = body)
+            doctor = calendar.createEvent("2026-10-14", "Врач", "09:30")
+            assertIs<SyncResult.Done>(engine.sync())
+            assertIs<CalendarSyncResult.Done>(syncCalendar())
+            running.calendar.locked { running.calendar.backups!!.snapshot(it, "nightly", running.calendar.latestCursor()) }
+
+            trip = calendar.createEvent("2026-10-20", "Поездка", null)
+            calendar.updateEvent(doctor, "Стоматолог", "2026-10-14T10:00")
+            assertIs<CalendarSyncResult.Done>(syncCalendar())
+            assertEquals(0L, calendarDb.calendarQueries.pendingCount().executeAsOne(), "all acknowledged, then the calendar file breaks")
+        }
+
+        assertEquals(2, Restore.run(dir, "latest", Restore.CALENDAR).epoch)
+
+        RunningServer().use { running ->
+            assertEquals(1, running.db.epoch, "the journal wasn't touched")
+            assertEquals(2, running.calendar.epoch)
+            assertEquals(SyncResult.Done(pushed = 0, pulled = 0, rejected = 0), engine.sync(), "the journal has nothing to heal")
+            assertIs<CalendarSyncResult.Done>(syncCalendar())
+            val store = SqliteCalendarStore(running.calendar)
+            assertEquals("Стоматолог", store.record(CalendarKind.EVENT, doctor)!!.fields.getValue("title").value, "the lost edit is back")
+            assertEquals(
+                "Поездка",
+                store.record(CalendarKind.EVENT, trip)!!.fields.getValue("title").value,
+                "so is the event after the backup",
+            )
+            assertTrue(SqliteSyncStore(running.db).entry(entry) != null)
+            assertEquals(listOf("Стоматолог"), calendar.events("2026-10-14", "2026-10-14").first().map { it.title })
         }
     }
 }

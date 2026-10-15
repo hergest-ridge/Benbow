@@ -3,6 +3,7 @@ Benbow Server (Windows)
 Folder layout
   runtime\          bundled Java runtime (no system Java needed)
   lib\              server jars
+  web\              the web client (the app in a browser), served at https://<this PC>:8765/app/
   run-console.cmd   run in a console window for testing
   install-service.cmd / uninstall-service.cmd   Windows service via WinSW (run as Administrator)
 
@@ -29,5 +30,11 @@ Service (run the scripts as Administrator)
   - starts automatically (delayed) after boot, restarts on failure
   - opens TCP 8765 in the Windows firewall for private networks
   - logs: <data folder>\logs (server), <install folder>\service-logs (wrapper)
+
+Web client
+  Open https://<this PC's address>:8765/app/ in Edge, Chrome or Firefox on any PC of the home network
+  (https://localhost:8765/app/ on this PC). The browser warns once about the self-signed certificate;
+  compare its SHA-256 with the one on https://localhost:8765, then continue. In the app, enter the code from
+  "Получить код" on the admin page. Use one address per browser: another address is another device.
 
 The service currently runs as LocalSystem. A dedicated low-privilege account is planned.

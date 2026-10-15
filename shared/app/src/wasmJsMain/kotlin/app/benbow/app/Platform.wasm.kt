@@ -1,30 +1,27 @@
 package app.benbow.app
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.WebElementView
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.media_file
 import app.benbow.client.LocalFile
-import app.benbow.client.byteSourceOf
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
+import app.benbow.client.uri
 import org.jetbrains.compose.resources.stringResource
-import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
 
-// The browser's side of the app's platform pieces (ADR-029). Playback and dropping files come with W3.
+// The browser's side of the app's platform pieces (ADR-029).
 
 internal actual val pageServer: String? = pageOrigin()
 
@@ -44,40 +41,52 @@ internal actual fun rememberNotificationPermission(): () -> Unit = {}
 internal actual fun rememberPrint(): (PrintPage) -> Unit = { page -> openHtml(page.html) }
 
 /** The browser's file dialog: the chosen files are attached like picked ones on the other platforms. */
-@OptIn(ExperimentalEncodingApi::class)
 @Composable
 internal actual fun MediaBar(services: AppServices, entryId: suspend () -> String, modifier: Modifier) {
     val title = stringResource(Res.string.media_file)
     Row(modifier.padding(horizontal = 4.dp)) {
         IconButton({
-            pickFiles("", multiple = true) { name, type, base64, modified ->
-                val bytes = Base64.decode(base64)
-                services.attach(entryId, { byteSourceOf(bytes) }) {
-                    MediaProbe(mime = type, name = name, kind = kindOf(type), capturedAt = modified.toLong())
-                }
-            }
+            pickFiles("", multiple = true) { files -> forEachItem(files) { services.attachBrowserFile(entryId, it) } }
         }) { Icon(Icons.Attach, title) }
     }
 }
 
+/**
+ * Files dropped on the page or pasted while the entry is open are attached, like files dragged from Explorer into the
+ * desktop app. Pasted text stays with the editor.
+ */
 @Composable
-internal actual fun Modifier.attachOnDrop(services: AppServices, entryId: suspend () -> String, onHover: (Boolean) -> Unit): Modifier = this
+internal actual fun Modifier.attachOnDrop(services: AppServices, entryId: suspend () -> String, onHover: (Boolean) -> Unit): Modifier {
+    val hover by rememberUpdatedState(onHover)
+    val entry by rememberUpdatedState(entryId)
+    DisposableEffect(services) {
+        val listeners = listenForFiles(
+            onHover = { hover(it) },
+            onFiles = { files -> forEachItem(files) { services.attachBrowserFile({ entry() }, it) } },
+        )
+        onDispose { stopFileListeners(listeners) }
+    }
+    return this
+}
 
-/** Not yet in the browser (W3): the file stays available on the other devices. */
+/**
+ * The browser's own player over the file's blob, with its controls (seek, volume, full screen). It is an HTML element
+ * above the app's canvas, so it leaves the viewer's top bar (back, delete) free.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 internal actual fun MediaPlayer(file: LocalFile, mime: String, modifier: Modifier) {
-    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(file.name, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
+    val url = remember(file) { file.uri() }
+    WebElementView(
+        factory = { mediaElement(if (mime.startsWith("audio/")) "audio" else "video", url) },
+        modifier = modifier.fillMaxSize().padding(top = 56.dp),
+        onRelease = { pauseMedia(it) },
+    )
 }
 
 @Composable
-internal actual fun rememberAudioPlayback(): AudioPlayback = remember {
-    object : AudioPlayback {
-        override val now: StateFlow<AudioNow?> = MutableStateFlow(null)
-
-        override fun toggle(id: String, file: LocalFile, mime: String) = Unit
-
-        override fun seek(positionMs: Long) = Unit
-    }
+internal actual fun rememberAudioPlayback(): AudioPlayback {
+    val playback = remember { BrowserAudio() }
+    DisposableEffect(playback) { onDispose { playback.release() } }
+    return playback
 }

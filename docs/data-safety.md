@@ -66,6 +66,15 @@ Implemented (server 0.2.0): `Backups` (VACUUM INTO + reopen + integrity_check + 
 - Exclude the DB from Android Auto Backup. Restoring a stale cache onto a new phone would confuse sync. Device recovery happens through a fresh pull.
 - Every device cache doubles as a partial backup. After a server restore, clients can re-upload what the server lacks (see `sync.md`).
 
+### Browser client (ADR-029, W1-W3)
+The browser has no fsync'd files; its lasting storage is IndexedDB of the page's origin. How the same guarantees hold there:
+- **DB (S2, S3):** SQLite (sql.js) runs in the tab's memory; the whole file is put to IndexedDB after 1 s without changes (at most 5 s while changes keep coming), as one atomic put flushed with `durability: 'strict'`, so the stored file is always a complete snapshot. A snapshot never ends a transaction (it waits for none to be open). Typing reaches the DB within 400 ms (`DraftSession`).
+- **Closing or hiding the tab:** on `visibilitychange: hidden` open drafts become revisions and both DBs are flushed; `beforeunload` asks ("Leave site?") while typing, a DB snapshot or a media file is still on its way, and starts saving at once, so it is done before the user can answer. Only a browser or OS crash can lose the last few seconds.
+- **Media (S3, S7):** a picked, dropped or pasted file is stored as a Blob in IndexedDB (`media/<sha256>`, SHA-256 by WebCrypto) before the entry refers to it, uploaded from the stored blob in slices, and kept by the same rule as the apps (7 days after the server verified it, only over the cap). Downloads are verified against their hash before they are kept.
+- **One owner:** one tab holds the data (Web Locks); a second tab of the same origin refuses to open it, since two in-memory copies would overwrite each other's snapshots.
+- **Migrations (S10) and damage:** the old file is kept beside the new one (`<name>.before-v<N>-<time>`) before migrating; a file that fails `quick_check` is kept aside (`<name>.damaged-<time>`), never deleted, and an empty DB fills again from the server.
+- Covered by `shared/client` wasm tests in Node (`BrowserSqlDriverTest`, `BrowserMediaTest`, with an in-memory shelf).
+
 ## Calendar store (ADR-027, 7.3a)
 Events matter less than entries and will outnumber them, so they live in their own files (server `calendar.sqlite`, client `calendar.db`) and calendar code never opens the journal DB. The one exception is moving the 5.1 events (`moveJournalEvents`, on every start, idempotent): it reads them and only trashes the old entries (soft delete).
 - The calendar file carries the journal's store id; a file of another store is refused. If it doesn't open (corrupt, another store's), the server logs it, the admin page says so and the journal runs as usual.

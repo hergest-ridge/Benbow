@@ -5,6 +5,7 @@ import app.benbow.client.BenbowApi
 import app.benbow.client.ByteSink
 import app.benbow.client.ByteSource
 import app.benbow.client.Connection
+import app.benbow.client.DraftSession
 import app.benbow.client.Due
 import app.benbow.client.ExportProgress
 import app.benbow.client.ExportReport
@@ -30,6 +31,7 @@ import app.benbow.client.upcoming
 import app.cash.sqldelight.db.SqlDriver
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -171,6 +173,15 @@ class AppServices(
     val launch = MutableStateFlow<AppLaunch?>(null)
 
     val attached = MutableSharedFlow<Attached>(extraBufferCapacity = 16)
+
+    /** Editors open now (main thread only): the browser commits them when the page hides and asks before closing. */
+    val openDrafts = mutableSetOf<DraftSession>()
+
+    /** Typing that hasn't reached the local DB yet. */
+    val draftsPending: Boolean get() = openDrafts.any { it.pending }
+
+    /** Saves every open editor's text as a revision now (the page is being hidden or closed). */
+    fun commitOpenDrafts(): List<Job> = openDrafts.map { it.commit() }
 
     /** A drawing just saved (7.5): kept until the editor behind the drawing screen takes it. */
     val drawn = MutableStateFlow<Drawn?>(null)

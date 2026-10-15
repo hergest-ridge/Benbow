@@ -44,6 +44,9 @@ class DraftSession(
     val entryIdFlow: StateFlow<String?> = id.asStateFlow()
     val entryId: String? get() = id.value
 
+    /** Typing not yet in the local DB (it gets there within [SAVE_DELAY]); the browser asks before closing then. */
+    val pending: Boolean get() = unsaved.load() != null
+
     private val unsaved = AtomicReference<RichText?>(null)
     private val mutex = Mutex()
     private var saveJob: Job? = null

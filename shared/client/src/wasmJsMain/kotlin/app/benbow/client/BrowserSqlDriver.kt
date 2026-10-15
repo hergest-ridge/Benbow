@@ -17,6 +17,10 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 
 /**
  * A synchronous SQLDelight driver over sql.js, so the client's code runs in the browser unchanged (ADR-029). The
@@ -31,6 +35,8 @@ class BrowserSqlDriver private constructor(private val shelf: FileShelf, private
     private var dirty = false
     private var force = false
     private var saving: Job? = null
+    private var lastChange: TimeMark = TimeSource.Monotonic.markNow()
+    private var firstUnsaved: TimeMark? = null
     private var storing = 0
 
     /** Changes not in browser storage yet. */
@@ -94,28 +100,34 @@ class BrowserSqlDriver private constructor(private val shelf: FileShelf, private
 
     override fun close() = Unit
 
-    /** Saves soon: changes come in bursts (a sync page, typing), one snapshot covers them. */
+    /**
+     * Saves once changes pause: they come in bursts (a sync page, a draft every few hundred ms while typing) and each
+     * snapshot is the whole file. While changes keep coming, a snapshot still goes out every [MAX_WAIT].
+     */
     private fun changed() {
         dirty = true
+        lastChange = TimeSource.Monotonic.markNow()
+        if (firstUnsaved == null) firstUnsaved = lastChange
         if (saving == null) {
-            saving = scope.launch {
-                delay(SAVE_DELAY_MS)
-                save()
-            }.also { job -> job.invokeOnCompletion { if (saving === job) saving = null } }
+            saving = scope.launch { save(patient = true) }.also { job -> job.invokeOnCompletion { if (saving === job) saving = null } }
         }
     }
 
     /** Saves what's pending now (the page is being hidden, a test checks the stored file). */
     suspend fun flush() {
         saving?.cancelAndJoin()
-        save()
+        save(patient = false)
     }
 
-    private suspend fun save() {
+    private suspend fun save(patient: Boolean) {
         while (dirty) {
+            if (patient) {
+                while (lastChange.elapsedNow() < QUIET && firstUnsaved?.let { it.elapsedNow() < MAX_WAIT } != false) delay(POLL)
+            }
             // A transaction never spans a suspension, but a snapshot would end one: wait it out.
-            while (transaction != null) delay(SAVE_DELAY_MS)
+            while (transaction != null) delay(POLL)
             dirty = false
+            firstUnsaved = null
             // Reads inside a transaction, or a sync round that found nothing new, wrote no rows: nothing to save.
             // The counter starts again at 0 when sql.js reopens the database for a snapshot.
             if (!force && totalChanges() == 0L) continue
@@ -216,7 +228,9 @@ class BrowserSqlDriver private constructor(private val shelf: FileShelf, private
     }
 
     companion object {
-        private const val SAVE_DELAY_MS = 300L
+        private val QUIET = 1.seconds
+        private val MAX_WAIT = 5.seconds
+        private val POLL = 100.milliseconds
         private const val RETRY_MS = 5_000L
         private const val MAX_EXACT = (1L shl 53) - 1 // a JavaScript number holds it exactly
         private var sqlJs: JsAny? = null

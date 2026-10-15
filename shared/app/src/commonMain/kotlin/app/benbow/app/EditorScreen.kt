@@ -114,7 +114,7 @@ import org.jetbrains.compose.resources.stringResource
  */
 internal class EditorViewModel(private val services: AppServices, route: Route.Editor) : ViewModel() {
     private val repo = services.repo
-    private val session = DraftSession(repo, services.scope, route.entryId, route.day)
+    private val session = DraftSession(repo, services.scope, route.entryId, route.day).also { services.openDrafts += it }
 
     var editor by mutableStateOf<EditorState?>(null)
         private set
@@ -229,7 +229,10 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
         services.scope.launch { repo.restore(id) }
     }
 
-    override fun onCleared() = commit()
+    override fun onCleared() {
+        services.openDrafts -= session
+        commit()
+    }
 
     private fun onEntry(entry: EntryDetail) {
         detail = entry

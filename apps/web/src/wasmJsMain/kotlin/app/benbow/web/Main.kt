@@ -8,6 +8,7 @@ import app.benbow.app.AppServices
 import app.benbow.app.BenbowApp
 import app.benbow.app.MediaFactory
 import app.benbow.app.WebNotice
+import app.benbow.app.installWebImages
 import app.benbow.app.preloadTexts
 import app.benbow.client.BrowserMedia
 import app.benbow.client.BrowserShelf
@@ -17,6 +18,7 @@ import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.db.BenbowDb
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.async
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 
 /** Opens this browser's copy of the journal and calendar (ADR-029), then shows the app. */
@@ -36,18 +38,27 @@ fun main() {
         val services = AppServices(
             journal,
             calendar,
-            mediaStore = MediaFactory { db, apis, now -> BrowserMedia(db, apis, now) },
+            mediaStore = MediaFactory { db, apis, now -> BrowserMedia(db, apis, now, shelf) },
             platform = "web",
             deviceName = browserName(),
-            mediaCacheBytes = 256L * 1024 * 1024, // kept in the tab's memory for now
+            mediaCacheBytes = 2L * 1024 * 1024 * 1024, // downloads kept in IndexedDB; the PC has room
         )
-        warnBeforeClosing { journal.unsaved || calendar.unsaved }
-        whenHidden {
+        val media = services.media as BrowserMedia
+        // Hidden (another tab, minimized, closing): typing becomes a revision and everything goes to browser storage now.
+        val saveAll = {
             services.scope.launch {
+                services.commitOpenDrafts().joinAll()
                 journal.flush()
                 calendar.flush()
             }
         }
+        whenHidden { saveAll() }
+        warnBeforeClosing {
+            val unsaved = services.draftsPending || journal.unsaved || calendar.unsaved || media.unsaved
+            if (unsaved) saveAll() // finishes while the browser asks
+            unsaved
+        }
+        installWebImages()
         texts.await()
         hideLoading()
         ComposeViewport { BenbowApp(services) }

@@ -2,22 +2,33 @@ package app.benbow.client
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
 
-// The browser's side of Platform.kt (ADR-029): files are bytes in memory, the page has one thread.
+// The browser's side of Platform.kt (ADR-029): a file is a Blob (kept on disk by the browser, in IndexedDB), the page
+// has one thread.
 
-actual open class LocalFile(val name: String, val bytes: ByteArray)
+/**
+ * A media file in the browser: its [blob] (what plays and uploads, never copied whole into Kotlin) and, for small
+ * files, its [bytes] too (drawings read as text, pictures decoded at once).
+ */
+actual open class LocalFile(val name: String, val blob: JsAny, val size: Long, val bytes: ByteArray? = null) {
+    internal var url: String? = null
+}
 
-actual fun LocalFile.readAllText(): String = bytes.decodeToString()
+actual fun LocalFile.readAllText(): String = checkNotNull(bytes) { "$name is too large to read as text here" }.decodeToString()
 
-@OptIn(ExperimentalEncodingApi::class)
-actual fun LocalFile.uri(): String = "data:application/octet-stream;base64," + Base64.encode(bytes)
+/** A blob: URL, valid in this page and in windows it opens (printing). */
+actual fun LocalFile.uri(): String = url ?: objectUrl(blob).also { url = it }
 
 actual abstract class ByteSource : AutoCloseable {
+    /** Everything at once; a [BlobSource] has no synchronous read and is taken whole by the media store instead. */
     abstract fun readAll(): ByteArray
 
     actual open override fun close() = Unit
+}
+
+/** A file the user picked, dropped or pasted, as the browser holds it: [BrowserMedia] stores the blob as it is. */
+class BlobSource(val blob: JsAny) : ByteSource() {
+    override fun readAll(): ByteArray = throw UnsupportedOperationException("A picked file is read asynchronously")
 }
 
 private class BytesSource(private val bytes: ByteArray) : ByteSource() {

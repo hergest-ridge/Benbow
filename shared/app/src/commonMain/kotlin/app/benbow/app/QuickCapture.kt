@@ -111,7 +111,7 @@ fun QuickCapture(services: AppServices, shared: SharedContent, onClose: () -> Un
                         services.messages.collect { if (it is AppMessage.AttachFailed) failures += it.reason }
                     }
                     val id = services.repo.createNote(services.today(), text.trim())
-                    shared.files.map { file -> services.attach({ id }, file.open, probe = file.probe) }.joinAll()
+                    shared.files.map { file -> services.attach({ id }, { file.open() }, probe = { file.probe() }) }.joinAll()
                     listener.cancel()
                 }
                 if (failures.isEmpty()) onClose() else error = failures.joinToString("\n")

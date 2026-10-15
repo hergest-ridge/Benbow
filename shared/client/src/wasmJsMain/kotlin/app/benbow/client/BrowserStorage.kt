@@ -5,13 +5,15 @@ package app.benbow.client
 import kotlinx.coroutines.await
 import kotlin.js.Promise
 
-/** Where whole database files wait between visits (ADR-029). */
+/** Where whole files wait between visits (ADR-029): the databases, and media as Blobs. */
 interface FileShelf {
-    /** The stored file (a Uint8Array), or null. */
+    /** The stored file (a Uint8Array or a Blob, as stored), or null. */
     suspend fun load(key: String): JsAny?
 
-    /** Stores [bytes] (a Uint8Array) under [key], replacing the previous file only once the new one is complete. */
+    /** Stores [bytes] (a Uint8Array or a Blob) under [key], replacing the previous file only once the new one is complete. */
     suspend fun store(key: String, bytes: JsAny)
+
+    suspend fun delete(key: String)
 }
 
 /** The app's data on this browser belongs to another tab. */
@@ -26,6 +28,10 @@ class BrowserShelf private constructor() : FileShelf {
 
     override suspend fun store(key: String, bytes: JsAny) {
         idbPut(key, bytes).await<JsAny?>()
+    }
+
+    override suspend fun delete(key: String) {
+        idbDelete(key).await<JsAny?>()
     }
 
     companion object {
@@ -56,6 +62,15 @@ private fun idbPut(key: String, bytes: JsAny): Promise<JsAny?> = js(
         tx.oncomplete = () => resolve(null);
         tx.onerror = () => reject(tx.error);
         tx.onabort = () => reject(tx.error);
+    }))""",
+)
+
+private fun idbDelete(key: String): Promise<JsAny?> = js(
+    """globalThis.benbowFiles().then(db => new Promise((resolve, reject) => {
+        const tx = db.transaction('files', 'readwrite');
+        tx.objectStore('files').delete(key);
+        tx.oncomplete = () => resolve(null);
+        tx.onerror = () => reject(tx.error);
     }))""",
 )
 

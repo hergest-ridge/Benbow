@@ -37,9 +37,9 @@ internal fun kindOf(mime: String): String = when {
  */
 internal fun AppServices.attach(
     entryId: suspend () -> String,
-    open: () -> ByteSource,
+    open: suspend () -> ByteSource,
     onAttached: () -> Unit = {},
-    probe: () -> MediaProbe,
+    probe: suspend () -> MediaProbe,
 ): Job = scope.launch {
     try {
         val probe = probe()

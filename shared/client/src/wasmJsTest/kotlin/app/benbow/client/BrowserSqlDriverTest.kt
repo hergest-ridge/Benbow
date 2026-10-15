@@ -14,16 +14,6 @@ import kotlin.test.assertTrue
 
 /** The browser's database (ADR-029): the journal's schema and queries on sql.js, and its files on the shelf. */
 class BrowserSqlDriverTest {
-    private class MemoryShelf : FileShelf {
-        val files = mutableMapOf<String, JsAny>()
-
-        override suspend fun load(key: String): JsAny? = files[key]
-
-        override suspend fun store(key: String, bytes: JsAny) {
-            files[key] = bytes
-        }
-    }
-
     @Test
     fun aNoteSurvivesAReloadAndIsFoundBySearch() = runTest {
         val shelf = MemoryShelf()

@@ -2,11 +2,13 @@ package app.benbow.app
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import app.benbow.client.ByteSink
 import app.benbow.client.byteSourceOf
-import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
+import app.benbow.client.readBlob
+import app.benbow.client.toUint8Array
+import kotlinx.coroutines.launch
 
 @Composable
 internal actual fun rememberCopy(): (String) -> Boolean = { text ->
@@ -21,14 +23,17 @@ internal actual fun rememberShare(): (String) -> Boolean = { text ->
     false
 }
 
-@OptIn(ExperimentalEncodingApi::class)
 @Composable
 internal actual fun rememberOpenFile(mimes: List<String>, onPicked: (PickedFile?) -> Unit): () -> Unit {
     val callback by rememberUpdatedState(onPicked)
+    val scope = rememberCoroutineScope()
     return {
-        pickFiles(mimes.joinToString(",").replace("*/*", ""), multiple = false) { name, _, base64, _ ->
-            val bytes = Base64.decode(base64)
-            callback(PickedFile(name) { byteSourceOf(bytes) })
+        pickFiles(mimes.filter { it != "*/*" }.joinToString(","), multiple = false) { files ->
+            val file = arrayItem(files, 0)
+            scope.launch {
+                val bytes = readBlob(file)
+                callback(PickedFile(fileName(file)) { byteSourceOf(bytes) })
+            }
         }
     }
 }
@@ -47,7 +52,6 @@ private class DownloadSink(private val name: String, private val mime: String) :
         parts += bytes.copyOf()
     }
 
-    @OptIn(ExperimentalEncodingApi::class)
     override fun close() {
         val all = ByteArray(parts.sumOf { it.size })
         var at = 0
@@ -55,6 +59,6 @@ private class DownloadSink(private val name: String, private val mime: String) :
             part.copyInto(all, at)
             at += part.size
         }
-        downloadBase64(name, mime, Base64.encode(all))
+        saveDownload(name, mime, all.toUint8Array())
     }
 }

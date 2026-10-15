@@ -58,12 +58,4 @@ internal fun cellBytes(row: JsAny, index: Int): JsAny = js("row[index]")
 
 internal fun byteLength(array: JsAny): Int = js("array.length")
 
-internal fun byteAt(array: JsAny, index: Int): Int = js("array[index]")
-
 internal fun newBytes(size: Int): JsAny = js("new Uint8Array(size)")
-
-internal fun setByte(array: JsAny, index: Int, value: Int): Unit = js("{ array[index] = value; }")
-
-internal fun ByteArray.toUint8Array(): JsAny = newBytes(size).also { array -> forEachIndexed { i, b -> setByte(array, i, b.toInt()) } }
-
-internal fun JsAny.toByteArray(): ByteArray = ByteArray(byteLength(this)) { byteAt(this, it).toByte() }

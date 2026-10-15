@@ -87,3 +87,9 @@ Manual, on the S24+ against a dev server (2026-10-13, all passed):
 - Background: note written with the server down, app sent home, process killed → WorkManager delivered it ~30 s after the server came back, without opening the app.
 - Restore: snapshot, then a new note + an edit, then `--restore` of the snapshot → after pull-to-refresh the server had the note back and the edit as a second head; picking it in History resolved the conflict.
 - Still to do by hand: airplane mode on/off (adb over Wi-Fi drops, so not automated).
+
+Calendar store (7.3a), automated: `CalendarSimulation` on memory and SQLite, `CalendarClientTest` (lost response, older server, restore, another store), `CalendarStoreTest` (own snapshots, a broken calendar never stops the journal's backup, `--restore-calendar`, hand-copied file), `EndToEndTest.restoredCalendarIsHealedByThePhoneAndTheJournalStays`.
+Manual, on the S24+ bench build against a 0.6.0 dev server (2026-10-15, all passed):
+- Move: two events made by the previous build (journal entries of kind `event`) moved on the first start of the new one: same ids in `calendar.sqlite`, the entries trashed on the server, 2 calendar ops.
+- Kill: three events made with the server off, then the app force-stopped 0.3 / 0.6 / 0.9 / 1.4 s after each start → all three on the server once (5 records, 5 applied ops, no duplicates), "Синхронизировано". The push finished within 0.3 s, so a kill inside the request itself wasn't hit; that case is `CalendarClientTest` (lost response).
+- Restore: `--restore-calendar` of a snapshot taken before any event existed → the phone re-sent all five with their clocks (an edit made after the snapshot included); the journal file's SHA-256 and its epoch and cursor stayed the same.

@@ -50,11 +50,12 @@ fun Route.webApp(root: Path?) {
 /**
  * The page talks to this server and nothing else: no fonts, scripts or requests from elsewhere, whatever a library
  * might try (Compose for Web fetches missing glyphs from Google's font CDN; the app bundles its emoji instead).
- * WebAssembly needs 'wasm-unsafe-eval'; pictures and players use blob: URLs; the loading screen has inline styles.
+ * WebAssembly needs 'wasm-unsafe-eval'; pictures and players use blob: URLs, and Coil decodes pictures in a worker it
+ * starts from a blob: URL; the loading screen has inline styles.
  */
 internal const val CONTENT_SECURITY_POLICY =
     "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; " +
-        "media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; " +
+        "media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; " +
         "frame-ancestors 'none'; form-action 'self'"
 
 private val HASHED = Regex("[0-9a-f]{16,}\\.\\w+")

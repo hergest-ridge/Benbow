@@ -52,6 +52,7 @@ class WebAppTest {
         assertEquals("no-cache", index.headers[HttpHeaders.CacheControl], "an update shows on the next reload")
         val policy = index.headers["Content-Security-Policy"].orEmpty()
         assertTrue("connect-src 'self';" in policy && "font-src 'self' data:;" in policy, "the page reaches nothing but this server")
+        assertTrue("worker-src 'self' blob:;" in policy, "Coil decodes pictures in a worker it starts from a blob")
 
         val wasm = client.get("/app/0123456789abcdef0123.wasm") { header(HttpHeaders.AcceptEncoding, "gzip") }
         assertEquals(ContentType.Application.Wasm, wasm.headers[HttpHeaders.ContentType]?.let(ContentType::parse))

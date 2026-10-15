@@ -24,5 +24,9 @@ class ZipArchiveWriter(private val zip: ZipOutputStream) : ArchiveWriter {
 }
 
 /** Writes the archive as a ZIP into [out] and closes it. */
-suspend fun ArchiveExport.write(out: OutputStream, withMedia: Boolean, today: String, onProgress: (ExportProgress) -> Unit = {}): ExportReport =
-    ZipOutputStream(out.buffered()).use { zip -> write(ZipArchiveWriter(zip), withMedia, today, onProgress) }
+suspend fun ArchiveExport.write(
+    out: OutputStream,
+    withMedia: Boolean,
+    today: String,
+    onProgress: (ExportProgress) -> Unit = {},
+): ExportReport = ZipOutputStream(out.buffered()).use { zip -> write(ZipArchiveWriter(zip), withMedia, today, onProgress) }

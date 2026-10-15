@@ -6,8 +6,8 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.window.ComposeViewport
 import app.benbow.app.AppMessage
 import app.benbow.app.AppServices
-import app.benbow.app.BrowserReminderClock
 import app.benbow.app.BenbowApp
+import app.benbow.app.BrowserReminderClock
 import app.benbow.app.MediaFactory
 import app.benbow.app.WebNotice
 import app.benbow.app.WithBundledFonts
@@ -19,9 +19,9 @@ import app.benbow.client.BrowserMedia
 import app.benbow.client.BrowserShelf
 import app.benbow.client.BrowserSqlDriver
 import app.benbow.client.OpenElsewhereException
-import app.benbow.client.installTimeZones
 import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.db.BenbowDb
+import app.benbow.client.installTimeZones
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope

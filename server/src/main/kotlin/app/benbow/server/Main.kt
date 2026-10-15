@@ -23,7 +23,7 @@ import java.nio.file.StandardOpenOption
 import kotlin.io.path.createDirectories
 import kotlin.system.exitProcess
 
-const val SERVER_VERSION = "0.7.0"
+const val SERVER_VERSION = "0.7.1"
 const val DEFAULT_PORT = 8765
 
 fun main(args: Array<String>) {

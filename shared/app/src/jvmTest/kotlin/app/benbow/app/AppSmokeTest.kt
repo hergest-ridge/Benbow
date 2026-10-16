@@ -29,16 +29,22 @@ import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextInputSelection
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.test.waitUntilExactlyOneExists
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import app.benbow.client.Prompts
 import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.db.BenbowDb
 import app.benbow.core.calendar.CalendarKind
 import app.benbow.core.calendar.EventField
+import app.benbow.core.content.DocumentCodec
+import app.benbow.core.content.toDocument
+import app.benbow.core.text.Mark
+import app.benbow.core.text.buildRichText
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -216,6 +222,48 @@ class AppSmokeTest {
         onNodeWithContentDescription("Меню").click()
         onNodeWithText("Редактировать").click()
         waitUntilExactlyOneExists(hasText("Настроение"), 5_000)
+    }
+
+    @Test
+    fun spoilersHideUntilATapThatOpensThemNotThePost() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val rich = buildRichText {
+            paragraph { text("Разговор с Олей") }
+            paragraph {
+                text("Она сказала, что ")
+                text("диагноз подтвердили", Mark.Spoiler)
+                text(", но держится.")
+            }
+            paragraph { text("Вечером гуляли у моря") }
+        }
+        services.repo.createEntry(services.today(), kind = "note", body = DocumentCodec.encode(rich.toDocument()))
+        setContent { BenbowApp(services) }
+        onNodeWithText("Лента").click()
+        waitUntilExactlyOneExists(hasText("Вечером гуляли у моря"), 5_000)
+        screenshot("24-spoiler-feed")
+
+        // A tap on the hidden words opens them in place; the post stays closed.
+        val line = onNodeWithText("Она сказала", substring = true, useUnmergedTree = true) // the line, not the whole card
+        val bounds = line.fetchSemanticsNode().layoutInfo.coordinates.size
+        mainClock.autoAdvance = false
+        line.performTouchInput { click(Offset(bounds.width * 0.6f, bounds.height * 0.25f)) } // the first of its two lines
+        mainClock.advanceTimeBy(250)
+        screenshot("25a-spoiler-opening") // a circle grows from the tap
+        mainClock.autoAdvance = true
+        mainClock.advanceTimeBy(1_000)
+        waitForIdle()
+        assertTrue(onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isEmpty()) // no reply box: still the feed
+        screenshot("25-spoiler-open")
+
+        onNodeWithText("Вечером гуляли у моря").click()
+        waitUntilExactlyOneExists(hasText("Пока без комментариев", substring = true), 5_000)
+        screenshot("26-spoiler-post") // hidden again: a new visit
+        onNodeWithContentDescription("Меню").click()
+        onNodeWithText("Редактировать").click()
+        waitUntilExactlyOneExists(hasText("Настроение"), 5_000)
+        screenshot("27-spoiler-editor") // frosted, readable
+        onNode(hasSetTextAction()).performTextInputSelection(TextRange(38)) // inside "диаг|ноз"
+        waitForIdle()
+        screenshot("27b-spoiler-cursor") // clear where the cursor is
     }
 
     @Test

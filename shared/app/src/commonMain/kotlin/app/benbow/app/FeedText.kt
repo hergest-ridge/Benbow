@@ -2,11 +2,15 @@ package app.benbow.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,10 +25,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -42,9 +54,19 @@ import app.benbow.core.content.toRichText
 import app.benbow.core.text.Atom
 import app.benbow.core.text.BlockStyle
 import app.benbow.core.text.ListKind
+import app.benbow.core.text.Mark
 import app.benbow.core.text.Paragraph
 import app.benbow.core.text.RichText
 import app.benbow.ui.editor.EditorStyles
+import app.benbow.ui.editor.SpoilerDots
+import app.benbow.ui.editor.SpoilerLayout
+import app.benbow.ui.editor.SpoilerReveal
+import app.benbow.ui.editor.rememberSpoilerDots
+import app.benbow.ui.editor.spoilerClock
+import app.benbow.ui.editor.spoilerDots
+import app.benbow.ui.editor.spoilerLayout
+import app.benbow.ui.editor.spoilerMask
+import app.benbow.ui.editor.spoilerRanges
 import app.benbow.ui.theme.BenbowPalette
 import org.jetbrains.compose.resources.stringResource
 
@@ -60,12 +82,27 @@ private const val LINE_COST = 40
  */
 @Composable
 internal fun FeedText(body: FeedBody?, expanded: Boolean, onExpand: () -> Unit, modifier: Modifier = Modifier) {
-    val rich = body?.rich ?: return
+    if (body == null || body.blocks.isEmpty()) return
     val colors = MaterialTheme.colorScheme
     val dark = colors.background.luminance() < 0.5f
     val styles = remember(colors) { EditorStyles(colors, dark) }
+    // The post's spoilers open together and close again once it scrolls away (this state goes with it).
+    val reveal = remember(body) { SpoilerReveal() }
+    val spoilers = if (body.spoilers) {
+        val dots = rememberSpoilerDots()
+        val time = spoilerClock(!reveal.done)
+        remember(reveal, dots, time) { FeedSpoilers(reveal, dots, time) }
+    } else {
+        null
+    }
+    CompositionLocalProvider(LocalFeedSpoilers provides spoilers) { FeedBlocks(body, expanded, onExpand, styles, dark, modifier) }
+}
+
+@Composable
+private fun FeedBlocks(body: FeedBody, expanded: Boolean, onExpand: () -> Unit, styles: EditorStyles, dark: Boolean, modifier: Modifier) {
+    val rich = body.rich
     val blocks = body.blocks
-    if (blocks.isEmpty()) return
+    val colors = MaterialTheme.colorScheme
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         var budget = BUDGET
         var cut = false
@@ -110,7 +147,14 @@ internal fun FeedText(body: FeedBody?, expanded: Boolean, onExpand: () -> Unit, 
 }
 
 /** A post's text, parsed once off the main thread: decoding JSON as a post scrolls in would cost frames. */
-internal class FeedBody(val rich: RichText, val blocks: List<Block>)
+internal class FeedBody(val rich: RichText, val blocks: List<Block>) {
+    val spoilers = rich.marks.any { it.mark == Mark.Spoiler }
+}
+
+/** What a post's lines need to draw its spoilers; null for a post without any. */
+private class FeedSpoilers(val reveal: SpoilerReveal, val dots: SpoilerDots, val time: State<Float>)
+
+private val LocalFeedSpoilers = staticCompositionLocalOf<FeedSpoilers?> { null }
 
 /** Null when the body can't be read (the post then shows no text rather than failing the feed). */
 internal fun feedBody(body: String): FeedBody? =
@@ -285,7 +329,49 @@ private fun Line(rich: RichText, index: Int, styles: EditorStyles, style: TextSt
         Box(modifier.height(6.dp).fillMaxWidth())
         return
     }
-    Text(text, style = style, maxLines = maxLines, overflow = TextOverflow.Ellipsis, modifier = modifier)
+    val spoilers = LocalFeedSpoilers.current
+    val ranges = remember(rich, index) { rich.spoilerRanges(rich.paragraphStarts[index], rich.paragraphEnd(index)) }
+    if (spoilers == null || ranges.isEmpty()) {
+        Text(text, style = style, maxLines = maxLines, overflow = TextOverflow.Ellipsis, modifier = modifier)
+        return
+    }
+    var area by remember { mutableStateOf<SpoilerLayout?>(null) }
+    val reveal = spoilers.reveal
+    val scope = rememberCoroutineScope()
+    Box(modifier) {
+        Text(
+            text,
+            style = style,
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { area = it.spoilerLayout(ranges) },
+            modifier = Modifier
+                .spoilerMask { area?.let { reveal.hidden(index, it) } }
+                .pointerInput(reveal) {
+                    // A tap on a closed spoiler opens the post's spoilers instead of the post.
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        if (reveal.opened || area?.hit(down.position) != true) return@awaitEachGesture
+                        down.consume()
+                        val up = waitForUpOrCancellation() ?: return@awaitEachGesture
+                        up.consume()
+                        reveal.open(index, up.position, scope)
+                    }
+                },
+        )
+        if (!reveal.done) {
+            Spacer(
+                Modifier.matchParentSize().spoilerDots(
+                    spoilers.dots,
+                    MaterialTheme.colorScheme.onSurface,
+                    spoilers.time,
+                    reveal::dotsAlpha,
+                ) {
+                    area?.let { reveal.hidden(index, it) }
+                },
+            )
+        }
+    }
 }
 
 /** One paragraph with its marks in the editor's styles; soft line breaks become real ones. */

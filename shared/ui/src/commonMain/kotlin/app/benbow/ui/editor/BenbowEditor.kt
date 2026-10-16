@@ -4,7 +4,9 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -25,14 +27,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -80,7 +87,7 @@ fun BenbowEditor(state: EditorState, modifier: Modifier = Modifier, readOnly: Bo
 }
 
 @Composable
-private fun EditorBody(state: EditorState, readOnly: Boolean, atoms: AtomViews, width: Dp) {
+private fun BoxScope.EditorBody(state: EditorState, readOnly: Boolean, atoms: AtomViews, width: Dp) {
     val colors = MaterialTheme.colorScheme
     val density = LocalDensity.current
     val styles = remember(colors, atoms, width, density) {
@@ -93,6 +100,19 @@ private fun EditorBody(state: EditorState, readOnly: Boolean, atoms: AtomViews, 
     )
     val measurer = rememberTextMeasurer()
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    // Spoilers (ADR-031): read-only text hides them until a tap opens them all; the editor shows them frosted, and clear
+    // where the cursor or selection touches them, so they can still be written.
+    val spoilerRanges = remember(state.model) { state.model.spoilerRanges() }
+    val laidOut = layout?.takeIf { spoilerRanges.isNotEmpty() && it.matches(state.model) }
+    val spoilers = remember(laidOut, spoilerRanges) { laidOut?.spoilerLayout(spoilerRanges) }
+    val reveal = remember(state) { SpoilerReveal() }
+    val covered: () -> Path? = {
+        when {
+            spoilers == null -> null
+            readOnly -> reveal.hidden(null, spoilers)
+            else -> spoilers.path { !state.selection.touches(spoilerRanges[it]) }.takeUnless { it.isEmpty }
+        }
+    }
 
     SideEffect { state.styles = styles }
     LaunchedEffect(state) {
@@ -139,6 +159,15 @@ private fun EditorBody(state: EditorState, readOnly: Boolean, atoms: AtomViews, 
                     .pointerInput(state, styles) {
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                            if (readOnly && !reveal.opened && layout?.spoilerAt(state.model, down.position) == true) {
+                                down.consume()
+                                val up = waitForUpOrCancellation(PointerEventPass.Initial)
+                                if (up != null) {
+                                    up.consume()
+                                    reveal.open(null, up.position, scope)
+                                }
+                                return@awaitEachGesture
+                            }
                             val index = layout?.let { checkboxAt(it, state.model, styles, down.position) }
                             if (index != null && !readOnly) {
                                 down.consume()
@@ -161,7 +190,24 @@ private fun EditorBody(state: EditorState, readOnly: Boolean, atoms: AtomViews, 
                             }
                         }
                     }
-                    .drawBehind { layout?.let { drawDecorations(it, state.model, styles, measurer, textStyle) } },
+                    .drawBehind { layout?.let { drawDecorations(it, state.model, styles, measurer, textStyle) } }
+                    .drawWithContent {
+                        val path = covered()
+                        when {
+                            path == null -> drawContent()
+
+                            readOnly -> clipPath(path, ClipOp.Difference) { this@drawWithContent.drawContent() }
+
+                            else -> {
+                                clipPath(path, ClipOp.Difference) { this@drawWithContent.drawContent() }
+                                drawIntoCanvas { canvas ->
+                                    canvas.saveLayer(path.getBounds(), Paint().apply { alpha = FROSTED_TEXT })
+                                    clipPath(path) { this@drawWithContent.drawContent() }
+                                    canvas.restore()
+                                }
+                            }
+                        }
+                    },
                 inputTransformation = state.inputTransformation,
                 outputTransformation = state.outputTransformation,
                 readOnly = readOnly,
@@ -177,6 +223,15 @@ private fun EditorBody(state: EditorState, readOnly: Boolean, atoms: AtomViews, 
             )
         }
     }
+    if (spoilers != null && !(readOnly && reveal.done)) {
+        // The editor's frosted dots stand still: calm while writing, and nothing to redraw.
+        val time = spoilerClock(readOnly)
+        Spacer(
+            Modifier.matchParentSize().spoilerDots(rememberSpoilerDots(), colors.onSurface, time, {
+                if (readOnly) reveal.dotsAlpha() else FROSTED_DOTS
+            }, covered),
+        )
+    }
     // Each atom over its own line, which the paragraph style made exactly as tall.
     val current = layout
     if (current != null && current.matches(state.model)) {
@@ -190,6 +245,16 @@ private fun EditorBody(state: EditorState, readOnly: Boolean, atoms: AtomViews, 
         }
     }
 }
+
+private fun TextLayoutResult.spoilerAt(model: RichText, position: Offset): Boolean {
+    if (!matches(model)) return false
+    val ranges = model.spoilerRanges()
+    return ranges.isNotEmpty() && spoilerLayout(ranges).hit(position)
+}
+
+/** How much of frosted spoiler text and dots shows in the editor. */
+private const val FROSTED_TEXT = 0.35f
+private const val FROSTED_DOTS = 0.55f
 
 /** Copy/cut of model text; each returns false when it didn't handle the action (platform default runs). */
 private class ClipboardActions(val copy: () -> Boolean, val cut: () -> Boolean)

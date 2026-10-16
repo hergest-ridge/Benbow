@@ -33,6 +33,7 @@ P0 = MVP (Phases 2–3), P1 = soon after, P2 = later, P3 = maybe. Numbers refer 
 | 9 | Templates ("Today", "This month", reviews) | P1 | Placeholders and prompts |
 | 10 | Psychology-informed prompts, reviews, mood check-ins | P1 | |
 | 13 | Themes, Keep-like note backgrounds | P1 | Semantic tokens, dark-mode aware |
+| 14 | Бережно: spoilers, curtains and quiet entries for sad or triggering notes | P1 | ADR-031; a view only, nothing is ever lost |
 | — | Web client (simplified UI, full functionality) | P1 | Same Compose code, thin client |
 | — | Desktop client | P1 | Same Compose code |
 | 7 | Free ink and drawing over notes, paper feel | P2 | "Paper mode" design in `editor.md` |

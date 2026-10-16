@@ -299,12 +299,6 @@
         <item>Цветочный</item>
         <item>Глиняный</item>
     </string-array>
-    <string-array name="tag_categories">
-        <item>Люди</item>
-        <item>Места</item>
-        <item>Проекты</item>
-        <item>Эмоции</item>
-    </string-array>
     <string-array name="months_nominative">
         <item>Январь</item>
         <item>Февраль</item>

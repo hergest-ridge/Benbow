@@ -1,10 +1,14 @@
 package app.benbow.server.backup
 
+import app.benbow.core.content.TagNames
 import app.benbow.server.calendar.CalendarDatabase
 import app.benbow.server.storage.Backups
 import app.benbow.server.storage.BlobStore
 import app.benbow.server.storage.Database
 import app.benbow.server.storage.SqliteSyncStore
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import java.nio.file.Files
 import java.nio.file.Path
@@ -47,6 +51,9 @@ class BackupJobs(
     private val log = LoggerFactory.getLogger("benbow.backup")
     private val executor = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "benbow-backup").apply { isDaemon = true } }
     private val exportStateFile = dataDir.resolve("export").resolve(".last-seq")
+
+    /** The registry's tag names the mirror was last written with (ADR-032). */
+    private val exportedNamesFile = dataDir.resolve("export").resolve(".tag-names.json")
 
     @Volatile
     var status = BackupStatus(
@@ -193,21 +200,45 @@ class BackupJobs(
         }
     }
 
-    /** Writes the Markdown mirror for entries changed since the last export. */
+    /**
+     * Writes the Markdown mirror for entries changed since the last export. Notes list their tags by name (ADR-032), so
+     * when the registry renames a tag every entry carrying it is written again.
+     */
     private fun exportChanged() {
         val store = SqliteSyncStore(db)
         val since = readExportSeq()
         val changes = store.changesSince(since, Int.MAX_VALUE)
         if (changes.isEmpty()) return
+        val names = store.entry(TagNames.REGISTRY_ID)?.let { registry ->
+            TagNames.of(registry.fields.mapValues { it.value.value })
+        }.orEmpty()
+        val exported = readExportedNames()
+        val renamed = (names.keys + exported.keys).filterTo(HashSet()) { names[it] != exported[it] }
+        val ids = changes.map { it.second }.toMutableSet()
+        if (renamed.isNotEmpty()) {
+            ids += store.changesSince(0, Int.MAX_VALUE).map { it.second }.distinct().filter { id ->
+                store.entry(id)?.fields?.keys.orEmpty().any {
+                    it.startsWith(TagNames.TAG_PREFIX) &&
+                        it.removePrefix(TagNames.TAG_PREFIX) in renamed
+                }
+            }
+        }
         val mirror = MarkdownMirror(dataDir.resolve("export")) { sha -> blobs?.blob(sha)?.let(blobs::file) }
-        changes.map { it.second }.distinct().forEach { id ->
+        ids.forEach { id ->
             val entry = store.entry(id) ?: return@forEach
-            mirror.write(entry, entry.head?.let { store.revision(it)?.body })
+            mirror.write(entry, entry.head?.let { store.revision(it)?.body }, names)
         }
         val seq = changes.last().first
         exportStateFile.parent.createDirectories()
+        if (renamed.isNotEmpty()) exportedNamesFile.writeText(Json.encodeToString(namesSerializer, names))
         exportStateFile.writeText(seq.toString())
         status = status.copy(lastExportSeq = seq)
+    }
+
+    private fun readExportedNames(): Map<String, String> = if (exportedNamesFile.exists()) {
+        runCatching { Json.decodeFromString(namesSerializer, exportedNamesFile.readText()) }.getOrDefault(emptyMap())
+    } else {
+        emptyMap()
     }
 
     private fun readExportSeq(): Long = if (exportStateFile.exists()) exportStateFile.readText().trim().toLongOrNull() ?: 0 else 0
@@ -225,6 +256,8 @@ class BackupJobs(
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 }
+
+private val namesSerializer = MapSerializer(String.serializer(), String.serializer())
 
 private const val STALE_UPLOAD_MS = 7L * 24 * 3_600_000
 private const val SCRUB_AFTER_MS = 7L * 24 * 3_600_000

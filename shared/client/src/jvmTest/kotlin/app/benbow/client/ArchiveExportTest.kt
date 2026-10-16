@@ -9,6 +9,7 @@ import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.ByteArrayOutputStream
@@ -67,6 +68,9 @@ class ArchiveExportTest {
 
         val sidecar = Json.parseToJsonElement(files.getValue(note.removeSuffix(".md") + ".json").decodeToString()).jsonObject
         assertEquals(repo.entry(walk).first()!!.body, sidecar.getValue("body").jsonPrimitive.content, "the exact document, lossless")
+        val tag = sidecar.getValue("tags").jsonArray.single().jsonObject
+        assertEquals(repo.tags().first().single().id, tag.getValue("id").jsonPrimitive.content, "tags by id and name (ADR-032)")
+        assertEquals("Море", tag.getValue("name").jsonPrimitive.content)
 
         val old = files.entries.single { it.key.startsWith("entries/2026/09/") && it.key.endsWith(".md") }.value.decodeToString()
         assertTrue("<!-- image ${gone.sha256} is not in this export" in old, old)
@@ -78,7 +82,7 @@ class ArchiveExportTest {
     fun withoutFilesTheNotesSaySo() = runTest {
         val walk = repo.createNote("2026-10-13", "Прогулка")
         repo.attach(walk, media.import(photo.inputStream(), "image/jpeg", "IMG_1.jpg", null), "image")
-        repo.setTagCategory("Море", "Места") // the tag registry is app data, not an entry
+        repo.setTagCategory("море", "места") // the tag registry is app data, not an entry
 
         val out = ByteArrayOutputStream()
         assertEquals(ExportReport(1, 0, 0), ArchiveExport(db, media).write(out, withMedia = false, today = "2026-10-13"))

@@ -39,6 +39,27 @@ class EntryExportTest {
     }
 
     @Test
+    fun tagsListByTheRegistrysNameElseTheirOwnNeverById() {
+        val entry = EntryState(
+            id = "entry-1",
+            kind = "note",
+            day = "2026-10-14",
+            createdAt = 0,
+            fields = mapOf(
+                "tag:море" to LwwValue("Море", Hlc.ZERO),
+                "tag:0192-кофе" to LwwValue("Кофе", Hlc.ZERO),
+                "tag:старое" to LwwValue(null, Hlc.ZERO),
+            ),
+        )
+        val names = TagNames.of(mapOf("name:море" to "Океан", "cat:море" to "места"))
+        assertEquals(mapOf("море" to "Океан"), names)
+        val markdown = EntryExport.markdown(entry, null, missing = "missing", tagNames = names) { null }
+        assertTrue("tags: [\"Кофе\", \"Океан\"]" in markdown, markdown)
+        val sidecar = EntryExport.sidecar(entry, null, names)
+        assertTrue("\"id\": \"0192-кофе\"" in sidecar && "\"name\": \"Океан\"" in sidecar, sidecar)
+    }
+
+    @Test
     fun aVoiceNotesTranscriptFollowsItsLinkAsAQuote() {
         val voice =
             AttachmentState(

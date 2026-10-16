@@ -74,6 +74,35 @@ class BackupTest {
     }
 
     @Test
+    fun aRenamedTagIsWrittenAgainInEveryNoteThatHasIt() {
+        val data = Files.createTempDirectory("benbow-backup")
+        Database.open(data, "test").use { db ->
+            val jobs = BackupJobs(db, data, null)
+            val rules = SyncRules(SqliteSyncStore(db))
+            rules.push(
+                listOf(
+                    CreateEntry("o1", "entry-0001", "journal", "2026-10-13", 1),
+                    PutRevision("o2", "entry-0001", "r1", emptyList(), body),
+                    SetField("o3", "entry-0001", "tag:море", "Море", Hlc(1, 0, "phone")),
+                    CreateEntry("o4", "system-tags", "system", "1970-01-01", 1),
+                ),
+            )
+            jobs.runOnce()
+            val md = data.resolve("export/2026/10").listDirectoryEntries("*.md").single()
+            assertTrue("tags: [\"Море\"]" in md.readText())
+
+            // Only the registry changes (ADR-032): the note itself is written again with the new name.
+            rules.push(listOf(SetField("o5", "system-tags", "name:море", "Океан", Hlc(2, 0, "phone"))))
+            Thread.sleep(1_100) // snapshot names have second resolution
+            jobs.runOnce()
+            assertTrue("tags: [\"Океан\"]" in md.readText(), md.readText())
+            val sidecar = data.resolve("export/2026/10").listDirectoryEntries("*.json").single().readText()
+            assertTrue("\"id\": \"море\"" in sidecar && "\"name\": \"Океан\"" in sidecar, sidecar)
+            assertFalse(data.resolve("export/1970").exists(), "the registry is not a note")
+        }
+    }
+
+    @Test
     fun retentionKeepsRecentDailyWeeklyMonthlyAndPreUpdate() {
         val day = 24 * 3_600_000L
         val now = 400 * day

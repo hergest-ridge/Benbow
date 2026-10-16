@@ -32,7 +32,7 @@ data class GentleRule(
     val id: String,
     val name: String,
     val kind: String,
-    /** The tag's or the category's name; empty for a period. */
+    /** The tag's or the category's id (rules made before ids, ADR-032: its name, any case); empty for a period. */
     val value: String = "",
     /** A period's first and last day ("YYYY-MM-DD", both included). */
     val from: String = "",
@@ -41,6 +41,9 @@ data class GentleRule(
 ) {
     /** The veil this rule gives; null while it is off. */
     val veil: Veil? get() = Veil.of(level)?.takeIf { it != Veil.Open }
+
+    /** The id it points at: a name from before ids is, in lower case, the id of the tag or category it named. */
+    val key: String get() = tagName(value).lowercase()
 
     internal fun encode(): String = ClientJson.encodeToString(Stored.serializer(), Stored(name, kind, value, from, to, level))
 
@@ -70,17 +73,26 @@ data class GentleRule(
     }
 }
 
-/** The rules, with the tag categories they need to match; [today] decides whether a put-off entry is back. */
-class GentleRules(val rules: List<GentleRule>, private val categories: Map<String, String>, val today: String = "") {
-    fun matches(rule: GentleRule, day: String, tags: List<String>): Boolean = when (rule.kind) {
-        GentleRule.TAG -> tags.any { it.equals(rule.value, ignoreCase = true) }
-        GentleRule.CATEGORY -> tags.any { categories[tagName(it).lowercase()]?.equals(rule.value, ignoreCase = true) == true }
+/**
+ * The rules, with the tag registry they need to match; [today] decides whether a put-off entry is back. A rule
+ * points at a tag or a category by id; one from before ids (ADR-032) also matches by name, so renaming never lets an
+ * entry out from under its rule: a rule may cover more, never less.
+ */
+class GentleRules(val rules: List<GentleRule>, val registry: TagRegistry = TagRegistry(), val today: String = "") {
+    fun matches(rule: GentleRule, day: String, tags: List<TagRef>): Boolean = when (rule.kind) {
+        GentleRule.TAG -> tags.any { it.id == rule.key || registry.name(it).equals(rule.value, ignoreCase = true) }
+
+        GentleRule.CATEGORY -> tags.any { tag ->
+            registry.category(tag.id)?.let { it == rule.key || registry.categoryName(it).equals(rule.value, ignoreCase = true) } == true
+        }
+
         GentleRule.PERIOD -> rule.from.isNotEmpty() && day >= rule.from && day <= rule.to
+
         else -> false
     }
 
     /** The strongest veil the rules give an entry (quiet over curtain), null when none applies. */
-    fun ruled(day: String, tags: List<String>): Veil? {
+    fun ruled(day: String, tags: List<TagRef>): Veil? {
         val levels = rules.mapNotNull { rule -> rule.veil?.takeIf { matches(rule, day, tags) } }
         return if (Veil.Quiet in levels) Veil.Quiet else levels.firstOrNull()
     }
@@ -89,31 +101,27 @@ class GentleRules(val rules: List<GentleRule>, private val categories: Map<Strin
     fun own(mark: Veil?, until: String?): Veil? = if (until != null && today < until) Veil.Quiet else mark
 
     /** What an entry shows as now. */
-    fun veilOf(mark: Veil?, until: String?, day: String, tags: List<String>): Veil? = effectiveVeil(own(mark, until), ruled(day, tags))
+    fun veilOf(mark: Veil?, until: String?, day: String, tags: List<TagRef>): Veil? = effectiveVeil(own(mark, until), ruled(day, tags))
 
+    /** The entry as lists show it: its tags by the names they show as, and its veil. */
     fun apply(entry: EntrySummary): EntrySummary {
         val ruled = ruled(entry.day, entry.tags)
-        return entry.copy(veil = effectiveVeil(own(entry.ownVeil, entry.until), ruled), ruleVeil = ruled)
+        return entry.copy(
+            tags = registry.resolve(entry.tags),
+            veil = effectiveVeil(own(entry.ownVeil, entry.until), ruled),
+            ruleVeil = ruled,
+        )
     }
 
     companion object {
-        val NONE = GentleRules(emptyList(), emptyMap())
+        val NONE = GentleRules(emptyList())
 
-        /** From the fields of the rules' registry and of the tag registry (`cat:<tag key>` = category). */
+        /** From the fields of the rules' registry and of the tag registry. */
         internal fun of(rules: Map<String, String?>, tags: Map<String, String?>, today: String) = GentleRules(
             rules.mapNotNull { (key, value) ->
                 if (!key.startsWith(RULE_PREFIX) || value == null) null else GentleRule.decode(key.removePrefix(RULE_PREFIX), value)
             }.sortedBy { it.name.lowercase() },
-            tags.mapNotNull { (key, value) ->
-                if (key.startsWith(CATEGORY_PREFIX) &&
-                    value != null
-                ) {
-                    key.removePrefix(CATEGORY_PREFIX) to value
-                } else {
-                    null
-                }
-            }
-                .toMap(),
+            TagRegistry.of(tags),
             today,
         )
     }

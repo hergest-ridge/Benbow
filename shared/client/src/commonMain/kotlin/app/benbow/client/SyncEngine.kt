@@ -4,6 +4,7 @@ import app.benbow.client.db.BenbowDb
 import app.benbow.core.api.KnownEntry
 import app.benbow.core.api.Protocol
 import app.benbow.core.api.ServerInfo
+import app.benbow.core.content.TagNames
 import app.benbow.core.sync.CreateEntry
 import app.benbow.core.sync.EntrySnapshot
 import app.benbow.core.sync.OpStatus
@@ -155,6 +156,13 @@ class SyncEngine(private val db: BenbowDb, private val apiFor: (Connection) -> B
         entry.fields.values.forEach { clock.observe(it.hlc) }
         if (q.pendingCountFor(entry.id).executeAsOne() > 0) return
         val existing = q.selectEntry(entry.id).executeAsOneOrNull()
+        val renamed = if (entry.id ==
+            TAG_REGISTRY_ID
+        ) {
+            renamedTags(existing?.fields, entry.fields.mapValues { it.value.value })
+        } else {
+            emptySet()
+        }
         val body = snapshot.headBody ?: existing?.body ?: JournalRepository.emptyBody()
         val (title, preview) = summarize(body)
         val media = mediaSummary(entry.attachments)
@@ -183,6 +191,14 @@ class SyncEngine(private val db: BenbowDb, private val apiFor: (Connection) -> B
         q.updateParent(entry.fields[PARENT_FIELD]?.value, entry.id)
         Moments.apply(db, entry.id, entry.fields.mapValues { it.value.value })
         SearchIndex.update(db, entry.id)
+        SearchIndex.retag(db, renamed)
+    }
+
+    /** Tags whose own name differs between the registry this device had and the one from the server (ADR-032). */
+    private fun renamedTags(before: String?, after: Map<String, String?>): Set<String> {
+        val old = before?.let { TagNames.of(decodeFields(it)) }.orEmpty()
+        val new = TagNames.of(after)
+        return (old.keys + new.keys).filterTo(HashSet()) { old[it] != new[it] }
     }
 
     private companion object {

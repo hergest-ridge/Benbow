@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.dp
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.swatch_names
 import app.benbow.client.SWATCHES
-import app.benbow.client.TagLooks
+import app.benbow.client.TagRegistry
 import org.jetbrains.compose.resources.stringArrayResource
 
 /** Google Keep's note colors by name ([SWATCHES]): a light and a dark shade, so tags read well in both themes. */
@@ -45,8 +45,8 @@ private val SHADES: Map<String, Pair<Long, Long>> = mapOf(
 /** The light shade as CSS, for printed pages. */
 internal fun lightSwatch(name: String?): String? = SHADES[name]?.first?.let { "#" + (it and 0xFFFFFF).toString(16).padStart(6, '0') }
 
-/** The tag registry's looks for the whole app, provided once at the root. */
-internal val LocalTagLooks = compositionLocalOf { TagLooks() }
+/** The tag registry (names, categories, colors by id) for the whole app, provided once at the root. */
+internal val LocalTags = compositionLocalOf { TagRegistry() }
 
 @Composable
 internal fun swatch(name: String?): Color? {
@@ -61,9 +61,9 @@ internal fun markColor(name: String?): Color? {
     return Color(if (MaterialTheme.colorScheme.background.luminance() < 0.5f) light else dark)
 }
 
-/** A tag's chip color: its own, else its category's, else a quiet neutral. */
+/** A tag's chip color (by its id): its own, else its category's, else a quiet neutral. */
 @Composable
-internal fun tagColor(tag: String): Color = swatch(LocalTagLooks.current.color(tag)) ?: MaterialTheme.colorScheme.surfaceContainerHighest
+internal fun tagColor(tagId: String): Color = swatch(LocalTags.current.color(tagId)) ?: MaterialTheme.colorScheme.surfaceContainerHighest
 
 /** Pick one of the colors, or [noneLabel] for none (back to the default); without [noneLabel] a color is a must. */
 @Composable

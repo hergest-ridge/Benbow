@@ -87,7 +87,7 @@ import app.benbow.app.resources.veil_undo
 import app.benbow.app.resources.veiled_curtain
 import app.benbow.app.resources.veiled_none
 import app.benbow.app.resources.veiled_quiet
-import app.benbow.client.TagLooks
+import app.benbow.client.TagRegistry
 import app.benbow.client.Templates
 import app.benbow.client.Veil
 import kotlinx.coroutines.flow.filterNotNull
@@ -219,11 +219,11 @@ private val still = EnterTransition.None togetherWith ExitTransition.None
 /** Root of the Android, desktop and web apps. */
 @Composable
 fun BenbowApp(services: AppServices) {
-    val looks by remember { services.repo.tagLooks() }.collectAsStateWithLifecycle(TagLooks())
+    val tags by remember { services.repo.tagRegistry() }.collectAsStateWithLifecycle(TagRegistry())
     val gentle by services.gentle.on.collectAsStateWithLifecycle()
     AppTheme(services) {
         CompositionLocalProvider(
-            LocalTagLooks provides looks,
+            LocalTags provides tags,
             LocalGentle provides gentle,
             LocalAudio provides rememberAudioPlayback(),
             LocalPagerArrows provides (services.platform != "android"), // a mouse: side buttons on pictures

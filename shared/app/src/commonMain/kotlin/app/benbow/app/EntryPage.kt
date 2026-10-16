@@ -48,14 +48,14 @@ internal suspend fun AppServices.entryPage(id: String): PrintPage? = withContext
     val dayText = { day: String -> LocalDate.parse(day).let { "${it.day} ${months[it.month.number - 1]} ${it.year}" } }
     val weekday = getStringArray(Res.array.weekdays)[LocalDate.parse(entry.day).dayOfWeek.isoDayNumber - 1]
     val moment = "$weekday, ${dayText(entry.day)}, ${timeLabel(entry.createdAt)}"
-    val looks = repo.tagLooks().first()
+    val looks = repo.tagRegistry().first()
     val head = buildString {
         append("<p class=\"meta\">").append(escape(moment)).append(moodEmoji(entry.mood)?.let { " · $it" }.orEmpty()).append("</p>\n")
         if (entry.tags.isNotEmpty()) {
             append("<p class=\"tags\">")
             entry.tags.forEach { tag ->
-                val background = lightSwatch(looks.color(tag))?.let { " style=\"background:$it\"" }.orEmpty()
-                append("<span").append(background).append(">").append(escape(tag)).append("</span>")
+                val background = lightSwatch(looks.color(tag.id))?.let { " style=\"background:$it\"" }.orEmpty()
+                append("<span").append(background).append(">").append(escape(tag.name)).append("</span>")
             }
             append("</p>\n")
         }

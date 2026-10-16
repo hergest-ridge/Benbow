@@ -3,6 +3,7 @@ package app.benbow.core.content
 import app.benbow.core.sync.AttachmentState
 import app.benbow.core.sync.EntryState
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -23,9 +24,16 @@ object EntryExport {
 
     /**
      * The `.md` file. [link] gives an attachment's path relative to the note, or null when the file isn't in this
-     * export; [missing] then says why in an HTML comment ("not uploaded yet", "not on this device").
+     * export; [missing] then says why in an HTML comment ("not uploaded yet", "not on this device"). [tagNames] are
+     * the registry's names by tag id ([TagNames.of]); tags list by name, never by id.
      */
-    fun markdown(entry: EntryState, body: String?, missing: String, link: (AttachmentState) -> String?): String {
+    fun markdown(
+        entry: EntryState,
+        body: String?,
+        missing: String,
+        tagNames: Map<String, String> = emptyMap(),
+        link: (AttachmentState) -> String?,
+    ): String {
         val document = decode(body)
         val title = (document?.blocks?.firstOrNull() as? TextBlock)?.let { block -> block.children.joinToString("") { it.text } }.orEmpty()
         val frontMatter = buildString {
@@ -38,7 +46,7 @@ object EntryExport {
             if (entry.conflictHeads.isNotEmpty()) appendLine("conflict: [${entry.conflictHeads.joinToString(", ") { yaml(it) }}]")
             // Namespaced fields (ADR-021) read as lists; everything else as plain keys.
             val fields = entry.fields.mapNotNull { (k, v) -> v.value?.let { k to it } }.sortedBy { it.first }.toMap()
-            val tags = fields.filterKeys { it.startsWith("tag:") }.values.sortedBy { it.lowercase() }
+            val tags = TagNames.on(fields, tagNames).map { it.second }
             val reactions = fields.keys.filter { it.startsWith("reaction:") }.map { it.removePrefix("reaction:") }
             fields.filterKeys { !it.startsWith("tag:") && !it.startsWith("reaction:") && !it.startsWith(TRANSCRIPT) }
                 .forEach { (k, v) -> appendLine("$k: ${yaml(v)}") }
@@ -61,11 +69,21 @@ object EntryExport {
         return frontMatter + "\n" + markdown + "\n" + attachments(entry, missing, inline, link)
     }
 
-    /** The `.json` sidecar: the entry state, the canonical body and its plain text. */
-    fun sidecar(entry: EntryState, body: String?): String = json.encodeToString(
+    /** The `.json` sidecar: the entry state, its tags (id and name, ADR-032), the canonical body and its plain text. */
+    fun sidecar(entry: EntryState, body: String?, tagNames: Map<String, String> = emptyMap()): String = json.encodeToString(
         JsonObject.serializer(),
         buildJsonObject {
             put("entry", Json.encodeToJsonElement(EntryState.serializer(), entry))
+            val tags = TagNames.on(entry.fields.mapValues { it.value.value }, tagNames)
+            if (tags.isNotEmpty()) {
+                val list = tags.map { (id, name) ->
+                    buildJsonObject {
+                        put("id", JsonPrimitive(id))
+                        put("name", JsonPrimitive(name))
+                    }
+                }
+                put("tags", JsonArray(list))
+            }
             put("body", JsonPrimitive(body.orEmpty()))
             put("plain_text", JsonPrimitive(decode(body)?.toPlainText().orEmpty()))
         },

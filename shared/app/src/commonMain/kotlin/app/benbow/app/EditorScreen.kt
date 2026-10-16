@@ -80,6 +80,7 @@ import app.benbow.client.DraftSession
 import app.benbow.client.EntryDetail
 import app.benbow.client.GentleRules
 import app.benbow.client.JournalRepository
+import app.benbow.client.TagRef
 import app.benbow.client.TemplateContext
 import app.benbow.client.Templates
 import app.benbow.client.effectiveVeil
@@ -212,9 +213,9 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
 
     fun setBackground(color: String?) = withEntry { repo.setBackground(it, color) }
 
-    fun addTag(name: String) = withEntry { repo.addTag(it, name) }
+    fun addTag(name: String, tagId: String?) = withEntry { repo.addTag(it, name, tagId) }
 
-    fun removeTag(name: String) = withEntry { repo.removeTag(it, name) }
+    fun removeTag(tag: TagRef) = withEntry { repo.removeTag(it, tag.id) }
 
     fun commit() {
         session.commit()

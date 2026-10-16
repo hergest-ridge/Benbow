@@ -106,13 +106,13 @@ internal fun SearchScreen(services: AppServices, nav: Navigator) {
                         vm.edit { it.copy(withMedia = !it.withMedia) }
                     }, { Text(stringResource(Res.string.filter_media)) }, modifier = Modifier.hand())
                 }
-                items(tags, key = { it.name }) { tag ->
-                    val on = query.tag.equals(tag.name, ignoreCase = true)
+                items(tags, key = { it.id }) { tag ->
+                    val on = query.tag == tag.id
                     FilterChip(
                         on,
-                        { vm.edit { it.copy(tag = if (on) null else tag.name) } },
+                        { vm.edit { it.copy(tag = if (on) null else tag.id) } },
                         { Text("${tag.name} · ${tag.uses}") },
-                        colors = FilterChipDefaults.filterChipColors(containerColor = tagColor(tag.name)),
+                        colors = FilterChipDefaults.filterChipColors(containerColor = tagColor(tag.id)),
                         modifier = Modifier.hand(),
                     )
                 }

@@ -33,17 +33,22 @@ class MetadataSearchTest {
         phone.repo.setMood(id, 2)
         phone.repo.addTag(id, "#Путешествия")
         phone.repo.addTag(id, "  друзья ")
-        phone.repo.addTag(id, "путешествия") // same tag, any case
+        phone.repo.addTag(id, "путешествия") // the same tag, any case, keeps its name
         val summary = phone.repo.journal().first().single()
         assertTrue(summary.favorite)
         assertEquals(2, summary.mood)
-        assertEquals(listOf("друзья", "путешествия"), summary.tags)
-        assertEquals(listOf(TagCount("друзья", 1), TagCount("путешествия", 1)), phone.repo.tags().first().sortedBy { it.name })
+        assertEquals(listOf("друзья", "Путешествия"), summary.tags.map { it.name })
+        assertEquals(
+            listOf("друзья" to 1, "Путешествия" to 1),
+            phone.repo.tags().first().map {
+                it.name to it.uses
+            }.sortedBy { it.first.lowercase() },
+        )
 
-        phone.repo.removeTag(id, "Друзья")
+        phone.repo.removeTag(id, summary.tags.first().id)
         phone.repo.toggleReaction(id, "❤️", on = true)
         val detail = phone.repo.entry(id).first()!!
-        assertEquals(listOf("путешествия"), detail.tags)
+        assertEquals(listOf("Путешествия"), detail.tags.map { it.name })
         assertEquals(setOf("❤️"), detail.reactions)
     }
 
@@ -60,8 +65,8 @@ class MetadataSearchTest {
         phone.engine.sync()
         desktop.engine.sync()
         phone.engine.sync()
-        assertEquals(listOf("дом", "семья"), phone.repo.entry(id).first()!!.tags)
-        assertEquals(listOf("дом", "семья"), desktop.repo.entry(id).first()!!.tags)
+        assertEquals(listOf("дом", "семья"), phone.repo.entry(id).first()!!.tags.map { it.name })
+        assertEquals(listOf("дом", "семья"), desktop.repo.entry(id).first()!!.tags.map { it.name })
     }
 
     @Test
@@ -99,9 +104,9 @@ class MetadataSearchTest {
         val phone = Device(FakeServer(), "phone")
         val a = phone.repo.createNote("2026-10-12", "Утро на даче")
         val b = phone.repo.createNote("2026-10-13", "Утро в городе")
-        phone.repo.addTag(a, "дача")
+        val dacha = phone.repo.addTag(a, "дача")
         phone.repo.setFavorite(b, true)
-        assertEquals(listOf("Утро на даче"), phone.find(SearchQuery("утро", tag = "Дача")))
+        assertEquals(listOf("Утро на даче"), phone.find(SearchQuery("утро", tag = dacha)))
         assertEquals(listOf("Утро в городе"), phone.find(SearchQuery(favorites = true)))
         phone.repo.moveToTrash(b)
         assertEquals(listOf("Утро на даче"), phone.find(SearchQuery("утро")))

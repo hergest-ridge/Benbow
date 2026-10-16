@@ -3,6 +3,7 @@ package app.benbow.client
 import app.benbow.client.calendar.CalendarRepository
 import app.benbow.client.db.BenbowDb
 import app.benbow.core.content.EntryExport
+import app.benbow.core.content.TagNames
 import app.benbow.core.sync.AttachmentState
 import app.benbow.core.sync.EntryState
 import app.benbow.core.sync.Hlc
@@ -48,6 +49,10 @@ class ArchiveExport(
                     attachments = decodeAttachments(row.attachments),
                 ) to row.body
             }
+            // Notes list their tags by the names they show as (ADR-032).
+            val tagNames = db.benbowQueries.selectEntry(TAG_REGISTRY_ID).executeAsOneOrNull()?.let {
+                TagNames.of(decodeFields(it.fields))
+            }.orEmpty()
             val wanted = if (withMedia) {
                 entries.flatMap { (entry, _) ->
                     entry.attachments.values.filter { it.present }.map { entry to it }
@@ -85,9 +90,11 @@ class ArchiveExport(
                 }
                 for ((entry, body) in entries) {
                     val dir = "entries/${EntryExport.folder(entry)}/"
-                    val markdown = EntryExport.markdown(entry, body, missing = why) { a -> placed[a.meta.sha256]?.let { "../../../$it" } }
+                    val markdown = EntryExport.markdown(entry, body, missing = why, tagNames = tagNames) { a ->
+                        placed[a.meta.sha256]?.let { "../../../$it" }
+                    }
                     zip.text(dir + EntryExport.baseName(entry) + ".md", markdown)
-                    zip.text(dir + EntryExport.baseName(entry) + ".json", EntryExport.sidecar(entry, body))
+                    zip.text(dir + EntryExport.baseName(entry) + ".json", EntryExport.sidecar(entry, body, tagNames))
                     onProgress(ExportProgress(++done, total))
                 }
                 val calendars = calendar?.exportFiles(now()).orEmpty()

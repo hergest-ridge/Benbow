@@ -18,17 +18,16 @@ class GentleRulesTest {
     @Test
     fun rulesByTagCategoryAndPeriodVeilEntriesTheOwnMarkWins() = runTest {
         val loss = repo.createNote("2025-03-10", "Похороны")
-        repo.addTag(loss, "Утрата")
+        val grief = repo.addTag(loss, "Утрата")!!
         val friend = repo.createNote("2026-10-01", "Разговор с Олей")
-        repo.addTag(friend, "Оля")
-        repo.setTagCategory("Оля", "Люди")
+        repo.setTagCategory(repo.addTag(friend, "Оля")!!, "люди")
         val spring = repo.createNote("2024-04-02", "Больница")
         val calm = repo.createNote("2026-10-02", "Прогулка")
 
-        repo.setGentleRule(GentleRule("r1", "Утрата", GentleRule.TAG, value = "утрата", level = GentleRule.QUIET))
+        repo.setGentleRule(GentleRule("r1", "Утрата", GentleRule.TAG, value = grief, level = GentleRule.QUIET))
         repo.setGentleRule(GentleRule("r2", "Люди", GentleRule.CATEGORY, value = "люди"))
         repo.setGentleRule(GentleRule("r3", "Весна 2024", GentleRule.PERIOD, from = "2024-03-01", to = "2024-05-31"))
-        assertEquals(Veil.Quiet, veilOf(loss), "a tag, any case")
+        assertEquals(Veil.Quiet, veilOf(loss), "a tag")
         assertEquals(Veil.Curtain, veilOf(friend), "a tag in the category")
         assertEquals(Veil.Curtain, veilOf(spring), "a day in the period")
         assertNull(veilOf(calm))
@@ -57,8 +56,8 @@ class GentleRulesTest {
         repo.setMood(hard, -2)
         val good = repo.createNote("2026-10-05", "Но вечер хороший")
         repo.setMood(good, 2)
-        repo.addTag(hard, "Больница")
-        repo.setGentleRule(GentleRule("r", "Больница", GentleRule.TAG, value = "больница", level = GentleRule.QUIET))
+        val hospital = repo.addTag(hard, "Больница")!!
+        repo.setGentleRule(GentleRule("r", "Больница", GentleRule.TAG, value = hospital, level = GentleRule.QUIET))
 
         val day = repo.monthDays("2026-10-01", "2026-10-31").first().getValue("2026-10-05")
         assertEquals(2, day.entries, "counted all the same")

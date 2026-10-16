@@ -15,17 +15,18 @@ import kotlin.io.path.writeText
  * [media] finds the placed file of a SHA-256 (null while it hasn't been uploaded).
  */
 class MarkdownMirror(private val root: Path, private val media: (String) -> Path? = { null }) {
-    fun write(entry: EntryState, body: String?) {
+    /** [tagNames]: the tag registry's names by id (`TagNames.of`), so the note lists its tags as the app shows them. */
+    fun write(entry: EntryState, body: String?, tagNames: Map<String, String> = emptyMap()) {
         if (entry.kind == "system") return // registries (e.g. tag categories) are app data, not notes
         val dir = root.resolve(EntryExport.folder(entry)).createDirectories()
         val base = EntryExport.baseName(entry)
-        val markdown = EntryExport.markdown(entry, body, missing = "not uploaded yet") { a ->
+        val markdown = EntryExport.markdown(entry, body, missing = "not uploaded yet", tagNames = tagNames) { a ->
             media(a.meta.sha256)?.let { file ->
                 runCatching { dir.relativize(file).joinToString("/") }.getOrElse { file.toUri().toString() }
             }
         }
         atomicWrite(dir.resolve("$base.md"), markdown)
-        atomicWrite(dir.resolve("$base.json"), EntryExport.sidecar(entry, body))
+        atomicWrite(dir.resolve("$base.json"), EntryExport.sidecar(entry, body, tagNames))
     }
 
     private fun atomicWrite(target: Path, text: String) {

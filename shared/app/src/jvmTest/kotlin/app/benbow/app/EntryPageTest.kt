@@ -25,8 +25,7 @@ class EntryPageTest {
         val repo = services.repo
         val id = repo.createNote("2026-10-13", "Прогулка у моря\nтёплый <вечер>")
         repo.setMood(id, 2)
-        repo.addTag(id, "Море")
-        repo.setTagCategory("Море", "Места")
+        repo.setTagCategory(repo.addTag(id, "Море")!!, "места")
         val photo = services.media.import(Random(5).nextBytes(500).inputStream(), "image/jpeg", "IMG_1.jpg", null)
         repo.attach(id, photo, "image")
         repo.createComment(id, "2026-10-14", "Перечитал утром")

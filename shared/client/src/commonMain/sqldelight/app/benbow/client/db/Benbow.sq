@@ -214,12 +214,20 @@ FROM entry
 WHERE kind = 'reminder' AND json_extract(fields, '$.deleted') IS NOT 'true'
 ORDER BY at;
 
+-- Tags in use by key (`tag:<id>`, ADR-032) and the name entries hold, which may differ in case between entries.
 tagCounts:
-SELECT json_each.value AS name, COUNT(*) AS uses
+SELECT json_each.key AS key, json_each.value AS name, COUNT(*) AS uses
 FROM entry, json_each(entry.fields)
 WHERE json_each.key LIKE 'tag:%' AND json_each.value IS NOT NULL AND json_extract(entry.fields, '$.deleted') IS NOT 'true' AND entry.kind != 'system'
-GROUP BY json_each.key
-ORDER BY uses DESC, name;
+GROUP BY json_each.key, json_each.value;
+
+-- Whether any entry, in the trash or not, has or had this tag (the field may be null: taken off).
+tagKeyInUse:
+SELECT 1 FROM entry, json_each(entry.fields) WHERE json_each.key = :key LIMIT 1;
+
+-- Entries that carry a tag, to index them again when it is renamed.
+entriesWithTag:
+SELECT DISTINCT entry.id FROM entry, json_each(entry.fields) WHERE json_each.key = :key AND json_each.value IS NOT NULL;
 
 indexEntry:
 INSERT INTO entry_search(entry_id, title, body, tags) VALUES (?, ?, ?, ?);

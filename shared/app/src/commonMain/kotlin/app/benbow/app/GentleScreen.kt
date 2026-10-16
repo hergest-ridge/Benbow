@@ -65,9 +65,10 @@ import app.benbow.app.resources.gentle_rules
 import app.benbow.app.resources.gentle_rules_empty
 import app.benbow.app.resources.months_genitive
 import app.benbow.app.resources.save
-import app.benbow.app.resources.tag_categories
 import app.benbow.client.EntrySummary
 import app.benbow.client.GentleRule
+import app.benbow.client.TagCategory
+import app.benbow.client.TagCount
 import app.benbow.client.Veil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
@@ -87,7 +88,7 @@ import kotlin.time.Instant
 
 /** "Ещё → Бережно" (ADR-031): the rules, each with its level and its entries, and the ones marked by hand. */
 internal class GentleViewModel(private val services: AppServices) : ViewModel() {
-    class State(val rules: List<Pair<GentleRule, Int>>, val marked: Int, val tags: List<String>, val categories: List<String>)
+    class State(val rules: List<Pair<GentleRule, Int>>, val marked: Int, val tags: List<TagCount>, val categories: List<TagCategory>)
 
     val state: StateFlow<State?> = combine(services.repo.journal(), services.repo.gentleRules(), services.repo.tags()) {
             entries,
@@ -97,8 +98,8 @@ internal class GentleViewModel(private val services: AppServices) : ViewModel() 
         State(
             rules.rules.map { rule -> rule to entries.count { rules.matches(rule, it.day, it.tags) } },
             entries.count { it.marked },
-            tags.sortedByDescending { it.uses }.map { it.name },
-            tags.mapNotNull { it.category },
+            tags.sortedByDescending { it.uses },
+            rules.registry.categories,
         )
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
@@ -183,18 +184,18 @@ internal fun GentleScreen(services: AppServices, nav: Navigator) {
             }
         }
         if (adding) {
-            val taken = current.rules.map { it.first.kind to it.first.value.lowercase() }.toSet()
-            val categories = (stringArrayResource(Res.array.tag_categories) + current.categories).distinctBy { it.lowercase() }
+            // Rules point at ids (ADR-032); older ones at a name, which in lower case is the same id.
+            val taken = current.rules.map { it.first.kind to it.first.key }.toSet()
             AddRuleDialog(
-                tags = current.tags.filter { (GentleRule.TAG to it.lowercase()) !in taken },
-                categories = categories.filter { (GentleRule.CATEGORY to it.lowercase()) !in taken },
+                tags = current.tags.filter { (GentleRule.TAG to it.id) !in taken },
+                categories = current.categories.filter { (GentleRule.CATEGORY to it.id) !in taken },
                 onTag = {
                     adding = false
-                    vm.add(GentleRule.TAG, it, value = it)
+                    vm.add(GentleRule.TAG, it.name, value = it.id)
                 },
                 onCategory = {
                     adding = false
-                    vm.add(GentleRule.CATEGORY, it, value = it)
+                    vm.add(GentleRule.CATEGORY, it.name, value = it.id)
                 },
                 onPeriod = {
                     adding = false
@@ -290,10 +291,10 @@ private fun RuleCard(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AddRuleDialog(
-    tags: List<String>,
-    categories: List<String>,
-    onTag: (String) -> Unit,
-    onCategory: (String) -> Unit,
+    tags: List<TagCount>,
+    categories: List<TagCategory>,
+    onTag: (TagCount) -> Unit,
+    onCategory: (TagCategory) -> Unit,
     onPeriod: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -307,12 +308,12 @@ private fun AddRuleDialog(
                     Text(stringResource(Res.string.gentle_no_tags), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        tags.forEach { tag -> FilterChip(false, { onTag(tag) }, { Text(tag) }, Modifier.hand()) }
+                        tags.forEach { tag -> FilterChip(false, { onTag(tag) }, { Text(tag.name) }, Modifier.hand()) }
                     }
                 }
                 Text(stringResource(Res.string.gentle_kind_category), style = MaterialTheme.typography.titleSmall)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    categories.forEach { category -> FilterChip(false, { onCategory(category) }, { Text(category) }, Modifier.hand()) }
+                    categories.forEach { category -> FilterChip(false, { onCategory(category) }, { Text(category.name) }, Modifier.hand()) }
                 }
                 Text(stringResource(Res.string.gentle_kind_period), style = MaterialTheme.typography.titleSmall)
                 TextButton(onPeriod, Modifier.hand()) { Text(stringResource(Res.string.gentle_pick_dates)) }

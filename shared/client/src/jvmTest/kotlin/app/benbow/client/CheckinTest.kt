@@ -18,7 +18,7 @@ class CheckinTest {
         val entry = repo.journal().first().single()
         assertEquals(-1, entry.mood)
         assertEquals("усталость, тревога", entry.title, "the words stand in when nothing was written")
-        assertEquals(listOf("тревога", "усталость"), entry.tags)
+        assertEquals(listOf("тревога", "усталость"), entry.tags.map { it.name })
         assertEquals(setOf(EMOTIONS), repo.tags().first().map { it.category }.toSet())
         assertEquals(-1.0, repo.monthDays("2026-10-01", "2026-10-31").first().getValue("2026-10-13").mood, "it tints the calendar")
     }

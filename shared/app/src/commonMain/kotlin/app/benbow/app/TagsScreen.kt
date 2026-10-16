@@ -36,14 +36,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.color_as_category
 import app.benbow.app.resources.color_default
-import app.benbow.app.resources.tag_categories
 import app.benbow.app.resources.tag_category
 import app.benbow.app.resources.tag_color
 import app.benbow.app.resources.tags
 import app.benbow.app.resources.tags_empty
 import app.benbow.app.resources.tags_uncategorized
+import app.benbow.client.TagRef
 import kotlinx.coroutines.launch
-import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
 
 /** All tags grouped by category, in their colors. Tap a category for its color; tap a tag for its category and own color. */
@@ -51,8 +50,7 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun TagsScreen(services: AppServices, nav: Navigator) {
     val tags by services.repo.tags().collectAsStateWithLifecycle(null)
-    val looks = LocalTagLooks.current
-    val categories = stringArrayResource(Res.array.tag_categories)
+    val looks = LocalTags.current
     val none = stringResource(Res.string.tags_uncategorized)
     var editing by remember { mutableStateOf<String?>(null) }
     val toggle = { key: String -> editing = if (editing == key) null else key }
@@ -66,20 +64,20 @@ internal fun TagsScreen(services: AppServices, nav: Navigator) {
             }
             return@Scaffold
         }
-        val groups = all.groupBy { it.category ?: none }
-        val order =
-            categories.filter { it in groups } + groups.keys.filter { it !in categories && it != none }.sorted() +
-                listOfNotNull(none.takeIf { it in groups })
+        // By category id; tags without one come last.
+        val groups = all.groupBy { it.category }
+        val order: List<String?> =
+            looks.categories.map { it.id }.filter { it in groups } + if (null in groups) listOf(null) else emptyList()
         LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
             order.forEach { group ->
                 item(key = "g:$group") {
-                    if (group == none) {
-                        CategoryTitle(group, null, null)
+                    if (group == null) {
+                        CategoryTitle(none, null, null)
                     } else {
-                        CategoryTitle(group, swatch(looks.categoryColor(group))) { toggle("c:$group") }
+                        CategoryTitle(looks.categoryName(group), swatch(looks.categoryColor(group))) { toggle("c:$group") }
                         if (editing == "c:$group") {
                             SwatchPicker(
-                                selected = looks.categoryColors[group.lowercase()],
+                                selected = looks.categoryColors[group],
                                 noneLabel = stringResource(Res.string.color_default),
                                 onPick = { color -> services.scope.launch { services.repo.setCategoryColor(group, color) } },
                                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
@@ -87,15 +85,15 @@ internal fun TagsScreen(services: AppServices, nav: Navigator) {
                         }
                     }
                 }
-                items(groups.getValue(group).sortedBy { it.name.lowercase() }, key = { "t:" + it.name }) { tag ->
+                items(groups.getValue(group).sortedBy { it.name.lowercase() }, key = { "t:" + it.id }) { tag ->
                     Column(Modifier.fillMaxWidth()) {
                         Row(
                             Modifier.fillMaxWidth().hand().clickable {
-                                toggle("t:" + tag.name)
+                                toggle("t:" + tag.id)
                             }.padding(horizontal = 24.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            TagChip(tag.name)
+                            TagChip(TagRef(tag.id, tag.name))
                             Spacer(Modifier.width(10.dp))
                             Text(
                                 "${tag.uses}",
@@ -103,24 +101,24 @@ internal fun TagsScreen(services: AppServices, nav: Navigator) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        if (editing == "t:" + tag.name) {
+                        if (editing == "t:" + tag.id) {
                             Column(
                                 Modifier.padding(start = 24.dp, end = 24.dp, bottom = 12.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 Text(stringResource(Res.string.tag_category), style = MaterialTheme.typography.labelLarge)
                                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    (categories + none).forEach { category ->
-                                        FilterChip((tag.category ?: none) == category, {
-                                            services.scope.launch { services.repo.setTagCategory(tag.name, category.takeIf { it != none }) }
-                                        }, { Text(category) }, modifier = Modifier.hand())
+                                    (looks.categories.map { it.id to it.name } + (null to none)).forEach { (category, name) ->
+                                        FilterChip(tag.category == category, {
+                                            services.scope.launch { services.repo.setTagCategory(tag.id, category) }
+                                        }, { Text(name) }, modifier = Modifier.hand())
                                     }
                                 }
                                 Text(stringResource(Res.string.tag_color), style = MaterialTheme.typography.labelLarge)
                                 SwatchPicker(
-                                    selected = looks.ownColor(tag.name),
+                                    selected = looks.ownColor(tag.id),
                                     noneLabel = stringResource(Res.string.color_as_category),
-                                    onPick = { color -> services.scope.launch { services.repo.setTagColor(tag.name, color) } },
+                                    onPick = { color -> services.scope.launch { services.repo.setTagColor(tag.id, color) } },
                                 )
                             }
                         }

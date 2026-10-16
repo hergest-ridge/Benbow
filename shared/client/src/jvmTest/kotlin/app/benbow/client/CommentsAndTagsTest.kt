@@ -59,13 +59,14 @@ class CommentsAndTagsTest {
         phone.engine.sync()
         desktop.engine.sync()
 
-        phone.repo.setTagCategory("Маша", "Люди") // both devices create the registry offline
-        desktop.repo.setTagCategory("кафе", "Места")
+        val ids = desktop.repo.tags().first().associate { it.name to it.id }
+        phone.repo.setTagCategory(ids.getValue("Маша"), "люди") // both devices change the registry offline
+        desktop.repo.setTagCategory(ids.getValue("Кафе"), "места")
         phone.engine.sync()
         desktop.engine.sync()
         phone.engine.sync()
 
-        val expected = mapOf("Кафе" to "Места", "Маша" to "Люди")
+        val expected = mapOf("Кафе" to "места", "Маша" to "люди")
         assertEquals(expected, phone.repo.tags().first().associate { it.name to it.category })
         assertEquals(expected, desktop.repo.tags().first().associate { it.name to it.category })
         val registry = server.store.entry(TAG_REGISTRY_ID)!!
@@ -80,25 +81,25 @@ class CommentsAndTagsTest {
         val server = FakeServer()
         val phone = Device(server, "phone")
         val desktop = Device(server, "desktop")
-        phone.repo.setTagCategory("Маша", "Люди")
-        phone.repo.setTagCategory("кафе", "Места")
-        phone.repo.setTagCategory("Benbow", "Хобби")
+        phone.repo.setTagCategory("маша", "люди")
+        phone.repo.setTagCategory("кафе", "места")
+        phone.repo.setTagCategory("benbow", "хобби")
         phone.repo.setCategoryColor("места", "sand")
-        phone.repo.setTagColor("Маша", "coral")
+        phone.repo.setTagColor("маша", "coral")
         phone.repo.setTagColor("кафе", "not-a-color") // ignored, stays as its category
         phone.engine.sync()
         desktop.engine.sync()
 
-        val looks = desktop.repo.tagLooks().first()
+        val looks = desktop.repo.tagRegistry().first()
         assertEquals("coral", looks.color("маша"), "a tag's own color wins")
-        assertEquals("sand", looks.color("Кафе"), "then its category's")
-        assertEquals("storm", looks.categoryColor("Люди"), "built-in categories have defaults")
-        assertTrue(looks.color("benbow") in SWATCHES, "other categories get one from the name")
+        assertEquals("sand", looks.color("кафе"), "then its category's")
+        assertEquals("storm", looks.categoryColor("люди"), "built-in categories have defaults")
+        assertTrue(looks.color("benbow") in SWATCHES, "other categories get one from their id")
         assertEquals(null, looks.color("без категории"), "a free tag stays neutral")
 
-        desktop.repo.setTagColor("Маша", null)
+        desktop.repo.setTagColor("маша", null)
         desktop.engine.sync()
         phone.engine.sync()
-        assertEquals("storm", phone.repo.tagLooks().first().color("Маша"), "back to the category color")
+        assertEquals("storm", phone.repo.tagRegistry().first().color("маша"), "back to the category color")
     }
 }

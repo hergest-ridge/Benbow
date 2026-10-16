@@ -42,6 +42,7 @@ import app.benbow.app.resources.tag_add
 import app.benbow.app.resources.tag_hint
 import app.benbow.app.resources.tag_remove
 import app.benbow.client.TagCount
+import app.benbow.client.TagRef
 import app.benbow.client.tagName
 import org.jetbrains.compose.resources.stringResource
 
@@ -54,11 +55,12 @@ internal fun moodEmoji(mood: Int?): String? = MOODS.firstOrNull { it.first == mo
 @Composable
 internal fun MetadataRow(
     mood: Int?,
-    tags: List<String>,
+    tags: List<TagRef>,
     knownTags: List<TagCount>,
     onMood: (Int?) -> Unit,
-    onAddTag: (String) -> Unit,
-    onRemoveTag: (String) -> Unit,
+    /** A name typed, or a known tag picked (its id). */
+    onAddTag: (name: String, id: String?) -> Unit,
+    onRemoveTag: (TagRef) -> Unit,
 ) {
     var picking by remember { mutableStateOf(false) }
     var adding by remember { mutableStateOf(false) }
@@ -68,13 +70,14 @@ internal fun MetadataRow(
                 picking = !picking
             }, label = { Text(moodEmoji(mood) ?: stringResource(Res.string.mood)) }, modifier = Modifier.hand())
             tags.forEach { tag ->
-                val remove = stringResource(Res.string.tag_remove, tag)
+                val name = LocalTags.current.name(tag)
+                val remove = stringResource(Res.string.tag_remove, name)
                 InputChip(
                     selected = false,
                     onClick = { onRemoveTag(tag) },
-                    label = { Text(tag) },
+                    label = { Text(name) },
                     trailingIcon = { Icon(Icons.Close, remove, Modifier.size(16.dp)) },
-                    colors = InputChipDefaults.inputChipColors(containerColor = tagColor(tag)),
+                    colors = InputChipDefaults.inputChipColors(containerColor = tagColor(tag.id)),
                     border = null,
                     modifier = Modifier.hand(),
                 )
@@ -98,22 +101,27 @@ internal fun MetadataRow(
             }
         }
         if (adding) {
-            TagInput(knownTags.filter { it.name !in tags }, onDone = { adding = false }, onAdd = onAddTag)
+            val on = tags.mapTo(HashSet()) { it.id }
+            TagInput(knownTags.filter { it.id !in on }, onDone = { adding = false }, onAdd = onAddTag)
         }
     }
 }
 
 /** A tag as Keep shows labels: a rounded chip in the tag's color, no "#". */
 @Composable
-internal fun TagChip(name: String, modifier: Modifier = Modifier) {
-    Surface(color = tagColor(name), shape = RoundedCornerShape(8.dp), modifier = modifier) {
-        Text(name, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
+internal fun TagChip(tag: TagRef, modifier: Modifier = Modifier) {
+    Surface(color = tagColor(tag.id), shape = RoundedCornerShape(8.dp), modifier = modifier) {
+        Text(
+            LocalTags.current.name(tag),
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+        )
     }
 }
 
 /** An entry's tags on a line of their own under the text. */
 @Composable
-internal fun TagRibbon(tags: List<String>, modifier: Modifier = Modifier) {
+internal fun TagRibbon(tags: List<TagRef>, modifier: Modifier = Modifier) {
     FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         tags.forEach { TagChip(it) }
     }
@@ -121,14 +129,14 @@ internal fun TagRibbon(tags: List<String>, modifier: Modifier = Modifier) {
 
 /** Type a tag or tap a suggestion; Done or Enter adds it and closes. */
 @Composable
-private fun TagInput(known: List<TagCount>, onDone: () -> Unit, onAdd: (String) -> Unit) {
+private fun TagInput(known: List<TagCount>, onDone: () -> Unit, onAdd: (name: String, id: String?) -> Unit) {
     var text by remember { mutableStateOf("") }
     val clean = tagName(text)
     val suggestions = known.filter { clean.isEmpty() || it.name.startsWith(clean, ignoreCase = true) }.take(12)
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
-    val add = { name: String ->
-        onAdd(name)
+    val add = { name: String, id: String? ->
+        onAdd(name, id)
         onDone()
     }
     Column(Modifier.fillMaxWidth().padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -139,19 +147,19 @@ private fun TagInput(known: List<TagCount>, onDone: () -> Unit, onAdd: (String) 
                 placeholder = { Text(stringResource(Res.string.tag_hint)) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { if (clean.isNotEmpty()) add(clean) else onDone() }),
+                keyboardActions = KeyboardActions(onDone = { if (clean.isNotEmpty()) add(clean, null) else onDone() }),
                 modifier = Modifier.weight(1f).focusRequester(focus),
             )
             TextButton({
-                add(clean)
+                add(clean, null)
             }, enabled = clean.isNotEmpty(), modifier = Modifier.hand(clean.isNotEmpty())) { Text(stringResource(Res.string.add)) }
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             suggestions.forEach { tag ->
                 SuggestionChip(
-                    onClick = { add(tag.name) },
+                    onClick = { add(tag.name, tag.id) },
                     label = { Text(tag.name) },
-                    colors = SuggestionChipDefaults.suggestionChipColors(containerColor = tagColor(tag.name)),
+                    colors = SuggestionChipDefaults.suggestionChipColors(containerColor = tagColor(tag.id)),
                     border = null,
                     modifier = Modifier.hand(),
                 )

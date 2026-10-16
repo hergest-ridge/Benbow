@@ -3,19 +3,21 @@ package app.benbow.client
 import app.benbow.client.db.BenbowDb
 import app.benbow.core.content.DocumentCodec
 import app.benbow.core.content.DocumentFormatException
+import app.benbow.core.content.TagNames
 import app.benbow.core.content.toPlainText
 
 /**
  * The on-device full-text index (`entry_search`): title, all text (with what was said in voice notes and the names of
- * attachments) and tags of every entry, plus the Russian stems of their words. Updated in the same transaction as the
- * entry; rebuilt from scratch when [VERSION] changes.
+ * attachments) and tags (by the names they show as, ADR-032) of every entry, plus the Russian stems of their words.
+ * Updated in the same transaction as the entry; rebuilt from scratch when [VERSION] changes.
  */
 internal object SearchIndex {
     const val VERSION = "4"
     private const val VERSION_KEY = "search.version"
     private val WORD = Regex("""[\p{L}\p{N}]+""")
 
-    fun update(db: BenbowDb, id: String) {
+    /** [names]: the tag registry's own names, read once by callers that index many entries. */
+    fun update(db: BenbowDb, id: String, names: Map<String, String> = registryNames(db)) {
         val q = db.benbowQueries
         q.unindexEntry(id)
         val entry = q.selectEntry(id).executeAsOneOrNull() ?: return
@@ -28,7 +30,7 @@ internal object SearchIndex {
         val spoken = transcriptsOf(fields).values
         val captions = decodeAttachments(entry.attachments).values.filter { it.present }.mapNotNull { it.caption }
         val all = (listOf(text) + spoken + captions).filter { it.isNotBlank() }.joinToString("\n")
-        val tags = tagsOf(fields).joinToString(" ")
+        val tags = TagNames.on(fields, names).joinToString(" ") { it.second }
         q.indexEntry(id, fold(entry.title), withStems(fold(all)), withStems(fold(tags)))
     }
 
@@ -47,10 +49,21 @@ internal object SearchIndex {
         if (settings.get(VERSION_KEY) == VERSION) return
         db.transaction {
             db.benbowQueries.clearIndex()
-            db.benbowQueries.allEntryIds().executeAsList().forEach { update(db, it) }
+            val names = registryNames(db)
+            db.benbowQueries.allEntryIds().executeAsList().forEach { update(db, it, names) }
             settings.put(VERSION_KEY, VERSION)
         }
     }
+
+    /** Indexes the entries with these tags again, after the registry renamed them. */
+    fun retag(db: BenbowDb, tags: Set<String>) {
+        if (tags.isEmpty()) return
+        val names = registryNames(db)
+        tags.flatMap { db.benbowQueries.entriesWithTag(TAG_PREFIX + it).executeAsList() }.distinct().forEach { update(db, it, names) }
+    }
+
+    private fun registryNames(db: BenbowDb): Map<String, String> =
+        db.benbowQueries.selectEntry(TAG_REGISTRY_ID).executeAsOneOrNull()?.let { TagNames.of(decodeFields(it.fields)) }.orEmpty()
 
     /** One typed word as FTS: [either] = its stem or the word as a prefix, [prefix] = just the prefix. */
     class Term(val either: String, val prefix: String)

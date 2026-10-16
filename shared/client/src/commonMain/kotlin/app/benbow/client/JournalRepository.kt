@@ -1,10 +1,12 @@
 package app.benbow.client
 
 import app.benbow.client.db.BenbowDb
+import app.benbow.client.db.TagCounts
 import app.benbow.core.content.Document
 import app.benbow.core.content.DocumentCodec
 import app.benbow.core.content.DocumentFormatException
 import app.benbow.core.content.Span
+import app.benbow.core.content.TagNames
 import app.benbow.core.content.TextBlock
 import app.benbow.core.content.toPlainText
 import app.benbow.core.sync.AttachmentMeta
@@ -24,6 +26,7 @@ import app.cash.sqldelight.coroutines.mapToOneOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
@@ -52,7 +55,8 @@ data class EntrySummary(
     val cover: String? = null,
     val favorite: Boolean = false,
     val mood: Int? = null,
-    val tags: List<String> = emptyList(),
+    /** By the names they show as, once a list has been through [GentleRules.apply]. */
+    val tags: List<TagRef> = emptyList(),
     /** A Keep-like note color, one of [SWATCHES]; null = the theme's own. */
     val background: String? = null,
     /** Бережно (ADR-031): what it shows as, its own mark (set by hand), and what the rules alone would give. */
@@ -63,7 +67,8 @@ data class EntrySummary(
     val until: String? = null,
 )
 
-data class TagCount(val name: String, val uses: Int, val category: String? = null)
+/** A tag in use: [uses] entries outside the trash; [category] is the category's id. */
+data class TagCount(val id: String, val name: String, val uses: Int, val category: String? = null)
 
 /** An entry as the feed shows it: notes in full, journal entries as a preview; [media] = its pictures and videos in order. */
 data class FeedItem(
@@ -98,7 +103,7 @@ data class Comment(
     val transcripts: Map<String, String> = emptyMap(),
 )
 
-/** What to look for; empty text and off switches match everything outside the trash. */
+/** What to look for; empty text and off switches match everything outside the trash. [tag] is a tag's id. */
 data class SearchQuery(val text: String = "", val tag: String? = null, val favorites: Boolean = false, val withMedia: Boolean = false)
 
 /** A file in the app's media folder, ready to be attached ([MediaStore.import]). */
@@ -117,6 +122,8 @@ data class EntryDetail(
     val hasDraft: Boolean,
     /** Present attachments in gallery order. */
     val attachments: List<AttachmentState> = emptyList(),
+    /** By the names they show as ([entry] reads them from the tag registry). */
+    val tags: List<TagRef> = tagsOf(fields),
 ) {
     val inTrash: Boolean get() = fields[TRASH_FIELD] == "true"
     val favorite: Boolean get() = fields[FAVORITE_FIELD] == "true"
@@ -130,7 +137,6 @@ data class EntryDetail(
     /** Бережно: the entry's own mark (set by hand); the rules may add theirs ([GentleRules.ruled]). */
     val ownVeil: Veil? get() = Veil.of(fields[VEIL_FIELD])
     val until: String? get() = fields[VEIL_UNTIL_FIELD]
-    val tags: List<String> get() = tagsOf(fields)
     val reactions: Set<String> get() = fields.filter {
         it.key.startsWith(REACTION_PREFIX) && it.value != null
     }.keys.map { it.removePrefix(REACTION_PREFIX) }.toSet()
@@ -156,11 +162,9 @@ internal const val VEIL_UNTIL_FIELD = "veil_until"
 /** Attachments shown as pictures (a video by its preview frame). */
 private val VISUAL_KINDS = setOf("image", "video", "drawing")
 
-/** The tag registry (ADR-021): a system entry whose fields are `cat:<tag key>` = category. Fixed id, so devices share it. */
-internal const val TAG_REGISTRY_ID = "system-tags"
-const val EMOTIONS = "Эмоции"
-internal const val CATEGORY_PREFIX = "cat:"
-internal const val TAG_PREFIX = "tag:"
+/** The tag registry (ADR-021, ADR-032): a system entry whose fields name, sort and color tags by id. Fixed id, so devices share it. */
+internal const val TAG_REGISTRY_ID = TagNames.REGISTRY_ID
+internal const val TAG_PREFIX = TagNames.TAG_PREFIX
 internal const val REACTION_PREFIX = "reaction:"
 
 /** `transcript:<attachment id>` = the text of a voice note or sound, recognized on a phone (7.6); synced like a tag. */
@@ -176,14 +180,11 @@ internal fun transcriptsOf(fields: Map<String, String?>): Map<String, String> = 
     }
 }.toMap()
 
-/** Display names of the entry's tags, alphabetically. */
-internal fun tagsOf(fields: Map<String, String?>): List<String> =
-    fields.filter { it.key.startsWith(TAG_PREFIX) }.values.filterNotNull().sortedBy { it.lowercase() }
+/** The entry's tags (`tag:<id>` = the name it was put on with), by that name; [TagRegistry.resolve] gives the names they show as. */
+internal fun tagsOf(fields: Map<String, String?>): List<TagRef> = TagNames.on(fields, emptyMap()).map { (id, name) -> TagRef(id, name) }
 
 /** "#Работа " → "Работа"; empty when nothing usable is left. Quotes can't be in tags (they'd break the JSON path). */
 fun tagName(input: String): String = input.trim().trimStart('#').replace('"', ' ').replace(Regex("""\s+"""), " ").trim()
-
-internal fun tagKey(name: String): String = TAG_PREFIX + tagName(name).lowercase()
 
 private val fieldsSerializer = MapSerializer(String.serializer(), String.serializer().nullable)
 
@@ -221,8 +222,10 @@ class JournalRepository(
     fun entry(id: String): Flow<EntryDetail?> = combine(
         q.selectEntry(id).asFlow().mapToOneOrNull(context),
         q.selectDraft(id).asFlow().mapToOneOrNull(context),
-    ) { row, draft ->
+        tagRegistry(),
+    ) { row, draft, registry ->
         row?.let {
+            val fields = decodeFields(it.fields)
             EntryDetail(
                 id = it.id,
                 kind = it.kind,
@@ -230,10 +233,11 @@ class JournalRepository(
                 createdAt = it.created_at,
                 body = draft?.body ?: it.body,
                 headRevision = it.head_rev,
-                fields = decodeFields(it.fields),
+                fields = fields,
                 conflictHeads = ClientJson.decodeFromString(it.conflict_heads),
                 hasDraft = draft != null,
                 attachments = galleryOrder(decodeAttachments(it.attachments).values, draft?.body ?: it.body),
+                tags = registry.resolve(tagsOf(fields)),
             )
         }
     }
@@ -300,6 +304,9 @@ class JournalRepository(
                 id,
             )
             SearchIndex.update(db, id)
+            if (id == TAG_REGISTRY_ID && field.startsWith(TagNames.NAME_PREFIX)) {
+                SearchIndex.retag(db, setOf(field.removePrefix(TagNames.NAME_PREFIX)))
+            }
             if (field == PARENT_FIELD) q.updateParent(value, id)
             if (field == Moments.FIELD) Moments.apply(db, id, mapOf(field to value))
         }
@@ -468,10 +475,7 @@ class JournalRepository(
         val body = text.trim().ifEmpty { words.joinToString(", ") }
         val id = createEntry(day, kind = "checkin", body = textBody(body, random))
         setMood(id, mood)
-        words.forEach {
-            addTag(id, it)
-            setTagCategory(it, EMOTIONS)
-        }
+        words.forEach { word -> addTag(id, word)?.let { setTagCategory(it, EMOTIONS) } }
         id
     }
 
@@ -502,12 +506,27 @@ class JournalRepository(
     /** Бережно (ADR-031): a view only; the entry's text, revisions, sync and exports stay as they are. */
     fun setVeil(id: String, veil: Veil?) = setField(id, VEIL_FIELD, veil?.value)
 
-    fun addTag(id: String, name: String) {
+    /**
+     * Puts a tag on the entry (ADR-032): [tagId] when it was picked from a list, else the tag with this name (any case),
+     * else a new tag with an id of its own and the name in the registry. Returns its id; null when the name is empty.
+     */
+    fun addTag(entryId: String, name: String, tagId: String? = null): String? = db.transactionWithResult {
         val clean = tagName(name)
-        if (clean.isNotEmpty()) setField(id, tagKey(clean), clean)
+        if (clean.isEmpty()) return@transactionWithResult null
+        val registry = registry()
+        val id = tagId ?: registry.named(clean) ?: olderTag(clean, registry)
+            ?: newId().also { setRegistryField(TagNames.NAME_PREFIX + it, clean) }
+        setField(entryId, TAG_PREFIX + id, registry.names[id] ?: clean)
+        id
     }
 
-    fun removeTag(id: String, name: String) = setField(id, tagKey(name), null)
+    /** A tag from before ids whose key is this name (its id), unless the registry has named it otherwise since. */
+    private fun olderTag(name: String, registry: TagRegistry): String? = name.lowercase().takeIf { id ->
+        id !in registry.names &&
+            (id in registry.own || id in registry.tagCategories || q.tagKeyInUse(TAG_PREFIX + id).executeAsOneOrNull() != null)
+    }
+
+    fun removeTag(entryId: String, tagId: String) = setField(entryId, TAG_PREFIX + tagId, null)
 
     fun toggleReaction(id: String, emoji: String, on: Boolean) = setField(id, REACTION_PREFIX + emoji, if (on) "1" else null)
 
@@ -573,30 +592,32 @@ class JournalRepository(
     }
 
     /** Every tag in use (outside the trash), most used first, with its category: suggestions, filters, the tag list. */
-    fun tags(): Flow<List<TagCount>> = combine(
-        q.tagCounts { name, uses -> TagCount(name.orEmpty(), uses.toInt()) }.asFlow().mapToList(context),
-        q.selectEntry(TAG_REGISTRY_ID).asFlow().mapToOneOrNull(context),
-    ) { counts, registry ->
-        val categories = registry?.let { decodeFields(it.fields) }.orEmpty()
-        counts.filter { it.name.isNotEmpty() }.map { it.copy(category = categories[CATEGORY_PREFIX + tagName(it.name).lowercase()]) }
+    fun tags(): Flow<List<TagCount>> = combine(q.tagCounts().asFlow().mapToList(context), tagRegistry()) { rows, registry ->
+        rows.groupBy { it.key.removePrefix(TAG_PREFIX) }.mapNotNull { (id, written) ->
+            // Entries may hold a tag's name in different cases: the registry's name wins, else the most used one.
+            val name = registry.names[id] ?: written.sortedWith(compareByDescending<TagCounts> { it.uses }.thenBy { it.name }).first().name
+            if (id.isEmpty() || name.isEmpty()) null else TagCount(id, name, written.sumOf { it.uses }.toInt(), registry.category(id))
+        }.sortedWith(compareByDescending<TagCount> { it.uses }.thenBy { it.name })
     }
 
-    /** Own colors, categories and category colors from the tag registry. */
-    fun tagLooks(): Flow<TagLooks> = q.selectEntry(TAG_REGISTRY_ID).asFlow().mapToOneOrNull(context).map { registry ->
-        registry?.let { TagLooks.of(decodeFields(it.fields)) } ?: TagLooks()
-    }
+    /** Names, categories and colors of tags by id (ADR-032). */
+    fun tagRegistry(): Flow<TagRegistry> = q.selectEntry(TAG_REGISTRY_ID).asFlow().mapToOneOrNull(context).map { registry ->
+        registry?.let { TagRegistry.of(decodeFields(it.fields)) } ?: TagRegistry()
+    }.distinctUntilChanged()
 
-    /** Puts a tag into a category (null = none). */
-    fun setTagCategory(tag: String, category: String?) =
-        setRegistryField(CATEGORY_PREFIX + tagName(tag).lowercase(), category?.trim()?.takeIf { it.isNotEmpty() })
+    private fun registry(): TagRegistry =
+        q.selectEntry(TAG_REGISTRY_ID).executeAsOneOrNull()?.let { TagRegistry.of(decodeFields(it.fields)) } ?: TagRegistry()
+
+    /** Puts a tag into a category, by the category's id (null = none). */
+    fun setTagCategory(tagId: String, category: String?) =
+        setRegistryField(CATEGORY_PREFIX + tagId, category?.let(::categoryId)?.takeIf { it.isNotEmpty() })
 
     /** A tag's own color, one of [SWATCHES] (null = as its category). */
-    fun setTagColor(tag: String, color: String?) =
-        setRegistryField(COLOR_PREFIX + tagName(tag).lowercase(), color?.takeIf { it in SWATCHES })
+    fun setTagColor(tagId: String, color: String?) = setRegistryField(COLOR_PREFIX + tagId, color?.takeIf { it in SWATCHES })
 
-    /** A category's color, one of [SWATCHES] (null = the default). */
+    /** A category's color by its id, one of [SWATCHES] (null = the default). */
     fun setCategoryColor(category: String, color: String?) =
-        setRegistryField(CATEGORY_COLOR_PREFIX + category.trim().lowercase(), color?.takeIf { it in SWATCHES })
+        setRegistryField(CATEGORY_COLOR_PREFIX + categoryId(category), color?.takeIf { it in SWATCHES })
 
     /** Бережно's rules (ADR-031) with the tag categories they need. */
     fun gentleRules(): Flow<GentleRules> = combine(
@@ -647,7 +668,7 @@ class JournalRepository(
             m3 = terms.getOrNull(2)?.either,
             m4 = terms.getOrNull(3)?.either,
             rest = terms.drop(4).takeIf { it.isNotEmpty() }?.joinToString(" ") { it.prefix },
-            tagPath = query.tag?.let { "$.\"${tagKey(it)}\"" },
+            tagPath = query.tag?.let { "$.\"$TAG_PREFIX$it\"" },
             favorites = if (query.favorites) 1 else 0,
             withMedia = if (query.withMedia) 1 else 0,
             mapper = ::summaryOf,

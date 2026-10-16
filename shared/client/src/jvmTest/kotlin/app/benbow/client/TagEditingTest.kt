@@ -228,4 +228,12 @@ class TagEditingTest {
         phone.repo.setGentleLevel(GentleRule.TAG, "море", "Море", GentleRule.QUIET)
         assertEquals(GentleRule.QUIET, phone.repo.gentleRules().first().rules.single { it.id == "old" }.level)
     }
+
+    @Test
+    fun aFreshDeviceStillHasTheBuiltInCategories() = runTest {
+        val expected = listOf("Люди", "Места", "Проекты", "Эмоции")
+        assertEquals(expected, phone.repo.tagRegistry().first().categories.map { it.name }, "before any registry exists")
+        assertEquals(expected, TagRegistry().categories.map { it.name }, "and before it is read")
+        assertEquals(TagRegistry.of(emptyMap()), TagRegistry())
+    }
 }

@@ -58,6 +58,7 @@ import app.benbow.client.setCategoryOrder
 import app.benbow.client.setGentleLevel
 import app.benbow.client.tags
 import app.benbow.client.trashCategory
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
@@ -74,7 +75,12 @@ internal fun CategoryEditor(services: AppServices, categoryId: String, onDismiss
     val tags by remember { repo.tags() }.collectAsStateWithLifecycle(emptyList())
     val order = registry.categories.map { it.id }
     if (categoryId !in order) {
-        LaunchedEffect(Unit) { onDismiss() } // in the trash meanwhile
+        // In the trash meanwhile: close. Just made: the registry catches up in a moment.
+        val gone = categoryId in registry.categoryTrash
+        LaunchedEffect(gone) {
+            if (!gone) delay(CATCH_UP_MILLIS)
+            onDismiss()
+        }
         return
     }
     val current = registry.categoryName(categoryId)

@@ -49,12 +49,13 @@ data class TagRegistry(
     val own: Map<String, String> = emptyMap(),
     /** Tag id to its category's id, whether that category is in the trash or not. */
     val tagCategories: Map<String, String> = emptyMap(),
-    val categoryNames: Map<String, String> = emptyMap(),
+    /** Category id to its name; with no registry yet (a fresh device), the built-in ones. */
+    val categoryNames: Map<String, String> = TagFields.BUILT_IN,
     val categoryColors: Map<String, String> = emptyMap(),
     val categoryDescriptions: Map<String, String> = emptyMap(),
     val categoryEmoji: Map<String, String> = emptyMap(),
-    /** The categories outside the trash, in their order ([TagFields.categoryOrder]). */
-    val categoryIds: List<String> = emptyList(),
+    /** The categories outside the trash, in their order ([TagFields.categoryOrder]); with no registry yet, the built-in ones. */
+    val categoryIds: List<String> = TagFields.BUILT_IN.keys.toList(),
     /** Category id to when it went to the trash. */
     val categoryTrash: Map<String, Long> = emptyMap(),
 ) {

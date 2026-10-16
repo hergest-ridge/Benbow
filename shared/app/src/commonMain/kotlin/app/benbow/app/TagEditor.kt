@@ -77,6 +77,7 @@ import app.benbow.client.setTagColor
 import app.benbow.client.tagName
 import app.benbow.client.tags
 import app.benbow.client.trashTag
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringArrayResource
@@ -96,7 +97,12 @@ internal fun TagEditor(services: AppServices, tagId: String, onDismiss: () -> Un
     val all = tags ?: return
     val tag = all.firstOrNull { it.id == tagId }
     if (tag == null) {
-        LaunchedEffect(Unit) { onDismiss() } // merged or in the trash meanwhile
+        // Merged or in the trash meanwhile: close. Just made: the list catches up in a moment.
+        val gone = registry.inTrash(tagId) || registry.root(tagId) != tagId
+        LaunchedEffect(gone) {
+            if (!gone) delay(CATCH_UP_MILLIS)
+            onDismiss()
+        }
         return
     }
     var name by remember(tagId) { mutableStateOf(tag.name) }
@@ -303,6 +309,9 @@ internal fun NameDialog(title: String, onDismiss: () -> Unit, onName: (String) -
         dismissButton = { TextButton(onDismiss, Modifier.hand()) { Text(stringResource(Res.string.cancel)) } },
     )
 }
+
+/** How long an editor waits for a tag or category just made to reach the lists before it gives up. */
+internal const val CATCH_UP_MILLIS = 2_000L
 
 /** Where each Бережно level sits in `gentle_levels`. */
 internal val LEVEL_INDEX = mapOf(GentleRule.OFF to 0, GentleRule.CURTAIN to 1, GentleRule.QUIET to 2)

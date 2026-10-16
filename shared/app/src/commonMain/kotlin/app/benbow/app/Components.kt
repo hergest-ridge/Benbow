@@ -63,7 +63,7 @@ internal fun BackButton(onClick: () -> Unit) {
 /** The pointing hand over what can be clicked (desktop and the browser; ignored on touch screens). */
 internal fun Modifier.hand(enabled: Boolean = true): Modifier = if (enabled) pointerHoverIcon(PointerIcon.Hand) else this
 
-/** A journal entry in a list: time, title, a few lines of preview. */
+/** A journal entry in a list: time, title, a few lines of preview; while Бережно is on a veiled one shows its time and a curtain. */
 @Composable
 internal fun EntryCard(
     entry: EntrySummary,
@@ -73,18 +73,24 @@ internal fun EntryCard(
     trailing: @Composable (() -> Unit)? = null,
 ) {
     val colors = MaterialTheme.colorScheme
+    val curtained = entry.curtained(LocalGentle.current)
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
-        color = swatch(entry.background) ?: colors.surfaceContainerLow,
+        color = (if (curtained) null else swatch(entry.background)) ?: colors.surfaceContainerLow,
         // Open beside the list (a wide window): framed, so the eye finds it.
         border = if (LocalOpenEntry.current == entry.id) BorderStroke(2.dp, colors.primary) else null,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).hand(),
     ) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                val time = if (showDay) "${dayLabel(entry.day)}, ${timeLabel(entry.createdAt)}" else timeLabel(entry.createdAt)
+                if (curtained) {
+                    Text(time, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+                    Curtain(Modifier.padding(top = 4.dp))
+                    return@Column
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    val time = if (showDay) "${dayLabel(entry.day)}, ${timeLabel(entry.createdAt)}" else timeLabel(entry.createdAt)
                     Text(time, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
                     if (entry.favorite) Text("  ★", style = MaterialTheme.typography.labelMedium, color = colors.primary)
                     moodEmoji(entry.mood)?.let { Text("  $it", style = MaterialTheme.typography.labelMedium) }
@@ -115,7 +121,7 @@ internal fun EntryCard(
                     )
                 }
             }
-            if (media != null) entry.cover?.let { CoverThumb(media, it, entry.mediaCount) }
+            if (media != null && !curtained) entry.cover?.let { CoverThumb(media, it, entry.mediaCount) }
             trailing?.invoke()
         }
     }

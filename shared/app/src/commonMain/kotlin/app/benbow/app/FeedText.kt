@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.show_more
+import app.benbow.client.Comment
 import app.benbow.core.content.DocumentCodec
 import app.benbow.core.content.SOFT_BREAK
 import app.benbow.core.content.toRichText
@@ -144,6 +145,13 @@ private fun FeedBlocks(body: FeedBody, expanded: Boolean, onExpand: () -> Unit, 
             )
         }
     }
+}
+
+/** A comment's own words, drawn like a post: formatting kept, spoilers hidden until a tap (not dropped). */
+@Composable
+internal fun CommentText(comment: Comment) {
+    val body = remember(comment.body) { feedBody(comment.body) }
+    FeedText(body, expanded = true, onExpand = {})
 }
 
 /** A post's text, parsed once off the main thread: decoding JSON as a post scrolls in would cost frames. */

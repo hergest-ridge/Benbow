@@ -21,6 +21,7 @@ import app.benbow.client.SpeechModel
 import app.benbow.client.SyncController
 import app.benbow.client.SyncEngine
 import app.benbow.client.SyncResult
+import app.benbow.client.Veil
 import app.benbow.client.calendar.CalendarRepository
 import app.benbow.client.calendar.CalendarSync
 import app.benbow.client.calendar.CalendarSyncResult
@@ -87,6 +88,12 @@ sealed interface AppMessage {
 
     /** A reminder rang where the system can't show it (the browser without permission for notifications). */
     data class Reminder(val text: String) : AppMessage
+
+    /** An entry's veil changed (ADR-031); "Вернуть" puts [previous] back. */
+    data class Veiled(val entryId: String, val veil: Veil?, val previous: Veil?) : AppMessage
+
+    /** Бережно was switched from the Feed tab (a long press). */
+    data class GentleSwitched(val on: Boolean) : AppMessage
 }
 
 /**
@@ -143,6 +150,16 @@ class AppServices(
     val settings get() = Settings(db)
 
     val lock = AppLock(Settings(db), now)
+
+    val gentle = Gentle(now)
+
+    /** Sets an entry's veil (ADR-031) and offers to take it back. */
+    fun setVeil(id: String, veil: Veil?, previous: Veil?) {
+        scope.launch {
+            repo.setVeil(id, veil)
+            messages.emit(AppMessage.Veiled(id, veil, previous))
+        }
+    }
 
     val appearance = MutableStateFlow(Appearance.load(Settings(db)))
 

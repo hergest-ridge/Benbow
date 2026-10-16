@@ -52,7 +52,19 @@ data class EntrySummary(
     val tags: List<String> = emptyList(),
     /** A Keep-like note color, one of [SWATCHES]; null = the theme's own. */
     val background: String? = null,
+    val veil: Veil? = null,
 )
+
+/** Бережно (ADR-031): a curtain over the entry, or quiet (kept out of passive places); null = shown as usual. */
+enum class Veil(val value: String) {
+    Curtain("curtain"),
+    Quiet("quiet"),
+    ;
+
+    companion object {
+        fun of(value: String?): Veil? = entries.firstOrNull { it.value == value }
+    }
+}
 
 data class TagCount(val name: String, val uses: Int, val category: String? = null)
 
@@ -72,13 +84,18 @@ data class FeedItem(
     val transcripts: Map<String, String> = emptyMap(),
 )
 
-/** A calendar day: how many entries and their average mood (-2..2, null when no mood was set). */
-data class DayInfo(val day: String, val entries: Int, val mood: Double?)
+/**
+ * A calendar day: how many entries and their average mood (-2..2, null when no mood was set); [openMood] leaves out
+ * quiet entries (ADR-031), so a hard day kept out of the way doesn't tint the month either.
+ */
+data class DayInfo(val day: String, val entries: Int, val mood: Double?, val openMood: Double? = mood)
 
 /** A reply in an entry's thread, shown in full, with its pictures and files ([media], in order). */
 data class Comment(
     val summary: EntrySummary,
     val text: String,
+    /** The document itself (Benbow Document JSON), drawn like a feed post (spoilers stay hidden, not dropped). */
+    val body: String = "",
     val media: List<AttachmentState> = emptyList(),
     /** What was said in each voice note or sound, by attachment id (7.6). */
     val transcripts: Map<String, String> = emptyMap(),
@@ -112,6 +129,7 @@ data class EntryDetail(
     val parentId: String? get() = fields[PARENT_FIELD]
     val mood: Int? get() = fields[MOOD_FIELD]?.toIntOrNull()
     val background: String? get() = fields[BACKGROUND_FIELD]?.takeIf { it in SWATCHES }
+    val veil: Veil? get() = Veil.of(fields[VEIL_FIELD])
     val tags: List<String> get() = tagsOf(fields)
     val reactions: Set<String> get() = fields.filter {
         it.key.startsWith(REACTION_PREFIX) && it.value != null
@@ -132,6 +150,7 @@ internal const val AT_FIELD = "at"
 internal const val REPEAT_FIELD = "repeat"
 internal const val DONE_FIELD = "done"
 internal const val BACKGROUND_FIELD = "background"
+internal const val VEIL_FIELD = "veil"
 
 /** Attachments shown as pictures (a video by its preview frame). */
 private val VISUAL_KINDS = setOf("image", "video", "drawing")
@@ -405,7 +424,7 @@ class JournalRepository(
         q.commentsOf(parentId) { id, day, createdAt, title, preview, conflictHeads, mediaCount, cover, fields, body, attachments ->
             val media = galleryOrder(decodeAttachments(attachments).values, body)
             val summary = summaryOf(id, day, createdAt, title, preview, conflictHeads, mediaCount, cover, fields)
-            Comment(summary, plainText(body), media, transcriptsOf(decodeFields(fields)))
+            Comment(summary, plainText(body), body, media, transcriptsOf(decodeFields(fields)))
         }.asFlow().mapToList(context)
 
     fun commentCount(parentId: String): Flow<Long> = q.commentCount(parentId).asFlow().mapToOne(context)
@@ -414,7 +433,8 @@ class JournalRepository(
 
     /** Days of [fromDay]..[toDay] that have entries, keyed by day. */
     fun monthDays(fromDay: String, toDay: String): Flow<Map<String, DayInfo>> =
-        q.monthDays(fromDay, toDay) { day, entries, mood -> DayInfo(day, entries.toInt(), mood) }.asFlow().mapToList(context)
+        q.monthDays(fromDay, toDay) { day, entries, mood, openMood -> DayInfo(day, entries.toInt(), mood, openMood) }.asFlow()
+            .mapToList(context)
             .map { days -> days.associateBy { it.day } }
 
     // Mood check-ins (5.4)
@@ -458,6 +478,9 @@ class JournalRepository(
 
     /** The note's color, one of [SWATCHES] (anything else, or null, clears it). */
     fun setBackground(id: String, color: String?) = setField(id, BACKGROUND_FIELD, color?.takeIf { it in SWATCHES })
+
+    /** Бережно (ADR-031): a view only; the entry's text, revisions, sync and exports stay as they are. */
+    fun setVeil(id: String, veil: Veil?) = setField(id, VEIL_FIELD, veil?.value)
 
     fun addTag(id: String, name: String) {
         val clean = tagName(name)
@@ -638,6 +661,7 @@ private fun summaryOf(
         mood = f[MOOD_FIELD]?.toIntOrNull(),
         tags = tagsOf(f),
         background = f[BACKGROUND_FIELD]?.takeIf { it in SWATCHES },
+        veil = Veil.of(f[VEIL_FIELD]),
     )
 }
 

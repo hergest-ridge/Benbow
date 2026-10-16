@@ -418,6 +418,7 @@ private fun MonthGrid(
     onSelect: (LocalDate) -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
+    val gentle = LocalGentle.current
     Column(Modifier.padding(horizontal = 8.dp)) {
         Row {
             stringArrayResource(Res.array.weekdays_short).forEach {
@@ -436,8 +437,9 @@ private fun MonthGrid(
                     val key = date.toString()
                     val info = days[key]
                     val inMonth = date.month == month.month
-                    // Warm for good days, sea blue for hard ones; untinted when no mood was noted.
-                    val tint = info?.mood?.let { mood ->
+                    // Warm for good days, sea blue for hard ones; untinted when no mood was noted. A quiet entry keeps
+                    // its dot but tints nothing while Бережно is on (ADR-031).
+                    val tint = (if (gentle) info?.openMood else info?.mood)?.let { mood ->
                         (if (mood >= 0) colors.primary else colors.secondary).copy(alpha = (0.12 + 0.12 * mood.absoluteValue).toFloat())
                     } ?: Color.Transparent
                     Box(Modifier.weight(1f).aspectRatio(1f)) {

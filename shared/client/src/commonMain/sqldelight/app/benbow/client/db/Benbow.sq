@@ -192,7 +192,9 @@ UPDATE entry SET parent_id = ? WHERE id = ?;
 
 -- Per day in a range: how many entries and the average mood (null when none was set).
 monthDays:
-SELECT day, COUNT(*) AS entries, AVG(CAST(json_extract(fields, '$.mood') AS INTEGER)) AS mood FROM entry
+SELECT day, COUNT(*) AS entries, AVG(CAST(json_extract(fields, '$.mood') AS INTEGER)) AS mood,
+    AVG(CASE WHEN json_extract(fields, '$.veil') = 'quiet' THEN NULL ELSE CAST(json_extract(fields, '$.mood') AS INTEGER) END) AS openMood
+FROM entry
 WHERE (day BETWEEN :fromDay AND :toDay) AND json_extract(fields, '$.deleted') IS NOT 'true'
   AND kind NOT IN ('comment', 'system', 'event', 'reminder')
 GROUP BY day;

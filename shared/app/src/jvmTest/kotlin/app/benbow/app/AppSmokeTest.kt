@@ -4,10 +4,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
@@ -18,6 +20,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.isToggleable
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -33,10 +36,12 @@ import androidx.compose.ui.test.performTextInputSelection
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runDesktopComposeUiTest
+import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.waitUntilExactlyOneExists
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import app.benbow.client.Prompts
+import app.benbow.client.Veil
 import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.db.BenbowDb
 import app.benbow.core.calendar.CalendarKind
@@ -163,6 +168,9 @@ class AppSmokeTest {
     /** Clicks through the node's action: no hit-testing against a layout that may be a frame behind. */
     private fun SemanticsNodeInteraction.click() = performSemanticsAction(SemanticsActions.OnClick)
 
+    /** On screen: laid out inside the window (a list keeps some items composed just out of view). */
+    private fun SemanticsNode.isShown() = boundsInRoot.let { it.bottom > 0f && it.top < 860f && it.height > 0f }
+
     @Test
     fun favoriteMoodTagsAndSearch() = runDesktopComposeUiTest(width = 412, height = 860) {
         services.repo.createNote(services.today(), "Планы на неделю\nдописать поиск")
@@ -235,7 +243,16 @@ class AppSmokeTest {
             }
             paragraph { text("Вечером гуляли у моря") }
         }
-        services.repo.createEntry(services.today(), kind = "note", body = DocumentCodec.encode(rich.toDocument()))
+        val post = services.repo.createEntry(services.today(), kind = "note", body = DocumentCodec.encode(rich.toDocument()))
+        // A reply with a spoiler of its own: hidden in the thread too, not dropped.
+        val reply = buildRichText {
+            paragraph {
+                text("Перечитал: ")
+                text("было страшно", Mark.Spoiler)
+            }
+        }
+        val comment = services.repo.createEntry(services.today(), kind = "comment", body = DocumentCodec.encode(reply.toDocument()))
+        services.repo.setField(comment, "parent", post)
         setContent { BenbowApp(services) }
         onNodeWithText("Лента").click()
         waitUntilExactlyOneExists(hasText("Вечером гуляли у моря"), 5_000)
@@ -255,7 +272,7 @@ class AppSmokeTest {
         screenshot("25-spoiler-open")
 
         onNodeWithText("Вечером гуляли у моря").click()
-        waitUntilExactlyOneExists(hasText("Пока без комментариев", substring = true), 5_000)
+        waitUntilExactlyOneExists(hasText("Перечитал", substring = true), 5_000) // the reply, its spoiler hidden
         screenshot("26-spoiler-post") // hidden again: a new visit
         onNodeWithContentDescription("Меню").click()
         onNodeWithText("Редактировать").click()
@@ -264,6 +281,67 @@ class AppSmokeTest {
         onNode(hasSetTextAction()).performTextInputSelection(TextRange(38)) // inside "диаг|ноз"
         waitForIdle()
         screenshot("27b-spoiler-cursor") // clear where the cursor is
+    }
+
+    @Test
+    fun curtainsAndQuietEntriesStayOutOfTheWayUntilTurnedOff() = runDesktopComposeUiTest(width = 412, height = 860) {
+        services.repo.createNote(services.today(), "Обычный день у моря")
+        services.repo.createNote(services.today(), "Тяжёлый разговор с врачом")
+        val quiet = services.repo.createNote(services.today(), "Совсем тяжёлое")
+        services.repo.setVeil(quiet, Veil.Quiet)
+        setContent { BenbowApp(services) }
+        onNodeWithText("Лента").click()
+        waitUntilExactlyOneExists(hasText("Обычный день у моря"), 5_000)
+        assertTrue(onAllNodesWithText("Совсем тяжёлое").fetchSemanticsNodes().isEmpty()) // quiet: no trace in the feed
+
+        // A curtain from the post's long-press menu, with a way back.
+        onNodeWithText("Тяжёлый разговор с врачом").performTouchInput { longClick() }
+        onNodeWithText("Задёрнуть шторку").click()
+        waitUntilExactlyOneExists(hasText("Вернуть"), 5_000)
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Тяжёлый разговор", substring = true).fetchSemanticsNodes().isEmpty() }
+        screenshot("28-gentle-feed")
+        onNodeWithText("Открыть", substring = true).click() // opens in place, not the post
+        waitUntilExactlyOneExists(hasText("Тяжёлый разговор с врачом"), 5_000)
+        screenshot("29-gentle-curtain-open")
+
+        // The switch stays out of sight until the title is clicked (with a mouse); off, the quiet entry is back.
+        assertTrue(onAllNodesWithText("Бережно").fetchSemanticsNodes().isEmpty())
+        onNodeWithText("Моя лента").click()
+        waitUntilExactlyOneExists(isToggleable(), 5_000)
+        onNode(isToggleable()).click()
+        waitUntilExactlyOneExists(hasText("Совсем тяжёлое"), 5_000)
+        screenshot("30-gentle-off")
+        onNode(isToggleable()).click()
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Совсем тяжёлое").fetchSemanticsNodes().isEmpty() }
+
+        // Looking for it on purpose finds it, under a curtain.
+        onNodeWithText("Поиск").click()
+        onNode(hasSetTextAction()).performTextInput("тяжёлое")
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Открыть", substring = true).fetchSemanticsNodes().size == 2 }
+        assertTrue(onAllNodesWithText("Совсем тяжёлое").fetchSemanticsNodes().isEmpty())
+        screenshot("31-gentle-search")
+    }
+
+    @Test
+    fun onAPhoneTheSwitchWaitsAboveTheFeedForAPull() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val phone = AppServices(
+            JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), BenbowDb.Schema),
+            JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), CalendarDb.Schema),
+            mediaIn(java.nio.file.Files.createTempDirectory("benbow-media").toFile()),
+            "android",
+            "Test phone",
+        )
+        phone.repo.createNote(phone.today(), "Утро у моря")
+        setContent { BenbowApp(phone) }
+        onNodeWithText("Лента").click()
+        waitUntilExactlyOneExists(hasText("Утро у моря"), 5_000)
+        waitForIdle()
+        screenshot("32a-gentle-hidden")
+        assertFalse(onAllNodesWithText("Бережно").fetchSemanticsNodes().any { it.isShown() })
+        onNodeWithText("Утро у моря").performTouchInput { swipeDown(startY = centerY, endY = centerY + 500f, durationMillis = 800) }
+        waitForIdle()
+        onNodeWithText("Бережно").assertIsDisplayed()
+        screenshot("32-gentle-pulled")
     }
 
     @Test

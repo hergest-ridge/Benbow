@@ -470,6 +470,10 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                     menu = false
                                     pickingBackground = true
                                 }, modifier = Modifier.hand())
+                                VeilMenuItems(detail?.veil) { veil ->
+                                    menu = false
+                                    vm.entryId?.let { services.setVeil(it, veil, detail?.veil) }
+                                }
                                 DropdownMenuItem(text = { Text(stringResource(Res.string.print)) }, onClick = {
                                     menu = false
                                     vm.commit()

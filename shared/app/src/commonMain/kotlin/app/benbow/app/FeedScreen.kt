@@ -1,5 +1,14 @@
 package app.benbow.app
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -13,6 +22,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -31,18 +41,32 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -53,18 +77,21 @@ import app.benbow.app.resources.comments
 import app.benbow.app.resources.feed_empty
 import app.benbow.app.resources.feed_title
 import app.benbow.app.resources.months_nominative
+import app.benbow.client.EntrySummary
 import app.benbow.client.FeedItem
 import app.benbow.core.sync.AttachmentState
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
+import kotlin.math.roundToInt
 
 /** A row of the feed: an entry, or the day line drawn above a day's entries. */
 internal sealed interface FeedRow {
@@ -108,7 +135,9 @@ internal class FeedViewModel(private val services: AppServices) : ViewModel() {
     // Each post's text is parsed here, once per change, not while it scrolls into view.
     private val parsed = HashMap<String, Pair<String, FeedBody?>>()
 
-    val rows: StateFlow<List<FeedRow>?> = services.repo.feed().map { items ->
+    val rows: StateFlow<List<FeedRow>?> = combine(services.repo.feed(), services.gentle.on) { items, gentle ->
+        items.withoutQuiet(gentle) { it.summary }
+    }.map { items ->
         val rows = feedRows(items) { item ->
             val id = item.summary.id
             parsed[id]?.takeIf { it.first == item.body }?.second ?: feedBody(item.body).also { parsed[id] = item.body to it }
@@ -131,10 +160,21 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
     val appearance by services.appearance.collectAsStateWithLifecycle()
     val expanded = remember { mutableStateMapOf<String, Boolean>() }
     val status by services.sync.status.collectAsStateWithLifecycle()
+    val gentle by services.gentle.on.collectAsStateWithLifecycle()
+    // Бережно's switch (ADR-031) waits above the newest post, out of sight: on a phone a pull down at the top brings it
+    // (like Telegram's archive); with a mouse, where the wheel would bring it every time, only the title does.
+    val pull = remember(services.platform) { StripPull(pulls = services.platform == "android") }
+    val stripHidden by remember(pull) { derivedStateOf { pull.shown <= 0f } }
+    val scope = rememberCoroutineScope()
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(Res.string.feed_title)) },
+                title = {
+                    Text(
+                        stringResource(Res.string.feed_title),
+                        Modifier.hand().clickable(interactionSource = null, indication = null) { scope.launch { pull.toggle() } },
+                    )
+                },
                 actions = { SyncBadge(status) { nav.open(Route.Server) } },
             )
         },
@@ -153,35 +193,89 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
         // Posts a screen ahead (and half a screen behind) are composed in the spare time between frames, so a post
         // scrolling in is already built: composing pictures and text in the frame it appears in drops frames.
         val state = rememberLazyListState(cacheWindow = LazyLayoutCacheWindow(aheadFraction = 1f, behindFraction = 0.5f))
-        LazyColumn(
-            Modifier.padding(padding).fillMaxSize(),
-            state = state,
-            contentPadding = PaddingValues(vertical = if (appearance.feedCards) 8.dp else 0.dp),
-        ) {
-            items(list, key = { it.key }, contentType = { it.contentType }) { row ->
-                when (row) {
-                    is FeedRow.Day -> DayHeader(row.day)
+        Box(Modifier.padding(padding).fillMaxSize().clipToBounds().nestedScroll(pull)) {
+            LazyColumn(
+                Modifier.fillMaxSize().offset { IntOffset(0, pull.shown.roundToInt()) },
+                state = state,
+                contentPadding = PaddingValues(vertical = if (appearance.feedCards) 8.dp else 0.dp),
+            ) {
+                // Posts that turn quiet or come back slide out and in where they are; the post in view stays put.
+                items(list, key = { it.key }, contentType = { it.contentType }) { row ->
+                    Box(Modifier.animateItem()) {
+                        when (row) {
+                            is FeedRow.Day -> DayHeader(row.day)
 
-                    is FeedRow.Month -> MonthHeader(row.month)
+                            is FeedRow.Month -> MonthHeader(row.month)
 
-                    is FeedRow.Item -> FeedPost(
-                        services,
-                        row.item,
-                        row.body,
-                        cards = appearance.feedCards,
-                        expanded = expanded[row.item.summary.id] == true,
-                        onExpand = { expanded[row.item.summary.id] = true },
-                        onOpen = { nav.open(Route.Editor(row.item.summary.id, row.item.summary.day, readOnly = true)) },
-                        onComments = { nav.open(Route.Editor(row.item.summary.id, row.item.summary.day, readOnly = true)) },
-                        onOpenMedia = { nav.open(Route.Media(row.item.summary.id, it.meta.id)) },
-                    ) { emoji, on ->
-                        vm.react(row.item.summary.id, emoji, on)
+                            is FeedRow.Item -> FeedPost(
+                                services,
+                                row.item,
+                                row.body,
+                                cards = appearance.feedCards,
+                                expanded = expanded[row.item.summary.id] == true,
+                                onExpand = { expanded[row.item.summary.id] = true },
+                                onOpen = { nav.open(Route.Editor(row.item.summary.id, row.item.summary.day, readOnly = true)) },
+                                onComments = { nav.open(Route.Editor(row.item.summary.id, row.item.summary.day, readOnly = true)) },
+                                onOpenMedia = { nav.open(Route.Media(row.item.summary.id, it.meta.id)) },
+                            ) { emoji, on ->
+                                vm.react(row.item.summary.id, emoji, on)
+                            }
+                        }
                     }
                 }
             }
+            // As tall as it is pulled out: nothing of it lies outside, so a hidden strip takes no taps (or screen readers).
+            Box(
+                Modifier.fillMaxWidth().clipToBounds().layout { measurable, constraints ->
+                    val strip = measurable.measure(constraints.copy(minHeight = 0, maxHeight = Constraints.Infinity))
+                    pull.height = strip.height.toFloat()
+                    val shown = pull.shown.roundToInt().coerceIn(0, strip.height)
+                    layout(strip.width, shown) { strip.place(0, shown - strip.height) }
+                }.then(if (stripHidden) Modifier.clearAndSetSemantics {} else Modifier),
+            ) { GentleStrip(gentle, services.gentle::set) }
         }
     }
 }
+
+/**
+ * How much of Бережно's strip shows above the feed. On a phone a drag down at the very top pulls it in; a fling never
+ * does, and scrolling the feed up tucks it away first. Let go, it settles open past half its height, closed otherwise.
+ */
+@Stable
+private class StripPull(private val pulls: Boolean) : NestedScrollConnection {
+    var shown by mutableFloatStateOf(0f)
+        private set
+
+    /** The strip's full height, measured as it is laid out. */
+    var height = 0f
+
+    suspend fun toggle() = settle(if (shown > 0f) 0f else height)
+
+    private suspend fun settle(target: Float) {
+        animate(shown, target, animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) { value, _ -> shown = value }
+    }
+
+    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+        if (available.y >= 0f || shown <= 0f) return Offset.Zero
+        val used = maxOf(available.y, -shown)
+        shown += used
+        return Offset(0f, used)
+    }
+
+    override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+        if (!pulls || source != NestedScrollSource.UserInput || available.y <= 0f || shown >= height) return Offset.Zero
+        shown = minOf(height, shown + available.y * PULL_RESISTANCE)
+        return Offset(0f, available.y)
+    }
+
+    override suspend fun onPreFling(available: Velocity): Velocity {
+        if (shown <= 0f || shown >= height) return Velocity.Zero
+        settle(if (shown > height / 2) height else 0f)
+        return available
+    }
+}
+
+private const val PULL_RESISTANCE = 0.6f
 
 /**
  * One post. With [cards], a rounded card with inset media; without, edge to edge: media across the full width, the
@@ -204,8 +298,11 @@ private fun FeedPost(
     val colors = MaterialTheme.colorScheme
     val entry = item.summary
     var picking by remember { mutableStateOf(false) }
-    val tint = swatch(entry.background)
-    val open = Modifier.hand().combinedClickable(onClick = onOpen, onLongClick = { picking = true })
+    // A curtain opens in place and closes again once the post scrolls away (this state goes with it).
+    var opened by remember(entry.id) { mutableStateOf(false) }
+    val curtained = entry.curtained(LocalGentle.current) && !opened
+    val tint = if (curtained) null else swatch(entry.background)
+    val open = Modifier.hand().combinedClickable(onClick = { if (curtained) opened = true else onOpen() }, onLongClick = { picking = true })
     val shown = LocalOpenEntry.current == entry.id // open beside the feed (a wide window)
     Box(
         Modifier.fillMaxWidth().then(
@@ -223,16 +320,22 @@ private fun FeedPost(
                 border = if (shown) BorderStroke(2.dp, colors.primary) else null,
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).then(open),
             ) {
-                Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (item.media.isNotEmpty()) MediaCarousel(services.media, item.media, onOpenMedia)
-                    PostBody(services, item, body, expanded, onExpand, onComments, onReact)
+                Revealing(curtained, entry) {
+                    Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (item.media.isNotEmpty()) MediaCarousel(services.media, item.media, onOpenMedia)
+                        PostBody(services, item, body, expanded, onExpand, onComments, onReact)
+                    }
                 }
             }
         } else {
             Column(Modifier.fillMaxWidth().background(tint ?: colors.background).then(open)) {
-                if (item.media.isNotEmpty()) MediaCarousel(services.media, item.media, onOpenMedia, rounded = false)
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    PostBody(services, item, body, expanded, onExpand, onComments, onReact)
+                Revealing(curtained, entry, Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                    Column {
+                        if (item.media.isNotEmpty()) MediaCarousel(services.media, item.media, onOpenMedia, rounded = false)
+                        Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            PostBody(services, item, body, expanded, onExpand, onComments, onReact)
+                        }
+                    }
                 }
                 HorizontalDivider(Modifier.padding(top = 4.dp), thickness = 0.5.dp, color = colors.outlineVariant)
             }
@@ -242,6 +345,10 @@ private fun FeedPost(
                 picking = false
                 onComments()
             }, modifier = Modifier.hand())
+            VeilMenuItems(entry.veil) {
+                picking = false
+                services.setVeil(entry.id, it, entry.veil)
+            }
             Row(Modifier.padding(horizontal = 8.dp)) {
                 REACTIONS.forEach { emoji ->
                     val on = emoji in item.reactions
@@ -250,6 +357,38 @@ private fun FeedPost(
                         onReact(emoji, !on)
                     }, modifier = Modifier.size(width = 52.dp, height = 48.dp).hand())
                 }
+            }
+        }
+    }
+}
+
+/**
+ * A post's content, or while [curtained] only its time under a curtain at one compact height (no tags, mood, pictures
+ * or length). Opening fades the content in as the card grows to it.
+ */
+@Composable
+private fun Revealing(
+    curtained: Boolean,
+    entry: EntrySummary,
+    curtainPadding: Modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+    content: @Composable () -> Unit,
+) {
+    AnimatedContent(
+        curtained,
+        transitionSpec = { fadeIn(tween(260, delayMillis = 60)) togetherWith fadeOut(tween(120)) using SizeTransform(clip = true) },
+        label = "curtain",
+    ) { closed ->
+        if (!closed) {
+            content()
+        } else {
+            Column(curtainPadding, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Curtain()
+                Text(
+                    timeLabel(entry.createdAt),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.align(Alignment.End),
+                )
             }
         }
     }

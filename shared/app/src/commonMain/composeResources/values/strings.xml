@@ -469,4 +469,19 @@
     <string name="server_forget_blocked">Нельзя отключить, пока есть несинхронизированные изменения.</string>
     <!-- Web (ADR-029) -->
     <string name="web_open_elsewhere">Benbow уже открыт в другой вкладке этого браузера. Продолжайте там: две вкладки с одной базой могли бы затереть изменения друг друга.</string>
+    <!-- Бережно (ADR-031) -->
+    <string name="gentle">Бережно</string>
+    <string name="gentle_on_hint">Шторки задёрнуты, тихие записи не в ленте</string>
+    <string name="gentle_off_hint">Всё открыто. Включится само, когда приложение 5 минут не на экране</string>
+    <string name="gentle_turned_on">Бережно включено</string>
+    <string name="gentle_turned_off">Бережно выключено. Включится само через 5 минут вне приложения</string>
+    <string name="curtain_open">Открыть</string>
+    <string name="veil_curtain">Задёрнуть шторку</string>
+    <string name="veil_uncurtain">Снять шторку</string>
+    <string name="veil_quiet">Не показывать в ленте</string>
+    <string name="veil_unquiet">Показывать в ленте</string>
+    <string name="veiled_curtain">Запись за шторкой</string>
+    <string name="veiled_quiet">Запись не показывается в ленте</string>
+    <string name="veiled_none">Запись снова на виду</string>
+    <string name="veil_undo">Вернуть</string>
 </resources>

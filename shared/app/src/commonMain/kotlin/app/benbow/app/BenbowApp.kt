@@ -30,8 +30,10 @@ import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.ShortNavigationBar
 import androidx.compose.material3.ShortNavigationBarItem
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -47,9 +49,11 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -66,6 +70,8 @@ import androidx.navigation3.ui.NavDisplay
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.attach_failed
 import app.benbow.app.resources.copied
+import app.benbow.app.resources.gentle_turned_off
+import app.benbow.app.resources.gentle_turned_on
 import app.benbow.app.resources.reminder_now
 import app.benbow.app.resources.save_failed
 import app.benbow.app.resources.saved
@@ -75,8 +81,13 @@ import app.benbow.app.resources.tab_feed
 import app.benbow.app.resources.tab_home
 import app.benbow.app.resources.tab_more
 import app.benbow.app.resources.tab_search
+import app.benbow.app.resources.veil_undo
+import app.benbow.app.resources.veiled_curtain
+import app.benbow.app.resources.veiled_none
+import app.benbow.app.resources.veiled_quiet
 import app.benbow.client.TagLooks
 import app.benbow.client.Templates
+import app.benbow.client.Veil
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -200,9 +211,11 @@ private val still = EnterTransition.None togetherWith ExitTransition.None
 @Composable
 fun BenbowApp(services: AppServices) {
     val looks by remember { services.repo.tagLooks() }.collectAsStateWithLifecycle(TagLooks())
+    val gentle by services.gentle.on.collectAsStateWithLifecycle()
     AppTheme(services) {
         CompositionLocalProvider(
             LocalTagLooks provides looks,
+            LocalGentle provides gentle,
             LocalAudio provides rememberAudioPlayback(),
             LocalPagerArrows provides (services.platform != "android"), // a mouse: side buttons on pictures
         ) { AppRoot(services) }
@@ -214,10 +227,12 @@ private fun AppRoot(services: AppServices) {
     LifecycleEventEffect(Lifecycle.Event.ON_START) {
         services.sync.foreground = true
         services.lock.onReturn()
+        services.gentle.onReturn()
     }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
         services.sync.foreground = false
         services.lock.onLeave()
+        services.gentle.onLeave()
     }
     val backStack = remember { mutableStateListOf<Route>(Route.Home) }
     val nav = remember(backStack) { Navigator(backStack) }
@@ -275,11 +290,29 @@ private fun AppRoot(services: AppServices) {
         services.messages.collect { message ->
             when (message) {
                 is AppMessage.AttachFailed -> snackbar.showSnackbar(getString(Res.string.attach_failed, message.reason))
+
                 is AppMessage.TranscriptionFailed -> snackbar.showSnackbar(getString(Res.string.speech_failed, message.reason))
+
                 AppMessage.Copied -> snackbar.showSnackbar(getString(Res.string.copied))
+
                 AppMessage.Saved -> snackbar.showSnackbar(getString(Res.string.saved))
+
                 is AppMessage.SaveFailed -> snackbar.showSnackbar(getString(Res.string.save_failed, message.reason))
+
                 is AppMessage.Reminder -> snackbar.showSnackbar(getString(Res.string.reminder_now, message.text), withDismissAction = true)
+
+                is AppMessage.Veiled -> {
+                    val text = when (message.veil) {
+                        Veil.Curtain -> Res.string.veiled_curtain
+                        Veil.Quiet -> Res.string.veiled_quiet
+                        null -> Res.string.veiled_none
+                    }
+                    val result = snackbar.showSnackbar(getString(text), getString(Res.string.veil_undo), duration = SnackbarDuration.Long)
+                    if (result == SnackbarResult.ActionPerformed) services.repo.setVeil(message.entryId, message.previous)
+                }
+
+                is AppMessage.GentleSwitched ->
+                    snackbar.showSnackbar(getString(if (message.on) Res.string.gentle_turned_on else Res.string.gentle_turned_off))
             }
         }
     }
@@ -308,6 +341,18 @@ private fun AppFrame(
     // the same shape in both, so resizing across the line never rebuilds the screens.
     val top = backStack.lastOrNull()
     val tabs = top in TAB_ROUTES
+    val haptic = LocalHapticFeedback.current
+    // A long press on the Feed tab flips Бережно (ADR-031): out of sight, but a moment away.
+    val flipGentle: () -> Unit = remember(services, haptic) {
+        {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            val on = !services.gentle.on.value
+            services.gentle.set(on)
+            services.messages.tryEmit(AppMessage.GentleSwitched(on))
+        }
+    }
+
+    fun Tab.press() = Modifier.hand().then(if (route == Route.Feed) Modifier.longPress(flipGentle) else Modifier)
     val current = backStack.lastOrNull { it in TAB_ROUTES }
     var barHeight by remember { mutableIntStateOf(0) }
     val bar = with(LocalDensity.current) { barHeight.toDp() }
@@ -326,7 +371,7 @@ private fun AppFrame(
                             onClick = { nav.selectTab(tab.route) },
                             icon = { Icon(tab.icon, label) },
                             label = { Text(label) },
-                            modifier = Modifier.hand(),
+                            modifier = tab.press(),
                         )
                     }
                 }
@@ -357,7 +402,7 @@ private fun AppFrame(
                                 onClick = { nav.selectTab(tab.route) },
                                 icon = { Icon(tab.icon, label) },
                                 label = { Text(label) },
-                                modifier = Modifier.hand(),
+                                modifier = tab.press(),
                             )
                         }
                     }

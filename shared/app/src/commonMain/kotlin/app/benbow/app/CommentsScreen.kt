@@ -79,7 +79,7 @@ internal fun CommentsScreen(services: AppServices, nav: Navigator, route: Route.
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).hand(),
                 ) {
                     Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (comment.text.isNotBlank()) Text(comment.text, style = MaterialTheme.typography.bodyLarge)
+                        CommentText(comment)
                         CommentMedia(services, comment) { nav.open(Route.Media(comment.summary.id, it)) }
                         Text(
                             dateTimeLabel(comment.summary.createdAt),

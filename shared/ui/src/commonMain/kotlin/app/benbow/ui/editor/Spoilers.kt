@@ -203,6 +203,14 @@ fun Modifier.spoilerDots(dots: SpoilerDots, color: Color, time: State<Float>, al
         }
     }
 
+/** Dots over the whole element (a curtain over an entry); clip it first for round corners. */
+fun Modifier.spoilerSurface(dots: SpoilerDots, color: Color, time: State<Float>, alpha: () -> Float = { 1f }): Modifier =
+    graphicsLayer().drawWithCache {
+        val tint = ColorFilter.tint(color)
+        val path = Path().apply { addRect(Rect(Offset.Zero, size)) }
+        onDrawBehind { drawDots(dots, path, tint, time.value, alpha()) }
+    }
+
 private fun DrawScope.drawDots(dots: SpoilerDots, path: Path, tint: ColorFilter, time: Float, alpha: Float) {
     if (alpha <= 0f || path.isEmpty) return
     val bounds = path.getBounds()

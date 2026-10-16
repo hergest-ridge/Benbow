@@ -116,12 +116,17 @@ internal class HomeViewModel(private val services: AppServices) : ViewModel() {
             services.repo.daysWritten(monthStart.toString(), monthStart.plus(1, DateTimeUnit.MONTH).minus(1, DateTimeUnit.DAY).toString()),
             ::Triple,
         ),
-    ) { (todays, pinned, drafts), (onThisDay, favorites, days) ->
+        services.gentle.on,
+    ) { (todays, pinned, drafts), (allOnThisDay, allFavorites, days), gentle ->
+        // Бережно (ADR-031): quiet entries stay out of Home; what comes back unasked (On this day, the resurfaced
+        // favorite) leaves out curtained ones too.
+        val onThisDay = if (gentle) allOnThisDay.filter { it.veil == null } else allOnThisDay
+        val favorites = if (gentle) allFavorites.filter { it.veil == null } else allFavorites
         HomeState(
             today,
-            todays,
-            pinned,
-            drafts,
+            todays.withoutQuiet(gentle) { it },
+            pinned.withoutQuiet(gentle) { it },
+            drafts.withoutQuiet(gentle) { it },
             onThisDay,
             favorites.takeIf { it.isNotEmpty() }?.let {
                 it[

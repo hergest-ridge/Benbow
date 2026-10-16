@@ -70,8 +70,8 @@ data class GentleRule(
     }
 }
 
-/** The rules, with the tag categories they need to match. */
-class GentleRules(val rules: List<GentleRule>, private val categories: Map<String, String>) {
+/** The rules, with the tag categories they need to match; [today] decides whether a put-off entry is back. */
+class GentleRules(val rules: List<GentleRule>, private val categories: Map<String, String>, val today: String = "") {
     fun matches(rule: GentleRule, day: String, tags: List<String>): Boolean = when (rule.kind) {
         GentleRule.TAG -> tags.any { it.equals(rule.value, ignoreCase = true) }
         GentleRule.CATEGORY -> tags.any { categories[tagName(it).lowercase()]?.equals(rule.value, ignoreCase = true) == true }
@@ -85,16 +85,22 @@ class GentleRules(val rules: List<GentleRule>, private val categories: Map<Strin
         return if (Veil.Quiet in levels) Veil.Quiet else levels.firstOrNull()
     }
 
+    /** "Отложить до…": quiet until the day comes, whatever the entry's own mark; then its own mark again. */
+    fun own(mark: Veil?, until: String?): Veil? = if (until != null && today < until) Veil.Quiet else mark
+
+    /** What an entry shows as now. */
+    fun veilOf(mark: Veil?, until: String?, day: String, tags: List<String>): Veil? = effectiveVeil(own(mark, until), ruled(day, tags))
+
     fun apply(entry: EntrySummary): EntrySummary {
         val ruled = ruled(entry.day, entry.tags)
-        return entry.copy(veil = effectiveVeil(entry.ownVeil, ruled), ruleVeil = ruled)
+        return entry.copy(veil = effectiveVeil(own(entry.ownVeil, entry.until), ruled), ruleVeil = ruled)
     }
 
     companion object {
         val NONE = GentleRules(emptyList(), emptyMap())
 
         /** From the fields of the rules' registry and of the tag registry (`cat:<tag key>` = category). */
-        internal fun of(rules: Map<String, String?>, tags: Map<String, String?>) = GentleRules(
+        internal fun of(rules: Map<String, String?>, tags: Map<String, String?>, today: String) = GentleRules(
             rules.mapNotNull { (key, value) ->
                 if (!key.startsWith(RULE_PREFIX) || value == null) null else GentleRule.decode(key.removePrefix(RULE_PREFIX), value)
             }.sortedBy { it.name.lowercase() },
@@ -108,6 +114,7 @@ class GentleRules(val rules: List<GentleRule>, private val categories: Map<Strin
                 }
             }
                 .toMap(),
+            today,
         )
     }
 }

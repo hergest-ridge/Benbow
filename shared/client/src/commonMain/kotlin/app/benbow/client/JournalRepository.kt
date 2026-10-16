@@ -26,11 +26,14 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.builtins.serializer
 import kotlin.coroutines.CoroutineContext
 import kotlin.random.Random
+import kotlin.time.Instant
 
 data class DaySummary(val day: String, val entries: Int)
 
@@ -56,6 +59,8 @@ data class EntrySummary(
     val veil: Veil? = null,
     val ownVeil: Veil? = null,
     val ruleVeil: Veil? = null,
+    /** "Отложить до…": quiet until this day ("YYYY-MM-DD"), then back with a card on Home until the owner answers it. */
+    val until: String? = null,
 )
 
 data class TagCount(val name: String, val uses: Int, val category: String? = null)
@@ -124,6 +129,7 @@ data class EntryDetail(
 
     /** Бережно: the entry's own mark (set by hand); the rules may add theirs ([GentleRules.ruled]). */
     val ownVeil: Veil? get() = Veil.of(fields[VEIL_FIELD])
+    val until: String? get() = fields[VEIL_UNTIL_FIELD]
     val tags: List<String> get() = tagsOf(fields)
     val reactions: Set<String> get() = fields.filter {
         it.key.startsWith(REACTION_PREFIX) && it.value != null
@@ -145,6 +151,7 @@ internal const val REPEAT_FIELD = "repeat"
 internal const val DONE_FIELD = "done"
 internal const val BACKGROUND_FIELD = "background"
 internal const val VEIL_FIELD = "veil"
+internal const val VEIL_UNTIL_FIELD = "veil_until"
 
 /** Attachments shown as pictures (a video by its preview frame). */
 private val VISUAL_KINDS = setOf("image", "video", "drawing")
@@ -191,6 +198,10 @@ class JournalRepository(
     private val now: () -> Long,
     private val context: CoroutineContext = Dispatchers.Default,
     private val random: Random = Random.Default,
+    /** The journal's day now (the app's starts at 04:00); "Отложить до…" compares with it. */
+    private val today: () -> String = {
+        Instant.fromEpochMilliseconds(now()).toLocalDateTime(TimeZone.currentSystemDefault()).date.toString()
+    },
 ) {
     private val q get() = db.benbowQueries
     private val clock = ClientClock(db, now)
@@ -434,7 +445,7 @@ class JournalRepository(
                     val f = decodeFields(row.fields)
                     f[MOOD_FIELD]?.toIntOrNull()?.let {
                         it to
-                            (effectiveVeil(Veil.of(f[VEIL_FIELD]), rules.ruled(day, tagsOf(f))) == Veil.Quiet)
+                            (rules.veilOf(Veil.of(f[VEIL_FIELD]), f[VEIL_UNTIL_FIELD], day, tagsOf(f)) == Veil.Quiet)
                     }
                 }
                 DayInfo(
@@ -575,7 +586,7 @@ class JournalRepository(
         q.selectEntry(GENTLE_REGISTRY_ID).asFlow().mapToOneOrNull(context),
         q.selectEntry(TAG_REGISTRY_ID).asFlow().mapToOneOrNull(context),
     ) { rules, tags ->
-        GentleRules.of(rules?.let { decodeFields(it.fields) }.orEmpty(), tags?.let { decodeFields(it.fields) }.orEmpty())
+        GentleRules.of(rules?.let { decodeFields(it.fields) }.orEmpty(), tags?.let { decodeFields(it.fields) }.orEmpty(), today())
     }
 
     /** Adds or changes a rule; a view only, entries stay as they are. */
@@ -586,7 +597,13 @@ class JournalRepository(
     fun newRuleId(): String = newId()
 
     private fun Flow<List<EntrySummary>>.veiled(): Flow<List<EntrySummary>> =
-        combine(this, gentleRules()) { entries, rules -> if (rules.rules.isEmpty()) entries else entries.map(rules::apply) }
+        combine(this, gentleRules()) { entries, rules -> entries.map(rules::apply) }
+
+    /** "Отложить до…" (ADR-031): quiet until [until], then back; null brings it back now (or answers the Home card). */
+    fun setVeilUntil(id: String, until: String?) = setField(id, VEIL_UNTIL_FIELD, until)
+
+    /** Entries put off until a day that has come and not answered yet, oldest first. */
+    fun returned(today: String): Flow<List<EntrySummary>> = q.returned(today, ::summaryOf).asFlow().mapToList(context).veiled()
 
     /** A registry is created once, without revisions, so two devices never conflict over it; its fields are LWW. */
     private fun setRegistryField(name: String, value: String?, registry: String = TAG_REGISTRY_ID) {
@@ -694,6 +711,7 @@ private fun summaryOf(
         background = f[BACKGROUND_FIELD]?.takeIf { it in SWATCHES },
         veil = effectiveVeil(Veil.of(f[VEIL_FIELD]), null),
         ownVeil = Veil.of(f[VEIL_FIELD]),
+        until = f[VEIL_UNTIL_FIELD],
     )
 }
 

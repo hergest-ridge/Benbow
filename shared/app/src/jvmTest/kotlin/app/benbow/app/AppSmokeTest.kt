@@ -364,6 +364,30 @@ class AppSmokeTest {
     }
 
     @Test
+    fun aPutOffEntryLeavesTheFeedAndComesBackWithACard() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val id = services.repo.createNote(services.today(), "Письмо, которое пока не перечитать")
+        services.repo.createNote(services.today(), "Утро как утро")
+        setContent { BenbowApp(services) }
+        onNodeWithText("Лента").click()
+        waitUntilExactlyOneExists(hasText("Письмо, которое пока не перечитать"), 5_000)
+        onNodeWithText("Письмо, которое пока не перечитать").performTouchInput { longClick() }
+        onNodeWithText("Отложить до…").click()
+        onNodeWithText("На месяц").click()
+        waitUntilExactlyOneExists(hasText("Запись вернётся", substring = true), 5_000)
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Письмо", substring = true).fetchSemanticsNodes().isEmpty() }
+        screenshot("36-gentle-postponed")
+
+        // Its day comes: back in its place, and Home says so once.
+        services.repo.setVeilUntil(id, services.today())
+        onNodeWithText("Главная").click()
+        waitUntilExactlyOneExists(hasText("Вернулась запись от", substring = true), 5_000)
+        screenshot("37-gentle-returned")
+        onNodeWithText("Не сейчас").click()
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Вернулась запись от", substring = true).fetchSemanticsNodes().isEmpty() }
+        waitUntilExactlyOneExists(hasText("Письмо, которое пока не перечитать"), 5_000) // in today's list again
+    }
+
+    @Test
     fun onAPhoneTheSwitchWaitsAboveTheFeedForAPull() = runDesktopComposeUiTest(width = 412, height = 860) {
         val phone = AppServices(
             JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), BenbowDb.Schema),

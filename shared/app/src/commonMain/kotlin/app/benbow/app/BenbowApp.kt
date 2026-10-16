@@ -72,6 +72,8 @@ import app.benbow.app.resources.attach_failed
 import app.benbow.app.resources.copied
 import app.benbow.app.resources.gentle_turned_off
 import app.benbow.app.resources.gentle_turned_on
+import app.benbow.app.resources.months_genitive
+import app.benbow.app.resources.postponed
 import app.benbow.app.resources.reminder_now
 import app.benbow.app.resources.save_failed
 import app.benbow.app.resources.saved
@@ -93,6 +95,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.getStringArray
 import org.jetbrains.compose.resources.stringResource
 
 internal sealed interface Route {
@@ -315,6 +318,14 @@ private fun AppRoot(services: AppServices) {
                     }
                     val result = snackbar.showSnackbar(getString(text), getString(Res.string.veil_undo), duration = SnackbarDuration.Long)
                     if (result == SnackbarResult.ActionPerformed) services.repo.setVeil(message.entryId, message.previous)
+                }
+
+                is AppMessage.Postponed -> {
+                    val text =
+                        message.until?.let { getString(Res.string.postponed, dateLabel(it, getStringArray(Res.array.months_genitive))) }
+                            ?: getString(Res.string.veiled_none)
+                    val result = snackbar.showSnackbar(text, getString(Res.string.veil_undo), duration = SnackbarDuration.Long)
+                    if (result == SnackbarResult.ActionPerformed) services.repo.setVeilUntil(message.entryId, message.previous)
                 }
 
                 is AppMessage.GentleSwitched ->

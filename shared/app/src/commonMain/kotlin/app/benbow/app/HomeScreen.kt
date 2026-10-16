@@ -86,6 +86,8 @@ internal data class HomeState(
     /** Days with entries and their average mood over the last 7 and 30 days, for the review cards. */
     val week: Pair<Int, Double?> = 0 to null,
     val month: Pair<Int, Double?> = 0 to null,
+    /** A put-off entry whose day has come (ADR-031), oldest first; one card at a time. */
+    val returned: EntrySummary? = null,
 )
 
 internal class HomeViewModel(private val services: AppServices) : ViewModel() {
@@ -138,12 +140,19 @@ internal class HomeViewModel(private val services: AppServices) : ViewModel() {
         )
     }
 
-    val state: StateFlow<HomeState?> = combine(base, reviews) { home, (week, month) -> home.copy(week = week, month = month) }
+    val state: StateFlow<HomeState?> = combine(base, reviews, services.repo.returned(today)) { home, (week, month), returned ->
+        home.copy(week = week, month = month, returned = returned.firstOrNull())
+    }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun checkin(mood: Int, emotions: List<String>, text: String) {
         services.scope.launch { services.repo.createCheckin(services.today(), mood, emotions, text) }
         kindness.value = mood <= -1
+    }
+
+    /** The returned card's "Не сейчас" and "Открыть": answered, so the card goes; the entry is already back. */
+    fun answerReturned(id: String) {
+        services.scope.launch { services.repo.setVeilUntil(id, null) }
     }
 
     fun quickNote(text: String) {
@@ -161,6 +170,7 @@ internal fun HomeScreen(services: AppServices, nav: Navigator) {
     val kindness by vm.kindness.collectAsStateWithLifecycle()
     val status by services.sync.status.collectAsStateWithLifecycle()
     var refreshUntil by remember { mutableStateOf<Int?>(null) }
+    var postponing by remember { mutableStateOf<EntrySummary?>(null) }
     val newEntry = { nav.open(Route.Editor(null, services.today(), opened = services.now())) }
     Scaffold(
         topBar = { HomeHeader(state?.today, status) { nav.open(Route.Server) } },
@@ -177,7 +187,26 @@ internal fun HomeScreen(services: AppServices, nav: Navigator) {
             val home = state ?: return@PullToRefreshBox
             val open = { entry: EntrySummary -> nav.open(Route.Editor(entry.id, entry.day)) }
             val write = { template: String -> nav.open(Route.Editor(null, services.today(), opened = services.now(), template = template)) }
+            postponing?.let { entry ->
+                PostponeDialog(onPick = { day ->
+                    postponing = null
+                    services.postpone(entry.id, day.toString(), entry.until)
+                }, onDismiss = { postponing = null })
+            }
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
+                home.returned?.let { entry ->
+                    item(key = "returned") {
+                        ReturnedCard(
+                            entry,
+                            onOpen = {
+                                vm.answerReturned(entry.id)
+                                open(entry)
+                            },
+                            onLater = { vm.answerReturned(entry.id) },
+                            onAgain = { postponing = entry },
+                        )
+                    }
+                }
                 item(key = "checkin") { CheckinCard(vm::checkin) }
                 if (kindness) {
                     item(key = "kindness") {

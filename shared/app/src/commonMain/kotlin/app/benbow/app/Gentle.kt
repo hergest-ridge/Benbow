@@ -14,14 +14,25 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,10 +41,22 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import app.benbow.app.resources.Res
+import app.benbow.app.resources.cancel
 import app.benbow.app.resources.curtain_open
 import app.benbow.app.resources.gentle
 import app.benbow.app.resources.gentle_off_hint
 import app.benbow.app.resources.gentle_on_hint
+import app.benbow.app.resources.months_genitive
+import app.benbow.app.resources.postpone
+import app.benbow.app.resources.postpone_back_now
+import app.benbow.app.resources.postpone_choices
+import app.benbow.app.resources.postpone_hint
+import app.benbow.app.resources.postpone_pick_day
+import app.benbow.app.resources.returned_again
+import app.benbow.app.resources.returned_hint
+import app.benbow.app.resources.returned_later
+import app.benbow.app.resources.returned_title
+import app.benbow.app.resources.save
 import app.benbow.app.resources.veil_curtain
 import app.benbow.app.resources.veil_quiet
 import app.benbow.app.resources.veil_uncurtain
@@ -45,7 +68,17 @@ import app.benbow.ui.editor.spoilerClock
 import app.benbow.ui.editor.spoilerSurface
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.number
+import kotlinx.datetime.plus
+import kotlinx.datetime.toLocalDateTime
+import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
+import kotlin.time.Instant
 
 /**
  * Бережно (ADR-031): whether curtains and quiet entries apply on this device right now. On in every new process (it is
@@ -183,3 +216,90 @@ internal fun VeilMenuItems(veil: Veil?, ruled: Veil?, onPick: (Veil?) -> Unit) {
 
 /** A curtain is calmer than a spoiler: its dots are dimmer. */
 private const val CURTAIN_DOTS = 0.6f
+
+/** "Отложить до…", or "Вернуть сейчас" while the entry is put off; [onClick] gets true to choose a day. */
+@Composable
+internal fun PostponeMenuItem(until: String?, onClick: (choose: Boolean) -> Unit) {
+    val away = until != null && journalToday().toString() < until
+    DropdownMenuItem(
+        text = { Text(stringResource(if (away) Res.string.postpone_back_now else Res.string.postpone)) },
+        onClick = { onClick(!away) },
+        modifier = Modifier.hand(),
+    )
+}
+
+/** When a put-off entry comes back: in a week, a month, half a year, a year, or on a chosen day (after today). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun PostponeDialog(onPick: (LocalDate) -> Unit, onDismiss: () -> Unit) {
+    val today = remember { journalToday() }
+    var choosing by remember { mutableStateOf(false) }
+    if (choosing) {
+        // The date picker speaks UTC midnights.
+        val first = today.plus(1, DateTimeUnit.DAY).atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds()
+        val dates = rememberDatePickerState(
+            initialSelectedDateMillis = first,
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis >= first
+            },
+        )
+        DatePickerDialog(
+            onDismissRequest = onDismiss,
+            confirmButton = {
+                TextButton({
+                    dates.selectedDateMillis?.let { onPick(Instant.fromEpochMilliseconds(it).toLocalDateTime(TimeZone.UTC).date) }
+                }, Modifier.hand()) { Text(stringResource(Res.string.save)) }
+            },
+            dismissButton = { TextButton(onDismiss, Modifier.hand()) { Text(stringResource(Res.string.cancel)) } },
+        ) { DatePicker(dates) }
+        return
+    }
+    val choices = stringArrayResource(Res.array.postpone_choices)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(Res.string.postpone)) },
+        text = {
+            Column {
+                Text(stringResource(Res.string.postpone_hint), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                POSTPONE_PERIODS.forEachIndexed { i, period ->
+                    TextButton({ onPick(today.plus(period)) }, Modifier.hand()) { Text(choices[i]) }
+                }
+                TextButton({ choosing = true }, Modifier.hand()) { Text(stringResource(Res.string.postpone_pick_day)) }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onDismiss, Modifier.hand()) { Text(stringResource(Res.string.cancel)) } },
+    )
+}
+
+private val POSTPONE_PERIODS = listOf(DatePeriod(days = 7), DatePeriod(months = 1), DatePeriod(months = 6), DatePeriod(years = 1))
+
+/** A put-off entry is back (its day came): said once, calmly, without its text; it is already in its place again. */
+@Composable
+internal fun ReturnedCard(entry: EntrySummary, onOpen: () -> Unit, onLater: () -> Unit, onAgain: () -> Unit) {
+    HomeCard {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Leaf, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+            Text(
+                stringResource(Res.string.returned_title, dateLabel(entry.day, stringArrayResource(Res.array.months_genitive))),
+                style = MaterialTheme.typography.titleMedium,
+            )
+        }
+        Text(
+            stringResource(Res.string.returned_hint),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onLater, Modifier.hand()) { Text(stringResource(Res.string.returned_later)) }
+            TextButton(onAgain, Modifier.hand()) { Text(stringResource(Res.string.returned_again)) }
+            TextButton(onOpen, Modifier.hand()) { Text(stringResource(Res.string.curtain_open)) }
+        }
+    }
+}
+
+/** "16 октября", with the year when it isn't this one; never "Сегодня" or "Вчера" (a date said as a date). */
+internal fun dateLabel(day: String, months: List<String>): String {
+    val date = LocalDate.parse(day)
+    return "${date.day} ${months[date.month.number - 1]}" + if (date.year != journalToday().year) " ${date.year}" else ""
+}

@@ -190,6 +190,12 @@ UPDATE entry SET parent_id = ? WHERE id = ?;
 
 -- Calendar (5.1) ---------------------------------------------------------------------------
 
+-- Бережно (ADR-031): entries put off until a day that has come, not answered yet; oldest first (the Home card).
+returned:
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
+WHERE json_extract(fields, '$.veil_until') <= :today AND json_extract(fields, '$.deleted') IS NOT 'true' AND kind != 'system'
+ORDER BY json_extract(fields, '$.veil_until'), day;
+
 -- A calendar span's entries (moods and Бережно's marks are read in code, where the rules apply).
 dayEntries:
 SELECT day, fields FROM entry

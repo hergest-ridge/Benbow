@@ -92,6 +92,9 @@ sealed interface AppMessage {
     /** An entry's veil changed (ADR-031); "Вернуть" puts [previous] back. */
     data class Veiled(val entryId: String, val veil: Veil?, val previous: Veil?) : AppMessage
 
+    /** An entry was put off until [until] (null: brought back); "Вернуть" puts [previous] back. */
+    data class Postponed(val entryId: String, val until: String?, val previous: String?) : AppMessage
+
     /** Бережно was switched from the Feed tab (a long press). */
     data class GentleSwitched(val on: Boolean) : AppMessage
 }
@@ -119,7 +122,7 @@ class AppServices(
     val now: () -> Long = { Clock.System.now().toEpochMilliseconds() }
     private val db = BenbowDb(driver)
     private val apis = ApiCache()
-    val repo = JournalRepository(db, now)
+    val repo = JournalRepository(db, now, today = { today() })
     val pairing = Pairing(db)
     val history = ServerHistory(db, apis)
     val media: Media = mediaStore.create(db, apis, now)
@@ -152,6 +155,14 @@ class AppServices(
     val lock = AppLock(Settings(db), now)
 
     val gentle = Gentle(now)
+
+    /** "Отложить до…" (ADR-031): quiet until [until], or back now (null); offers to take it back. */
+    fun postpone(id: String, until: String?, previous: String?) {
+        scope.launch {
+            repo.setVeilUntil(id, until)
+            messages.emit(AppMessage.Postponed(id, until, previous))
+        }
+    }
 
     /** Sets an entry's veil (ADR-031) and offers to take it back. */
     fun setVeil(id: String, veil: Veil?, previous: Veil?) {

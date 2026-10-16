@@ -298,6 +298,7 @@ private fun FeedPost(
     val colors = MaterialTheme.colorScheme
     val entry = item.summary
     var picking by remember { mutableStateOf(false) }
+    var postponing by remember { mutableStateOf(false) }
     // A curtain opens in place and closes again once the post scrolls away (this state goes with it).
     var opened by remember(entry.id) { mutableStateOf(false) }
     val curtained = entry.curtained(LocalGentle.current) && !opened
@@ -349,6 +350,10 @@ private fun FeedPost(
                 picking = false
                 services.setVeil(entry.id, it, entry.ownVeil)
             }
+            PostponeMenuItem(entry.until) { choose ->
+                picking = false
+                if (choose) postponing = true else services.postpone(entry.id, null, entry.until)
+            }
             Row(Modifier.padding(horizontal = 8.dp)) {
                 REACTIONS.forEach { emoji ->
                     val on = emoji in item.reactions
@@ -358,6 +363,12 @@ private fun FeedPost(
                     }, modifier = Modifier.size(width = 52.dp, height = 48.dp).hand())
                 }
             }
+        }
+        if (postponing) {
+            PostponeDialog(onPick = {
+                postponing = false
+                services.postpone(entry.id, it.toString(), entry.until)
+            }, onDismiss = { postponing = false })
         }
     }
 }

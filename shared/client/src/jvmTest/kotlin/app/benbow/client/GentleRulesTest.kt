@@ -65,4 +65,24 @@ class GentleRulesTest {
         assertEquals(0.0, day.mood)
         assertEquals(2.0, day.openMood)
     }
+
+    @Test
+    fun aPutOffEntryIsQuietUntilItsDayThenBackWithACardUntilAnswered() = runTest {
+        var today = "2026-10-16"
+        val journal =
+            JournalRepository(BenbowDb(JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), BenbowDb.Schema)), {
+                time++
+            }, today = { today })
+        val id = journal.createNote("2026-03-12", "Тяжёлый разговор")
+        journal.setVeil(id, Veil.Curtain)
+        journal.setVeilUntil(id, "2026-11-16")
+        assertEquals(Veil.Quiet, journal.journal().first().single().veil, "quiet while put off, over its own curtain")
+        assertEquals(emptyList(), journal.returned(today).first())
+
+        today = "2026-11-16"
+        assertEquals(Veil.Curtain, journal.journal().first().single().veil, "back on its day, with its own mark again")
+        assertEquals(listOf(id), journal.returned(today).first().map { it.id }, "and a card on Home")
+        journal.setVeilUntil(id, null) // answered
+        assertEquals(emptyList(), journal.returned(today).first())
+    }
 }

@@ -107,7 +107,7 @@ internal fun ReviewCard(title: String, summary: String, onWrite: () -> Unit) {
 }
 
 @Composable
-private fun HomeCard(color: Color = MaterialTheme.colorScheme.surfaceContainerLow, content: @Composable () -> Unit) {
+internal fun HomeCard(color: Color = MaterialTheme.colorScheme.surfaceContainerLow, content: @Composable () -> Unit) {
     Surface(
         color = color,
         shape = RoundedCornerShape(16.dp),

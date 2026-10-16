@@ -513,4 +513,19 @@
         <item quantity="many">%1$d записей</item>
         <item quantity="other">%1$d записи</item>
     </plurals>
+    <string name="postpone">Отложить до…</string>
+    <string name="postpone_back_now">Вернуть сейчас</string>
+    <string name="postpone_hint">Запись побудет вне ленты и вернётся в выбранный день, тихо, с карточкой на Главной.</string>
+    <string name="postpone_pick_day">Выбрать день…</string>
+    <string-array name="postpone_choices">
+        <item>На неделю</item>
+        <item>На месяц</item>
+        <item>На полгода</item>
+        <item>На год</item>
+    </string-array>
+    <string name="postponed">Запись вернётся %1$s</string>
+    <string name="returned_title">Вернулась запись от %1$s</string>
+    <string name="returned_hint">Вы откладывали её до этого дня. Можно прочитать сейчас или позже: она снова на своём месте.</string>
+    <string name="returned_later">Не сейчас</string>
+    <string name="returned_again">Ещё отложить</string>
 </resources>

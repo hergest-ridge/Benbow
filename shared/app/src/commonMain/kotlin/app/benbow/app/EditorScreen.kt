@@ -285,6 +285,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     val gentleRules by remember { services.repo.gentleRules() }.collectAsStateWithLifecycle(GentleRules.NONE)
     var menu by remember { mutableStateOf(false) }
     var pickingBackground by remember { mutableStateOf(false) }
+    var postponing by remember { mutableStateOf(false) }
     var moving by remember { mutableStateOf(false) }
     if (moving) {
         val at = detail?.createdAt?.let { Instant.fromEpochMilliseconds(it).toLocalDateTime(TimeZone.currentSystemDefault()).time }
@@ -474,9 +475,18 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                     pickingBackground = true
                                 }, modifier = Modifier.hand())
                                 val ruled = detail?.let { gentleRules.ruled(it.day, it.tags) }
-                                VeilMenuItems(effectiveVeil(detail?.ownVeil, ruled), ruled) { veil ->
+                                VeilMenuItems(
+                                    gentleRules.own(detail?.ownVeil, detail?.until).let {
+                                        effectiveVeil(it, ruled)
+                                    },
+                                    ruled,
+                                ) { veil ->
                                     menu = false
                                     vm.entryId?.let { services.setVeil(it, veil, detail?.ownVeil) }
+                                }
+                                PostponeMenuItem(detail?.until) { choose ->
+                                    menu = false
+                                    if (choose) postponing = true else vm.entryId?.let { services.postpone(it, null, detail?.until) }
                                 }
                                 DropdownMenuItem(text = { Text(stringResource(Res.string.print)) }, onClick = {
                                     menu = false
@@ -542,6 +552,12 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                         modifier = Modifier.padding(16.dp),
                     )
                 }
+            }
+            if (postponing) {
+                PostponeDialog(onPick = { day ->
+                    postponing = false
+                    vm.entryId?.let { services.postpone(it, day.toString(), detail?.until) }
+                }, onDismiss = { postponing = false })
             }
             if (pickingBackground) {
                 SwatchPicker(

@@ -115,8 +115,8 @@ internal class GentleViewModel(private val services: AppServices) : ViewModel() 
     }
 }
 
-/** Marked by hand: a curtain or quiet of its own (not merely open despite a rule). */
-private val EntrySummary.marked get() = ownVeil == Veil.Curtain || ownVeil == Veil.Quiet
+/** Marked by hand: a curtain or quiet of its own, or put off (not merely open despite a rule). */
+private val EntrySummary.marked get() = ownVeil == Veil.Curtain || ownVeil == Veil.Quiet || until != null
 
 private val LEVELS = listOf(GentleRule.OFF, GentleRule.CURTAIN, GentleRule.QUIET)
 

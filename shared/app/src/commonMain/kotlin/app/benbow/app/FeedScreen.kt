@@ -79,6 +79,7 @@ import app.benbow.app.resources.feed_title
 import app.benbow.app.resources.months_nominative
 import app.benbow.client.EntrySummary
 import app.benbow.client.FeedItem
+import app.benbow.client.effectiveVeil
 import app.benbow.core.sync.AttachmentState
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
@@ -269,13 +270,19 @@ private class StripPull(private val pulls: Boolean) : NestedScrollConnection {
     }
 
     override suspend fun onPreFling(available: Velocity): Velocity {
-        if (shown <= 0f || shown >= height) return Velocity.Zero
-        settle(if (shown > height / 2) height else 0f)
+        if (shown <= 0f) return Velocity.Zero
+        // A flick at the top (flinging up to the newest post, again) is no pull on purpose: the strip goes back.
+        val flick = available.y > FLICK_VELOCITY
+        if (!flick && shown >= height) return Velocity.Zero
+        settle(if (!flick && shown > height / 2) height else 0f)
         return available
     }
 }
 
 private const val PULL_RESISTANCE = 0.6f
+
+/** px per second: a pull let go faster than this was a flick (a slow, deliberate pull ends well below it). */
+private const val FLICK_VELOCITY = 3000f
 
 /**
  * One post. With [cards], a rounded card with inset media; without, edge to edge: media across the full width, the
@@ -346,7 +353,7 @@ private fun FeedPost(
                 picking = false
                 onComments()
             }, modifier = Modifier.hand())
-            VeilMenuItems(entry.veil, entry.ruleVeil) {
+            VeilMenuItems(effectiveVeil(entry.ownVeil, entry.ruleVeil), entry.ruleVeil) {
                 picking = false
                 services.setVeil(entry.id, it, entry.ownVeil)
             }

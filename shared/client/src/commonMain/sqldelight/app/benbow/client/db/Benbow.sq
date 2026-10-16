@@ -274,6 +274,10 @@ UPDATE media SET uploaded = 0 WHERE origin = 'captured';
 updateHead:
 UPDATE entry SET head_rev = ?, body = ?, title = ?, preview = ?, updated_at = ? WHERE id = ?;
 
+-- The local title and preview made again from the body (JournalRepository.prepareSummaries); nothing else changes.
+updateSummary:
+UPDATE entry SET title = ?, preview = ? WHERE id = ?;
+
 clearConflicts:
 UPDATE entry SET conflict_heads = '[]' WHERE id = ?;
 

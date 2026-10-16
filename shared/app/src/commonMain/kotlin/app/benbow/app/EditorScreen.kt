@@ -476,9 +476,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                 }, modifier = Modifier.hand())
                                 val ruled = detail?.let { gentleRules.ruled(it.day, it.tags) }
                                 VeilMenuItems(
-                                    gentleRules.own(detail?.ownVeil, detail?.until).let {
-                                        effectiveVeil(it, ruled)
-                                    },
+                                    effectiveVeil(detail?.ownVeil, ruled),
                                     ruled,
                                 ) { veil ->
                                     menu = false

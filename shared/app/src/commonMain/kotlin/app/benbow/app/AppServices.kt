@@ -236,7 +236,10 @@ class AppServices(
         repo.commitLeftoverDrafts()
         scope.launch { moveJournalEvents(db, repo, calendar) }
         sync.start()
-        scope.launch { repo.prepareSearch() }
+        scope.launch {
+            repo.prepareSearch()
+            repo.prepareSummaries()
+        }
         if (reminderClock != null) {
             scope.launch {
                 repo.reminders().collect {

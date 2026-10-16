@@ -66,7 +66,7 @@ Colors, highlights and callout tones are **token names**, never raw hex. The des
 - Tests (property-based): `decode(encode(doc)) == doc`, `canon(canon(x)) == canon(x)`, every `_key` is unique, unknown types and fields round-trip byte-identically.
 
 ## Derived forms
-- **Plain text** (search index, previews, notifications): block texts joined by `\n`. List and check prefixes are omitted. Code included. Spoiler text is excluded from previews and notifications but indexed for search.
+- **Plain text** (search index, previews, notifications): block texts joined by `\n`. List and check prefixes are omitted. Code included. Spoiler text is excluded from titles, previews and notifications but indexed for search (titles too since 7.8: a list card showed the hidden words; the client makes its cached titles and previews again once, `prepareSummaries`).
 - **Markdown export**, two flavours:
   - *rich* (default, Obsidian-friendly): `**`, `*`, `<u>`, `~~`, `` ` ``, spoiler → `<span class="spoiler">`, color/size → `<span style>`, highlight → `==x==` (default token) or `<mark style>`, align → HTML wrapper, callout → `> [!note] <icon>`, check → `- [ ]` / `- [x]`, entryLink → relative link to the exported file.
   - *clean*: drop all styling that CommonMark+GFM can't express.

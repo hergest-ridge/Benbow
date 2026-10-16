@@ -555,6 +555,23 @@ class JournalRepository(
     /** Builds the search index after an update changed it (or on the first start); quick otherwise. */
     fun prepareSearch() = SearchIndex.rebuildIfNeeded(db)
 
+    /**
+     * Titles and previews are this device's own cache of each body ([summarize]); when the way they are made changes,
+     * they are made again once (7.8: spoilers left out of titles as well). Nothing synced or stored by the user changes.
+     */
+    fun prepareSummaries() {
+        val settings = Settings(db)
+        if (settings.get(SUMMARIES_KEY) == SUMMARIES_VERSION) return
+        db.transaction {
+            q.allEntryIds().executeAsList().forEach { id ->
+                val entry = q.selectEntry(id).executeAsOneOrNull() ?: return@forEach
+                val (title, preview) = summarize(entry.body)
+                if (title != entry.title || preview != entry.preview) q.updateSummary(title, preview, id)
+            }
+            settings.put(SUMMARIES_KEY, SUMMARIES_VERSION)
+        }
+    }
+
     /** Every tag in use (outside the trash), most used first, with its category: suggestions, filters, the tag list. */
     fun tags(): Flow<List<TagCount>> = combine(
         q.tagCounts { name, uses -> TagCount(name.orEmpty(), uses.toInt()) }.asFlow().mapToList(context),
@@ -735,10 +752,19 @@ internal fun summarize(body: String): Pair<String, String> {
     } catch (_: DocumentFormatException) {
         return "" to ""
     }
-    val title = (document.blocks.firstOrNull() as? TextBlock)?.children?.joinToString("") { it.text }.orEmpty().trim()
-    val rest = document.toPlainText(includeSpoilers = false).trim().removePrefix(title)
-    return title.take(TITLE_MAX) to rest.lines().map { it.trim() }.filter { it.isNotEmpty() }.joinToString(" ").take(PREVIEW_MAX)
+    // Spoilers stay out of both (ADR-031): lists, Home and search show them, and they show the words openly.
+    val first = document.blocks.firstOrNull() as? TextBlock
+    val title = first?.children?.filter { SPOILER !in it.marks }?.joinToString("") { it.text }.orEmpty().squeezed()
+    val rest = (if (first != null) document.copy(blocks = document.blocks.drop(1)) else document).toPlainText(includeSpoilers = false)
+    return title.take(TITLE_MAX) to rest.lines().map { it.squeezed() }.filter { it.isNotEmpty() }.joinToString(" ").take(PREVIEW_MAX)
 }
+
+private const val SPOILER = "spoiler"
+private const val SUMMARIES_KEY = "summaries.version"
+private const val SUMMARIES_VERSION = "2"
+
+/** Runs of spaces as one (a hidden spoiler leaves two behind), trimmed. */
+private fun String.squeezed(): String = replace(Regex(" {2,}"), " ").trim()
 
 private fun plainText(body: String): String = try {
     DocumentCodec.decode(body).toPlainText(includeSpoilers = false).trim()

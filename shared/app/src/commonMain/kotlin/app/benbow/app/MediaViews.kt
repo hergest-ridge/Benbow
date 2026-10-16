@@ -1,5 +1,6 @@
 package app.benbow.app
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -9,17 +10,21 @@ import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -32,12 +37,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,12 +53,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,6 +71,8 @@ import androidx.compose.ui.zIndex
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.attachments
 import app.benbow.app.resources.in_text
+import app.benbow.app.resources.media_next
+import app.benbow.app.resources.media_previous
 import app.benbow.client.LocalFile
 import app.benbow.client.Media
 import app.benbow.core.sync.AttachmentState
@@ -69,6 +81,7 @@ import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
 import coil3.size.Size
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
 internal sealed interface MediaLoad {
@@ -104,7 +117,7 @@ internal val AttachmentState.visual: String? get() = meta.previewSha256 ?: meta.
 internal fun MediaThumb(media: Media, attachment: AttachmentState, size: Dp, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Box(
-        Modifier.size(size).clip(RoundedCornerShape(12.dp)).background(colors.surfaceContainerHigh).clickable(onClick = onClick)
+        Modifier.size(size).clip(RoundedCornerShape(12.dp)).background(colors.surfaceContainerHigh).hand().clickable(onClick = onClick)
             .semantics { contentDescription = attachment.meta.name ?: attachment.meta.kind },
         contentAlignment = Alignment.Center,
     ) {
@@ -301,6 +314,50 @@ internal fun ZoomableImage(file: LocalFile, modifier: Modifier = Modifier, onZoo
     )
 }
 
+/** A mouse can't swipe: on desktop and in the browser pagers get side buttons (set by the app's root). */
+internal val LocalPagerArrows = compositionLocalOf { false }
+
+/** Round, translucent buttons at the sides of a pager: the previous and next picture, hidden at either end. */
+@Composable
+internal fun BoxScope.PagerArrows(pager: PagerState, size: Dp = 36.dp, inset: Dp = 8.dp) {
+    if (!LocalPagerArrows.current || pager.pageCount < 2) return
+    val scope = rememberCoroutineScope()
+    if (pager.currentPage > 0) {
+        PagerArrow(
+            Icons.ChevronLeft,
+            stringResource(Res.string.media_previous),
+            size,
+            Modifier.align(Alignment.CenterStart).padding(start = inset),
+        ) {
+            scope.launch { pager.animateScrollToPage(pager.currentPage - 1) }
+        }
+    }
+    if (pager.currentPage < pager.pageCount - 1) {
+        PagerArrow(
+            Icons.ChevronRight,
+            stringResource(Res.string.media_next),
+            size,
+            Modifier.align(Alignment.CenterEnd).padding(end = inset),
+        ) {
+            scope.launch { pager.animateScrollToPage(pager.currentPage + 1) }
+        }
+    }
+}
+
+@Composable
+private fun PagerArrow(icon: ImageVector, label: String, size: Dp, modifier: Modifier, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = Color.Black.copy(alpha = 0.38f),
+        contentColor = Color.White,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.24f)), // seen on the viewer's black too
+        modifier = modifier.size(size).hand(),
+    ) {
+        Box(contentAlignment = Alignment.Center) { Icon(icon, label, Modifier.size(size * 0.66f)) }
+    }
+}
+
 @Composable
 internal fun Loading(modifier: Modifier = Modifier) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -321,23 +378,44 @@ internal fun MediaCarousel(
     if (items.isEmpty()) return
     val pager = rememberPagerState { items.size }
     val first = items.first().meta
-    val ratio = if ((first.width ?: 0) > 0 && (first.height ?: 0) > 0) first.width!!.toFloat() / first.height!! else 4f / 3
+    val shapeRatio = if ((first.width ?: 0) > 0 && (first.height ?: 0) > 0) first.width!!.toFloat() / first.height!! else 4f / 3
     val shape = if (rounded) RoundedCornerShape(12.dp) else RectangleShape
     val label = stringResource(Res.string.attachments)
+    // A tall photo in a wide window (a post on the right side) would be taller than the screen: at most 70% of it.
+    // A phone's column never gets there (a card is at most 1.25 times as tall as wide), so phones look as before.
+    val tallest = with(LocalDensity.current) { (LocalWindowInfo.current.containerSize.height * 0.7f).toDp() }
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        val height = (maxWidth / shapeRatio.coerceIn(0.8f, 1.9f)).coerceAtMost(tallest.coerceAtLeast(160.dp))
+        val ratio = maxWidth / height
+        MediaCarouselFrame(media, items, pager, ratio, shape, label, onOpen, Modifier.fillMaxWidth().height(height))
+    }
+}
+
+@Composable
+private fun MediaCarouselFrame(
+    media: Media,
+    items: List<AttachmentState>,
+    pager: PagerState,
+    ratio: Float,
+    shape: Shape,
+    label: String,
+    onOpen: (AttachmentState) -> Unit,
+    modifier: Modifier,
+) {
     Box(
-        modifier.fillMaxWidth().aspectRatio(ratio.coerceIn(0.8f, 1.9f)).clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh).semantics { contentDescription = label },
+        modifier.clip(shape).background(MaterialTheme.colorScheme.surfaceContainerHigh).semantics { contentDescription = label },
     ) {
         HorizontalPager(pager, key = { items[it].meta.id }, modifier = Modifier.fillMaxSize()) { page ->
             val item = items[page]
-            Box(Modifier.fillMaxSize().clickable { onOpen(item) }, contentAlignment = Alignment.Center) {
-                FittedPicture(media, item, carousel = ratio.coerceIn(0.8f, 1.9f))
+            Box(Modifier.fillMaxSize().hand().clickable { onOpen(item) }, contentAlignment = Alignment.Center) {
+                FittedPicture(media, item, carousel = ratio)
                 if (item.meta.kind == "video") {
                     PlayBadge()
                     item.meta.durationMs?.let { ms -> Chip(durationLabel(ms), Modifier.align(Alignment.BottomStart).padding(8.dp)) }
                 }
             }
         }
+        PagerArrows(pager)
         if (items.size > 1) {
             Chip("${pager.currentPage + 1}/${items.size}", Modifier.align(Alignment.TopEnd).padding(8.dp))
             Row(

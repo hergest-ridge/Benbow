@@ -100,7 +100,9 @@ internal fun QuickNoteBar(onSend: (String) -> Unit, onNewEntry: (() -> Unit)? = 
             )
             if (text.isBlank()) {
                 if (onNewEntry != null) {
-                    IconButton(onNewEntry, Modifier.padding(bottom = 4.dp)) { Icon(Icons.Edit, stringResource(Res.string.new_entry)) }
+                    IconButton(onNewEntry, Modifier.padding(bottom = 4.dp).hand()) {
+                        Icon(Icons.Edit, stringResource(Res.string.new_entry))
+                    }
                 }
             } else {
                 IconButton(
@@ -108,7 +110,7 @@ internal fun QuickNoteBar(onSend: (String) -> Unit, onNewEntry: (() -> Unit)? = 
                         onSend(text)
                         text = ""
                     },
-                    modifier = Modifier.padding(bottom = 4.dp),
+                    modifier = Modifier.padding(bottom = 4.dp).hand(),
                 ) { Icon(Icons.Send, stringResource(Res.string.send), tint = MaterialTheme.colorScheme.primary) }
             }
         }

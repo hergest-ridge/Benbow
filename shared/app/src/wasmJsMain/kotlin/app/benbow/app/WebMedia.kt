@@ -42,6 +42,7 @@ internal fun AppServices.attachBrowserFile(entryId: suspend () -> String, file: 
 fun installWebImages() {
     SingletonImageLoader.setSafe { context ->
         ImageLoader.Builder(context).components {
+            add(TurnedJpegDecoder.Factory()) // before Coil's own: portrait phone photos keep their shape
             add(Keyer<LocalFile> { file, _ -> file.name })
             add(
                 Fetcher.Factory<LocalFile> { file, options, _ ->

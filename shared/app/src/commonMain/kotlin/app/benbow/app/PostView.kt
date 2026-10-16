@@ -115,7 +115,7 @@ internal fun PostView(
                 onClick = { onOpenComment(comment) },
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
                 shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).hand(),
             ) {
                 Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (comment.text.isNotBlank()) Text(comment.text, style = MaterialTheme.typography.bodyLarge)
@@ -140,7 +140,7 @@ private fun Reactions(chosen: Set<String>, onReact: (String, Boolean) -> Unit, m
         chosen.sorted().forEach { emoji ->
             Surface(onClick = {
                 onReact(emoji, false)
-            }, color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(12.dp)) {
+            }, color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(12.dp), modifier = Modifier.hand()) {
                 Text(emoji, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
             }
         }
@@ -150,7 +150,7 @@ private fun Reactions(chosen: Set<String>, onReact: (String, Boolean) -> Unit, m
                 onClick = { picking = true },
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.semantics { contentDescription = add },
+                modifier = Modifier.semantics { contentDescription = add }.hand(),
             ) {
                 Icon(
                     Icons.AddReaction,
@@ -165,7 +165,7 @@ private fun Reactions(chosen: Set<String>, onReact: (String, Boolean) -> Unit, m
                         DropdownMenuItem(text = { Text(emoji, style = MaterialTheme.typography.titleLarge) }, onClick = {
                             picking = false
                             onReact(emoji, emoji !in chosen)
-                        }, modifier = Modifier.size(width = 52.dp, height = 48.dp))
+                        }, modifier = Modifier.size(width = 52.dp, height = 48.dp).hand())
                     }
                 }
             }

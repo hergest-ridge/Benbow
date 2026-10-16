@@ -201,7 +201,11 @@ private val still = EnterTransition.None togetherWith ExitTransition.None
 fun BenbowApp(services: AppServices) {
     val looks by remember { services.repo.tagLooks() }.collectAsStateWithLifecycle(TagLooks())
     AppTheme(services) {
-        CompositionLocalProvider(LocalTagLooks provides looks, LocalAudio provides rememberAudioPlayback()) { AppRoot(services) }
+        CompositionLocalProvider(
+            LocalTagLooks provides looks,
+            LocalAudio provides rememberAudioPlayback(),
+            LocalPagerArrows provides (services.platform != "android"), // a mouse: side buttons on pictures
+        ) { AppRoot(services) }
     }
 }
 
@@ -322,6 +326,7 @@ private fun AppFrame(
                             onClick = { nav.selectTab(tab.route) },
                             icon = { Icon(tab.icon, label) },
                             label = { Text(label) },
+                            modifier = Modifier.hand(),
                         )
                     }
                 }
@@ -352,6 +357,7 @@ private fun AppFrame(
                                 onClick = { nav.selectTab(tab.route) },
                                 icon = { Icon(tab.icon, label) },
                                 label = { Text(label) },
+                                modifier = Modifier.hand(),
                             )
                         }
                     }
@@ -373,9 +379,14 @@ private val Route.fullWindow get() = this is Route.Media || this is Route.Drawin
 private fun AppNavigation(services: AppServices, backStack: SnapshotStateList<Route>, nav: Navigator, twoPane: Boolean) {
     val pane by rememberUpdatedState(twoPane)
     val listNav = remember(nav) { nav.forList { pane } }
+    val listPane = remember(services) { ListPane(services.settings) }
     val strategies = remember(twoPane) {
         if (twoPane) {
-            listOf(ListDetailStrategy { DetailPlaceholder { nav.open(Route.Editor(null, services.today(), opened = services.now())) } })
+            listOf(
+                ListDetailStrategy(listPane) {
+                    DetailPlaceholder { nav.open(Route.Editor(null, services.today(), opened = services.now())) }
+                },
+            )
         } else {
             emptyList()
         }

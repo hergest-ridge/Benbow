@@ -123,7 +123,7 @@ private fun MoreList(services: AppServices, nav: Navigator) {
 @Composable
 private fun MoreItem(icon: ImageVector, title: String, subtitle: String?, tone: Color? = null, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 16.dp),
+        Modifier.fillMaxWidth().hand().clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, null, tint = MaterialTheme.colorScheme.primary)

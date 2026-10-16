@@ -48,7 +48,7 @@ internal actual fun MediaBar(services: AppServices, entryId: suspend () -> Strin
     Row(modifier.padding(horizontal = 4.dp)) {
         IconButton({
             pickFiles("", multiple = true) { files -> forEachItem(files) { services.attachBrowserFile(entryId, it) } }
-        }) { Icon(Icons.Attach, title) }
+        }, modifier = Modifier.hand()) { Icon(Icons.Attach, title) }
     }
 }
 

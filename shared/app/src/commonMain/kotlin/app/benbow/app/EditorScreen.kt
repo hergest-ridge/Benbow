@@ -388,7 +388,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                     // The entry's date and time, the weekday under them; while editing, a tap moves it in time.
                     val (date, weekday) = dayTitle(detail?.day ?: route.day)
                     val label = detail?.let { "$date, ${timeLabel(it.createdAt)}" } ?: date
-                    Column(if (vm.reading) Modifier else Modifier.clip(RoundedCornerShape(8.dp)).clickable { moving = true }) {
+                    Column(if (vm.reading) Modifier else Modifier.clip(RoundedCornerShape(8.dp)).hand().clickable { moving = true }) {
                         Text(if (vm.reading) label else "$label ▾", style = MaterialTheme.typography.titleMedium, maxLines = 1)
                         weekday?.let {
                             Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -397,14 +397,14 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                 },
                 actions = {
                     if (attachments.isNotEmpty()) {
-                        TextButton({ ribbonChoice = !ribbon }) {
+                        TextButton({ ribbonChoice = !ribbon }, modifier = Modifier.hand()) {
                             val tint = if (ribbon) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             Icon(Icons.Attach, stringResource(Res.string.attachments), tint = tint, modifier = Modifier.size(20.dp))
                             Text(" ${attachments.size}", color = tint, style = MaterialTheme.typography.labelLarge)
                         }
                     }
                     val favorite = detail?.favorite == true
-                    IconButton(vm::toggleFavorite) {
+                    IconButton(vm::toggleFavorite, modifier = Modifier.hand()) {
                         Icon(
                             if (favorite) Icons.Star else Icons.StarOutline,
                             stringResource(if (favorite) Res.string.favorite_remove else Res.string.favorite_add),
@@ -413,13 +413,13 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                     }
                     if (vm.entryId != null) {
                         Box {
-                            IconButton({ menu = true }) { Icon(Icons.More, stringResource(Res.string.menu)) }
+                            IconButton({ menu = true }, modifier = Modifier.hand()) { Icon(Icons.More, stringResource(Res.string.menu)) }
                             DropdownMenu(menu, { menu = false }) {
                                 if (vm.reading) {
                                     DropdownMenuItem(text = { Text(stringResource(Res.string.edit)) }, onClick = {
                                         menu = false
                                         vm.startEditing()
-                                    })
+                                    }, modifier = Modifier.hand())
                                 }
                                 DropdownMenuItem(text = {
                                     Text(
@@ -436,7 +436,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                 }, onClick = {
                                     menu = false
                                     vm.togglePinned()
-                                })
+                                }, modifier = Modifier.hand())
                                 if (!vm.reading) {
                                     DropdownMenuItem(
                                         text = {
@@ -455,36 +455,37 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                             vm.commit()
                                             vm.entryId?.let { nav.open(Route.Comments(it)) }
                                         },
+                                        modifier = Modifier.hand(),
                                     )
                                 }
                                 DropdownMenuItem(text = { Text(stringResource(Res.string.copy_text)) }, onClick = {
                                     menu = false
                                     if (!copy(vm.plainText())) vm.copied()
-                                })
+                                }, modifier = Modifier.hand())
                                 DropdownMenuItem(text = { Text(stringResource(Res.string.share)) }, onClick = {
                                     menu = false
                                     if (!share(vm.markdown())) vm.copied()
-                                })
+                                }, modifier = Modifier.hand())
                                 DropdownMenuItem(text = { Text(stringResource(Res.string.background)) }, onClick = {
                                     menu = false
                                     pickingBackground = true
-                                })
+                                }, modifier = Modifier.hand())
                                 DropdownMenuItem(text = { Text(stringResource(Res.string.print)) }, onClick = {
                                     menu = false
                                     vm.commit()
                                     val id = vm.entryId
                                     if (id != null) scope.launch { services.entryPage(id)?.let(print) }
-                                })
+                                }, modifier = Modifier.hand())
                                 DropdownMenuItem(text = { Text(stringResource(Res.string.history)) }, onClick = {
                                     menu = false
                                     openHistory()
-                                })
+                                }, modifier = Modifier.hand())
                                 if (detail?.inTrash != true) {
                                     DropdownMenuItem(text = { Text(stringResource(Res.string.move_to_trash)) }, onClick = {
                                         menu = false
                                         vm.moveToTrash()
                                         nav.back()
-                                    })
+                                    }, modifier = Modifier.hand())
                                 }
                             }
                         }
@@ -502,7 +503,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                         IconButton({
                             vm.drawingAtEnd = !editorFocused
                             services.scope.launch { vm.ensureEntryId().let { id -> nav.open(Route.Drawing(id, null)) } }
-                        }) { Icon(Icons.Brush, stringResource(Res.string.drawing_add)) }
+                        }, modifier = Modifier.hand()) { Icon(Icons.Brush, stringResource(Res.string.drawing_add)) }
                     }
                     EditorToolbar(editor)
                 }

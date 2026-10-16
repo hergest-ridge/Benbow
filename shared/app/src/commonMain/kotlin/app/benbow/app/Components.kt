@@ -31,6 +31,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -55,8 +57,11 @@ import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun BackButton(onClick: () -> Unit) {
-    IconButton(onClick) { Icon(Icons.Back, stringResource(Res.string.back)) }
+    IconButton(onClick, modifier = Modifier.hand()) { Icon(Icons.Back, stringResource(Res.string.back)) }
 }
+
+/** The pointing hand over what can be clicked (desktop and the browser; ignored on touch screens). */
+internal fun Modifier.hand(enabled: Boolean = true): Modifier = if (enabled) pointerHoverIcon(PointerIcon.Hand) else this
 
 /** A journal entry in a list: time, title, a few lines of preview. */
 @Composable
@@ -74,7 +79,7 @@ internal fun EntryCard(
         color = swatch(entry.background) ?: colors.surfaceContainerLow,
         // Open beside the list (a wide window): framed, so the eye finds it.
         border = if (LocalOpenEntry.current == entry.id) BorderStroke(2.dp, colors.primary) else null,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).hand(),
     ) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -127,7 +132,7 @@ internal fun Banner(text: String, action: String, error: Boolean = false, onActi
     ) {
         Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(vertical = 8.dp))
-            TextButton(onAction) { Text(action) }
+            TextButton(onAction, modifier = Modifier.hand()) { Text(action) }
         }
     }
 }
@@ -174,5 +179,5 @@ internal fun SyncBadge(status: SyncStatus, onClick: () -> Unit) {
     } else {
         0f
     }
-    IconButton(onClick) { Icon(look.icon, look.label, tint = look.tone, modifier = Modifier.rotate(turn)) }
+    IconButton(onClick, modifier = Modifier.hand()) { Icon(look.icon, look.label, tint = look.tone, modifier = Modifier.rotate(turn)) }
 }

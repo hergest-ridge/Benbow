@@ -91,7 +91,7 @@ internal class EntryPictures(
             }
             val label = if (meta.kind == "drawing") stringResource(Res.string.drawing_title) else null
             Box(
-                Modifier.fillMaxSize().clip(shape).background(colors.surfaceContainerHigh).clickable { onOpen(meta.id) }
+                Modifier.fillMaxSize().clip(shape).background(colors.surfaceContainerHigh).hand().clickable { onOpen(meta.id) }
                     .semantics { label?.let { contentDescription = it } },
                 contentAlignment = Alignment.Center,
             ) {

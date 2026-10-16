@@ -156,7 +156,7 @@ private fun LargeStrip(services: AppServices, items: List<AttachmentState>, onOp
 @Composable
 private fun Tile(services: AppServices, item: AttachmentState, modifier: Modifier, more: Int = 0, onOpen: (AttachmentState) -> Unit) {
     Box(
-        modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh).clickable {
+        modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh).hand().clickable {
             onOpen(item)
         },
         contentAlignment = Alignment.Center,
@@ -179,7 +179,7 @@ private fun FileRow(item: AttachmentState, onClick: () -> Unit) {
         onClick = onClick,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().hand(),
     ) {
         Row(
             Modifier.padding(horizontal = 14.dp, vertical = 12.dp),

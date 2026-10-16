@@ -1,9 +1,19 @@
 package app.benbow.app
 
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -16,9 +26,18 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.scene.Scene
@@ -27,6 +46,7 @@ import androidx.navigation3.scene.SceneStrategyScope
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.detail_empty
 import app.benbow.app.resources.new_entry
+import app.benbow.client.Settings
 import org.jetbrains.compose.resources.stringResource
 
 // Wide windows (ux.md#desktop-and-web): the tab's screen stays on the left while what it opened shows on the right,
@@ -36,8 +56,32 @@ import org.jetbrains.compose.resources.stringResource
 /** From here (rail included) the list and what it opened sit side by side. */
 internal val TWO_PANE = 1040.dp
 
-/** The list's width beside an entry: a phone's column, so every tab screen fits as designed. */
+/** The list's width beside an entry: a phone's column, so every tab screen fits as designed; the divider moves it. */
 private val LIST_WIDTH = 400.dp
+private val LIST_MIN = 300.dp
+private val LIST_MAX = 640.dp
+
+/** What stays for the entry at the least when the list is dragged wider. */
+private val DETAIL_MIN = 480.dp
+
+/** The list's width on this device: dragged by the divider, kept in the device's settings. */
+internal class ListPane(private val settings: Settings) {
+    var width by mutableStateOf(settings.get(KEY)?.toFloatOrNull()?.dp?.coerceIn(LIST_MIN, LIST_MAX) ?: LIST_WIDTH)
+
+    fun save() = settings.put(KEY, width.value.toString())
+
+    fun reset() {
+        width = LIST_WIDTH
+        save()
+    }
+
+    private companion object {
+        const val KEY = "ui.listWidth"
+    }
+}
+
+/** The pointer over the divider: a left-right arrow where the platform has one. */
+internal expect val ResizeColumnIcon: PointerIcon
 
 /** Screens that cover the whole window even when the list could stay. */
 internal val FULL_WINDOW = mapOf("benbow.full" to true)
@@ -45,14 +89,14 @@ internal val FULL_WINDOW = mapOf("benbow.full" to true)
 /** The entry open beside the list, so the list can mark it. */
 internal val LocalOpenEntry = compositionLocalOf<String?> { null }
 
-internal class ListDetailStrategy(private val empty: @Composable () -> Unit) : SceneStrategy<Route> {
+internal class ListDetailStrategy(private val pane: ListPane, private val empty: @Composable () -> Unit) : SceneStrategy<Route> {
     override fun SceneStrategyScope<Route>.calculateScene(entries: List<NavEntry<Route>>): Scene<Route>? {
         val top = entries.last()
         if (top.metadata["benbow.full"] == true) return null
         val listAt = entries.indexOfLast { it.metadata["benbow.tab"] == true }
         if (listAt < 0) return null
         val detail = top.takeIf { listAt < entries.lastIndex }
-        return ListDetailScene(entries[listAt], detail, entries.subList(0, if (detail == null) listAt else entries.lastIndex), empty)
+        return ListDetailScene(entries[listAt], detail, entries.subList(0, if (detail == null) listAt else entries.lastIndex), pane, empty)
     }
 }
 
@@ -64,6 +108,7 @@ private class ListDetailScene(
     private val list: NavEntry<Route>,
     private val detail: NavEntry<Route>?,
     override val previousEntries: List<NavEntry<Route>>,
+    private val pane: ListPane,
     private val empty: @Composable () -> Unit,
 ) : Scene<Route> {
     override val key: Any = "list-detail" to list.contentKey
@@ -71,13 +116,21 @@ private class ListDetailScene(
     override val metadata: Map<String, Any> = (detail ?: list).metadata
 
     override val content: @Composable () -> Unit = {
-        Row(Modifier.fillMaxSize()) {
-            Box(Modifier.width(LIST_WIDTH).fillMaxHeight()) { list.Content() }
-            VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-            Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.TopCenter) {
-                Box(Modifier.widthIn(max = READABLE).fillMaxHeight()) {
-                    if (detail == null) empty() else detail.Content()
-                }
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            val widest = (maxWidth - DETAIL_MIN).coerceIn(LIST_MIN, LIST_MAX)
+            Row(Modifier.fillMaxSize()) {
+                Box(Modifier.width(pane.width.coerceIn(LIST_MIN, widest)).fillMaxHeight()) { list.Content() }
+                PaneDivider(pane, widest)
+                Detail()
+            }
+        }
+    }
+
+    @Composable
+    private fun RowScope.Detail() {
+        Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.TopCenter) {
+            Box(Modifier.widthIn(max = READABLE).fillMaxHeight()) {
+                if (detail == null) empty() else detail.Content()
             }
         }
     }
@@ -85,6 +138,36 @@ private class ListDetailScene(
     override fun equals(other: Any?) = other is ListDetailScene && other.list == list && other.detail == detail
 
     override fun hashCode() = 31 * list.hashCode() + detail.hashCode()
+}
+
+/**
+ * The line between the list and the entry: dragged left or right within reason (the list from 300 to 640 dp, the entry
+ * keeps at least 480), a double click puts it back. A strip a little wider than the line takes the pointer.
+ */
+@Composable
+private fun PaneDivider(pane: ListPane, widest: Dp) {
+    val density = LocalDensity.current
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    val dragged by interaction.collectIsDraggedAsState()
+    val drag = rememberDraggableState { delta ->
+        pane.width = (pane.width.coerceAtMost(widest) + with(density) { delta.toDp() }).coerceIn(LIST_MIN, widest)
+    }
+    Box(
+        Modifier.width(9.dp).fillMaxHeight()
+            .hoverable(interaction)
+            .pointerHoverIcon(ResizeColumnIcon)
+            // The double click outside the drag: a tap detector inside it would take the press the drag starts from.
+            .pointerInput(pane) { detectTapGestures(onDoubleTap = { pane.reset() }) }
+            .draggable(drag, Orientation.Horizontal, interactionSource = interaction, onDragStopped = { pane.save() }),
+        contentAlignment = Alignment.Center,
+    ) {
+        val colors = MaterialTheme.colorScheme
+        VerticalDivider(
+            thickness = if (hovered || dragged) 3.dp else 1.dp,
+            color = if (hovered || dragged) colors.primary.copy(alpha = 0.6f) else colors.outlineVariant.copy(alpha = 0.5f),
+        )
+    }
 }
 
 /** The right side before anything is open: what it's for, and a way to start writing. */
@@ -100,7 +183,7 @@ internal fun DetailPlaceholder(onNewEntry: () -> Unit) {
                 textAlign = TextAlign.Center,
                 modifier = Modifier.widthIn(max = 360.dp),
             )
-            FilledTonalButton(onNewEntry) {
+            FilledTonalButton(onNewEntry, modifier = Modifier.hand()) {
                 Icon(Icons.Edit, null)
                 Text(stringResource(Res.string.new_entry), Modifier.padding(start = 8.dp))
             }

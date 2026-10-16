@@ -36,7 +36,7 @@ internal actual fun MediaBar(services: AppServices, entryId: suspend () -> Strin
                 isVisible = true // modal
             }
             dialog.files.forEach { file -> services.attach(entryId, { file.inputStream() }) { desktopProbe(file) } }
-        }) { Icon(Icons.Attach, title) }
+        }, modifier = Modifier.hand()) { Icon(Icons.Attach, title) }
     }
 }
 
@@ -49,7 +49,7 @@ internal actual fun MediaPlayer(file: File, mime: String, modifier: Modifier) {
             val copy = File(System.getProperty("java.io.tmpdir"), "benbow-${file.name.take(12)}.$ext")
             if (!copy.exists()) file.copyTo(copy)
             runCatching { Desktop.getDesktop().open(copy) }
-        }) { Text(stringResource(Res.string.media_open)) }
+        }, modifier = Modifier.hand()) { Text(stringResource(Res.string.media_open)) }
     }
 }
 

@@ -100,7 +100,7 @@ internal fun LockScreen(auth: DeviceAuth?, onUnlock: () -> Unit) {
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Button(open) { Text(stringResource(Res.string.lock_open)) }
+            Button(open, modifier = Modifier.hand()) { Text(stringResource(Res.string.lock_open)) }
         }
     }
 }

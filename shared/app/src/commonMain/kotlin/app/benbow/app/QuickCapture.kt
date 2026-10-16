@@ -121,13 +121,13 @@ fun QuickCapture(services: AppServices, shared: SharedContent, onClose: () -> Un
         val quiet = remember { MutableInteractionSource() }
         Box(
             Modifier.fillMaxSize().background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.4f))
-                .clickable(quiet, indication = null) { if (!saving) onClose() },
+                .hand().clickable(quiet, indication = null) { if (!saving) onClose() },
             contentAlignment = Alignment.BottomCenter,
         ) {
             Surface(
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
                 shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-                modifier = Modifier.fillMaxWidth().clickable(quiet, indication = null) {},
+                modifier = Modifier.fillMaxWidth().hand().clickable(quiet, indication = null) {},
             ) {
                 Column(
                     Modifier.navigationBarsPadding().imePadding().padding(horizontal = 20.dp, vertical = 16.dp),
@@ -149,9 +149,15 @@ fun QuickCapture(services: AppServices, shared: SharedContent, onClose: () -> Un
                     )
                     error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClose, enabled = !saving) { Text(stringResource(Res.string.cancel)) }
+                        TextButton(onClose, enabled = !saving, modifier = Modifier.hand(!saving)) {
+                            Text(stringResource(Res.string.cancel))
+                        }
                         Spacer(Modifier.weight(1f))
-                        Button(save, enabled = !saving && (text.isNotBlank() || shared.files.isNotEmpty())) {
+                        Button(
+                            save,
+                            enabled = !saving && (text.isNotBlank() || shared.files.isNotEmpty()),
+                            modifier = Modifier.hand(!saving && (text.isNotBlank() || shared.files.isNotEmpty())),
+                        ) {
                             Text(stringResource(if (saving) Res.string.capture_saving else Res.string.capture_save))
                         }
                     }

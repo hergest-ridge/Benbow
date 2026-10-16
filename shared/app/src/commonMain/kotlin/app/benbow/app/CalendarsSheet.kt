@@ -64,11 +64,11 @@ internal fun CalendarsSheet(
             )
             calendars.forEach { calendar ->
                 Row(
-                    Modifier.fillMaxWidth().clickable { editing = calendar }.padding(horizontal = 12.dp),
+                    Modifier.fillMaxWidth().hand().clickable { editing = calendar }.padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Checkbox(calendar.visible, { onVisible(calendar, it) })
+                    Checkbox(calendar.visible, { onVisible(calendar, it) }, modifier = Modifier.hand())
                     ColorDot(calendar.color, size = 14)
                     Text(calendarName(calendar), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                     Text(
@@ -79,8 +79,8 @@ internal fun CalendarsSheet(
                     )
                 }
             }
-            TextButton({ creating = true }, Modifier.padding(horizontal = 12.dp)) { Text(stringResource(Res.string.calendar_new)) }
-            TextButton(onImport, Modifier.padding(horizontal = 12.dp)) { Text(stringResource(Res.string.calendar_import)) }
+            TextButton({ creating = true }, Modifier.padding(horizontal = 12.dp).hand()) { Text(stringResource(Res.string.calendar_new)) }
+            TextButton(onImport, Modifier.padding(horizontal = 12.dp).hand()) { Text(stringResource(Res.string.calendar_import)) }
         }
     }
     val target = editing
@@ -128,13 +128,15 @@ private fun CalendarDialog(
                     TextButton({
                         onExport()
                         onDismiss()
-                    }) { Text(stringResource(Res.string.calendar_export)) }
+                    }, modifier = Modifier.hand()) { Text(stringResource(Res.string.calendar_export)) }
                 }
                 if (onDelete != null) {
                     TextButton({
                         onDelete()
                         onDismiss()
-                    }) { Text(stringResource(Res.string.calendar_delete), color = MaterialTheme.colorScheme.error) }
+                    }, modifier = Modifier.hand()) {
+                        Text(stringResource(Res.string.calendar_delete), color = MaterialTheme.colorScheme.error)
+                    }
                 }
             }
         },
@@ -147,8 +149,8 @@ private fun CalendarDialog(
                     color.takeIf { calendar == null || it != calendar.color },
                 )
                 onDismiss()
-            }, enabled = name.isNotBlank()) { Text(stringResource(Res.string.event_save)) }
+            }, enabled = name.isNotBlank(), modifier = Modifier.hand(name.isNotBlank())) { Text(stringResource(Res.string.event_save)) }
         },
-        dismissButton = { TextButton(onDismiss) { Text(stringResource(Res.string.cancel)) } },
+        dismissButton = { TextButton(onDismiss, modifier = Modifier.hand()) { Text(stringResource(Res.string.cancel)) } },
     )
 }

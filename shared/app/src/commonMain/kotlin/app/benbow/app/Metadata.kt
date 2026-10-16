@@ -64,7 +64,9 @@ internal fun MetadataRow(
     var adding by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            AssistChip(onClick = { picking = !picking }, label = { Text(moodEmoji(mood) ?: stringResource(Res.string.mood)) })
+            AssistChip(onClick = {
+                picking = !picking
+            }, label = { Text(moodEmoji(mood) ?: stringResource(Res.string.mood)) }, modifier = Modifier.hand())
             tags.forEach { tag ->
                 val remove = stringResource(Res.string.tag_remove, tag)
                 InputChip(
@@ -74,9 +76,10 @@ internal fun MetadataRow(
                     trailingIcon = { Icon(Icons.Close, remove, Modifier.size(16.dp)) },
                     colors = InputChipDefaults.inputChipColors(containerColor = tagColor(tag)),
                     border = null,
+                    modifier = Modifier.hand(),
                 )
             }
-            AssistChip(onClick = { adding = true }, label = { Text("+ " + stringResource(Res.string.tag_add)) })
+            AssistChip(onClick = { adding = true }, label = { Text("+ " + stringResource(Res.string.tag_add)) }, modifier = Modifier.hand())
         }
         if (picking) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -84,13 +87,13 @@ internal fun MetadataRow(
                     TextButton({
                         onMood(value)
                         picking = false
-                    }) { Text(face, style = MaterialTheme.typography.titleLarge) }
+                    }, modifier = Modifier.hand()) { Text(face, style = MaterialTheme.typography.titleLarge) }
                 }
                 if (mood != null) {
                     TextButton({
                         onMood(null)
                         picking = false
-                    }) { Text(stringResource(Res.string.mood_clear)) }
+                    }, modifier = Modifier.hand()) { Text(stringResource(Res.string.mood_clear)) }
                 }
             }
         }
@@ -139,7 +142,9 @@ private fun TagInput(known: List<TagCount>, onDone: () -> Unit, onAdd: (String) 
                 keyboardActions = KeyboardActions(onDone = { if (clean.isNotEmpty()) add(clean) else onDone() }),
                 modifier = Modifier.weight(1f).focusRequester(focus),
             )
-            TextButton({ add(clean) }, enabled = clean.isNotEmpty()) { Text(stringResource(Res.string.add)) }
+            TextButton({
+                add(clean)
+            }, enabled = clean.isNotEmpty(), modifier = Modifier.hand(clean.isNotEmpty())) { Text(stringResource(Res.string.add)) }
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             suggestions.forEach { tag ->
@@ -148,6 +153,7 @@ private fun TagInput(known: List<TagCount>, onDone: () -> Unit, onAdd: (String) 
                     label = { Text(tag.name) },
                     colors = SuggestionChipDefaults.suggestionChipColors(containerColor = tagColor(tag.name)),
                     border = null,
+                    modifier = Modifier.hand(),
                 )
             }
         }
@@ -163,7 +169,7 @@ internal fun TemplateRow(onPick: (String) -> Unit) {
     ) {
         items(app.benbow.client.Templates.builtIn.size) { i ->
             val template = app.benbow.client.Templates.builtIn[i]
-            SuggestionChip(onClick = { onPick(template.id) }, label = { Text(template.name) })
+            SuggestionChip(onClick = { onPick(template.id) }, label = { Text(template.name) }, modifier = Modifier.hand())
         }
     }
 }

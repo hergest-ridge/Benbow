@@ -271,7 +271,7 @@ private fun Prompt(text: String, action: String, onAction: () -> Unit) {
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(text, style = MaterialTheme.typography.bodyLarge)
-            TextButton(onAction) { Text(action) }
+            TextButton(onAction, modifier = Modifier.hand()) { Text(action) }
         }
     }
 }

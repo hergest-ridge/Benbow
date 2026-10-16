@@ -44,7 +44,9 @@ internal fun CheckinCard(onSave: (mood: Int, emotions: List<String>, text: Strin
         Row {
             MOODS.forEach { (value, face) ->
                 val chosen = if (mood == value) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent
-                TextButton({ mood = value }, colors = ButtonDefaults.textButtonColors(containerColor = chosen)) {
+                TextButton({
+                    mood = value
+                }, colors = ButtonDefaults.textButtonColors(containerColor = chosen), modifier = Modifier.hand()) {
                     Text(face, style = MaterialTheme.typography.titleLarge)
                 }
             }
@@ -52,7 +54,15 @@ internal fun CheckinCard(onSave: (mood: Int, emotions: List<String>, text: Strin
         val chosen = mood ?: return@HomeCard
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             EMOTION_WORDS.forEach { word ->
-                FilterChip(word in emotions, { emotions = if (word in emotions) emotions - word else emotions + word }, { Text(word) })
+                FilterChip(word in emotions, {
+                    emotions = if (word in
+                        emotions
+                    ) {
+                        emotions - word
+                    } else {
+                        emotions + word
+                    }
+                }, { Text(word) }, modifier = Modifier.hand())
             }
         }
         OutlinedTextField(text, {
@@ -63,7 +73,7 @@ internal fun CheckinCard(onSave: (mood: Int, emotions: List<String>, text: Strin
             mood = null
             emotions = emptySet()
             text = ""
-        }) { Text(stringResource(Res.string.checkin_save)) }
+        }, modifier = Modifier.hand()) { Text(stringResource(Res.string.checkin_save)) }
     }
 }
 
@@ -74,8 +84,8 @@ internal fun KindnessCard(question: String, onWrite: () -> Unit, onLater: () -> 
         Text(stringResource(Res.string.kindness_hint), style = MaterialTheme.typography.bodyMedium)
         Text(question, style = MaterialTheme.typography.titleMedium)
         Row {
-            TextButton(onWrite) { Text(stringResource(Res.string.write)) }
-            TextButton(onLater) { Text(stringResource(Res.string.later)) }
+            TextButton(onWrite, modifier = Modifier.hand()) { Text(stringResource(Res.string.write)) }
+            TextButton(onLater, modifier = Modifier.hand()) { Text(stringResource(Res.string.later)) }
         }
     }
 }
@@ -92,7 +102,7 @@ internal fun ReviewCard(title: String, summary: String, onWrite: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        TextButton(onWrite) { Text(stringResource(Res.string.write)) }
+        TextButton(onWrite, modifier = Modifier.hand()) { Text(stringResource(Res.string.write)) }
     }
 }
 

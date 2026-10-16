@@ -10,6 +10,7 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
@@ -24,6 +25,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
@@ -540,6 +542,42 @@ class AppSmokeTest {
         onNodeWithContentDescription("Назад").performClick()
         waitUntilExactlyOneExists(hasText("Откройте запись слева", substring = true), 5_000)
         screenshot("60-wide-closed")
+    }
+
+    @Test
+    fun theLineBetweenListAndEntryMoves() = runDesktopComposeUiTest(width = 1280, height = 820) {
+        setContent { BenbowApp(services) }
+        onNodeWithText("Лента").performClick()
+        waitUntilExactlyOneExists(hasText("Откройте запись слева", substring = true), 5_000)
+        // The placeholder sits in the middle of the right side, which starts after the rail, the list (400) and the line (9).
+        val middle = onNodeWithText("Откройте запись слева", substring = true).fetchSemanticsNode().boundsInRoot.center.x
+        val rail = 2 * middle - 1280 - 409
+        fun line(list: Float) = Offset(rail + list + 4.5f, 400f)
+        fun width() = services.settings.get("ui.listWidth")?.toFloat()
+        onRoot().performMouseInput {
+            moveTo(line(400f))
+            press()
+            repeat(10) { moveBy(Offset(12f, 0f), delayMillis = 16) }
+            release()
+        }
+        waitForIdle()
+        val dragged = width() ?: 0f
+        assertTrue(dragged in 450f..520f, "the list got wider: $dragged")
+        screenshot("60a-wide-dragged")
+
+        // Not past what the entry needs, and a double click puts it back.
+        onRoot().performMouseInput {
+            moveTo(line(dragged))
+            press()
+            repeat(20) { moveBy(Offset(40f, 0f), delayMillis = 16) }
+            release()
+        }
+        waitForIdle()
+        val widest = minOf(640f, 1280 - rail - 480)
+        assertEquals(widest, width(), "the widest list")
+        onRoot().performMouseInput { doubleClick(line(widest)) }
+        waitForIdle()
+        assertEquals(400f, width())
     }
 
     /** A finger drag in small steps, the way a pager or a pull-to-close sees a real swipe. */

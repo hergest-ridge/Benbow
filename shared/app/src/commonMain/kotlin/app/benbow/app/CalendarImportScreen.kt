@@ -185,13 +185,15 @@ internal fun CalendarImportScreen(services: AppServices, nav: Navigator) {
                         style = MaterialTheme.typography.titleMedium,
                     )
                     if (s.result.already > 0) Text(stringResource(Res.string.import_done_already, s.result.already))
-                    Button(close) { Text(stringResource(Res.string.import_finish)) }
-                    OutlinedButton({ imports.undo(s.result.batch) }) { Text(stringResource(Res.string.import_undo)) }
+                    Button(close, modifier = Modifier.hand()) { Text(stringResource(Res.string.import_finish)) }
+                    OutlinedButton({
+                        imports.undo(s.result.batch)
+                    }, modifier = Modifier.hand()) { Text(stringResource(Res.string.import_undo)) }
                 }
 
                 is CalendarImportState.Undone -> Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text(stringResource(Res.string.import_undone, s.events))
-                    Button(close) { Text(stringResource(Res.string.import_finish)) }
+                    Button(close, modifier = Modifier.hand()) { Text(stringResource(Res.string.import_finish)) }
                 }
             }
         }
@@ -235,25 +237,29 @@ private fun ImportPreview(preview: CalendarImportState.Preview, today: String, o
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
             )
             Row(Modifier.padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(period == Period.ALL, { period = Period.ALL }, { Text(stringResource(Res.string.import_period_all)) })
-                FilterChip(period == Period.FUTURE, { period = Period.FUTURE }, { Text(stringResource(Res.string.import_period_future)) })
+                FilterChip(period == Period.ALL, {
+                    period = Period.ALL
+                }, { Text(stringResource(Res.string.import_period_all)) }, modifier = Modifier.hand())
+                FilterChip(period == Period.FUTURE, {
+                    period = Period.FUTURE
+                }, { Text(stringResource(Res.string.import_period_future)) }, modifier = Modifier.hand())
                 FilterChip(period == Period.FROM, {
                     picking = true
                 }, {
                     val month = stringArrayResource(Res.array.months_genitive)[fromDay.month.number - 1]
                     Text(stringResource(Res.string.import_period_from, "${fromDay.day} $month"))
-                })
+                }, modifier = Modifier.hand())
             }
         }
         itemsIndexed(preview.calendars) { i, calendar ->
             val summary = summaries[i]
             Row(
-                Modifier.fillMaxWidth().clickable { checked[i] = !checked[i] }.padding(horizontal = 12.dp, vertical = 4.dp),
+                Modifier.fillMaxWidth().hand().clickable { checked[i] = !checked[i] }.padding(horizontal = 12.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Checkbox(checked[i], { checked[i] = it })
-                Box(Modifier.clickable { colors[i] = SWATCHES[(SWATCHES.indexOf(colors[i]) + 1) % SWATCHES.size] }.padding(4.dp)) {
+                Checkbox(checked[i], { checked[i] = it }, modifier = Modifier.hand())
+                Box(Modifier.hand().clickable { colors[i] = SWATCHES[(SWATCHES.indexOf(colors[i]) + 1) % SWATCHES.size] }.padding(4.dp)) {
                     ColorDot(colors[i], size = 16)
                 }
                 Column(Modifier.weight(1f)) {
@@ -289,7 +295,7 @@ private fun ImportPreview(preview: CalendarImportState.Preview, today: String, o
                     onImport(choices, from)
                 },
                 enabled = total > 0,
-                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                modifier = Modifier.fillMaxWidth().padding(24.dp).hand(total > 0),
             ) { Text(pluralStringResource(Res.plurals.import_go, total, total)) }
         }
     }

@@ -250,9 +250,15 @@ internal fun CalendarScreen(services: AppServices, nav: Navigator) {
             TopAppBar(
                 title = { Text("${stringArrayResource(Res.array.months_nominative)[month.month.number - 1]} ${month.year}") },
                 actions = {
-                    IconButton({ showCalendars = true }) { Icon(Icons.Layers, stringResource(Res.string.calendar_calendars)) }
-                    IconButton({ vm.shiftMonth(-1) }) { Icon(Icons.ChevronLeft, stringResource(Res.string.previous)) }
-                    IconButton({ vm.shiftMonth(1) }) { Icon(Icons.ChevronRight, stringResource(Res.string.next)) }
+                    IconButton({
+                        showCalendars = true
+                    }, modifier = Modifier.hand()) { Icon(Icons.Layers, stringResource(Res.string.calendar_calendars)) }
+                    IconButton({
+                        vm.shiftMonth(-1)
+                    }, modifier = Modifier.hand()) { Icon(Icons.ChevronLeft, stringResource(Res.string.previous)) }
+                    IconButton({
+                        vm.shiftMonth(1)
+                    }, modifier = Modifier.hand()) { Icon(Icons.ChevronRight, stringResource(Res.string.next)) }
                 },
             )
         },
@@ -283,11 +289,11 @@ internal fun CalendarScreen(services: AppServices, nav: Navigator) {
                         )
                         TextButton({
                             nav.open(Route.Editor(null, selected.toString(), opened = services.now()))
-                        }) { Text(stringResource(Res.string.calendar_entry)) }
-                        TextButton({ sheet = EventSheetRequest(null, EventDraft.new(selected, MY_CALENDAR)) }) {
+                        }, modifier = Modifier.hand()) { Text(stringResource(Res.string.calendar_entry)) }
+                        TextButton({ sheet = EventSheetRequest(null, EventDraft.new(selected, MY_CALENDAR)) }, modifier = Modifier.hand()) {
                             Text(stringResource(Res.string.calendar_event))
                         }
-                        IconButton({ nav.open(Route.Reminders(selected.toString())) }) { Text("🔔") }
+                        IconButton({ nav.open(Route.Reminders(selected.toString())) }, modifier = Modifier.hand()) { Text("🔔") }
                     }
                 }
                 val shown = if (unfolded) dayEvents else dayEvents.take(FOLDED_EVENTS)
@@ -296,7 +302,7 @@ internal fun CalendarScreen(services: AppServices, nav: Navigator) {
                 }
                 if (dayEvents.size > shown.size) {
                     item(key = "more") {
-                        TextButton({ unfolded = true }, Modifier.padding(horizontal = 12.dp)) {
+                        TextButton({ unfolded = true }, Modifier.padding(horizontal = 12.dp).hand()) {
                             Text(stringResource(Res.string.calendar_more, dayEvents.size - shown.size))
                         }
                     }
@@ -365,7 +371,7 @@ private data class EventSheetRequest(val event: CalendarEvent?, val draft: Event
 @Composable
 private fun EventRow(event: CalendarEvent, day: String, color: String, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 7.dp),
+        Modifier.fillMaxWidth().hand().clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -438,7 +444,7 @@ private fun MonthGrid(
                         Box(
                             Modifier.fillMaxSize().padding(2.dp).clip(RoundedCornerShape(10.dp)).background(tint)
                                 .then(if (date == selected) Modifier.border(2.dp, colors.primary, RoundedCornerShape(10.dp)) else Modifier)
-                                .clickable { onSelect(date) },
+                                .hand().clickable { onSelect(date) },
                             contentAlignment = Alignment.Center,
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {

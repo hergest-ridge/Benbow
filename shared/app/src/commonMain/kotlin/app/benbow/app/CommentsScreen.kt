@@ -52,7 +52,7 @@ internal fun CommentsScreen(services: AppServices, nav: Navigator, route: Route.
                         onClick = { nav.open(Route.Editor(entry.id, entry.day)) },
                         color = MaterialTheme.colorScheme.secondaryContainer,
                         shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).hand(),
                     ) {
                         Text(
                             dayLabel(entry.day) + " · " + plainPreview(entry.body),
@@ -76,7 +76,7 @@ internal fun CommentsScreen(services: AppServices, nav: Navigator, route: Route.
                     onClick = { nav.open(Route.Editor(comment.summary.id, comment.summary.day)) },
                     color = MaterialTheme.colorScheme.surfaceContainerLow,
                     shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).hand(),
                 ) {
                     Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         if (comment.text.isNotBlank()) Text(comment.text, style = MaterialTheme.typography.bodyLarge)

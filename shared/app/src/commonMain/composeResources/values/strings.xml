@@ -29,6 +29,8 @@
     <string name="journal_empty_text">Напишите пару строк о сегодняшнем дне — внизу, или откройте большую запись.</string>
     <string name="quick_note_hint">Заметка…</string>
     <string name="new_entry">Новая запись</string>
+    <string name="media_previous">Предыдущее</string>
+    <string name="media_next">Следующее</string>
     <string name="detail_empty">Откройте запись слева — она появится здесь. Или начните новую.</string>
     <string name="send">Сохранить заметку</string>
     <string name="menu">Меню</string>

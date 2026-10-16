@@ -103,7 +103,7 @@ internal fun FeedText(body: FeedBody?, expanded: Boolean, onExpand: () -> Unit, 
                 stringResource(Res.string.show_more),
                 style = MaterialTheme.typography.labelLarge,
                 color = colors.primary,
-                modifier = Modifier.clickable(onClick = onExpand).padding(vertical = 2.dp),
+                modifier = Modifier.hand().clickable(onClick = onExpand).padding(vertical = 2.dp),
             )
         }
     }

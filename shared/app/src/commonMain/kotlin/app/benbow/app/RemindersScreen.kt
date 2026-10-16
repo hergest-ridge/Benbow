@@ -80,7 +80,9 @@ internal fun RemindersScreen(services: AppServices, nav: Navigator, route: Route
             item(key = "form") { ReminderForm(services.today(), route.day, add) }
             if (all.none { it.repeat == ReminderItem.DAILY }) {
                 item(key = "nudge") {
-                    TextButton({ add(nudgeText, "${services.today()}T21:00", ReminderItem.DAILY) }, Modifier.padding(horizontal = 12.dp)) {
+                    TextButton({
+                        add(nudgeText, "${services.today()}T21:00", ReminderItem.DAILY)
+                    }, Modifier.padding(horizontal = 12.dp).hand()) {
                         Text("🔔 " + stringResource(Res.string.reminder_nudge))
                     }
                 }
@@ -132,11 +134,11 @@ private fun ReminderRow(services: AppServices, reminder: ReminderItem, now: Loca
         if (next != null && reminder.repeat == null) {
             TextButton({
                 services.scope.launch { services.repo.setReminderDone(reminder.id, true) }
-            }) { Text(stringResource(Res.string.reminder_done)) }
+            }, modifier = Modifier.hand()) { Text(stringResource(Res.string.reminder_done)) }
         }
         IconButton({
             services.scope.launch { services.repo.moveToTrash(reminder.id) }
-        }) { Icon(Icons.Delete, stringResource(Res.string.reminder_delete)) }
+        }, modifier = Modifier.hand()) { Icon(Icons.Delete, stringResource(Res.string.reminder_delete)) }
     }
 }
 
@@ -153,21 +155,25 @@ private fun ReminderForm(today: String, preset: String?, onAdd: (String, String,
             text = it
         }, placeholder = { Text(stringResource(Res.string.reminder_hint)) }, modifier = Modifier.fillMaxWidth())
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            FilterChip(day == today, { day = today }, { Text(stringResource(Res.string.reminder_today)) })
+            FilterChip(day == today, { day = today }, { Text(stringResource(Res.string.reminder_today)) }, modifier = Modifier.hand())
             val tomorrow = todayDate.plus(1, DateTimeUnit.DAY).toString()
-            FilterChip(day == tomorrow, { day = tomorrow }, { Text(stringResource(Res.string.reminder_tomorrow)) })
+            FilterChip(day == tomorrow, {
+                day = tomorrow
+            }, { Text(stringResource(Res.string.reminder_tomorrow)) }, modifier = Modifier.hand())
             if (preset != null && preset != today &&
                 preset != tomorrow
             ) {
-                FilterChip(day == preset, { day = preset }, { Text(dayLabel(preset)) })
+                FilterChip(day == preset, { day = preset }, { Text(dayLabel(preset)) }, modifier = Modifier.hand())
             }
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            FilterChip(repeat == null, { repeat = null }, { Text(stringResource(Res.string.reminder_once)) })
-            FilterChip(repeat == ReminderItem.DAILY, { repeat = ReminderItem.DAILY }, { Text(stringResource(Res.string.reminder_daily)) })
+            FilterChip(repeat == null, { repeat = null }, { Text(stringResource(Res.string.reminder_once)) }, modifier = Modifier.hand())
+            FilterChip(repeat == ReminderItem.DAILY, {
+                repeat = ReminderItem.DAILY
+            }, { Text(stringResource(Res.string.reminder_daily)) }, modifier = Modifier.hand())
             FilterChip(repeat == ReminderItem.WEEKLY, {
                 repeat = ReminderItem.WEEKLY
-            }, { Text(stringResource(Res.string.reminder_weekly)) })
+            }, { Text(stringResource(Res.string.reminder_weekly)) }, modifier = Modifier.hand())
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
@@ -183,7 +189,9 @@ private fun ReminderForm(today: String, preset: String?, onAdd: (String, String,
                 onAdd(text.trim(), "${day}T$parsed", repeat)
                 text = ""
                 time = ""
-            }, enabled = text.isNotBlank() && parsed != null) { Text(stringResource(Res.string.add)) }
+            }, enabled = text.isNotBlank() && parsed != null, modifier = Modifier.hand(text.isNotBlank() && parsed != null)) {
+                Text(stringResource(Res.string.add))
+            }
         }
     }
 }

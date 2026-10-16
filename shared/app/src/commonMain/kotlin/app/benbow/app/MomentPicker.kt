@@ -14,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.cancel
 import app.benbow.app.resources.moment_next
@@ -42,9 +43,9 @@ internal fun MomentPicker(initial: LocalDateTime, onPick: (LocalDateTime) -> Uni
                     day =
                         dates.selectedDateMillis?.let { Instant.fromEpochMilliseconds(it).toLocalDateTime(TimeZone.UTC).date }
                             ?: initial.date
-                }) { Text(stringResource(Res.string.moment_next)) }
+                }, modifier = Modifier.hand()) { Text(stringResource(Res.string.moment_next)) }
             },
-            dismissButton = { TextButton(onDismiss) { Text(stringResource(Res.string.cancel)) } },
+            dismissButton = { TextButton(onDismiss, modifier = Modifier.hand()) { Text(stringResource(Res.string.cancel)) } },
         ) { DatePicker(dates) }
     } else {
         val time = rememberTimePickerState(initialHour = initial.hour, initialMinute = initial.minute, is24Hour = true)
@@ -53,9 +54,9 @@ internal fun MomentPicker(initial: LocalDateTime, onPick: (LocalDateTime) -> Uni
             confirmButton = {
                 TextButton({
                     onPick(LocalDateTime(chosen, LocalTime(time.hour, time.minute)))
-                }) { Text(stringResource(Res.string.moment_save)) }
+                }, modifier = Modifier.hand()) { Text(stringResource(Res.string.moment_save)) }
             },
-            dismissButton = { TextButton(onDismiss) { Text(stringResource(Res.string.cancel)) } },
+            dismissButton = { TextButton(onDismiss, modifier = Modifier.hand()) { Text(stringResource(Res.string.cancel)) } },
             text = { TimePicker(time) },
         )
     }

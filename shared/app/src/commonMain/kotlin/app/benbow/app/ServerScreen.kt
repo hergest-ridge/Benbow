@@ -177,7 +177,7 @@ internal fun ServerScreen(services: AppServices, nav: Navigator) {
 private fun FindServer(vm: ServerViewModel) {
     pageServer?.let { origin ->
         Text(stringResource(Res.string.server_web_intro, origin), style = MaterialTheme.typography.bodyLarge)
-        Button(vm::connect, enabled = !vm.busy, modifier = Modifier.fillMaxWidth()) {
+        Button(vm::connect, enabled = !vm.busy, modifier = Modifier.fillMaxWidth().hand(!vm.busy)) {
             Text(stringResource(if (vm.busy) Res.string.server_connecting else Res.string.server_connect))
         }
         return
@@ -200,7 +200,11 @@ private fun FindServer(vm: ServerViewModel) {
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         modifier = Modifier.fillMaxWidth(),
     )
-    Button(vm::connect, enabled = vm.host.isNotBlank() && vm.port.isNotBlank() && !vm.busy, modifier = Modifier.fillMaxWidth()) {
+    Button(
+        vm::connect,
+        enabled = vm.host.isNotBlank() && vm.port.isNotBlank() && !vm.busy,
+        modifier = Modifier.fillMaxWidth().hand(vm.host.isNotBlank() && vm.port.isNotBlank() && !vm.busy),
+    ) {
         Text(stringResource(if (vm.busy) Res.string.server_connecting else Res.string.server_connect))
     }
 }
@@ -230,8 +234,14 @@ private fun ConfirmServer(vm: ServerViewModel, probe: Probe) {
         modifier = Modifier.fillMaxWidth(),
     )
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        OutlinedButton(vm::cancel, enabled = !vm.busy, modifier = Modifier.weight(1f)) { Text(stringResource(Res.string.server_cancel)) }
-        Button(vm::pair, enabled = vm.code.length == 6 && vm.deviceName.isNotBlank() && !vm.busy, modifier = Modifier.weight(1f)) {
+        OutlinedButton(vm::cancel, enabled = !vm.busy, modifier = Modifier.weight(1f).hand(!vm.busy)) {
+            Text(stringResource(Res.string.server_cancel))
+        }
+        Button(
+            vm::pair,
+            enabled = vm.code.length == 6 && vm.deviceName.isNotBlank() && !vm.busy,
+            modifier = Modifier.weight(1f).hand(vm.code.length == 6 && vm.deviceName.isNotBlank() && !vm.busy),
+        ) {
             Text(stringResource(Res.string.server_pair))
         }
     }
@@ -289,7 +299,7 @@ private fun Paired(services: AppServices, vm: ServerViewModel, connection: Conne
 
         else -> {}
     }
-    Button(services.sync::requestSync, enabled = !status.syncing, modifier = Modifier.fillMaxWidth()) {
+    Button(services.sync::requestSync, enabled = !status.syncing, modifier = Modifier.fillMaxWidth().hand(!status.syncing)) {
         Text(stringResource(Res.string.server_sync_now))
     }
 
@@ -299,7 +309,7 @@ private fun Paired(services: AppServices, vm: ServerViewModel, connection: Conne
                 Text(stringResource(Res.string.server_rejected_title), style = MaterialTheme.typography.titleSmall)
                 Text(stringResource(Res.string.server_rejected_hint), style = MaterialTheme.typography.bodyMedium)
                 rejected.forEach { Text("• ${it.error ?: it.opId}", style = MaterialTheme.typography.bodySmall) }
-                TextButton(vm::retryRejected) { Text(stringResource(Res.string.retry)) }
+                TextButton(vm::retryRejected, modifier = Modifier.hand()) { Text(stringResource(Res.string.retry)) }
             }
         }
     }
@@ -312,7 +322,9 @@ private fun Paired(services: AppServices, vm: ServerViewModel, connection: Conne
     val canForget = status.pending == 0L && status.rejected == 0L
     OutlinedButton({
         confirmForget = true
-    }, enabled = canForget && !vm.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(Res.string.server_forget)) }
+    }, enabled = canForget && !vm.busy, modifier = Modifier.fillMaxWidth().hand(canForget && !vm.busy)) {
+        Text(stringResource(Res.string.server_forget))
+    }
     if (!canForget) {
         Text(
             stringResource(Res.string.server_forget_blocked),
@@ -328,9 +340,11 @@ private fun Paired(services: AppServices, vm: ServerViewModel, connection: Conne
                 TextButton({
                     confirmForget = false
                     vm.forget()
-                }) { Text(stringResource(Res.string.server_forget)) }
+                }, modifier = Modifier.hand()) { Text(stringResource(Res.string.server_forget)) }
             },
-            dismissButton = { TextButton({ confirmForget = false }) { Text(stringResource(Res.string.server_cancel)) } },
+            dismissButton = {
+                TextButton({ confirmForget = false }, modifier = Modifier.hand()) { Text(stringResource(Res.string.server_cancel)) }
+            },
         )
     }
 }

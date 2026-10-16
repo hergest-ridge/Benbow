@@ -99,12 +99,12 @@ internal fun SearchScreen(services: AppServices, nav: Navigator) {
                 item {
                     FilterChip(query.favorites, {
                         vm.edit { it.copy(favorites = !it.favorites) }
-                    }, { Text("★ " + stringResource(Res.string.filter_favorites)) })
+                    }, { Text("★ " + stringResource(Res.string.filter_favorites)) }, modifier = Modifier.hand())
                 }
                 item {
                     FilterChip(query.withMedia, {
                         vm.edit { it.copy(withMedia = !it.withMedia) }
-                    }, { Text(stringResource(Res.string.filter_media)) })
+                    }, { Text(stringResource(Res.string.filter_media)) }, modifier = Modifier.hand())
                 }
                 items(tags, key = { it.name }) { tag ->
                     val on = query.tag.equals(tag.name, ignoreCase = true)
@@ -113,6 +113,7 @@ internal fun SearchScreen(services: AppServices, nav: Navigator) {
                         { vm.edit { it.copy(tag = if (on) null else tag.name) } },
                         { Text("${tag.name} · ${tag.uses}") },
                         colors = FilterChipDefaults.filterChipColors(containerColor = tagColor(tag.name)),
+                        modifier = Modifier.hand(),
                     )
                 }
             }

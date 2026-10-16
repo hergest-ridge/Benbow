@@ -30,6 +30,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.benbow.core.text.Align
@@ -128,7 +130,7 @@ private fun Tool(label: String, active: Boolean = false, enabled: Boolean = true
             .clip(RoundedCornerShape(10.dp))
             .background(if (active) colors.secondaryContainer else Color.Transparent)
             .focusProperties { canFocus = false }
-            .clickable(enabled = enabled, onClick = onClick),
+            .hand(enabled).clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -165,8 +167,11 @@ private fun PaletteRow(picker: Picker, onPick: (String) -> Unit) {
             Box(
                 Modifier.size(30.dp).clip(CircleShape).background(color)
                     .focusProperties { canFocus = false }
-                    .clickable { onPick(token) },
+                    .hand().clickable { onPick(token) },
             )
         }
     }
 }
+
+/** The pointing hand over what can be clicked (desktop and the browser). */
+private fun Modifier.hand(enabled: Boolean = true): Modifier = if (enabled) pointerHoverIcon(PointerIcon.Hand) else this

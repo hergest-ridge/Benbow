@@ -69,7 +69,7 @@ internal fun AppearanceScreen(services: AppServices, nav: Navigator) {
                 ThemeMode.entries.forEachIndexed { i, mode ->
                     FilterChip(current.mode == mode, {
                         services.setAppearance(current.copy(mode = mode))
-                    }, { Text(modes.getOrElse(i) { mode.name }) })
+                    }, { Text(modes.getOrElse(i) { mode.name }) }, modifier = Modifier.hand())
                 }
             }
             Title(stringResource(Res.string.feed_section))
@@ -82,7 +82,7 @@ internal fun AppearanceScreen(services: AppServices, nav: Navigator) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Switch(current.feedCards, { services.setAppearance(current.copy(feedCards = it)) })
+                Switch(current.feedCards, { services.setAppearance(current.copy(feedCards = it)) }, modifier = Modifier.hand())
             }
             Title(stringResource(Res.string.post_section))
             Text(
@@ -97,6 +97,7 @@ internal fun AppearanceScreen(services: AppServices, nav: Navigator) {
                         current.postMedia == layout,
                         { services.setAppearance(current.copy(postMedia = layout)) },
                         { Text(layouts.getOrElse(i) { layout.name }) },
+                        modifier = Modifier.hand(),
                     )
                 }
             }
@@ -136,7 +137,7 @@ private fun PaletteCard(name: String, scheme: ColorScheme, selected: Boolean, on
             if (selected) 3.dp else 1.dp,
             if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
         ),
-        modifier = Modifier.width(150.dp),
+        modifier = Modifier.width(150.dp).hand(),
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

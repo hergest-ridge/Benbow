@@ -213,8 +213,12 @@ internal fun DrawingScreen(services: AppServices, nav: Navigator, route: Route.D
             navigationIcon = { BackButton(nav::back) },
             title = { Text(stringResource(Res.string.drawing_title)) },
             actions = {
-                IconButton(vm::undo, enabled = vm.canUndo) { Icon(Icons.Undo, stringResource(Res.string.drawing_undo)) }
-                IconButton(vm::redo, enabled = vm.canRedo) { Icon(Icons.Redo, stringResource(Res.string.drawing_redo)) }
+                IconButton(vm::undo, enabled = vm.canUndo, modifier = Modifier.hand(vm.canUndo)) {
+                    Icon(Icons.Undo, stringResource(Res.string.drawing_undo))
+                }
+                IconButton(vm::redo, enabled = vm.canRedo, modifier = Modifier.hand(vm.canRedo)) {
+                    Icon(Icons.Redo, stringResource(Res.string.drawing_redo))
+                }
             },
         )
     }) { padding ->
@@ -360,7 +364,7 @@ private fun Toolbar(vm: DrawingViewModel) {
                 vm.tool.sizes.indices.forEach { i ->
                     val dot = (6 + i * 5).dp
                     Box(
-                        Modifier.size(36.dp).clickable { vm.size = i },
+                        Modifier.size(36.dp).hand().clickable { vm.size = i },
                         contentAlignment = Alignment.Center,
                     ) {
                         Box(
@@ -378,7 +382,7 @@ private fun Toolbar(vm: DrawingViewModel) {
                     }
                 }
                 Spacer(Modifier.weight(1f))
-                TextButton(vm::moreRoom) { Text(stringResource(Res.string.drawing_more_room)) }
+                TextButton(vm::moreRoom, modifier = Modifier.hand()) { Text(stringResource(Res.string.drawing_more_room)) }
             }
             Row(
                 Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 4.dp),
@@ -389,7 +393,7 @@ private fun Toolbar(vm: DrawingViewModel) {
                     Box(
                         Modifier.size(34.dp).clip(CircleShape).border(if (selected) 3.dp else 0.dp, colors.primary, CircleShape)
                             .padding(5.dp).background(inkColor(token, colors.onSurface, dark), CircleShape)
-                            .clickable {
+                            .hand().clickable {
                                 vm.color = token
                                 if (vm.tool == DrawTool.Eraser) vm.tool = DrawTool.Pen
                             },
@@ -407,7 +411,7 @@ private fun ToolButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: org.jetbrains.compose.resources.StringResource,
 ) {
-    IconToggleButton(vm.tool == tool, { vm.tool = tool }) {
+    IconToggleButton(vm.tool == tool, { vm.tool = tool }, modifier = Modifier.hand()) {
         Icon(
             icon,
             stringResource(label),

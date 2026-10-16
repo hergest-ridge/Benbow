@@ -60,7 +60,9 @@ internal fun TrashScreen(services: AppServices, nav: Navigator) {
             }
             items(items, key = { it.id }) { entry ->
                 EntryCard(entry, onClick = { nav.open(Route.Editor(entry.id, entry.day)) }) {
-                    TextButton({ services.scope.launch { services.repo.restore(entry.id) } }) { Text(stringResource(Res.string.restore)) }
+                    TextButton({
+                        services.scope.launch { services.repo.restore(entry.id) }
+                    }, modifier = Modifier.hand()) { Text(stringResource(Res.string.restore)) }
                 }
             }
             if (events.isNotEmpty() || calendars.isNotEmpty()) {
@@ -91,6 +93,6 @@ private fun TrashRow(title: String, detail: String?, onRestore: () -> Unit) {
             Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
             detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
-        TextButton(onRestore) { Text(stringResource(Res.string.restore)) }
+        TextButton(onRestore, modifier = Modifier.hand()) { Text(stringResource(Res.string.restore)) }
     }
 }

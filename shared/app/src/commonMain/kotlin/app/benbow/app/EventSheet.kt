@@ -181,22 +181,26 @@ internal fun EventSheet(
                 modifier = Modifier.fillMaxWidth(),
             )
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton({ picking = { draft = draft.copy(day = it) } }) { Text(fullDateLabel(draft.day.toString())) }
+                OutlinedButton({
+                    picking = { draft = draft.copy(day = it) }
+                }, modifier = Modifier.hand()) { Text(fullDateLabel(draft.day.toString())) }
                 TimeField(timeText, { timeText = it }, stringResource(Res.string.event_time_hint), Modifier.weight(1f))
             }
             if (draft.hasEnd || endTimeText.isNotBlank()) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedButton({
                         picking = { draft = draft.copy(endDay = it) }
-                    }) { Text(fullDateLabel((draft.endDay ?: draft.day).toString())) }
+                    }, modifier = Modifier.hand()) { Text(fullDateLabel((draft.endDay ?: draft.day).toString())) }
                     TimeField(endTimeText, { endTimeText = it }, stringResource(Res.string.event_end_time_hint), Modifier.weight(1f))
                     IconButton({
                         draft = draft.copy(endDay = null, endTime = null)
                         endTimeText = ""
-                    }) { Icon(Icons.Close, stringResource(Res.string.event_end_clear)) }
+                    }, modifier = Modifier.hand()) { Icon(Icons.Close, stringResource(Res.string.event_end_clear)) }
                 }
             } else {
-                TextButton({ draft = draft.copy(endDay = draft.day) }) { Text(stringResource(Res.string.event_end_add)) }
+                TextButton({
+                    draft = draft.copy(endDay = draft.day)
+                }, modifier = Modifier.hand()) { Text(stringResource(Res.string.event_end_add)) }
             }
             RepeatMenu(draft.rrule) { draft = draft.copy(rrule = it) }
             OutlinedTextField(
@@ -220,18 +224,19 @@ internal fun EventSheet(
                         onClick = { draft = draft.copy(calendar = calendar.id) },
                         label = { Text(calendarName(calendar)) },
                         leadingIcon = { ColorDot(calendar.color) },
+                        modifier = Modifier.hand(),
                     )
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (event != null) {
-                    TextButton({ if (event.repeats) askDelete = true else onDelete(true) }) {
+                    TextButton({ if (event.repeats) askDelete = true else onDelete(true) }, modifier = Modifier.hand()) {
                         Text(stringResource(Res.string.event_delete), color = MaterialTheme.colorScheme.error)
                     }
-                    TextButton(onWrite) { Text(stringResource(Res.string.event_write)) }
+                    TextButton(onWrite, modifier = Modifier.hand()) { Text(stringResource(Res.string.event_write)) }
                 }
                 Spacer(Modifier.weight(1f))
-                Button({ onSave(current) }, enabled = valid) {
+                Button({ onSave(current) }, enabled = valid, modifier = Modifier.hand(valid)) {
                     Text(stringResource(if (event == null) Res.string.add else Res.string.event_save))
                 }
             }
@@ -247,8 +252,12 @@ internal fun EventSheet(
         AlertDialog(
             onDismissRequest = { askDelete = false },
             text = { Text(stringResource(Res.string.event_delete_series_question)) },
-            confirmButton = { TextButton({ onDelete(true) }) { Text(stringResource(Res.string.event_delete_series)) } },
-            dismissButton = { TextButton({ onDelete(false) }) { Text(stringResource(Res.string.event_delete_day)) } },
+            confirmButton = {
+                TextButton({ onDelete(true) }, modifier = Modifier.hand()) { Text(stringResource(Res.string.event_delete_series)) }
+            },
+            dismissButton = {
+                TextButton({ onDelete(false) }, modifier = Modifier.hand()) { Text(stringResource(Res.string.event_delete_day)) }
+            },
         )
     }
 }
@@ -280,13 +289,23 @@ private fun RepeatMenu(rule: String?, onPick: (String?) -> Unit) {
     val labels = stringArrayResource(Res.array.event_repeats)
     val index = REPEATS.indexOf(rule)
     Box {
-        OutlinedButton({ open = true }) { Text(if (index >= 0) labels[index] else stringResource(Res.string.event_repeat_custom)) }
+        OutlinedButton({ open = true }, modifier = Modifier.hand()) {
+            Text(
+                if (index >=
+                    0
+                ) {
+                    labels[index]
+                } else {
+                    stringResource(Res.string.event_repeat_custom)
+                },
+            )
+        }
         DropdownMenu(open, { open = false }) {
             REPEATS.forEachIndexed { i, choice ->
                 DropdownMenuItem(text = { Text(labels[i]) }, onClick = {
                     onPick(choice)
                     open = false
-                })
+                }, modifier = Modifier.hand())
             }
         }
     }
@@ -302,8 +321,8 @@ internal fun DayPicker(initial: LocalDate, onPick: (LocalDate) -> Unit, onDismis
         confirmButton = {
             TextButton({
                 onPick(state.selectedDateMillis?.let { Instant.fromEpochMilliseconds(it).toLocalDateTime(TimeZone.UTC).date } ?: initial)
-            }) { Text(stringResource(Res.string.event_pick_day)) }
+            }, modifier = Modifier.hand()) { Text(stringResource(Res.string.event_pick_day)) }
         },
-        dismissButton = { TextButton(onDismiss) { Text(stringResource(Res.string.cancel)) } },
+        dismissButton = { TextButton(onDismiss, modifier = Modifier.hand()) { Text(stringResource(Res.string.cancel)) } },
     ) { DatePicker(state) }
 }

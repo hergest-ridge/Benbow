@@ -90,7 +90,9 @@ internal fun TagsScreen(services: AppServices, nav: Navigator) {
                 items(groups.getValue(group).sortedBy { it.name.lowercase() }, key = { "t:" + it.name }) { tag ->
                     Column(Modifier.fillMaxWidth()) {
                         Row(
-                            Modifier.fillMaxWidth().clickable { toggle("t:" + tag.name) }.padding(horizontal = 24.dp, vertical = 10.dp),
+                            Modifier.fillMaxWidth().hand().clickable {
+                                toggle("t:" + tag.name)
+                            }.padding(horizontal = 24.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             TagChip(tag.name)
@@ -111,7 +113,7 @@ internal fun TagsScreen(services: AppServices, nav: Navigator) {
                                     (categories + none).forEach { category ->
                                         FilterChip((tag.category ?: none) == category, {
                                             services.scope.launch { services.repo.setTagCategory(tag.name, category.takeIf { it != none }) }
-                                        }, { Text(category) })
+                                        }, { Text(category) }, modifier = Modifier.hand())
                                     }
                                 }
                                 Text(stringResource(Res.string.tag_color), style = MaterialTheme.typography.labelLarge)
@@ -132,7 +134,7 @@ internal fun TagsScreen(services: AppServices, nav: Navigator) {
 @Composable
 private fun CategoryTitle(name: String, color: Color?, onClick: (() -> Unit)?) {
     Row(
-        Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+        Modifier.fillMaxWidth().then(if (onClick != null) Modifier.hand().clickable(onClick = onClick) else Modifier)
             .padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

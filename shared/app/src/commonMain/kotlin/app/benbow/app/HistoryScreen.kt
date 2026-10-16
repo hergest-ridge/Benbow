@@ -93,7 +93,7 @@ private fun <T> RemoteContent(vm: RemoteViewModel<T>, content: @Composable (T) -
 
         is Remote.Failed -> Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(Res.string.history_offline, state.reason), style = MaterialTheme.typography.bodyLarge)
-            TextButton(vm::reload) { Text(stringResource(Res.string.retry)) }
+            TextButton(vm::reload, modifier = Modifier.hand()) { Text(stringResource(Res.string.retry)) }
         }
 
         is Remote.Loaded -> content(state.value)
@@ -136,7 +136,7 @@ internal fun HistoryScreen(services: AppServices, nav: Navigator, route: Route.H
 private fun RevisionRow(revision: RevisionInfo, current: Boolean, conflict: Boolean, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 16.dp),
+        Modifier.fillMaxWidth().hand().clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(dateTimeLabel(revision.createdAt), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
@@ -180,7 +180,7 @@ internal fun RevisionScreen(services: AppServices, nav: Navigator, route: Route.
                         services.scope.launch { services.repo.restoreVersion(route.entryId, body) }
                         nav.backTo { it is Route.Editor || it is Route.Home }
                     },
-                    modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp),
+                    modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp).hand(),
                 ) { Text(stringResource(Res.string.revision_restore)) }
             }
         },

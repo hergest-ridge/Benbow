@@ -82,7 +82,9 @@ internal fun SpeechScreen(services: AppServices, nav: Navigator) {
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier.weight(1f),
                         )
-                        TextButton({ transcriptions.model.delete() }) { Text(stringResource(Res.string.speech_delete)) }
+                        TextButton({
+                            transcriptions.model.delete()
+                        }, modifier = Modifier.hand()) { Text(stringResource(Res.string.speech_delete)) }
                     }
 
                     is SpeechModel.State.Downloading -> {
@@ -95,16 +97,18 @@ internal fun SpeechScreen(services: AppServices, nav: Navigator) {
 
                     SpeechModel.State.ServerTooOld -> {
                         Text(stringResource(Res.string.speech_server_old), style = MaterialTheme.typography.bodyMedium)
-                        OutlinedButton({ fetch() }) { Text(stringResource(Res.string.speech_check_again)) }
+                        OutlinedButton({ fetch() }, modifier = Modifier.hand()) { Text(stringResource(Res.string.speech_check_again)) }
                     }
 
                     SpeechModel.State.NotOnServer -> {
                         Text(stringResource(Res.string.speech_not_on_server), style = MaterialTheme.typography.bodyMedium)
-                        OutlinedButton({ fetch() }) { Text(stringResource(Res.string.speech_check_again)) }
+                        OutlinedButton({ fetch() }, modifier = Modifier.hand()) { Text(stringResource(Res.string.speech_check_again)) }
                     }
 
                     SpeechModel.State.Missing -> if (paired) {
-                        Button({ fetch() }) { Text(stringResource(Res.string.speech_download, mb(SpeechModelSpec.totalSize))) }
+                        Button({
+                            fetch()
+                        }, modifier = Modifier.hand()) { Text(stringResource(Res.string.speech_download, mb(SpeechModelSpec.totalSize))) }
                     } else {
                         Text(stringResource(Res.string.speech_need_server), style = MaterialTheme.typography.bodyMedium)
                     }
@@ -115,7 +119,7 @@ internal fun SpeechScreen(services: AppServices, nav: Navigator) {
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.error,
                         )
-                        OutlinedButton({ fetch() }) { Text(stringResource(Res.string.speech_retry)) }
+                        OutlinedButton({ fetch() }, modifier = Modifier.hand()) { Text(stringResource(Res.string.speech_retry)) }
                     }
                 }
             }
@@ -126,7 +130,7 @@ internal fun SpeechScreen(services: AppServices, nav: Navigator) {
                             Text(stringResource(Res.string.speech_auto), style = MaterialTheme.typography.bodyLarge)
                             Note(stringResource(Res.string.speech_auto_note))
                         }
-                        Switch(auto, transcriptions::setAuto)
+                        Switch(auto, transcriptions::setAuto, modifier = Modifier.hand())
                     }
                     when {
                         running.isNotEmpty() -> Text(
@@ -134,7 +138,9 @@ internal fun SpeechScreen(services: AppServices, nav: Navigator) {
                             style = MaterialTheme.typography.bodyMedium,
                         )
 
-                        left > 0 -> OutlinedButton({ transcriptions.transcribeAll() }) { Text(stringResource(Res.string.speech_all, left)) }
+                        left > 0 -> OutlinedButton({
+                            transcriptions.transcribeAll()
+                        }, modifier = Modifier.hand()) { Text(stringResource(Res.string.speech_all, left)) }
 
                         else -> Note(stringResource(Res.string.speech_all_done))
                     }

@@ -72,13 +72,16 @@ internal fun LockSettingsScreen(services: AppServices, nav: Navigator) {
                                     }
                                 }
                             },
+                            modifier = Modifier.hand(usable || minutes != null),
                         )
                     }
                     if (minutes != null) {
                         Text(stringResource(Res.string.lock_after), style = MaterialTheme.typography.labelLarge)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             AppLock.CHOICES.forEachIndexed { i, choice ->
-                                FilterChip(minutes == choice, { services.lock.set(choice) }, { Text(labels.getOrElse(i) { "$choice" }) })
+                                FilterChip(minutes == choice, {
+                                    services.lock.set(choice)
+                                }, { Text(labels.getOrElse(i) { "$choice" }) }, modifier = Modifier.hand())
                             }
                         }
                     }

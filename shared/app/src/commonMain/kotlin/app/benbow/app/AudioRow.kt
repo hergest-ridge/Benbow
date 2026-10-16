@@ -114,7 +114,7 @@ internal fun AudioRow(
                     shape = CircleShape,
                     color = colors.primary,
                     contentColor = colors.onPrimary,
-                    modifier = Modifier.size(42.dp),
+                    modifier = Modifier.size(42.dp).hand(file != null),
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
@@ -136,7 +136,7 @@ internal fun AudioRow(
                             style = MaterialTheme.typography.bodyMedium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = if (onRename != null) Modifier.clickable { renaming = true } else Modifier,
+                            modifier = if (onRename != null) Modifier.hand().clickable { renaming = true } else Modifier,
                         )
                     }
                     val total = mine?.durationMs?.takeIf { it > 0 } ?: meta.durationMs ?: 0
@@ -170,7 +170,7 @@ internal fun AudioRow(
                 when {
                     transcribing -> CircularProgressIndicator(Modifier.padding(end = 8.dp).size(20.dp), strokeWidth = 2.dp)
 
-                    transcript == null && onTranscribe != null -> IconButton(onTranscribe) {
+                    transcript == null && onTranscribe != null -> IconButton(onTranscribe, modifier = Modifier.hand()) {
                         Icon(Icons.Transcribe, stringResource(Res.string.speech_transcribe), tint = colors.onSurfaceVariant)
                     }
                 }
@@ -182,7 +182,7 @@ internal fun AudioRow(
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = if (!folded || open) Int.MAX_VALUE else FOLDED_LINES,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth().then(if (folded) Modifier.clickable { open = !open } else Modifier)
+                    modifier = Modifier.fillMaxWidth().then(if (folded) Modifier.hand().clickable { open = !open } else Modifier)
                         .padding(start = TRANSCRIPT_START, end = TRANSCRIPT_END, bottom = 10.dp),
                 )
             }

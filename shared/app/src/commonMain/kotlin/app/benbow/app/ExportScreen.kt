@@ -70,9 +70,13 @@ internal fun ExportScreen(services: AppServices, nav: Navigator) {
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier.weight(1f),
                         )
-                        Switch(withMedia, { withMedia = it }, enabled = state !is ExportState.Running)
+                        Switch(withMedia, {
+                            withMedia = it
+                        }, enabled = state !is ExportState.Running, modifier = Modifier.hand(state !is ExportState.Running))
                     }
-                    Button({ saveAs("benbow-${services.today()}.zip") }, enabled = state !is ExportState.Running) {
+                    Button({
+                        saveAs("benbow-${services.today()}.zip")
+                    }, enabled = state !is ExportState.Running, modifier = Modifier.hand(state !is ExportState.Running)) {
                         Text(stringResource(Res.string.export_save))
                     }
                     ExportStatus(state)

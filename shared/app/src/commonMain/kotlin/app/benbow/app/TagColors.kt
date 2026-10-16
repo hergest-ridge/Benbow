@@ -75,7 +75,7 @@ internal fun SwatchPicker(selected: String?, noneLabel: String?, onPick: (String
         verticalArrangement = Arrangement.spacedBy(8.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        if (noneLabel != null) FilterChip(selected == null, { onPick(null) }, { Text(noneLabel) })
+        if (noneLabel != null) FilterChip(selected == null, { onPick(null) }, { Text(noneLabel) }, modifier = Modifier.hand())
         SWATCHES.forEachIndexed { i, name ->
             val on = name == selected
             Box(
@@ -88,7 +88,7 @@ internal fun SwatchPicker(selected: String?, noneLabel: String?, onPick: (String
                         if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
                         CircleShape,
                     )
-                    .clickable { onPick(name) }
+                    .hand().clickable { onPick(name) }
                     .semantics {
                         contentDescription = names.getOrElse(i) { name }
                         this.selected = on

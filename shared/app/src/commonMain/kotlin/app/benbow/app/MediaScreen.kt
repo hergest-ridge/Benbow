@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animate
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -37,9 +38,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -86,19 +94,38 @@ private fun MediaPager(services: AppServices, nav: Navigator, entryId: String, i
     val drag = rememberDraggableState { dragY += it }
     val fade = (1f - abs(dragY) / (dismissAt * 4)).coerceIn(0f, 1f)
     LaunchedEffect(pager.currentPage) { zoomed = false }
+    // Keys on a keyboard: ← and → go through the pictures, Esc closes.
+    val keys = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { keys.requestFocus() } }
+    val step = { by: Int ->
+        val to = (pager.currentPage + by).coerceIn(0, items.lastIndex)
+        if (to != pager.currentPage) scope.launch { pager.animateScrollToPage(to) }
+    }
     Box(
-        Modifier.fillMaxSize().background(Color.Black.copy(alpha = fade)).draggable(
-            drag,
-            Orientation.Vertical,
-            enabled = !zoomed,
-            onDragStopped = { velocity ->
-                if (abs(dragY) > dismissAt || abs(velocity) > 2_500f) {
-                    nav.back()
-                } else {
-                    scope.launch { animate(dragY, 0f) { value, _ -> dragY = value } }
+        Modifier.fillMaxSize().background(Color.Black.copy(alpha = fade))
+            .focusRequester(keys)
+            .onKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                when (event.key) {
+                    Key.DirectionLeft -> step(-1).let { true }
+                    Key.DirectionRight -> step(1).let { true }
+                    Key.Escape -> nav.back().let { true }
+                    else -> false
                 }
-            },
-        ),
+            }
+            .focusable()
+            .draggable(
+                drag,
+                Orientation.Vertical,
+                enabled = !zoomed,
+                onDragStopped = { velocity ->
+                    if (abs(dragY) > dismissAt || abs(velocity) > 2_500f) {
+                        nav.back()
+                    } else {
+                        scope.launch { animate(dragY, 0f) { value, _ -> dragY = value } }
+                    }
+                },
+            ),
     ) {
         HorizontalPager(
             pager,
@@ -124,6 +151,7 @@ private fun MediaPager(services: AppServices, nav: Navigator, entryId: String, i
                 },
             )
         }
+        if (chrome && dragY == 0f && !zoomed) PagerArrows(pager, size = 48.dp, inset = 16.dp)
         AnimatedVisibility(chrome && dragY == 0f, enter = fadeIn(), exit = fadeOut()) {
             val current = items.getOrNull(pager.currentPage)
             Row(
@@ -131,7 +159,7 @@ private fun MediaPager(services: AppServices, nav: Navigator, entryId: String, i
                     .statusBarsPadding().padding(horizontal = 4.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(nav::back) { Icon(Icons.Back, null, tint = Color.White) }
+                IconButton(nav::back, modifier = Modifier.hand()) { Icon(Icons.Back, null, tint = Color.White) }
                 Column(Modifier.weight(1f)) {
                     current?.meta?.capturedAt?.let {
                         Text(dateTimeLabel(it), color = Color.White, style = MaterialTheme.typography.titleSmall)
@@ -147,7 +175,9 @@ private fun MediaPager(services: AppServices, nav: Navigator, entryId: String, i
                 if (current !=
                     null
                 ) {
-                    IconButton({ confirm = true }) { Icon(Icons.Delete, stringResource(Res.string.media_remove), tint = Color.White) }
+                    IconButton({
+                        confirm = true
+                    }, modifier = Modifier.hand()) { Icon(Icons.Delete, stringResource(Res.string.media_remove), tint = Color.White) }
                 }
             }
         }
@@ -162,9 +192,11 @@ private fun MediaPager(services: AppServices, nav: Navigator, entryId: String, i
                     confirm = false
                     services.scope.launch { services.repo.removeAttachment(entryId, current.meta.id) }
                     if (items.size == 1) nav.back()
-                }) { Text(stringResource(Res.string.media_remove)) }
+                }, modifier = Modifier.hand()) { Text(stringResource(Res.string.media_remove)) }
             },
-            dismissButton = { TextButton({ confirm = false }) { Text(stringResource(Res.string.server_cancel)) } },
+            dismissButton = {
+                TextButton({ confirm = false }, modifier = Modifier.hand()) { Text(stringResource(Res.string.server_cancel)) }
+            },
         )
     }
 }

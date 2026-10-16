@@ -205,7 +205,7 @@ private fun FeedPost(
     val entry = item.summary
     var picking by remember { mutableStateOf(false) }
     val tint = swatch(entry.background)
-    val open = Modifier.combinedClickable(onClick = onOpen, onLongClick = { picking = true })
+    val open = Modifier.hand().combinedClickable(onClick = onOpen, onLongClick = { picking = true })
     val shown = LocalOpenEntry.current == entry.id // open beside the feed (a wide window)
     Box(
         Modifier.fillMaxWidth().then(
@@ -241,14 +241,14 @@ private fun FeedPost(
             DropdownMenuItem(text = { Text(stringResource(Res.string.comments)) }, onClick = {
                 picking = false
                 onComments()
-            })
+            }, modifier = Modifier.hand())
             Row(Modifier.padding(horizontal = 8.dp)) {
                 REACTIONS.forEach { emoji ->
                     val on = emoji in item.reactions
                     DropdownMenuItem(text = { Text(emoji, style = MaterialTheme.typography.titleLarge) }, onClick = {
                         picking = false
                         onReact(emoji, !on)
-                    }, modifier = Modifier.size(width = 52.dp, height = 48.dp))
+                    }, modifier = Modifier.size(width = 52.dp, height = 48.dp).hand())
                 }
             }
         }
@@ -277,11 +277,12 @@ private fun PostBody(
                 onClick = { onReact(emoji, false) },
                 color = colors.secondaryContainer,
                 shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.hand(),
             ) { Text(emoji, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) }
         }
         if (item.comments > 0) {
             Row(
-                Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onComments).padding(horizontal = 4.dp, vertical = 2.dp),
+                Modifier.clip(RoundedCornerShape(8.dp)).hand().clickable(onClick = onComments).padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {

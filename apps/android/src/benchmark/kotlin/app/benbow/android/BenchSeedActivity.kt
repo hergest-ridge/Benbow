@@ -9,6 +9,7 @@ import android.graphics.Shader
 import android.os.Bundle
 import app.benbow.client.JournalRepository
 import app.benbow.client.MediaFile
+import app.benbow.client.addTag
 import app.benbow.core.content.AttachmentBlock
 import app.benbow.core.content.Document
 import app.benbow.core.content.DocumentCodec

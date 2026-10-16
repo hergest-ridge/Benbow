@@ -23,27 +23,40 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.benbow.app.resources.Res
+import app.benbow.app.resources.gentle_count
 import app.benbow.app.resources.restore
 import app.benbow.app.resources.trash
 import app.benbow.app.resources.trash_calendar
 import app.benbow.app.resources.trash_calendar_item
+import app.benbow.app.resources.trash_category_item
 import app.benbow.app.resources.trash_empty
 import app.benbow.app.resources.trash_hint
+import app.benbow.app.resources.trash_tag_item
+import app.benbow.app.resources.trash_tags
+import app.benbow.client.restoreCategory
+import app.benbow.client.restoreTag
+import app.benbow.client.trashedTags
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
-/** The journal's trash, then the calendar's (ADR-027): deleted events and whole calendars come back from here. */
+/**
+ * The journal's trash, then tags and categories (ADR-032: their entries kept them all along), then the calendar's
+ * (ADR-027): deleted events and whole calendars come back from here.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun TrashScreen(services: AppServices, nav: Navigator) {
     val entries by services.repo.trash().collectAsStateWithLifecycle(null)
     val events by services.calendar.trashedEvents().collectAsStateWithLifecycle(emptyList())
     val calendars by services.calendar.trashedCalendars().collectAsStateWithLifecycle(emptyList())
+    val tags by services.repo.trashedTags().collectAsStateWithLifecycle(emptyList())
+    val categories = LocalTags.current.trashedCategories
     Scaffold(topBar = {
         TopAppBar(navigationIcon = { BackButton(nav::back) }, title = { Text(stringResource(Res.string.trash)) })
     }) { padding ->
         val items = entries ?: return@Scaffold
-        if (items.isEmpty() && events.isEmpty() && calendars.isEmpty()) {
+        if (items.isEmpty() && events.isEmpty() && calendars.isEmpty() && tags.isEmpty() && categories.isEmpty()) {
             Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(stringResource(Res.string.trash_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -63,6 +76,28 @@ internal fun TrashScreen(services: AppServices, nav: Navigator) {
                     TextButton({
                         services.scope.launch { services.repo.restore(entry.id) }
                     }, modifier = Modifier.hand()) { Text(stringResource(Res.string.restore)) }
+                }
+            }
+            if (tags.isNotEmpty() || categories.isNotEmpty()) {
+                item(key = "tags") {
+                    Text(
+                        stringResource(Res.string.trash_tags),
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 4.dp),
+                    )
+                }
+            }
+            items(tags, key = { "t" + it.id }) { tag ->
+                TrashRow(
+                    stringResource(Res.string.trash_tag_item, tag.name),
+                    pluralStringResource(Res.plurals.gentle_count, tag.uses, tag.uses),
+                ) {
+                    services.scope.launch { services.repo.restoreTag(tag.id) }
+                }
+            }
+            items(categories, key = { "g" + it.id }) { category ->
+                TrashRow(stringResource(Res.string.trash_category_item, category.name), null) {
+                    services.scope.launch { services.repo.restoreCategory(category.id) }
                 }
             }
             if (events.isNotEmpty() || calendars.isNotEmpty()) {

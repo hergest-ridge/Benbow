@@ -7,6 +7,7 @@ import app.benbow.server.storage.BlobStore
 import app.benbow.server.storage.Database
 import app.benbow.server.storage.SqliteSyncStore
 import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
@@ -52,8 +53,8 @@ class BackupJobs(
     private val executor = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "benbow-backup").apply { isDaemon = true } }
     private val exportStateFile = dataDir.resolve("export").resolve(".last-seq")
 
-    /** The registry's tag names the mirror was last written with (ADR-032). */
-    private val exportedNamesFile = dataDir.resolve("export").resolve(".tag-names.json")
+    /** The tag registry's names, merges and trash the mirror was last written with (ADR-032). */
+    private val exportedTagsFile = dataDir.resolve("export").resolve(".tags.json")
 
     @Volatile
     var status = BackupStatus(
@@ -201,19 +202,17 @@ class BackupJobs(
     }
 
     /**
-     * Writes the Markdown mirror for entries changed since the last export. Notes list their tags by name (ADR-032), so
-     * when the registry renames a tag every entry carrying it is written again.
+     * Writes the Markdown mirror for entries changed since the last export. Notes list their tags as they read (ADR-032),
+     * so when the registry renames, merges or trashes a tag every entry carrying it is written again.
      */
     private fun exportChanged() {
         val store = SqliteSyncStore(db)
         val since = readExportSeq()
         val changes = store.changesSince(since, Int.MAX_VALUE)
         if (changes.isEmpty()) return
-        val names = store.entry(TagNames.REGISTRY_ID)?.let { registry ->
-            TagNames.of(registry.fields.mapValues { it.value.value })
-        }.orEmpty()
-        val exported = readExportedNames()
-        val renamed = (names.keys + exported.keys).filterTo(HashSet()) { names[it] != exported[it] }
+        val registry = store.entry(TagNames.REGISTRY_ID)?.fields.orEmpty().mapValues { it.value.value }.filterKeys(TagNames::shapesTags)
+        val tags = TagNames.of(registry)
+        val renamed = TagNames.changed(TagNames.of(readExportedTags()), tags)
         val ids = changes.map { it.second }.toMutableSet()
         if (renamed.isNotEmpty()) {
             ids += store.changesSince(0, Int.MAX_VALUE).map { it.second }.distinct().filter { id ->
@@ -226,17 +225,17 @@ class BackupJobs(
         val mirror = MarkdownMirror(dataDir.resolve("export")) { sha -> blobs?.blob(sha)?.let(blobs::file) }
         ids.forEach { id ->
             val entry = store.entry(id) ?: return@forEach
-            mirror.write(entry, entry.head?.let { store.revision(it)?.body }, names)
+            mirror.write(entry, entry.head?.let { store.revision(it)?.body }, tags)
         }
         val seq = changes.last().first
         exportStateFile.parent.createDirectories()
-        if (renamed.isNotEmpty()) exportedNamesFile.writeText(Json.encodeToString(namesSerializer, names))
+        if (renamed.isNotEmpty()) exportedTagsFile.writeText(Json.encodeToString(registrySerializer, registry))
         exportStateFile.writeText(seq.toString())
         status = status.copy(lastExportSeq = seq)
     }
 
-    private fun readExportedNames(): Map<String, String> = if (exportedNamesFile.exists()) {
-        runCatching { Json.decodeFromString(namesSerializer, exportedNamesFile.readText()) }.getOrDefault(emptyMap())
+    private fun readExportedTags(): Map<String, String?> = if (exportedTagsFile.exists()) {
+        runCatching { Json.decodeFromString(registrySerializer, exportedTagsFile.readText()) }.getOrDefault(emptyMap())
     } else {
         emptyMap()
     }
@@ -257,7 +256,7 @@ class BackupJobs(
     }
 }
 
-private val namesSerializer = MapSerializer(String.serializer(), String.serializer())
+private val registrySerializer = MapSerializer(String.serializer(), String.serializer().nullable)
 
 private const val STALE_UPLOAD_MS = 7L * 24 * 3_600_000
 private const val SCRUB_AFTER_MS = 7L * 24 * 3_600_000

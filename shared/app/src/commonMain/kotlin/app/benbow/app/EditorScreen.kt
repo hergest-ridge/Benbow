@@ -83,7 +83,10 @@ import app.benbow.client.JournalRepository
 import app.benbow.client.TagRef
 import app.benbow.client.TemplateContext
 import app.benbow.client.Templates
+import app.benbow.client.addTag
 import app.benbow.client.effectiveVeil
+import app.benbow.client.removeTag
+import app.benbow.client.tags
 import app.benbow.core.content.DocumentCodec
 import app.benbow.core.content.DocumentFormatException
 import app.benbow.core.content.MarkdownExporter
@@ -475,7 +478,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                     menu = false
                                     pickingBackground = true
                                 }, modifier = Modifier.hand())
-                                val ruled = detail?.let { gentleRules.ruled(it.day, it.tags) }
+                                val ruled = detail?.let { gentleRules.ruled(it.day, it.tagIds) }
                                 VeilMenuItems(
                                     effectiveVeil(detail?.ownVeil, ruled),
                                     ruled,

@@ -75,15 +75,19 @@ data class GentleRule(
 
 /**
  * The rules, with the tag registry they need to match; [today] decides whether a put-off entry is back. A rule
- * points at a tag or a category by id; one from before ids (ADR-032) also matches by name, so renaming never lets an
- * entry out from under its rule: a rule may cover more, never less.
+ * points at a tag or a category by id; one from before ids (ADR-032) also matches by name. Rules see the tags an entry
+ * carries ([tags] are their ids), whatever became of them: renamed, merged into another (the rule on either covers
+ * both), in the trash, or in a category now in the trash. A rule may come to cover more, never less, so nothing done to
+ * tags ever lets an entry out from under its rule.
  */
 class GentleRules(val rules: List<GentleRule>, val registry: TagRegistry = TagRegistry(), val today: String = "") {
-    fun matches(rule: GentleRule, day: String, tags: List<TagRef>): Boolean = when (rule.kind) {
-        GentleRule.TAG -> tags.any { it.id == rule.key || registry.name(it).equals(rule.value, ignoreCase = true) }
+    fun matches(rule: GentleRule, day: String, tags: List<String>): Boolean = when (rule.kind) {
+        GentleRule.TAG -> tags.any { id ->
+            listOf(id, registry.root(id)).any { it == rule.key || registry.names[it].equals(rule.value, ignoreCase = true) }
+        }
 
-        GentleRule.CATEGORY -> tags.any { tag ->
-            registry.category(tag.id)?.let { it == rule.key || registry.categoryName(it).equals(rule.value, ignoreCase = true) } == true
+        GentleRule.CATEGORY -> tags.any { id ->
+            registry.linkedCategories(id).any { it == rule.key || registry.categoryName(it).equals(rule.value, ignoreCase = true) }
         }
 
         GentleRule.PERIOD -> rule.from.isNotEmpty() && day >= rule.from && day <= rule.to
@@ -92,7 +96,7 @@ class GentleRules(val rules: List<GentleRule>, val registry: TagRegistry = TagRe
     }
 
     /** The strongest veil the rules give an entry (quiet over curtain), null when none applies. */
-    fun ruled(day: String, tags: List<TagRef>): Veil? {
+    fun ruled(day: String, tags: List<String>): Veil? {
         val levels = rules.mapNotNull { rule -> rule.veil?.takeIf { matches(rule, day, tags) } }
         return if (Veil.Quiet in levels) Veil.Quiet else levels.firstOrNull()
     }
@@ -101,11 +105,11 @@ class GentleRules(val rules: List<GentleRule>, val registry: TagRegistry = TagRe
     fun own(mark: Veil?, until: String?): Veil? = if (until != null && today < until) Veil.Quiet else mark
 
     /** What an entry shows as now. */
-    fun veilOf(mark: Veil?, until: String?, day: String, tags: List<TagRef>): Veil? = effectiveVeil(own(mark, until), ruled(day, tags))
+    fun veilOf(mark: Veil?, until: String?, day: String, tags: List<String>): Veil? = effectiveVeil(own(mark, until), ruled(day, tags))
 
-    /** The entry as lists show it: its tags by the names they show as, and its veil. */
+    /** The entry as lists show it: its tags as they read ([TagRegistry.resolve]), and its veil. */
     fun apply(entry: EntrySummary): EntrySummary {
-        val ruled = ruled(entry.day, entry.tags)
+        val ruled = ruled(entry.day, entry.tagIds)
         return entry.copy(
             tags = registry.resolve(entry.tags),
             veil = effectiveVeil(own(entry.ownVeil, entry.until), ruled),

@@ -24,14 +24,14 @@ object EntryExport {
 
     /**
      * The `.md` file. [link] gives an attachment's path relative to the note, or null when the file isn't in this
-     * export; [missing] then says why in an HTML comment ("not uploaded yet", "not on this device"). [tagNames] are
-     * the registry's names by tag id ([TagNames.of]); tags list by name, never by id.
+     * export; [missing] then says why in an HTML comment ("not uploaded yet", "not on this device"). [tags] reads
+     * the tag registry ([TagNames.of]): tags list by the names they show as, never by id.
      */
     fun markdown(
         entry: EntryState,
         body: String?,
         missing: String,
-        tagNames: Map<String, String> = emptyMap(),
+        tags: TagNames = TagNames(),
         link: (AttachmentState) -> String?,
     ): String {
         val document = decode(body)
@@ -46,11 +46,11 @@ object EntryExport {
             if (entry.conflictHeads.isNotEmpty()) appendLine("conflict: [${entry.conflictHeads.joinToString(", ") { yaml(it) }}]")
             // Namespaced fields (ADR-021) read as lists; everything else as plain keys.
             val fields = entry.fields.mapNotNull { (k, v) -> v.value?.let { k to it } }.sortedBy { it.first }.toMap()
-            val tags = TagNames.on(fields, tagNames).map { it.second }
+            val names = tags.on(fields).map { it.second }
             val reactions = fields.keys.filter { it.startsWith("reaction:") }.map { it.removePrefix("reaction:") }
             fields.filterKeys { !it.startsWith("tag:") && !it.startsWith("reaction:") && !it.startsWith(TRANSCRIPT) }
                 .forEach { (k, v) -> appendLine("$k: ${yaml(v)}") }
-            if (tags.isNotEmpty()) appendLine("tags: [${tags.joinToString(", ") { yaml(it) }}]")
+            if (names.isNotEmpty()) appendLine("tags: [${names.joinToString(", ") { yaml(it) }}]")
             if (reactions.isNotEmpty()) appendLine("reactions: [${reactions.joinToString(", ") { yaml(it) }}]")
             appendLine("---")
         }
@@ -69,14 +69,14 @@ object EntryExport {
         return frontMatter + "\n" + markdown + "\n" + attachments(entry, missing, inline, link)
     }
 
-    /** The `.json` sidecar: the entry state, its tags (id and name, ADR-032), the canonical body and its plain text. */
-    fun sidecar(entry: EntryState, body: String?, tagNames: Map<String, String> = emptyMap()): String = json.encodeToString(
+    /** The `.json` sidecar: the entry state, its tags as they read (id and name, ADR-032), the canonical body and its plain text. */
+    fun sidecar(entry: EntryState, body: String?, tags: TagNames = TagNames()): String = json.encodeToString(
         JsonObject.serializer(),
         buildJsonObject {
             put("entry", Json.encodeToJsonElement(EntryState.serializer(), entry))
-            val tags = TagNames.on(entry.fields.mapValues { it.value.value }, tagNames)
-            if (tags.isNotEmpty()) {
-                val list = tags.map { (id, name) ->
+            val read = tags.on(entry.fields.mapValues { it.value.value })
+            if (read.isNotEmpty()) {
+                val list = read.map { (id, name) ->
                     buildJsonObject {
                         put("id", JsonPrimitive(id))
                         put("name", JsonPrimitive(name))

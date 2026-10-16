@@ -99,6 +99,25 @@ class BackupTest {
             val sidecar = data.resolve("export/2026/10").listDirectoryEntries("*.json").single().readText()
             assertTrue("\"id\": \"море\"" in sidecar && "\"name\": \"Океан\"" in sidecar, sidecar)
             assertFalse(data.resolve("export/1970").exists(), "the registry is not a note")
+
+            // Merged into another tag, then that one in the trash: each time the note is written again.
+            rules.push(
+                listOf(
+                    SetField("o6", "system-tags", "name:вода", "Вода", Hlc(3, 0, "phone")),
+                    SetField("o7", "system-tags", "into:море", "вода", Hlc(4, 0, "phone")),
+                ),
+            )
+            Thread.sleep(1_100)
+            jobs.runOnce()
+            assertTrue("tags: [\"Вода\"]" in md.readText(), md.readText())
+            rules.push(listOf(SetField("o8", "system-tags", "trash:вода", "1", Hlc(5, 0, "phone"))))
+            Thread.sleep(1_100)
+            jobs.runOnce()
+            assertFalse("tags:" in md.readText(), md.readText())
+            assertTrue(
+                "\"tag:море\"" in data.resolve("export/2026/10").listDirectoryEntries("*.json").single().readText(),
+                "the field itself stays",
+            )
         }
     }
 

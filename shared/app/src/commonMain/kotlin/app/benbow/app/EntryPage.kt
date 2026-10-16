@@ -10,6 +10,7 @@ import app.benbow.app.resources.not_on_device
 import app.benbow.app.resources.weekdays
 import app.benbow.client.IoDispatcher
 import app.benbow.client.LocalFile
+import app.benbow.client.tagRegistry
 import app.benbow.client.uri
 import app.benbow.core.content.AttachmentBlock
 import app.benbow.core.content.DocumentCodec

@@ -102,7 +102,7 @@ internal fun MetadataRow(
         }
         if (adding) {
             val on = tags.mapTo(HashSet()) { it.id }
-            TagInput(knownTags.filter { it.id !in on }, onDone = { adding = false }, onAdd = onAddTag)
+            TagInput(knownTags.filter { it.id !in on && !it.archived }, onDone = { adding = false }, onAdd = onAddTag)
         }
     }
 }

@@ -194,12 +194,9 @@ class SyncEngine(private val db: BenbowDb, private val apiFor: (Connection) -> B
         SearchIndex.retag(db, renamed)
     }
 
-    /** Tags whose own name differs between the registry this device had and the one from the server (ADR-032). */
-    private fun renamedTags(before: String?, after: Map<String, String?>): Set<String> {
-        val old = before?.let { TagNames.of(decodeFields(it)) }.orEmpty()
-        val new = TagNames.of(after)
-        return (old.keys + new.keys).filterTo(HashSet()) { old[it] != new[it] }
-    }
+    /** Tags that read differently with the registry from the server than with the one this device had (ADR-032). */
+    private fun renamedTags(before: String?, after: Map<String, String?>): Set<String> =
+        TagNames.changed(before?.let { TagNames.of(decodeFields(it)) } ?: TagNames(), TagNames.of(after))
 
     private companion object {
         const val BATCH = 200

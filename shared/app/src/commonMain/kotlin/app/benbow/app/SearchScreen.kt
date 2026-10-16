@@ -40,6 +40,7 @@ import app.benbow.app.resources.search_empty
 import app.benbow.app.resources.search_hint
 import app.benbow.client.EntrySummary
 import app.benbow.client.SearchQuery
+import app.benbow.client.tags
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,13 +48,16 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import org.jetbrains.compose.resources.stringResource
 
 internal class SearchViewModel(private val services: AppServices) : ViewModel() {
     val query = MutableStateFlow(SearchQuery())
-    val tags = services.repo.tags().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val tags = services.repo.tags().map { all ->
+        all.sortedBy { it.archived }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
     val results: StateFlow<List<EntrySummary>?> = query.debounce(150).flatMapLatest { services.repo.search(it) }

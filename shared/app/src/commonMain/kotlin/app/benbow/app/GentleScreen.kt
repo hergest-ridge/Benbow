@@ -63,13 +63,17 @@ import app.benbow.app.resources.gentle_pick_days
 import app.benbow.app.resources.gentle_remove
 import app.benbow.app.resources.gentle_rules
 import app.benbow.app.resources.gentle_rules_empty
+import app.benbow.app.resources.gentle_target_merged
+import app.benbow.app.resources.gentle_target_trashed
 import app.benbow.app.resources.months_genitive
 import app.benbow.app.resources.save
 import app.benbow.client.EntrySummary
 import app.benbow.client.GentleRule
 import app.benbow.client.TagCategory
 import app.benbow.client.TagCount
+import app.benbow.client.TagRegistry
 import app.benbow.client.Veil
+import app.benbow.client.tags
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -88,7 +92,13 @@ import kotlin.time.Instant
 
 /** "Ещё → Бережно" (ADR-031): the rules, each with its level and its entries, and the ones marked by hand. */
 internal class GentleViewModel(private val services: AppServices) : ViewModel() {
-    class State(val rules: List<Pair<GentleRule, Int>>, val marked: Int, val tags: List<TagCount>, val categories: List<TagCategory>)
+    class State(
+        val rules: List<Pair<GentleRule, Int>>,
+        val marked: Int,
+        val tags: List<TagCount>,
+        val categories: List<TagCategory>,
+        val registry: TagRegistry,
+    )
 
     val state: StateFlow<State?> = combine(services.repo.journal(), services.repo.gentleRules(), services.repo.tags()) {
             entries,
@@ -96,10 +106,11 @@ internal class GentleViewModel(private val services: AppServices) : ViewModel() 
             tags,
         ->
         State(
-            rules.rules.map { rule -> rule to entries.count { rules.matches(rule, it.day, it.tags) } },
+            rules.rules.map { rule -> rule to entries.count { rules.matches(rule, it.day, it.tagIds) } },
             entries.count { it.marked },
             tags.sortedByDescending { it.uses },
             rules.registry.categories,
+            rules.registry,
         )
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
@@ -170,8 +181,8 @@ internal fun GentleScreen(services: AppServices, nav: Navigator) {
             }
             items(current.rules, key = { it.first.id }) { (rule, count) ->
                 RuleCard(
-                    rule.name,
-                    ruleKind(rule),
+                    ruleTitle(rule, current.registry),
+                    ruleKind(rule, current.registry),
                     count,
                     level = rule.level,
                     onLevel = { vm.setLevel(rule, it) },
@@ -217,12 +228,28 @@ internal fun GentleScreen(services: AppServices, nav: Navigator) {
     }
 }
 
-/** "Тег", "Категория", or the period's days. */
-@Composable
-private fun ruleKind(rule: GentleRule): String = when (rule.kind) {
-    GentleRule.TAG -> stringResource(Res.string.gentle_kind_tag)
+/** The tag's or the category's name now (it follows a rename), else the name the rule was made with. */
+private fun ruleTitle(rule: GentleRule, registry: TagRegistry): String = when (rule.kind) {
+    GentleRule.TAG -> registry.names[rule.key]
+    GentleRule.CATEGORY -> registry.categoryNames[rule.key]
+    else -> null
+} ?: rule.name
 
-    GentleRule.CATEGORY -> stringResource(Res.string.gentle_kind_category)
+/** "Тег", "Категория", or the period's days; a tag or category in the trash or merged says so, as the rule still holds. */
+@Composable
+private fun ruleKind(rule: GentleRule, registry: TagRegistry): String = when (rule.kind) {
+    GentleRule.TAG -> stringResource(Res.string.gentle_kind_tag).let { kind ->
+        val root = registry.root(rule.key)
+        when {
+            registry.inTrash(rule.key) -> stringResource(Res.string.gentle_target_trashed, kind)
+            root != rule.key -> stringResource(Res.string.gentle_target_merged, kind, registry.names[root] ?: root)
+            else -> kind
+        }
+    }
+
+    GentleRule.CATEGORY -> stringResource(Res.string.gentle_kind_category).let { kind ->
+        if (rule.key in registry.categoryTrash) stringResource(Res.string.gentle_target_trashed, kind) else kind
+    }
 
     else -> {
         val months = stringArrayResource(Res.array.months_genitive)
@@ -375,7 +402,7 @@ internal class GentleEntriesViewModel(services: AppServices, private val ruleId:
             State(null, entries.filter { it.marked })
         } else {
             val rule = rules.rules.firstOrNull { it.id == ruleId }
-            State(rule?.name.orEmpty(), if (rule == null) emptyList() else entries.filter { rules.matches(rule, it.day, it.tags) })
+            State(rule?.name.orEmpty(), if (rule == null) emptyList() else entries.filter { rules.matches(rule, it.day, it.tagIds) })
         }
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 }

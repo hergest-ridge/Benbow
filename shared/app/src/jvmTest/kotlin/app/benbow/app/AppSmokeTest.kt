@@ -42,8 +42,14 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import app.benbow.client.Prompts
 import app.benbow.client.Veil
+import app.benbow.client.addTag
 import app.benbow.client.calendar.db.CalendarDb
+import app.benbow.client.createCategory
 import app.benbow.client.db.BenbowDb
+import app.benbow.client.tagRegistry
+import app.benbow.client.tags
+import app.benbow.client.trashCategory
+import app.benbow.client.trashTag
 import app.benbow.core.calendar.CalendarKind
 import app.benbow.core.calendar.EventField
 import app.benbow.core.content.DocumentCodec
@@ -441,6 +447,28 @@ class AppSmokeTest {
         waitForIdle()
         screenshot("15-tags")
         assertEquals(1L, runBlocking { services.repo.commentCount(entry).first() })
+    }
+
+    @Test
+    fun aTagAndACategoryComeBackFromTheTrash() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val entry = services.repo.createNote(services.today(), "Обед с Машей")
+        val masha = services.repo.addTag(entry, "Маша")!!
+        val friends = services.repo.createCategory("Друзья")!!
+        services.repo.trashTag(masha)
+        services.repo.trashCategory(friends)
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Обед с Машей"), 5_000)
+        onNodeWithText("Ещё").click()
+        onNodeWithText("Корзина").click()
+        waitUntilExactlyOneExists(hasText("Тег «Маша»"), 5_000)
+        onNodeWithText("Категория «Друзья»").assertIsDisplayed()
+        screenshot("15a-trash-tags")
+        onAllNodesWithText("Восстановить")[0].click()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.journal().first().single().tags.map { it.name } == listOf("Маша") } }
+        waitUntilExactlyOneExists(hasText("Восстановить"), 5_000)
+        onNodeWithText("Восстановить").click()
+        waitUntilExactlyOneExists(hasText("Корзина пуста"), 5_000)
+        assertEquals("Друзья", runBlocking { services.repo.tagRegistry().first().categories.last().name })
     }
 
     @Test

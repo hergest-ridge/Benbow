@@ -1,6 +1,7 @@
 package app.benbow.client
 
 import app.benbow.client.db.BenbowDb
+import app.benbow.core.content.TagNames
 import app.benbow.core.sync.CreateEntry
 import app.benbow.core.sync.Hlc
 import app.benbow.core.sync.PutRevision
@@ -139,8 +140,8 @@ class TagIdsTest {
     @Test
     fun aRuleByNameStillCoversATagWithANewId() {
         val registry =
-            TagRegistry(names = mapOf("x1" to "Кофе"), tagCategories = mapOf("x1" to "c1"), categoryNames = mapOf("c1" to "Утро"))
-        val tags = listOf(TagRef("x1", "Кофе"))
+            TagRegistry(TagNames(names = mapOf("x1" to "Кофе")), tagCategories = mapOf("x1" to "c1"), categoryNames = mapOf("c1" to "Утро"))
+        val tags = listOf("x1")
         val byName = GentleRules(listOf(GentleRule("r", "Кофе", GentleRule.TAG, value = "кофе")), registry)
         assertEquals(Veil.Curtain, byName.ruled("2026-10-01", tags), "rules made by an older app name the tag")
         val byCategory = GentleRules(listOf(GentleRule("r", "Утро", GentleRule.CATEGORY, value = "Утро")), registry)

@@ -90,6 +90,7 @@ import app.benbow.app.resources.veiled_quiet
 import app.benbow.client.TagRegistry
 import app.benbow.client.Templates
 import app.benbow.client.Veil
+import app.benbow.client.tagRegistry
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch

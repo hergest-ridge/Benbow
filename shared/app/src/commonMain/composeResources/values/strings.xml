@@ -390,6 +390,9 @@
     <string name="calendar_until">до %1$s</string>
     <string name="trash_calendar">Календарь</string>
     <string name="trash_calendar_item">Календарь «%1$s»</string>
+    <string name="trash_tags">Теги и категории</string>
+    <string name="trash_tag_item">Тег «%1$s»</string>
+    <string name="trash_category_item">Категория «%1$s»</string>
     <string name="previous">Назад</string>
     <string name="next">Вперёд</string>
     <string name="reminders">Напоминания</string>
@@ -487,6 +490,8 @@
     <string name="gentle_new_rule">Новое правило</string>
     <string name="gentle_kind_tag">Тег</string>
     <string name="gentle_kind_category">Категория</string>
+    <string name="gentle_target_trashed">%1$s · в корзине</string>
+    <string name="gentle_target_merged">%1$s · теперь «%2$s»</string>
     <string name="gentle_kind_period">Период</string>
     <string name="gentle_no_tags">Тегов пока нет</string>
     <string name="gentle_pick_dates">Выбрать даты</string>

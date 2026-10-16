@@ -42,6 +42,10 @@ import app.benbow.app.resources.tags
 import app.benbow.app.resources.tags_empty
 import app.benbow.app.resources.tags_uncategorized
 import app.benbow.client.TagRef
+import app.benbow.client.setCategoryColor
+import app.benbow.client.setTagCategory
+import app.benbow.client.setTagColor
+import app.benbow.client.tags
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 

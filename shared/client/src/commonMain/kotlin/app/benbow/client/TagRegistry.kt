@@ -16,69 +16,111 @@ data class TagCategory(val id: String, val name: String)
 internal val BUILT_IN_CATEGORIES =
     listOf(TagCategory("люди", "Люди"), TagCategory("места", "Места"), TagCategory("проекты", "Проекты"), TagCategory(EMOTIONS, "Эмоции"))
 
-/** The category of a mood check-in's feelings (5.4). */
+/** The category of a mood check-in's feelings (5.4); it can be renamed and recolored, not put in the trash. */
 const val EMOTIONS = "эмоции"
 
 /** The built-in categories start with their own colors; any other category gets one from its id. */
 private val DEFAULT_CATEGORY_COLORS = mapOf("люди" to "storm", "места" to "mint", "проекты" to "dusk", EMOTIONS to "blossom")
 
-// Registry fields (ADR-021, ADR-032) next to `name:<tag id>`, each keyed by a tag's or a category's id.
+// Registry fields (ADR-021, ADR-032) next to TagNames' `name:`, `into:` and `trash:`, each keyed by a tag's or a category's id.
 internal const val CATEGORY_PREFIX = "cat:" // a tag's category: its id (before ids, its name)
 internal const val COLOR_PREFIX = "color:"
+internal const val DESCRIPTION_PREFIX = "desc:"
+internal const val ARCHIVED_PREFIX = "archived:"
 internal const val CATEGORY_NAME_PREFIX = "catname:"
 internal const val CATEGORY_COLOR_PREFIX = "catcolor:"
+internal const val CATEGORY_DESCRIPTION_PREFIX = "catdesc:"
+internal const val CATEGORY_EMOJI_PREFIX = "catemoji:"
+internal const val CATEGORY_ORDER_PREFIX = "catsort:"
+internal const val CATEGORY_TRASH_PREFIX = "cattrash:"
 
 /** A category's id from what `cat:<tag id>` holds: the id, or the name it had before ids (which in lower case is its id). */
 internal fun categoryId(value: String): String = value.trim().lowercase()
 
 /**
- * The tag registry (the system entry `system-tags`, ADR-032): names, categories and colors by id. A tag shows the
- * registry's name, else the one on the entry; its own color, else its category's, else none (a neutral chip).
+ * The tag registry (the system entry `system-tags`, ADR-032): everything about tags and categories by id. How tags read
+ * (names, merges, the trash) is [read], shared with the export. A tag shows its own color, else its category's, else none
+ * (a neutral chip). Archived tags still show on their entries; they just stay out of suggestions.
  */
 data class TagRegistry(
-    /** Tag id to its own name; tags without one show the name they were put on with. */
-    val names: Map<String, String> = emptyMap(),
+    val read: TagNames = TagNames(),
+    /** Tag id to when it went to the trash. */
+    val trashedAt: Map<String, Long> = emptyMap(),
+    val descriptions: Map<String, String> = emptyMap(),
+    val archived: Set<String> = emptySet(),
     /** Tag id to its own color. */
     val own: Map<String, String> = emptyMap(),
-    /** Tag id to its category's id. */
+    /** Tag id to its category's id, whether that category is in the trash or not. */
     val tagCategories: Map<String, String> = emptyMap(),
     val categoryNames: Map<String, String> = emptyMap(),
     val categoryColors: Map<String, String> = emptyMap(),
+    val categoryDescriptions: Map<String, String> = emptyMap(),
+    val categoryEmoji: Map<String, String> = emptyMap(),
+    val categoryOrder: Map<String, Double> = emptyMap(),
+    /** Category id to when it went to the trash. */
+    val categoryTrash: Map<String, Long> = emptyMap(),
 ) {
-    fun name(tag: TagRef): String = names[tag.id] ?: tag.name
+    /** Tag id to its own name; tags without one show the name they were put on with. */
+    val names: Map<String, String> get() = read.names
 
-    /** [tags] with the names they show as, by name. */
-    fun resolve(tags: List<TagRef>): List<TagRef> = tags.map { it.copy(name = name(it)) }.sortedBy { it.name.lowercase() }
+    /** The tag [id] reads as (the end of its merges). */
+    fun root(id: String): String = read.root(id)
 
-    /** The tag with this name of its own (any case); tags named only by their entries aren't here. */
-    fun named(name: String): String? = names.entries.filter { it.value.equals(name, ignoreCase = true) }.minOfOrNull { it.key }
+    fun inTrash(id: String): Boolean = read.inTrash(id)
 
-    /** The tag's category id, null = none. */
-    fun category(tag: String): String? = tagCategories[tag]
+    fun name(tag: TagRef): String = root(tag.id).let { names[it] ?: names[tag.id] ?: tag.name }
+
+    /** [tags] as they show: merged ones as the tag they went into, once; those in the trash left out; by name. */
+    fun resolve(tags: List<TagRef>): List<TagRef> =
+        tags.filterNot { inTrash(it.id) }.map { TagRef(root(it.id), name(it)) }.distinctBy { it.id }.sortedBy { it.name.lowercase() }
+
+    /** The tag a typed name stands for (any case): one with that name of its own, not in the trash; a merged one leads on. */
+    fun named(name: String): String? = names.entries.filter { it.value.equals(name, ignoreCase = true) && !inTrash(it.key) }
+        .minWithOrNull(compareBy<Map.Entry<String, String>> { it.key in read.into }.thenBy { it.key })?.let { root(it.key) }
+
+    /** The tag [id] and every tag merged into it: the keys its entries may carry. */
+    fun family(id: String): Set<String> = read.into.keys.filterTo(hashSetOf(id)) { root(it) == id }
+
+    fun description(tag: String): String? = descriptions[root(tag)]
+
+    fun isArchived(tag: String): Boolean = root(tag) in archived
+
+    /** The category a tag shows in (null = none, or its category is in the trash). */
+    fun category(tag: String): String? = tagCategories[root(tag)]?.takeIf { it !in categoryTrash }
+
+    /** Every category a tag is or was linked to through itself or the tag it went into, in the trash or not (for Бережно). */
+    fun linkedCategories(tag: String): Set<String> = setOfNotNull(tagCategories[tag], tagCategories[root(tag)])
 
     fun categoryName(id: String): String = categoryNames[id] ?: id
 
-    /** The built-in categories first, then the others by name. */
+    /** The categories outside the trash: in their own order, else the built-in ones first, then by name. */
     val categories: List<TagCategory> by lazy {
         val builtIn = BUILT_IN_CATEGORIES.map { it.id }
-        val others = (tagCategories.values + categoryNames.keys).distinct().filter {
-            it !in builtIn
-        }.sortedBy { categoryName(it).lowercase() }
-        (builtIn + others).map { TagCategory(it, categoryName(it)) }
+        (builtIn + tagCategories.values + categoryNames.keys).distinct().filter { it !in categoryTrash }
+            .sortedWith(
+                compareBy({
+                    categoryOrder[it] ?: builtIn.indexOf(it).takeIf { i -> i >= 0 }?.toDouble() ?: Double.MAX_VALUE
+                }, { categoryName(it).lowercase() }),
+            )
+            .map { TagCategory(it, categoryName(it)) }
     }
+
+    /** Categories in the trash, most recent first. */
+    val trashedCategories: List<TagCategory> get() =
+        categoryTrash.entries.sortedByDescending { it.value }.map { TagCategory(it.key, categoryName(it.key)) }
 
     fun categoryColor(id: String): String =
         categoryColors[id] ?: DEFAULT_CATEGORY_COLORS[id] ?: SWATCHES[id.hashCode().absoluteValue % SWATCHES.size]
 
-    fun ownColor(tag: String): String? = own[tag]
+    fun ownColor(tag: String): String? = own[root(tag)]
 
-    fun color(tag: String): String? = own[tag] ?: category(tag)?.let(::categoryColor)
+    fun color(tag: String): String? = root(tag).let { own[it] ?: category(it)?.let(::categoryColor) }
 
     companion object {
         internal fun of(fields: Map<String, String?>): TagRegistry {
-            fun prefixed(prefix: String) = fields.mapNotNull { (key, value) ->
-                if (key.startsWith(prefix) && value != null) key.removePrefix(prefix) to value else null
-            }.toMap()
+            fun prefixed(prefix: String) = buildMap {
+                for ((key, value) in fields) if (key.startsWith(prefix) && value != null) put(key.removePrefix(prefix), value)
+            }
             val links = prefixed(CATEGORY_PREFIX)
             // A category named before ids lives only in its tags' links: the name as written there (capitals kept).
             val written = links.values.groupBy(::categoryId).mapValues { (id, values) ->
@@ -86,11 +128,20 @@ data class TagRegistry(
                     ?: id
             }
             return TagRegistry(
-                names = TagNames.of(fields),
+                read = TagNames.of(fields),
+                trashedAt = prefixed(TagNames.TRASH_PREFIX).mapValues { it.value.toLongOrNull() ?: 0 },
+                descriptions = prefixed(DESCRIPTION_PREFIX),
+                archived = prefixed(ARCHIVED_PREFIX).keys,
                 own = prefixed(COLOR_PREFIX),
                 tagCategories = links.mapValues { categoryId(it.value) },
                 categoryNames = written + BUILT_IN_CATEGORIES.associate { it.id to it.name } + prefixed(CATEGORY_NAME_PREFIX),
                 categoryColors = prefixed(CATEGORY_COLOR_PREFIX),
+                categoryDescriptions = prefixed(CATEGORY_DESCRIPTION_PREFIX),
+                categoryEmoji = prefixed(CATEGORY_EMOJI_PREFIX),
+                categoryOrder = prefixed(CATEGORY_ORDER_PREFIX).mapNotNull { (id, value) ->
+                    value.toDoubleOrNull()?.let { id to it }
+                }.toMap(),
+                categoryTrash = prefixed(CATEGORY_TRASH_PREFIX).mapValues { it.value.toLongOrNull() ?: 0 },
             )
         }
     }

@@ -118,7 +118,8 @@ SELECT id, kind, day, created_at, head_rev, body, conflict_heads, fields, field_
 WHERE kind != 'system' ORDER BY day, created_at;
 
 -- :m1..:m4 are one word each ("stem OR word*"), :rest the words after them; built by SearchIndex.terms, never raw
--- input. One MATCH per word keeps OR unambiguous in both FTS query syntaxes. Null filters are off.
+-- input. One MATCH per word keeps OR unambiguous in both FTS query syntaxes. Null filters are off. A tag filter
+-- (:tagged = 1) takes the tag's key and the keys of the tags merged into it (ADR-032).
 search:
 SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
 WHERE json_extract(fields, '$.deleted') IS NOT 'true' AND kind != 'system'
@@ -127,7 +128,7 @@ WHERE json_extract(fields, '$.deleted') IS NOT 'true' AND kind != 'system'
   AND (:m3 IS NULL OR id IN (SELECT entry_id FROM entry_search WHERE entry_search MATCH :m3))
   AND (:m4 IS NULL OR id IN (SELECT entry_id FROM entry_search WHERE entry_search MATCH :m4))
   AND (:rest IS NULL OR id IN (SELECT entry_id FROM entry_search WHERE entry_search MATCH :rest))
-  AND (:tagPath IS NULL OR json_extract(fields, :tagPath) IS NOT NULL)
+  AND (:tagged = 0 OR id IN (SELECT tagged.id FROM entry AS tagged, json_each(tagged.fields) AS t WHERE t.key IN :tagKeys AND t.value IS NOT NULL))
   AND (:favorites = 0 OR json_extract(fields, '$.favorite') = 'true')
   AND (:withMedia = 0 OR media_count > 0)
 ORDER BY day DESC, created_at DESC
@@ -225,7 +226,13 @@ GROUP BY json_each.key, json_each.value;
 tagKeyInUse:
 SELECT 1 FROM entry, json_each(entry.fields) WHERE json_each.key = :key LIMIT 1;
 
--- Entries that carry a tag, to index them again when it is renamed.
+-- The name entries hold for a tag most often: what a tag from before ids is called when it gets a name of its own.
+tagNameOnEntries:
+SELECT json_each.value FROM entry, json_each(entry.fields)
+WHERE json_each.key = :key AND json_each.value IS NOT NULL
+GROUP BY json_each.value ORDER BY COUNT(*) DESC, json_each.value LIMIT 1;
+
+-- Entries that carry a tag, to index them again when it reads differently.
 entriesWithTag:
 SELECT DISTINCT entry.id FROM entry, json_each(entry.fields) WHERE json_each.key = :key AND json_each.value IS NOT NULL;
 

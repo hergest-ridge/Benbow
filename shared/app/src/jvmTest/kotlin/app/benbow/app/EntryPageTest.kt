@@ -1,7 +1,9 @@
 package app.benbow.app
 
+import app.benbow.client.addTag
 import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.db.BenbowDb
+import app.benbow.client.setTagCategory
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlinx.coroutines.test.runTest
 import java.nio.file.Files

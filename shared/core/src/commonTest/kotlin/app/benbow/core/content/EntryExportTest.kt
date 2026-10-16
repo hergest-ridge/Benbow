@@ -51,11 +51,11 @@ class EntryExportTest {
                 "tag:старое" to LwwValue(null, Hlc.ZERO),
             ),
         )
-        val names = TagNames.of(mapOf("name:море" to "Океан", "cat:море" to "места"))
-        assertEquals(mapOf("море" to "Океан"), names)
-        val markdown = EntryExport.markdown(entry, null, missing = "missing", tagNames = names) { null }
+        val tags = TagNames.of(mapOf("name:море" to "Океан", "cat:море" to "места"))
+        assertEquals(mapOf("море" to "Океан"), tags.names)
+        val markdown = EntryExport.markdown(entry, null, missing = "missing", tags = tags) { null }
         assertTrue("tags: [\"Кофе\", \"Океан\"]" in markdown, markdown)
-        val sidecar = EntryExport.sidecar(entry, null, names)
+        val sidecar = EntryExport.sidecar(entry, null, tags)
         assertTrue("\"id\": \"0192-кофе\"" in sidecar && "\"name\": \"Океан\"" in sidecar, sidecar)
     }
 

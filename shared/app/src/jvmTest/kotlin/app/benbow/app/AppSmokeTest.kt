@@ -228,8 +228,9 @@ class AppSmokeTest {
         onNode(hasSetTextAction() and hasText("Найти", substring = true)).performTextInput("hf,")
         onNode(hasSetTextAction() and hasText("hf,")).performImeAction() // «раб» in the latin layout; one tag, the picker closes
         waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Тег…").fetchSemanticsNodes().isEmpty() }
+        // Only entries with the tag.
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Прогулка у моря").fetchSemanticsNodes().isEmpty() }
         waitUntilExactlyOneExists(hasText("Планы на неделю"), 5_000)
-        assertTrue(onAllNodesWithText("Прогулка у моря").fetchSemanticsNodes().isEmpty(), "only entries with the tag")
     }
 
     @Test

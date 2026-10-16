@@ -63,6 +63,7 @@ class ArchiveExportTest {
         val markdown = files.getValue(note).decodeToString()
         assertTrue(markdown.startsWith("---\nid: \"$walk\""), markdown)
         assertTrue("tags: [\"Море\"]" in markdown)
+        assertTrue("- **Море**" in files.getValue("tags.md").decodeToString(), "listed by its name")
         assertTrue("![IMG_1.jpg](<../../../media/2026/10/IMG_1.jpg>)" in markdown, markdown)
         assertContentEquals(photo, files.getValue("media/2026/10/IMG_1.jpg"), "the picture itself, byte for byte")
 
@@ -87,11 +88,15 @@ class ArchiveExportTest {
         val out = ByteArrayOutputStream()
         assertEquals(ExportReport(1, 0, 0), ArchiveExport(db, media).write(out, withMedia = false, today = "2026-10-13"))
         val files = unzip(out.toByteArray())
-        assertEquals(setOf("README.md"), files.keys.filter { !it.startsWith("entries/") }.toSet())
+        assertEquals(setOf("README.md", "tags.json", "tags.md"), files.keys.filter { !it.startsWith("entries/") }.toSet())
         assertTrue(
             "was left out (exported without files)" in
-                files.entries.single { it.key.endsWith(".md") && it.key != "README.md" }.value.decodeToString(),
+                files.entries.single { it.key.startsWith("entries/") && it.key.endsWith(".md") }.value.decodeToString(),
         )
+        // The tags with their categories, to read without the app (7.9 T5).
+        val book = files.getValue("tags.md").decodeToString()
+        assertTrue("## Места\n\n- **море**\n" in book, book)
+        assertTrue("\"category\": \"места\"" in files.getValue("tags.json").decodeToString())
     }
 
     @Test

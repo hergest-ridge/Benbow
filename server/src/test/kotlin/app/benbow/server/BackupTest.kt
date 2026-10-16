@@ -90,6 +90,9 @@ class BackupTest {
             jobs.runOnce()
             val md = data.resolve("export/2026/10").listDirectoryEntries("*.md").single()
             assertTrue("tags: [\"Море\"]" in md.readText())
+            val book = data.resolve("export/tags.md")
+            assertTrue("## No category\n\n- **Море**\n" in book.readText(), book.readText()) // as its entry holds it
+            assertTrue(data.resolve("export/tags.json").exists())
 
             // Only the registry changes (ADR-032): the note itself is written again with the new name.
             rules.push(listOf(SetField("o5", "system-tags", "name:море", "Океан", Hlc(2, 0, "phone"))))
@@ -99,6 +102,7 @@ class BackupTest {
             val sidecar = data.resolve("export/2026/10").listDirectoryEntries("*.json").single().readText()
             assertTrue("\"id\": \"море\"" in sidecar && "\"name\": \"Океан\"" in sidecar, sidecar)
             assertFalse(data.resolve("export/1970").exists(), "the registry is not a note")
+            assertTrue("- **Океан**" in book.readText(), "the tags' files follow the registry")
 
             // Merged into another tag, then that one in the trash: each time the note is written again.
             rules.push(
@@ -110,10 +114,12 @@ class BackupTest {
             Thread.sleep(1_100)
             jobs.runOnce()
             assertTrue("tags: [\"Вода\"]" in md.readText(), md.readText())
+            assertTrue("## Merged\n\n- **Океан** → **Вода**\n" in book.readText(), book.readText())
             rules.push(listOf(SetField("o8", "system-tags", "trash:вода", "1", Hlc(5, 0, "phone"))))
             Thread.sleep(1_100)
             jobs.runOnce()
             assertFalse("tags:" in md.readText(), md.readText())
+            assertTrue("## In the trash\n\n- Tag **Вода**\n" in book.readText(), book.readText())
             assertTrue(
                 "\"tag:море\"" in data.resolve("export/2026/10").listDirectoryEntries("*.json").single().readText(),
                 "the field itself stays",

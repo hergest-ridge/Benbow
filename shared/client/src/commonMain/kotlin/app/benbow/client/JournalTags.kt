@@ -1,5 +1,6 @@
 package app.benbow.client
 
+import app.benbow.client.db.BenbowDb
 import app.benbow.client.db.TagCounts
 import app.benbow.core.content.TagNames
 import app.cash.sqldelight.coroutines.asFlow
@@ -43,13 +44,24 @@ private fun tagCounts(rows: List<TagCounts>, registry: TagRegistry, keep: (Strin
     val roots = (written.keys + registry.names.keys).filter { it.isNotEmpty() && registry.root(it) == it && keep(it) }
     return roots.mapNotNull { id ->
         val family = registry.family(id)
-        val own = written[id].orEmpty()
-        // Entries may hold a name in different cases: the registry's own wins, else the one most used.
-        val name = registry.names[id] ?: own.sortedWith(compareByDescending<TagCounts> { it.uses }.thenBy { it.name }).firstOrNull()?.name
+        val name = registry.names[id] ?: written[id]?.let(::mostUsed)
         val uses = family.sumOf { key -> written[key].orEmpty().sumOf { it.uses } }.toInt()
         name?.takeIf { it.isNotEmpty() }?.let { TagCount(id, it, uses, registry.category(id), id in registry.archived) }
     }.sortedWith(compareByDescending<TagCount> { it.uses }.thenBy { it.name })
 }
+
+/** Entries may hold a tag's name in different cases: the one most used (the first by name when even). */
+private fun mostUsed(rows: List<TagCounts>): String? =
+    rows.sortedWith(compareByDescending<TagCounts> { it.uses }.thenBy { it.name }).firstOrNull()?.name
+
+/** Tag id to the name its entries hold (for tags with no name of their own: the export's `tags.json`). */
+internal fun writtenTagNames(db: BenbowDb): Map<String, String> =
+    db.benbowQueries.tagCounts().executeAsList().groupBy { it.key.removePrefix(TAG_PREFIX) }.mapNotNull { (id, rows) ->
+        mostUsed(rows)?.let {
+            id to
+                it
+        }
+    }.toMap()
 
 /**
  * Puts a tag on the entry: [tagId] when it was picked from a list, else the tag with this name (any case, a merged one

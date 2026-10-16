@@ -1,5 +1,6 @@
 package app.benbow.server.backup
 
+import app.benbow.core.content.TagBook
 import app.benbow.core.content.TagNames
 import app.benbow.server.calendar.CalendarDatabase
 import app.benbow.server.storage.Backups
@@ -210,7 +211,8 @@ class BackupJobs(
         val since = readExportSeq()
         val changes = store.changesSince(since, Int.MAX_VALUE)
         if (changes.isEmpty()) return
-        val registry = store.entry(TagNames.REGISTRY_ID)?.fields.orEmpty().mapValues { it.value.value }.filterKeys(TagNames::shapesTags)
+        val fields = store.entry(TagNames.REGISTRY_ID)?.fields.orEmpty().mapValues { it.value.value }
+        val registry = fields.filterKeys(TagNames::shapesTags)
         val tags = TagNames.of(registry)
         val renamed = TagNames.changed(TagNames.of(readExportedTags()), tags)
         val ids = changes.map { it.second }.toMutableSet()
@@ -227,11 +229,33 @@ class BackupJobs(
             val entry = store.entry(id) ?: return@forEach
             mirror.write(entry, entry.head?.let { store.revision(it)?.body }, tags)
         }
+        // The tags' own files follow the registry (and are made once for a mirror that has none yet).
+        if (TagNames.REGISTRY_ID in ids || !dataDir.resolve("export").resolve(TagBook.JSON_FILE).exists()) {
+            mirror.writeTags(fields, writtenTagNames(store))
+        }
         val seq = changes.last().first
         exportStateFile.parent.createDirectories()
         if (renamed.isNotEmpty()) exportedTagsFile.writeText(Json.encodeToString(registrySerializer, registry))
         exportStateFile.writeText(seq.toString())
         status = status.copy(lastExportSeq = seq)
+    }
+
+    /** Tag id to the name its entries hold most (tags from before ids have no name of their own). */
+    private fun writtenTagNames(store: SqliteSyncStore): Map<String, String> {
+        val counts = HashMap<String, MutableMap<String, Int>>()
+        store.changesSince(0, Int.MAX_VALUE).map { it.second }.distinct().forEach { id ->
+            store.entry(id)?.takeIf { it.kind != "system" }?.fields?.forEach { (key, value) ->
+                val name = value.value ?: return@forEach
+                if (key.startsWith(TagNames.TAG_PREFIX)) {
+                    counts.getOrPut(key.removePrefix(TagNames.TAG_PREFIX)) {
+                        HashMap()
+                    }.merge(name, 1, Int::plus)
+                }
+            }
+        }
+        return counts.mapValues { (_, names) ->
+            names.entries.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key }).first().key
+        }
     }
 
     private fun readExportedTags(): Map<String, String?> = if (exportedTagsFile.exists()) {

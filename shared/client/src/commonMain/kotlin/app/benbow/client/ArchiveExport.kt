@@ -3,6 +3,7 @@ package app.benbow.client
 import app.benbow.client.calendar.CalendarRepository
 import app.benbow.client.db.BenbowDb
 import app.benbow.core.content.EntryExport
+import app.benbow.core.content.TagBook
 import app.benbow.core.content.TagNames
 import app.benbow.core.sync.AttachmentState
 import app.benbow.core.sync.EntryState
@@ -50,9 +51,8 @@ class ArchiveExport(
                 ) to row.body
             }
             // Notes list their tags as they read (ADR-032).
-            val tags =
-                db.benbowQueries.selectEntry(TAG_REGISTRY_ID).executeAsOneOrNull()?.let { TagNames.of(decodeFields(it.fields)) }
-                    ?: TagNames()
+            val registry = db.benbowQueries.selectEntry(TAG_REGISTRY_ID).executeAsOneOrNull()?.let { decodeFields(it.fields) }.orEmpty()
+            val tags = TagNames.of(registry)
             val wanted = if (withMedia) {
                 entries.flatMap { (entry, _) ->
                     entry.attachments.values.filter { it.present }.map { entry to it }
@@ -97,6 +97,10 @@ class ArchiveExport(
                     zip.text(dir + EntryExport.baseName(entry) + ".json", EntryExport.sidecar(entry, body, tags))
                     onProgress(ExportProgress(++done, total))
                 }
+                // Tags and categories, to read without the app (7.9 T5).
+                val book = TagBook.read(registry, writtenTagNames(db))
+                zip.text(TagBook.JSON_FILE, TagBook.json(book))
+                zip.text(TagBook.MARKDOWN_FILE, TagBook.markdown(book))
                 val calendars = calendar?.exportFiles(now()).orEmpty()
                 calendars.forEach { zip.text("calendars/" + it.name, it.text) }
                 zip.text(
@@ -133,6 +137,8 @@ class ArchiveExport(
             appendLine("Every entry is a Markdown file under `entries/YEAR/MONTH/` with its metadata in the front matter, plus a `.json`")
             appendLine("file next to it with the exact text (Benbow Document, docs/content-format.md) and metadata. Pictures and files")
             appendLine("are under `media/` and linked from the notes. Nothing here needs the app to be read.")
+            appendLine("Tags and tag categories, with their colors, descriptions, merges and trash, are in `tags.md` (to read) and")
+            appendLine("`tags.json` (for programs); notes name their tags in their front matter.")
             appendLine()
             appendLine("- Entries: $entries")
             appendLine("- Files: $files" + if (withMedia) "" else " (exported without files)")

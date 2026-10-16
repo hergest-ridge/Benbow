@@ -1,6 +1,7 @@
 package app.benbow.server.backup
 
 import app.benbow.core.content.EntryExport
+import app.benbow.core.content.TagBook
 import app.benbow.core.content.TagNames
 import app.benbow.core.sync.EntryState
 import java.nio.file.Files
@@ -28,6 +29,14 @@ class MarkdownMirror(private val root: Path, private val media: (String) -> Path
         }
         atomicWrite(dir.resolve("$base.md"), markdown)
         atomicWrite(dir.resolve("$base.json"), EntryExport.sidecar(entry, body, tags))
+    }
+
+    /** `tags.json` and `tags.md` beside the notes (7.9 T5): every tag and category, to read without the app. */
+    fun writeTags(registry: Map<String, String?>, written: Map<String, String>) {
+        root.createDirectories()
+        val book = TagBook.read(registry, written)
+        atomicWrite(root.resolve(TagBook.JSON_FILE), TagBook.json(book))
+        atomicWrite(root.resolve(TagBook.MARKDOWN_FILE), TagBook.markdown(book))
     }
 
     private fun atomicWrite(target: Path, text: String) {

@@ -1,5 +1,6 @@
 package app.benbow.client
 
+import app.benbow.core.content.TagFields
 import app.benbow.core.content.TagNames
 import kotlin.math.absoluteValue
 
@@ -12,30 +13,26 @@ data class TagRef(val id: String, val name: String)
 /** A tag category: [id] never changes; the built-in ones and those named before ids have their name in lower case. */
 data class TagCategory(val id: String, val name: String)
 
-/** The built-in categories, in their order. */
-internal val BUILT_IN_CATEGORIES =
-    listOf(TagCategory("люди", "Люди"), TagCategory("места", "Места"), TagCategory("проекты", "Проекты"), TagCategory(EMOTIONS, "Эмоции"))
-
 /** The category of a mood check-in's feelings (5.4); it can be renamed and recolored, not put in the trash. */
 const val EMOTIONS = "эмоции"
 
 /** The built-in categories start with their own colors; any other category gets one from its id. */
 private val DEFAULT_CATEGORY_COLORS = mapOf("люди" to "storm", "места" to "mint", "проекты" to "dusk", EMOTIONS to "blossom")
 
-// Registry fields (ADR-021, ADR-032) next to TagNames' `name:`, `into:` and `trash:`, each keyed by a tag's or a category's id.
-internal const val CATEGORY_PREFIX = "cat:" // a tag's category: its id (before ids, its name)
-internal const val COLOR_PREFIX = "color:"
-internal const val DESCRIPTION_PREFIX = "desc:"
-internal const val ARCHIVED_PREFIX = "archived:"
-internal const val CATEGORY_NAME_PREFIX = "catname:"
-internal const val CATEGORY_COLOR_PREFIX = "catcolor:"
-internal const val CATEGORY_DESCRIPTION_PREFIX = "catdesc:"
-internal const val CATEGORY_EMOJI_PREFIX = "catemoji:"
-internal const val CATEGORY_ORDER_PREFIX = "catsort:"
-internal const val CATEGORY_TRASH_PREFIX = "cattrash:"
+// Registry fields (ADR-032, `TagFields` in shared/core) next to TagNames' `name:`, `into:` and `trash:`.
+internal const val CATEGORY_PREFIX = TagFields.CATEGORY
+internal const val COLOR_PREFIX = TagFields.COLOR
+internal const val DESCRIPTION_PREFIX = TagFields.DESCRIPTION
+internal const val ARCHIVED_PREFIX = TagFields.ARCHIVED
+internal const val CATEGORY_NAME_PREFIX = TagFields.CATEGORY_NAME
+internal const val CATEGORY_COLOR_PREFIX = TagFields.CATEGORY_COLOR
+internal const val CATEGORY_DESCRIPTION_PREFIX = TagFields.CATEGORY_DESCRIPTION
+internal const val CATEGORY_EMOJI_PREFIX = TagFields.CATEGORY_EMOJI
+internal const val CATEGORY_ORDER_PREFIX = TagFields.CATEGORY_ORDER
+internal const val CATEGORY_TRASH_PREFIX = TagFields.CATEGORY_TRASH
 
 /** A category's id from what `cat:<tag id>` holds: the id, or the name it had before ids (which in lower case is its id). */
-internal fun categoryId(value: String): String = value.trim().lowercase()
+internal fun categoryId(value: String): String = TagFields.categoryId(value)
 
 /**
  * The tag registry (the system entry `system-tags`, ADR-032): everything about tags and categories by id. How tags read
@@ -56,7 +53,8 @@ data class TagRegistry(
     val categoryColors: Map<String, String> = emptyMap(),
     val categoryDescriptions: Map<String, String> = emptyMap(),
     val categoryEmoji: Map<String, String> = emptyMap(),
-    val categoryOrder: Map<String, Double> = emptyMap(),
+    /** The categories outside the trash, in their order ([TagFields.categoryOrder]). */
+    val categoryIds: List<String> = emptyList(),
     /** Category id to when it went to the trash. */
     val categoryTrash: Map<String, Long> = emptyMap(),
 ) {
@@ -94,16 +92,7 @@ data class TagRegistry(
     fun categoryName(id: String): String = categoryNames[id] ?: id
 
     /** The categories outside the trash: in their own order, else the built-in ones first, then by name. */
-    val categories: List<TagCategory> by lazy {
-        val builtIn = BUILT_IN_CATEGORIES.map { it.id }
-        (builtIn + tagCategories.values + categoryNames.keys).distinct().filter { it !in categoryTrash }
-            .sortedWith(
-                compareBy({
-                    categoryOrder[it] ?: builtIn.indexOf(it).takeIf { i -> i >= 0 }?.toDouble() ?: Double.MAX_VALUE
-                }, { categoryName(it).lowercase() }),
-            )
-            .map { TagCategory(it, categoryName(it)) }
-    }
+    val categories: List<TagCategory> by lazy { categoryIds.map { TagCategory(it, categoryName(it)) } }
 
     /** Categories in the trash, most recent first. */
     val trashedCategories: List<TagCategory> get() =
@@ -118,29 +107,19 @@ data class TagRegistry(
 
     companion object {
         internal fun of(fields: Map<String, String?>): TagRegistry {
-            fun prefixed(prefix: String) = buildMap {
-                for ((key, value) in fields) if (key.startsWith(prefix) && value != null) put(key.removePrefix(prefix), value)
-            }
-            val links = prefixed(CATEGORY_PREFIX)
-            // A category named before ids lives only in its tags' links: the name as written there (capitals kept).
-            val written = links.values.groupBy(::categoryId).mapValues { (id, values) ->
-                values.map { it.trim() }.firstOrNull { it != id }
-                    ?: id
-            }
+            fun prefixed(prefix: String) = TagFields.prefixed(fields, prefix)
             return TagRegistry(
                 read = TagNames.of(fields),
                 trashedAt = prefixed(TagNames.TRASH_PREFIX).mapValues { it.value.toLongOrNull() ?: 0 },
                 descriptions = prefixed(DESCRIPTION_PREFIX),
                 archived = prefixed(ARCHIVED_PREFIX).keys,
                 own = prefixed(COLOR_PREFIX),
-                tagCategories = links.mapValues { categoryId(it.value) },
-                categoryNames = written + BUILT_IN_CATEGORIES.associate { it.id to it.name } + prefixed(CATEGORY_NAME_PREFIX),
+                tagCategories = prefixed(CATEGORY_PREFIX).mapValues { categoryId(it.value) },
+                categoryNames = TagFields.categoryNames(fields),
                 categoryColors = prefixed(CATEGORY_COLOR_PREFIX),
                 categoryDescriptions = prefixed(CATEGORY_DESCRIPTION_PREFIX),
                 categoryEmoji = prefixed(CATEGORY_EMOJI_PREFIX),
-                categoryOrder = prefixed(CATEGORY_ORDER_PREFIX).mapNotNull { (id, value) ->
-                    value.toDoubleOrNull()?.let { id to it }
-                }.toMap(),
+                categoryIds = TagFields.categoryOrder(fields),
                 categoryTrash = prefixed(CATEGORY_TRASH_PREFIX).mapValues { it.value.toLongOrNull() ?: 0 },
             )
         }

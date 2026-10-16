@@ -97,6 +97,15 @@ sealed interface AppMessage {
 
     /** Бережно was switched from the Feed tab (a long press). */
     data class GentleSwitched(val on: Boolean) : AppMessage
+
+    /** Tags went to the trash (7.9); "Вернуть" brings them back. */
+    data class TagsTrashed(val ids: List<String>, val names: List<String>) : AppMessage
+
+    /** Tags were merged into the one named [into]; "Вернуть" splits them off again. */
+    data class TagsMerged(val ids: List<String>, val into: String) : AppMessage
+
+    /** A category went to the trash; "Вернуть" brings it back. */
+    data class CategoryTrashed(val id: String, val name: String) : AppMessage
 }
 
 /**

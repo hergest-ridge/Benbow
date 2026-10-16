@@ -136,10 +136,10 @@ internal fun TagPicker(
     }
 }
 
-/** A dialog in a wide window, else a sheet as tall as the screen. */
+/** A dialog in a wide window, else a sheet as tall as the screen: the tag picker and the tag and category editors. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PickerFrame(onDismiss: () -> Unit, content: @Composable () -> Unit) {
+internal fun PickerFrame(onDismiss: () -> Unit, content: @Composable () -> Unit) {
     if (LocalWide.current) {
         Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
             Surface(

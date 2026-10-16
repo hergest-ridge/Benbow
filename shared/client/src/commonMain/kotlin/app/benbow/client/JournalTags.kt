@@ -182,3 +182,20 @@ fun JournalRepository.trashCategory(category: String): Boolean {
 }
 
 fun JournalRepository.restoreCategory(category: String) = setRegistryField(CATEGORY_TRASH_PREFIX + categoryId(category), null)
+
+// Бережно for one tag or category (ADR-031), from its editor
+
+/** The rule on this tag or category ([GentleRule.TAG] or [GentleRule.CATEGORY] and its id), if there is one. */
+fun GentleRules.ruleFor(kind: String, id: String): GentleRule? = rules.firstOrNull { it.kind == kind && it.key == id }
+
+/** Sets the level of the rule on this tag or category, or makes one; «Видно» on a rule keeps it, switched off. */
+fun JournalRepository.setGentleLevel(kind: String, id: String, name: String, level: String) {
+    db.transaction {
+        val fields = q.selectEntry(GENTLE_REGISTRY_ID).executeAsOneOrNull()?.let { decodeFields(it.fields) }.orEmpty()
+        val rule = GentleRules.of(fields, emptyMap(), "").ruleFor(kind, id)
+        when {
+            rule != null -> setGentleRule(rule.copy(level = level))
+            level != GentleRule.OFF -> setGentleRule(GentleRule(newRuleId(), name, kind, value = id, level = level))
+        }
+    }
+}

@@ -134,6 +134,17 @@ private val EntrySummary.marked get() = ownVeil == Veil.Curtain || ownVeil == Ve
 
 private val LEVELS = listOf(GentleRule.OFF, GentleRule.CURTAIN, GentleRule.QUIET)
 
+/** Видно / Шторка / Тихо for a rule; also in the tag and category editors. */
+@Composable
+internal fun GentleLevelChips(level: String, onLevel: (String) -> Unit) {
+    val labels = stringArrayResource(Res.array.gentle_levels)
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        LEVELS.forEachIndexed { i, value ->
+            FilterChip(level == value, { onLevel(value) }, { Text(labels[i]) }, Modifier.hand())
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun GentleScreen(services: AppServices, nav: Navigator) {
@@ -312,14 +323,7 @@ private fun RuleCard(
                     }
                 }
             }
-            if (level != null) {
-                val labels = stringArrayResource(Res.array.gentle_levels)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    LEVELS.forEachIndexed { i, value ->
-                        FilterChip(level == value, { onLevel(value) }, { Text(labels[i]) }, Modifier.hand())
-                    }
-                }
-            }
+            if (level != null) GentleLevelChips(level, onLevel)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     pluralStringResource(Res.plurals.gentle_count, count, count),

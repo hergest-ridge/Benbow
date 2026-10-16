@@ -7,25 +7,46 @@ import androidx.compose.runtime.Composable
 
 internal fun Route.path(): String = when (this) {
     Route.Home -> ""
+
     Route.Feed -> "feed"
+
     Route.Calendar, Route.CalendarImport -> "calendar"
+
     Route.Search -> "search"
+
     Route.More -> "more"
+
     is Route.Editor -> entryId?.let { "entry/$it" } ?: "new"
+
     is Route.Comments -> "entry/$entryId/comments"
+
     is Route.History -> "entry/$entryId/history"
+
     is Route.Revision -> "entry/$entryId/history"
+
     is Route.Media -> "entry/$entryId"
+
     is Route.Drawing -> "entry/$entryId"
-    Route.Tags -> "tags"
+
+    Route.Tags, is Route.Tag -> "tags"
+
+    // a tag's id may be any old name: no address of its own
     is Route.Reminders -> "reminders"
+
     Route.Trash -> "trash"
+
     Route.Server -> "server"
+
     Route.Export -> "export"
+
     Route.Lock -> "lock"
+
     Route.Gentle, is Route.GentleEntries -> "gentle"
+
     Route.Speech -> "speech"
+
     Route.Appearance -> "appearance"
+
     Route.Shortcuts -> "shortcuts"
 }
 

@@ -70,6 +70,7 @@ import androidx.navigation3.scene.SinglePaneSceneStrategy
 import androidx.navigation3.ui.NavDisplay
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.attach_failed
+import app.benbow.app.resources.category_trashed
 import app.benbow.app.resources.copied
 import app.benbow.app.resources.gentle_turned_off
 import app.benbow.app.resources.gentle_turned_on
@@ -84,6 +85,9 @@ import app.benbow.app.resources.tab_feed
 import app.benbow.app.resources.tab_home
 import app.benbow.app.resources.tab_more
 import app.benbow.app.resources.tab_search
+import app.benbow.app.resources.tag_trashed
+import app.benbow.app.resources.tags_merged
+import app.benbow.app.resources.tags_trashed
 import app.benbow.app.resources.veil_undo
 import app.benbow.app.resources.veiled_curtain
 import app.benbow.app.resources.veiled_none
@@ -91,6 +95,9 @@ import app.benbow.app.resources.veiled_quiet
 import app.benbow.client.TagRegistry
 import app.benbow.client.Templates
 import app.benbow.client.Veil
+import app.benbow.client.restoreCategory
+import app.benbow.client.restoreTag
+import app.benbow.client.splitTag
 import app.benbow.client.tagRegistry
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -135,6 +142,9 @@ internal sealed interface Route {
     data class Comments(val entryId: String) : Route
 
     data object Tags : Route
+
+    /** A tag's page (7.9 T4): what it is and its entries. */
+    data class Tag(val tagId: String) : Route
 
     /** [day] preselects the date (from the calendar). */
     data class Reminders(val day: String? = null) : Route
@@ -332,6 +342,32 @@ private fun AppRoot(services: AppServices) {
 
                 is AppMessage.GentleSwitched ->
                     snackbar.showSnackbar(getString(if (message.on) Res.string.gentle_turned_on else Res.string.gentle_turned_off))
+
+                is AppMessage.TagsTrashed -> {
+                    val text = message.names.singleOrNull()?.let { getString(Res.string.tag_trashed, it) }
+                        ?: getString(Res.string.tags_trashed, message.names.size)
+                    val result = snackbar.showSnackbar(text, getString(Res.string.veil_undo), duration = SnackbarDuration.Long)
+                    if (result == SnackbarResult.ActionPerformed) message.ids.forEach { services.repo.restoreTag(it) }
+                }
+
+                is AppMessage.TagsMerged -> {
+                    val result = snackbar.showSnackbar(
+                        getString(Res.string.tags_merged, message.into),
+                        getString(Res.string.veil_undo),
+                        duration = SnackbarDuration.Long,
+                    )
+                    if (result == SnackbarResult.ActionPerformed) message.ids.forEach { services.repo.splitTag(it) }
+                }
+
+                is AppMessage.CategoryTrashed -> {
+                    val result =
+                        snackbar.showSnackbar(
+                            getString(Res.string.category_trashed, message.name),
+                            getString(Res.string.veil_undo),
+                            duration = SnackbarDuration.Long,
+                        )
+                    if (result == SnackbarResult.ActionPerformed) services.repo.restoreCategory(message.id)
+                }
             }
         }
     }
@@ -459,7 +495,10 @@ private fun AppNavigation(services: AppServices, backStack: SnapshotStateList<Ro
         }
     }
     val openEntry = (backStack.lastOrNull() as? Route.Editor)?.entryId?.takeIf { twoPane }
-    CompositionLocalProvider(LocalOpenEntry provides openEntry) { Screens(services, backStack, nav, listNav, strategies) }
+    val openTag = remember(nav) { { id: String -> nav.open(Route.Tag(id)) } }
+    CompositionLocalProvider(LocalOpenEntry provides openEntry, LocalOpenTag provides openTag) {
+        Screens(services, backStack, nav, listNav, strategies)
+    }
 }
 
 @Composable
@@ -493,6 +532,7 @@ private fun Screens(
             entry<Route.More>(metadata = TAB) { MoreScreen(services, listNav) }
             entry<Route.Comments> { CommentsScreen(services, nav, it) }
             entry<Route.Tags> { TagsScreen(services, nav) }
+            entry<Route.Tag> { TagPage(services, nav, it) }
             entry<Route.Reminders> { RemindersScreen(services, nav, it) }
             entry<Route.Trash> { TrashScreen(services, nav) }
             entry<Route.CalendarImport> { CalendarImportScreen(services, nav) }

@@ -209,4 +209,23 @@ class TagEditingTest {
         phone.repo.restoreCategory(sport)
         assertEquals(sport, phone.repo.tags().first().single().category)
     }
+
+    @Test
+    fun aLevelFromTheEditorMakesOrChangesTheOneRuleOnIt() = runTest {
+        val a = phone.repo.createNote("2026-10-01", "Похороны")
+        val grief = phone.repo.addTag(a, "Утрата")!!
+        phone.repo.setGentleLevel(GentleRule.TAG, grief, "Утрата", GentleRule.OFF)
+        assertNull(phone.repo.gentleRules().first().ruleFor(GentleRule.TAG, grief), "«Видно» makes no rule")
+        phone.repo.setGentleLevel(GentleRule.TAG, grief, "Утрата", GentleRule.QUIET)
+        assertEquals(Veil.Quiet, phone.veils().getValue("Похороны"))
+        phone.repo.setGentleLevel(GentleRule.TAG, grief, "Утрата", GentleRule.OFF)
+        assertNull(phone.veils().getValue("Похороны"))
+        assertEquals(listOf(GentleRule.OFF), phone.repo.gentleRules().first().rules.map { it.level }, "one rule, kept and off")
+
+        // A rule made by name before ids is the same rule.
+        phone.repo.setField(a, "tag:море", "Море")
+        phone.repo.setGentleRule(GentleRule("old", "Море", GentleRule.TAG, value = "Море"))
+        phone.repo.setGentleLevel(GentleRule.TAG, "море", "Море", GentleRule.QUIET)
+        assertEquals(GentleRule.QUIET, phone.repo.gentleRules().first().rules.single { it.id == "old" }.level)
+    }
 }

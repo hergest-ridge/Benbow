@@ -73,7 +73,8 @@ internal fun PostView(
                 itemVerticalAlignment = Alignment.CenterVertically,
             ) {
                 moodEmoji(detail.mood)?.let { Text(it, style = MaterialTheme.typography.titleMedium) }
-                detail.tags.forEach { TagChip(it) }
+                val open = LocalOpenTag.current
+                detail.tags.forEach { tag -> TagChip(tag, onClick = open?.let { { it(tag.id) } }) }
             }
         }
         if (ribbon) {

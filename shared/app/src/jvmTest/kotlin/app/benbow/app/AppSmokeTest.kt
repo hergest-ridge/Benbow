@@ -14,10 +14,12 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.isToggleable
@@ -43,6 +45,7 @@ import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.waitUntilExactlyOneExists
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
+import app.benbow.client.GentleRule
 import app.benbow.client.Prompts
 import app.benbow.client.TagChoice
 import app.benbow.client.TagSearch
@@ -51,6 +54,7 @@ import app.benbow.client.addTag
 import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.createCategory
 import app.benbow.client.db.BenbowDb
+import app.benbow.client.ruleFor
 import app.benbow.client.setTagCategory
 import app.benbow.client.tagRegistry
 import app.benbow.client.tags
@@ -499,14 +503,70 @@ class AppSmokeTest {
         onNodeWithText("Ещё").click()
         onNodeWithText("Теги").click()
         waitUntilExactlyOneExists(hasText("Маша"), 5_000)
-        onNodeWithText("Маша").click()
+        screenshot("15-tags")
+        onNodeWithText("Маша").click() // its page
+        waitUntilExactlyOneExists(hasText("Обед с Машей"), 5_000)
+        onNodeWithContentDescription("Изменить").click()
+        waitUntilExactlyOneExists(hasText("Как у категории"), 5_000)
         onNodeWithText("Люди").click()
         waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.tags().first().single().category == "люди" } }
         onNodeWithContentDescription("Коралловый").click()
         waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.tagRegistry().first().color(masha) == "coral" } }
         waitForIdle()
-        screenshot("15-tags")
+        screenshot("15d-tag-editor")
         assertEquals(1L, runBlocking { services.repo.commentCount(entry).first() })
+    }
+
+    @Test
+    fun tagsAreFoundChosenEditedAndOpenFromTheirChips() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val walk = services.repo.createNote(services.today(), "Вечер у моря")
+        val sea = services.repo.addTag(walk, "Море")!!
+        services.repo.addTag(services.repo.createNote("2026-08-01", "Шторм"), "Море")
+        val trip = services.repo.addTag(services.repo.createNote("2026-07-01", "Билеты"), "Отпуск")!!
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Вечер у моря"), 5_000)
+        onNodeWithText("Море").click() // the chip on the card opens the tag's page, not the entry
+        waitUntilExactlyOneExists(hasText("Шторм"), 5_000)
+        screenshot("15c-tag-page")
+        onNodeWithContentDescription("Изменить").click()
+        waitUntilExactlyOneExists(hasText("Как у категории"), 5_000)
+        onNode(hasSetTextAction() and hasText("Описание", substring = true)).performTextInput("Всё про воду")
+        onNodeWithText("Шторка").click()
+        onNodeWithText("Готово").click()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.tagRegistry().first().description(sea) == "Всё про воду" } }
+        waitUntil(timeoutMillis = 5_000) {
+            runBlocking { services.repo.gentleRules().first().ruleFor(GentleRule.TAG, sea)?.level == GentleRule.CURTAIN }
+        }
+        onNodeWithContentDescription("Назад").click()
+
+        onNodeWithText("Ещё").click()
+        onNodeWithText("Теги").click()
+        waitUntilExactlyOneExists(hasText("Отпуск"), 5_000)
+        onNode(hasSetTextAction()).performTextInput("jngecr") // «отпуск» in the latin layout
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Море").fetchSemanticsNodes().isEmpty() }
+        onNode(hasSetTextAction()).performTextClearance()
+        waitUntilExactlyOneExists(hasText("Море"), 5_000)
+        onNodeWithText("Отпуск").performTouchInput { longClick() }
+        waitUntilExactlyOneExists(hasText("Выбрано: 1"), 5_000)
+        screenshot("15e-tags-chosen")
+        onNodeWithContentDescription("Меню").click()
+        onNodeWithText("В категорию").click()
+        onNode(hasText("Места") and hasAnyAncestor(isDialog())).click()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.tagRegistry().first().category(trip) == "места" } }
+
+        onNodeWithContentDescription("Новый тег").click()
+        onNodeWithText("Новая категория").click()
+        onNode(hasSetTextAction() and hasAnyAncestor(isDialog())).performTextInput("Спорт")
+        onNodeWithText("Готово").click()
+        waitUntilExactlyOneExists(hasText("Эмодзи"), 5_000) // its editor
+        onNode(hasSetTextAction() and hasText("Эмодзи")).performTextInput("🏃")
+        screenshot("15f-category-editor")
+        onNodeWithText("Готово").click()
+        waitUntil(timeoutMillis = 5_000) {
+            runBlocking { services.repo.tagRegistry().first().categoryEmoji.values.toList() == listOf("🏃") }
+        }
+        waitUntilExactlyOneExists(hasText("🏃 Спорт"), 5_000)
+        screenshot("15b-tags-screen")
     }
 
     @Test

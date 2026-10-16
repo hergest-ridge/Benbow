@@ -117,10 +117,15 @@ internal fun MetadataRow(
     }
 }
 
-/** A tag as Keep shows labels: a rounded chip in the tag's color, no "#". */
+/** A tag as Keep shows labels: a rounded chip in the tag's color, no "#". [onClick]: opens something (its page). */
 @Composable
-internal fun TagChip(tag: TagRef, modifier: Modifier = Modifier) {
-    Surface(color = tagColor(tag.id), shape = RoundedCornerShape(8.dp), modifier = modifier) {
+internal fun TagChip(tag: TagRef, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
+    val shape = RoundedCornerShape(8.dp)
+    Surface(
+        color = tagColor(tag.id),
+        shape = shape,
+        modifier = modifier.then(if (onClick != null) Modifier.clip(shape).hand().clickable(onClick = onClick) else Modifier),
+    ) {
         Text(
             LocalTags.current.name(tag),
             style = MaterialTheme.typography.labelMedium,
@@ -129,11 +134,12 @@ internal fun TagChip(tag: TagRef, modifier: Modifier = Modifier) {
     }
 }
 
-/** An entry's tags on a line of their own under the text. */
+/** An entry's tags on a line of their own under the text; a tap opens a tag's page. */
 @Composable
 internal fun TagRibbon(tags: List<TagRef>, modifier: Modifier = Modifier) {
+    val open = LocalOpenTag.current
     FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        tags.forEach { TagChip(it) }
+        tags.forEach { tag -> TagChip(tag, onClick = open?.let { { it(tag.id) } }) }
     }
 }
 

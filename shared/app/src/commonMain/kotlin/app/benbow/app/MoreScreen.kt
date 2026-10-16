@@ -29,9 +29,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.appearance
 import app.benbow.app.resources.export
+import app.benbow.app.resources.gentle
 import app.benbow.app.resources.lock
 import app.benbow.app.resources.lock_choices
 import app.benbow.app.resources.more_export
+import app.benbow.app.resources.more_gentle
 import app.benbow.app.resources.more_lock_off
 import app.benbow.app.resources.more_lock_on
 import app.benbow.app.resources.more_reminders
@@ -88,6 +90,7 @@ private fun MoreList(services: AppServices, nav: Navigator) {
             nav.open(Route.Reminders())
         }
         MoreItem(Icons.Label, stringResource(Res.string.tags), stringResource(Res.string.more_tags)) { nav.open(Route.Tags) }
+        MoreItem(Icons.Leaf, stringResource(Res.string.gentle), stringResource(Res.string.more_gentle)) { nav.open(Route.Gentle) }
         MoreItem(Icons.Delete, stringResource(Res.string.trash), stringResource(Res.string.more_trash)) { nav.open(Route.Trash) }
         MoreItem(Icons.Download, stringResource(Res.string.export), stringResource(Res.string.more_export)) { nav.open(Route.Export) }
         if (services.platform == "desktop" || services.platform == "web") {

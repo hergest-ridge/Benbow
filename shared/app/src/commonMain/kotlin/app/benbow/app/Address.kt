@@ -23,6 +23,7 @@ internal fun Route.path(): String = when (this) {
     Route.Server -> "server"
     Route.Export -> "export"
     Route.Lock -> "lock"
+    Route.Gentle, is Route.GentleEntries -> "gentle"
     Route.Speech -> "speech"
     Route.Appearance -> "appearance"
     Route.Shortcuts -> "shortcuts"
@@ -56,6 +57,7 @@ internal fun linkOf(path: String): Link? {
         "server" -> Link.Page(Route.Server)
         "export" -> Link.Page(Route.Export)
         "lock" -> Link.Page(Route.Lock)
+        "gentle" -> Link.Page(Route.Gentle)
         "appearance" -> Link.Page(Route.Appearance)
         "shortcuts" -> Link.Page(Route.Shortcuts)
         else -> null

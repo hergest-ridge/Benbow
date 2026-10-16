@@ -78,9 +78,11 @@ import app.benbow.app.resources.share
 import app.benbow.app.resources.unpin
 import app.benbow.client.DraftSession
 import app.benbow.client.EntryDetail
+import app.benbow.client.GentleRules
 import app.benbow.client.JournalRepository
 import app.benbow.client.TemplateContext
 import app.benbow.client.Templates
+import app.benbow.client.effectiveVeil
 import app.benbow.core.content.DocumentCodec
 import app.benbow.core.content.DocumentFormatException
 import app.benbow.core.content.MarkdownExporter
@@ -280,6 +282,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { vm.commit() }
     val editor = vm.editor
     val detail = vm.detail
+    val gentleRules by remember { services.repo.gentleRules() }.collectAsStateWithLifecycle(GentleRules.NONE)
     var menu by remember { mutableStateOf(false) }
     var pickingBackground by remember { mutableStateOf(false) }
     var moving by remember { mutableStateOf(false) }
@@ -470,9 +473,10 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                     menu = false
                                     pickingBackground = true
                                 }, modifier = Modifier.hand())
-                                VeilMenuItems(detail?.veil) { veil ->
+                                val ruled = detail?.let { gentleRules.ruled(it.day, it.tags) }
+                                VeilMenuItems(effectiveVeil(detail?.ownVeil, ruled), ruled) { veil ->
                                     menu = false
-                                    vm.entryId?.let { services.setVeil(it, veil, detail?.veil) }
+                                    vm.entryId?.let { services.setVeil(it, veil, detail?.ownVeil) }
                                 }
                                 DropdownMenuItem(text = { Text(stringResource(Res.string.print)) }, onClick = {
                                     menu = false

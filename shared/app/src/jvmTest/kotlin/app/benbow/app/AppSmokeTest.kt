@@ -323,6 +323,47 @@ class AppSmokeTest {
     }
 
     @Test
+    fun aRuleByTagKeepsItsEntriesOutOfTheWayAndOpenOnPurpose() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val call = services.repo.createNote(services.today(), "Звонок из больницы")
+        services.repo.addTag(call, "Больница")
+        val old = services.repo.createNote("2025-01-10", "Опять в больнице")
+        services.repo.addTag(old, "Больница")
+        services.repo.createNote(services.today(), "Обычный вечер")
+        setContent { BenbowApp(services) }
+        onNodeWithText("Ещё").click()
+        onNodeWithText("Бережно").click()
+        waitUntilExactlyOneExists(hasText("Добавить правило"), 5_000)
+        onNodeWithText("Добавить правило").click()
+        onNodeWithText("Больница").click() // the tag, in the new rule's dialog
+        waitUntilExactlyOneExists(hasText("2 записи"), 5_000)
+        onNodeWithText("Тихо").click()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.gentleRules().first().rules.single().level == "quiet" } }
+        waitForIdle()
+        screenshot("33-gentle-rules")
+
+        onNodeWithContentDescription("Назад").click()
+        onNodeWithText("Лента").click()
+        waitUntilExactlyOneExists(hasText("Обычный вечер"), 5_000)
+        assertTrue(onAllNodesWithText("больниц", substring = true).fetchSemanticsNodes().isEmpty()) // both quiet now
+
+        // Coming back on purpose: the rule's own list, nothing veiled.
+        onNodeWithText("Ещё").click()
+        onNodeWithText("Бережно").click()
+        onNodeWithText("Открыть").click()
+        waitUntilExactlyOneExists(hasText("Звонок из больницы"), 5_000)
+        waitUntilExactlyOneExists(hasText("Опять в больнице"), 5_000)
+        screenshot("34-gentle-rule-entries")
+
+        // A period: its days and a name in one dialog.
+        onNodeWithContentDescription("Назад").click()
+        onNodeWithText("Добавить правило").click()
+        onNodeWithText("Выбрать даты").click()
+        waitUntilExactlyOneExists(hasText("Название", substring = true), 5_000)
+        screenshot("35-gentle-period")
+        onNodeWithText("Отмена").click()
+    }
+
+    @Test
     fun onAPhoneTheSwitchWaitsAboveTheFeedForAPull() = runDesktopComposeUiTest(width = 412, height = 860) {
         val phone = AppServices(
             JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), BenbowDb.Schema),

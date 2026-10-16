@@ -190,14 +190,11 @@ UPDATE entry SET parent_id = ? WHERE id = ?;
 
 -- Calendar (5.1) ---------------------------------------------------------------------------
 
--- Per day in a range: how many entries and the average mood (null when none was set).
-monthDays:
-SELECT day, COUNT(*) AS entries, AVG(CAST(json_extract(fields, '$.mood') AS INTEGER)) AS mood,
-    AVG(CASE WHEN json_extract(fields, '$.veil') = 'quiet' THEN NULL ELSE CAST(json_extract(fields, '$.mood') AS INTEGER) END) AS openMood
-FROM entry
+-- A calendar span's entries (moods and Бережно's marks are read in code, where the rules apply).
+dayEntries:
+SELECT day, fields FROM entry
 WHERE (day BETWEEN :fromDay AND :toDay) AND json_extract(fields, '$.deleted') IS NOT 'true'
-  AND kind NOT IN ('comment', 'system', 'event', 'reminder')
-GROUP BY day;
+  AND kind NOT IN ('comment', 'system', 'event', 'reminder');
 
 -- Events made before 7.3a (kind "event", the text is the title): moved once to the calendar's own file (ADR-027).
 journalEvents:

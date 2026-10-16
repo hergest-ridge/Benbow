@@ -345,9 +345,9 @@ private fun FeedPost(
                 picking = false
                 onComments()
             }, modifier = Modifier.hand())
-            VeilMenuItems(entry.veil) {
+            VeilMenuItems(entry.veil, entry.ruleVeil) {
                 picking = false
-                services.setVeil(entry.id, it, entry.veil)
+                services.setVeil(entry.id, it, entry.ownVeil)
             }
             Row(Modifier.padding(horizontal = 8.dp)) {
                 REACTIONS.forEach { emoji ->

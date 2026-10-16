@@ -145,6 +145,12 @@ internal sealed interface Route {
 
     data object Lock : Route
 
+    /** "Ещё → Бережно" (ADR-031). */
+    data object Gentle : Route
+
+    /** A Бережно rule's entries, or the ones marked by hand ([ruleId] = null), everything open. */
+    data class GentleEntries(val ruleId: String?) : Route
+
     data object Speech : Route
 
     data object Appearance : Route
@@ -305,7 +311,7 @@ private fun AppRoot(services: AppServices) {
                     val text = when (message.veil) {
                         Veil.Curtain -> Res.string.veiled_curtain
                         Veil.Quiet -> Res.string.veiled_quiet
-                        null -> Res.string.veiled_none
+                        Veil.Open, null -> Res.string.veiled_none
                     }
                     val result = snackbar.showSnackbar(getString(text), getString(Res.string.veil_undo), duration = SnackbarDuration.Long)
                     if (result == SnackbarResult.ActionPerformed) services.repo.setVeil(message.entryId, message.previous)
@@ -477,6 +483,8 @@ private fun Screens(
             entry<Route.Server> { ServerScreen(services, nav) }
             entry<Route.Export> { ExportScreen(services, nav) }
             entry<Route.Lock> { LockSettingsScreen(services, nav) }
+            entry<Route.Gentle> { GentleScreen(services, nav) }
+            entry<Route.GentleEntries> { GentleEntriesScreen(services, nav, it) }
             entry<Route.Speech> { SpeechScreen(services, nav) }
             entry<Route.Appearance> { AppearanceScreen(services, nav) }
             entry<Route.Shortcuts> { ShortcutsScreen(nav, web = services.platform == "web") }

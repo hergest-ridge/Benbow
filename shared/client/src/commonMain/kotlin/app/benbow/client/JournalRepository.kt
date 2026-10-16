@@ -52,19 +52,11 @@ data class EntrySummary(
     val tags: List<String> = emptyList(),
     /** A Keep-like note color, one of [SWATCHES]; null = the theme's own. */
     val background: String? = null,
+    /** Бережно (ADR-031): what it shows as, its own mark (set by hand), and what the rules alone would give. */
     val veil: Veil? = null,
+    val ownVeil: Veil? = null,
+    val ruleVeil: Veil? = null,
 )
-
-/** Бережно (ADR-031): a curtain over the entry, or quiet (kept out of passive places); null = shown as usual. */
-enum class Veil(val value: String) {
-    Curtain("curtain"),
-    Quiet("quiet"),
-    ;
-
-    companion object {
-        fun of(value: String?): Veil? = entries.firstOrNull { it.value == value }
-    }
-}
 
 data class TagCount(val name: String, val uses: Int, val category: String? = null)
 
@@ -129,7 +121,9 @@ data class EntryDetail(
     val parentId: String? get() = fields[PARENT_FIELD]
     val mood: Int? get() = fields[MOOD_FIELD]?.toIntOrNull()
     val background: String? get() = fields[BACKGROUND_FIELD]?.takeIf { it in SWATCHES }
-    val veil: Veil? get() = Veil.of(fields[VEIL_FIELD])
+
+    /** Бережно: the entry's own mark (set by hand); the rules may add theirs ([GentleRules.ruled]). */
+    val ownVeil: Veil? get() = Veil.of(fields[VEIL_FIELD])
     val tags: List<String> get() = tagsOf(fields)
     val reactions: Set<String> get() = fields.filter {
         it.key.startsWith(REACTION_PREFIX) && it.value != null
@@ -202,16 +196,16 @@ class JournalRepository(
     private val clock = ClientClock(db, now)
 
     /** All entries outside the trash: newest day first, each day in the order it was written. */
-    fun journal(): Flow<List<EntrySummary>> = q.journal(::summaryOf).asFlow().mapToList(context)
+    fun journal(): Flow<List<EntrySummary>> = q.journal(::summaryOf).asFlow().mapToList(context).veiled()
 
     fun days(): Flow<List<DaySummary>> = journal().map { entries ->
         entries.groupBy { it.day }.map { (day, items) -> DaySummary(day, items.size) }
     }
 
-    fun entriesForDay(day: String): Flow<List<EntrySummary>> = q.entriesForDay(day, ::summaryOf).asFlow().mapToList(context)
+    fun entriesForDay(day: String): Flow<List<EntrySummary>> = q.entriesForDay(day, ::summaryOf).asFlow().mapToList(context).veiled()
 
     /** Most recently trashed first. */
-    fun trash(): Flow<List<EntrySummary>> = q.trash(::summaryOf).asFlow().mapToList(context)
+    fun trash(): Flow<List<EntrySummary>> = q.trash(::summaryOf).asFlow().mapToList(context).veiled()
 
     fun entry(id: String): Flow<EntryDetail?> = combine(
         q.selectEntry(id).asFlow().mapToOneOrNull(context),
@@ -433,9 +427,24 @@ class JournalRepository(
 
     /** Days of [fromDay]..[toDay] that have entries, keyed by day. */
     fun monthDays(fromDay: String, toDay: String): Flow<Map<String, DayInfo>> =
-        q.monthDays(fromDay, toDay) { day, entries, mood, openMood -> DayInfo(day, entries.toInt(), mood, openMood) }.asFlow()
-            .mapToList(context)
-            .map { days -> days.associateBy { it.day } }
+        combine(q.dayEntries(fromDay, toDay).asFlow().mapToList(context), gentleRules()) { rows, rules ->
+            rows.groupBy { it.day }.mapValues { (day, entries) ->
+                // Each mood with whether the entry is quiet now (its own mark or a rule): a quiet one tints nothing.
+                val moods = entries.mapNotNull { row ->
+                    val f = decodeFields(row.fields)
+                    f[MOOD_FIELD]?.toIntOrNull()?.let {
+                        it to
+                            (effectiveVeil(Veil.of(f[VEIL_FIELD]), rules.ruled(day, tagsOf(f))) == Veil.Quiet)
+                    }
+                }
+                DayInfo(
+                    day,
+                    entries.size,
+                    moods.map { it.first }.averageOrNull(),
+                    moods.filterNot { it.second }.map { it.first }.averageOrNull(),
+                )
+            }
+        }
 
     // Mood check-ins (5.4)
 
@@ -493,15 +502,17 @@ class JournalRepository(
 
     // Home (4.2)
 
-    fun pinned(): Flow<List<EntrySummary>> = q.pinned(::summaryOf).asFlow().mapToList(context)
+    fun pinned(): Flow<List<EntrySummary>> = q.pinned(::summaryOf).asFlow().mapToList(context).veiled()
 
     /** Entries with typing not yet turned into a revision ("continue writing"). */
-    fun withDrafts(): Flow<List<EntrySummary>> = q.withDrafts(::summaryOf).asFlow().mapToList(context)
+    fun withDrafts(): Flow<List<EntrySummary>> = q.withDrafts(::summaryOf).asFlow().mapToList(context).veiled()
 
     /** The same date in earlier years; [today] is "YYYY-MM-DD". */
-    fun onThisDay(today: String): Flow<List<EntrySummary>> = q.onThisDay(today.substring(4), today, ::summaryOf).asFlow().mapToList(context)
+    fun onThisDay(today: String): Flow<List<EntrySummary>> =
+        q.onThisDay(today.substring(4), today, ::summaryOf).asFlow().mapToList(context).veiled()
 
-    fun favoritesUpTo(lastDay: String): Flow<List<EntrySummary>> = q.favoritesUpTo(lastDay, ::summaryOf).asFlow().mapToList(context)
+    fun favoritesUpTo(lastDay: String): Flow<List<EntrySummary>> =
+        q.favoritesUpTo(lastDay, ::summaryOf).asFlow().mapToList(context).veiled()
 
     fun daysWritten(fromDay: String, toDay: String): Flow<Long> = q.daysWritten(fromDay, toDay).asFlow().mapToOne(context)
 
@@ -526,7 +537,9 @@ class JournalRepository(
                 }.toSet(),
                 comments.toInt(), media, body, audio, transcripts,
             )
-        }.asFlow().mapToList(context)
+        }.asFlow().mapToList(context).let { feed ->
+            combine(feed, gentleRules()) { items, rules -> items.map { it.copy(summary = rules.apply(it.summary)) } }
+        }
 
     /** Builds the search index after an update changed it (or on the first start); quick otherwise. */
     fun prepareSearch() = SearchIndex.rebuildIfNeeded(db)
@@ -557,21 +570,39 @@ class JournalRepository(
     fun setCategoryColor(category: String, color: String?) =
         setRegistryField(CATEGORY_COLOR_PREFIX + category.trim().lowercase(), color?.takeIf { it in SWATCHES })
 
-    /** The registry is created once, without revisions, so two devices never conflict over it; its fields are LWW. */
-    private fun setRegistryField(name: String, value: String?) {
+    /** Бережно's rules (ADR-031) with the tag categories they need. */
+    fun gentleRules(): Flow<GentleRules> = combine(
+        q.selectEntry(GENTLE_REGISTRY_ID).asFlow().mapToOneOrNull(context),
+        q.selectEntry(TAG_REGISTRY_ID).asFlow().mapToOneOrNull(context),
+    ) { rules, tags ->
+        GentleRules.of(rules?.let { decodeFields(it.fields) }.orEmpty(), tags?.let { decodeFields(it.fields) }.orEmpty())
+    }
+
+    /** Adds or changes a rule; a view only, entries stay as they are. */
+    fun setGentleRule(rule: GentleRule) = setRegistryField(RULE_PREFIX + rule.id, rule.encode(), GENTLE_REGISTRY_ID)
+
+    fun removeGentleRule(id: String) = setRegistryField(RULE_PREFIX + id, null, GENTLE_REGISTRY_ID)
+
+    fun newRuleId(): String = newId()
+
+    private fun Flow<List<EntrySummary>>.veiled(): Flow<List<EntrySummary>> =
+        combine(this, gentleRules()) { entries, rules -> if (rules.rules.isEmpty()) entries else entries.map(rules::apply) }
+
+    /** A registry is created once, without revisions, so two devices never conflict over it; its fields are LWW. */
+    private fun setRegistryField(name: String, value: String?, registry: String = TAG_REGISTRY_ID) {
         db.transaction {
-            if (q.selectEntry(TAG_REGISTRY_ID).executeAsOneOrNull() == null) {
+            if (q.selectEntry(registry).executeAsOneOrNull() == null) {
                 val time = now()
                 q.upsertEntry(
-                    TAG_REGISTRY_ID, "system", "1970-01-01", time, null,
+                    registry, "system", "1970-01-01", time, null,
                     emptyBody(
                         random,
                     ),
                     "", "", "[]", "{}", time, "{}", "{}", 0, null,
                 )
-                enqueue(CreateEntry(newId(), TAG_REGISTRY_ID, "system", "1970-01-01", time))
+                enqueue(CreateEntry(newId(), registry, "system", "1970-01-01", time))
             }
-            setField(TAG_REGISTRY_ID, name, value)
+            setField(registry, name, value)
         }
     }
 
@@ -586,7 +617,7 @@ class JournalRepository(
             favorites = if (query.favorites) 1 else 0,
             withMedia = if (query.withMedia) 1 else 0,
             mapper = ::summaryOf,
-        ).asFlow().mapToList(context)
+        ).asFlow().mapToList(context).veiled()
     }
 
     fun moveToTrash(id: String) = setField(id, TRASH_FIELD, "true")
@@ -661,7 +692,8 @@ private fun summaryOf(
         mood = f[MOOD_FIELD]?.toIntOrNull(),
         tags = tagsOf(f),
         background = f[BACKGROUND_FIELD]?.takeIf { it in SWATCHES },
-        veil = Veil.of(f[VEIL_FIELD]),
+        veil = effectiveVeil(Veil.of(f[VEIL_FIELD]), null),
+        ownVeil = Veil.of(f[VEIL_FIELD]),
     )
 }
 
@@ -723,3 +755,5 @@ internal class ClientClock(private val db: BenbowDb, now: () -> Long) {
         const val LOCAL_NODE = "device.local_node"
     }
 }
+
+private fun List<Int>.averageOrNull(): Double? = if (isEmpty()) null else average()

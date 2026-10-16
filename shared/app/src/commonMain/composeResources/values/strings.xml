@@ -484,4 +484,33 @@
     <string name="veiled_quiet">Запись не показывается в ленте</string>
     <string name="veiled_none">Запись снова на виду</string>
     <string name="veil_undo">Вернуть</string>
+    <string name="more_gentle">Шторки, тихие записи и правила</string>
+    <string name="gentle_intro">Некоторые записи тяжело встречать неожиданно. Здесь можно решить, какие из них лента показывает, только когда вы сами захотите. Ничего не удаляется: всё остаётся в поиске, календаре и экспорте.</string>
+    <string name="gentle_marked">Отмеченные вручную</string>
+    <string name="gentle_rules">Правила</string>
+    <string name="gentle_rules_empty">Правило задёргивает шторку или убирает из ленты все записи с тегом, из категории или за период — и те, что появятся потом.</string>
+    <string name="gentle_add">Добавить правило</string>
+    <string name="gentle_new_rule">Новое правило</string>
+    <string name="gentle_kind_tag">Тег</string>
+    <string name="gentle_kind_category">Категория</string>
+    <string name="gentle_kind_period">Период</string>
+    <string name="gentle_no_tags">Тегов пока нет</string>
+    <string name="gentle_pick_dates">Выбрать даты</string>
+    <string name="gentle_pick_days">Первый и последний день</string>
+    <string name="gentle_period_name">Название, например «Весна 2024»</string>
+    <string name="gentle_remove">Удалить правило</string>
+    <string name="gentle_open">Открыть</string>
+    <string name="gentle_nothing">Записей пока нет</string>
+    <string name="save">Сохранить</string>
+    <string-array name="gentle_levels">
+        <item>Видно</item>
+        <item>Шторка</item>
+        <item>Тихо</item>
+    </string-array>
+    <plurals name="gentle_count">
+        <item quantity="one">%1$d запись</item>
+        <item quantity="few">%1$d записи</item>
+        <item quantity="many">%1$d записей</item>
+        <item quantity="other">%1$d записи</item>
+    </plurals>
 </resources>

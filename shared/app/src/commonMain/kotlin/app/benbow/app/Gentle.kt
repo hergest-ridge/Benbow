@@ -161,17 +161,22 @@ internal fun Modifier.longPress(onLongPress: () -> Unit): Modifier = pointerInpu
     }
 }
 
-/** "Задёрнуть шторку" and "Не показывать в ленте" (or taking them back) for an entry's menu. */
+/**
+ * "Задёрнуть шторку" and "Не показывать в ленте" (or taking them back) for an entry's menu. [veil] is what the entry
+ * shows as, [ruled] what the rules alone give; [onPick] gets the entry's own new mark: taking a veil back from an
+ * entry a rule still covers marks it open ([Veil.Open]), so it shows although the rule stays.
+ */
 @Composable
-internal fun VeilMenuItems(veil: Veil?, onPick: (Veil?) -> Unit) {
+internal fun VeilMenuItems(veil: Veil?, ruled: Veil?, onPick: (Veil?) -> Unit) {
+    val shown = if (ruled != null) Veil.Open else null
     DropdownMenuItem(
         text = { Text(stringResource(if (veil == Veil.Curtain) Res.string.veil_uncurtain else Res.string.veil_curtain)) },
-        onClick = { onPick(if (veil == Veil.Curtain) null else Veil.Curtain) },
+        onClick = { onPick(if (veil == Veil.Curtain) shown else Veil.Curtain) },
         modifier = Modifier.hand(),
     )
     DropdownMenuItem(
         text = { Text(stringResource(if (veil == Veil.Quiet) Res.string.veil_unquiet else Res.string.veil_quiet)) },
-        onClick = { onPick(if (veil == Veil.Quiet) null else Veil.Quiet) },
+        onClick = { onPick(if (veil == Veil.Quiet) shown else Veil.Quiet) },
         modifier = Modifier.hand(),
     )
 }

@@ -7,12 +7,14 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -22,7 +24,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -38,8 +42,11 @@ import app.benbow.app.resources.filter_favorites
 import app.benbow.app.resources.filter_media
 import app.benbow.app.resources.search_empty
 import app.benbow.app.resources.search_hint
+import app.benbow.app.resources.search_tag
+import app.benbow.app.resources.tag_picker_search
 import app.benbow.client.EntrySummary
 import app.benbow.client.SearchQuery
+import app.benbow.client.TagRef
 import app.benbow.client.tags
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -48,16 +55,13 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import org.jetbrains.compose.resources.stringResource
 
 internal class SearchViewModel(private val services: AppServices) : ViewModel() {
     val query = MutableStateFlow(SearchQuery())
-    val tags = services.repo.tags().map { all ->
-        all.sortedBy { it.archived }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val tags = services.repo.tags().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
     val results: StateFlow<List<EntrySummary>?> = query.debounce(150).flatMapLatest { services.repo.search(it) }
@@ -66,7 +70,10 @@ internal class SearchViewModel(private val services: AppServices) : ViewModel() 
     fun edit(change: (SearchQuery) -> SearchQuery) = query.update(change)
 }
 
-/** Everything on the device, instantly and offline: words (as prefixes), a tag, favorites, entries with media. */
+/**
+ * Everything on the device, instantly and offline: words (as prefixes), a tag, favorites, entries with media. A tag is
+ * picked in the tag picker («Тег…»), or with one tap among the most used ones beside it.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SearchScreen(services: AppServices, nav: Navigator) {
@@ -75,6 +82,7 @@ internal fun SearchScreen(services: AppServices, nav: Navigator) {
     val tags by vm.tags.collectAsStateWithLifecycle()
     val results by vm.results.collectAsStateWithLifecycle()
     val focus = remember { FocusRequester() }
+    var picking by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { focus.requestFocus() }
     Scaffold(
         topBar = {
@@ -110,16 +118,39 @@ internal fun SearchScreen(services: AppServices, nav: Navigator) {
                         vm.edit { it.copy(withMedia = !it.withMedia) }
                     }, { Text(stringResource(Res.string.filter_media)) }, modifier = Modifier.hand())
                 }
-                items(tags, key = { it.id }) { tag ->
-                    val on = query.tag == tag.id
+                item(key = "tag") {
+                    val tag = query.tag?.let { id -> tags.firstOrNull { it.id == id } }
                     FilterChip(
-                        on,
-                        { vm.edit { it.copy(tag = if (on) null else tag.id) } },
+                        tag != null,
+                        { if (tag != null) vm.edit { it.copy(tag = null) } else picking = true },
+                        { Text(tag?.name ?: stringResource(Res.string.search_tag)) },
+                        trailingIcon = tag?.let { { Icon(Icons.Close, null, Modifier.size(16.dp)) } },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor =
+                            tag?.let { tagColor(it.id) } ?: Color.Unspecified,
+                        ),
+                        modifier = Modifier.hand(),
+                    )
+                }
+                items(tags.filter { !it.archived && it.id != query.tag }.take(QUICK_TAGS), key = { it.id }) { tag ->
+                    FilterChip(
+                        false,
+                        { vm.edit { it.copy(tag = tag.id) } },
                         { Text("${tag.name} · ${tag.uses}") },
                         colors = FilterChipDefaults.filterChipColors(containerColor = tagColor(tag.id)),
                         modifier = Modifier.hand(),
                     )
                 }
+            }
+            if (picking) {
+                TagPicker(
+                    services,
+                    title = stringResource(Res.string.tag_picker_search),
+                    chosen = tags.filter { it.id == query.tag }.map { TagRef(it.id, it.name) },
+                    multi = false,
+                    onPick = { tag -> vm.edit { it.copy(tag = tag.id) } },
+                    onDismiss = { picking = false },
+                )
             }
             val found = results ?: return@Column
             if (found.isEmpty()) {
@@ -136,3 +167,6 @@ internal fun SearchScreen(services: AppServices, nav: Navigator) {
         }
     }
 }
+
+/** How many of the most used tags sit beside «Тег…» for one tap. */
+private const val QUICK_TAGS = 8

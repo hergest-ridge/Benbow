@@ -60,6 +60,7 @@ import app.benbow.app.resources.gentle_open
 import app.benbow.app.resources.gentle_period_name
 import app.benbow.app.resources.gentle_pick_dates
 import app.benbow.app.resources.gentle_pick_days
+import app.benbow.app.resources.gentle_pick_tag
 import app.benbow.app.resources.gentle_remove
 import app.benbow.app.resources.gentle_rules
 import app.benbow.app.resources.gentle_rules_empty
@@ -67,6 +68,7 @@ import app.benbow.app.resources.gentle_target_merged
 import app.benbow.app.resources.gentle_target_trashed
 import app.benbow.app.resources.months_genitive
 import app.benbow.app.resources.save
+import app.benbow.app.resources.tag_picker_rule
 import app.benbow.client.EntrySummary
 import app.benbow.client.GentleRule
 import app.benbow.client.TagCategory
@@ -140,6 +142,7 @@ internal fun GentleScreen(services: AppServices, nav: Navigator) {
     val on by services.gentle.on.collectAsStateWithLifecycle()
     var adding by remember { mutableStateOf(false) }
     var period by remember { mutableStateOf(false) }
+    var pickingTag by remember { mutableStateOf(false) }
     Scaffold(topBar = {
         TopAppBar(navigationIcon = { BackButton(nav::back) }, title = { Text(stringResource(Res.string.gentle)) })
     }) { padding ->
@@ -194,11 +197,11 @@ internal fun GentleScreen(services: AppServices, nav: Navigator) {
                 TextButton({ adding = true }, Modifier.padding(horizontal = 12.dp).hand()) { Text(stringResource(Res.string.gentle_add)) }
             }
         }
+        // Rules point at ids (ADR-032); older ones at a name, which in lower case is the same id.
+        val taken = current.rules.map { it.first.kind to it.first.key }.toSet()
         if (adding) {
-            // Rules point at ids (ADR-032); older ones at a name, which in lower case is the same id.
-            val taken = current.rules.map { it.first.kind to it.first.key }.toSet()
             AddRuleDialog(
-                tags = current.tags.filter { (GentleRule.TAG to it.id) !in taken },
+                tags = current.tags.filter { (GentleRule.TAG to it.id) !in taken }.take(QUICK_TAGS),
                 categories = current.categories.filter { (GentleRule.CATEGORY to it.id) !in taken },
                 onTag = {
                     adding = false
@@ -212,7 +215,22 @@ internal fun GentleScreen(services: AppServices, nav: Navigator) {
                     adding = false
                     period = true
                 },
+                onMoreTags = {
+                    adding = false
+                    pickingTag = true
+                },
                 onDismiss = { adding = false },
+            )
+        }
+        if (pickingTag) {
+            TagPicker(
+                services,
+                title = stringResource(Res.string.tag_picker_rule),
+                chosen = emptyList(),
+                multi = false,
+                onPick = { vm.add(GentleRule.TAG, it.name, value = it.id) },
+                onDismiss = { pickingTag = false },
+                hidden = taken.filter { it.first == GentleRule.TAG }.mapTo(HashSet()) { it.second },
             )
         }
         if (period) {
@@ -323,6 +341,7 @@ private fun AddRuleDialog(
     onTag: (TagCount) -> Unit,
     onCategory: (TagCategory) -> Unit,
     onPeriod: () -> Unit,
+    onMoreTags: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
@@ -337,6 +356,7 @@ private fun AddRuleDialog(
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         tags.forEach { tag -> FilterChip(false, { onTag(tag) }, { Text(tag.name) }, Modifier.hand()) }
                     }
+                    TextButton(onMoreTags, Modifier.hand()) { Text(stringResource(Res.string.gentle_pick_tag)) }
                 }
                 Text(stringResource(Res.string.gentle_kind_category), style = MaterialTheme.typography.titleSmall)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -437,3 +457,6 @@ internal fun GentleEntriesScreen(services: AppServices, nav: Navigator, route: R
         }
     }
 }
+
+/** The most used tags offered at once in a new rule; the tag picker finds the rest. */
+private const val QUICK_TAGS = 8

@@ -3,6 +3,7 @@ package app.benbow.app
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.toAwtImage
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.test.ComposeUiTest
@@ -28,6 +29,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextClearance
@@ -35,17 +37,21 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextInputSelection
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.waitUntilExactlyOneExists
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import app.benbow.client.Prompts
+import app.benbow.client.TagChoice
+import app.benbow.client.TagSearch
 import app.benbow.client.Veil
 import app.benbow.client.addTag
 import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.createCategory
 import app.benbow.client.db.BenbowDb
+import app.benbow.client.setTagCategory
 import app.benbow.client.tagRegistry
 import app.benbow.client.tags
 import app.benbow.client.trashCategory
@@ -189,8 +195,10 @@ class AppSmokeTest {
         onNodeWithText("Настроение").click()
         onNodeWithText("🙂").click()
         onNodeWithText("+ Тег").click()
-        onNode(hasSetTextAction() and !hasText("Планы", substring = true)).performTextInput("Работа") // the tag field, not the editor
-        onNodeWithText("Добавить").click()
+        waitUntilExactlyOneExists(hasSetTextAction() and hasText("Найти", substring = true), 5_000) // the picker's field
+        onNode(hasSetTextAction() and hasText("Найти", substring = true)).performTextInput("Работа")
+        onNodeWithText("Создать «Работа»").click()
+        onNodeWithText("Готово").click()
         waitUntilExactlyOneExists(hasText("Работа"), 5_000)
         screenshot("09-editor-metadata")
 
@@ -209,6 +217,58 @@ class AppSmokeTest {
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Прогулка у моря")).fetchSemanticsNodes().isEmpty() }
         waitUntilExactlyOneExists(hasText("Планы на неделю"), 5_000)
         screenshot("11-search")
+
+        onNodeWithText("★ Избранное").performClick()
+        onNodeWithText("Тег…").click()
+        waitUntilExactlyOneExists(hasText("Тег для поиска"), 5_000)
+        onNode(hasSetTextAction() and hasText("Найти", substring = true)).performTextInput("hf,")
+        onNode(hasSetTextAction() and hasText("hf,")).performImeAction() // «раб» in the latin layout; one tag, the picker closes
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Тег…").fetchSemanticsNodes().isEmpty() }
+        waitUntilExactlyOneExists(hasText("Планы на неделю"), 5_000)
+        assertTrue(onAllNodesWithText("Прогулка у моря").fetchSemanticsNodes().isEmpty(), "only entries with the tag")
+    }
+
+    @Test
+    fun theTagPickerFindsForgivinglyAndPutsTagsOn() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val walk = services.repo.createNote(services.today(), "Прогулка у моря")
+        services.repo.setTagCategory(services.repo.addTag(walk, "Море")!!, "места")
+        val lunch = services.repo.createNote("2026-01-05", "Обед в городе")
+        services.repo.addTag(lunch, "Мария")
+        services.repo.addTag(lunch, "Кафе")
+        val plans = services.repo.createNote(services.today(), "Планы")
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Планы"), 5_000)
+        onNodeWithText("Планы").performClick()
+        waitUntilExactlyOneExists(hasText("+ Тег"), 5_000)
+        onNodeWithText("+ Тег").click()
+        val field = hasSetTextAction() and hasText("Найти", substring = true)
+        waitUntilExactlyOneExists(hasText("Недавние"), 5_000)
+        screenshot("09a-tag-picker")
+
+        onNode(field).performTextInput("vjht") // «море» in the latin layout
+        waitUntilExactlyOneExists(hasText("Море") and hasClickAction(), 5_000)
+        onNode(hasText("Море") and hasClickAction()).click()
+        onNode(field).performTextInput("мари")
+        waitUntilExactlyOneExists(hasText("Мария") and hasClickAction(), 5_000)
+        onNode(hasSetTextAction() and hasText("мари")).performImeAction() // Enter takes the first line
+        waitUntil(timeoutMillis = 5_000) {
+            runBlocking {
+                services.repo.entry(plans).first()!!.tags.map { it.name } ==
+                    listOf("Мария", "Море")
+            }
+        }
+        waitUntilExactlyOneExists(hasText("Часто вместе"), 5_000) // Кафе goes with Мария
+        screenshot("09b-tag-picker-chosen")
+
+        onNode(field).performTextInput("Отпуск")
+        onNodeWithText("Проекты").click()
+        screenshot("09c-tag-picker-create")
+        onNodeWithText("Создать «Отпуск»").click()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.entry(plans).first()!!.tags.size == 3 } }
+        val holiday = runBlocking { services.repo.entry(plans).first()!!.tags.single { it.name == "Отпуск" } }
+        assertEquals("проекты", runBlocking { services.repo.tagRegistry().first().category(holiday.id) })
+        onNodeWithText("Готово").click()
+        waitUntilExactlyOneExists(hasText("Отпуск"), 5_000)
     }
 
     @Test
@@ -742,6 +802,30 @@ class AppSmokeTest {
         onNodeWithText("Сочетания клавиш").click()
         waitUntilExactlyOneExists(hasText("Ctrl+N"), 5_000)
         screenshot("36-shortcuts")
+    }
+
+    @Test
+    fun aWideWindowPicksTagsInADialogByKeyboard() = runDesktopComposeUiTest(width = 1280, height = 820) {
+        val walk = services.repo.createNote(services.today(), "Прогулка")
+        services.repo.addTag(walk, "Море")
+        services.repo.addTag(walk, "Мария")
+        val plans = services.repo.createNote(services.today(), "Планы")
+        setContent { BenbowApp(services) }
+        onNodeWithText("Планы").performClick()
+        waitUntilExactlyOneExists(hasText("+ Тег"), 5_000)
+        onNodeWithText("+ Тег").click()
+        val field = hasSetTextAction() and hasText("Найти", substring = true)
+        waitUntilExactlyOneExists(field, 5_000)
+        onNode(field).performTextInput("м")
+        val order = TagSearch.find("м", runBlocking { services.repo.tags().first() }.map { TagChoice(it.id, it.name, it.uses) })
+        onNode(hasSetTextAction() and hasText("м")).performKeyInput { pressKey(Key.DirectionDown) } // to the second line
+        waitForIdle()
+        screenshot("61-wide-tag-picker")
+        onNode(hasSetTextAction() and hasText("м")).performKeyInput { pressKey(Key.Enter) }
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.entry(plans).first()!!.tags.size == 1 } }
+        assertEquals(order[1].tag.name, runBlocking { services.repo.entry(plans).first()!!.tags.single().name }, "the highlighted line")
+        onNode(field).performKeyInput { pressKey(Key.Backspace) } // an empty field: takes the last tag off
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.entry(plans).first()!!.tags.isEmpty() } }
     }
 
     @Test

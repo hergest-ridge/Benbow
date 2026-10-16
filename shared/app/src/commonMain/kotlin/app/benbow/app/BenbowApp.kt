@@ -38,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -407,7 +408,7 @@ private fun AppFrame(
                     contentAlignment = Alignment.TopCenter,
                 ) {
                     Box(Modifier.fillMaxHeight().widthIn(max = if (wide && !twoPane) READABLE else Dp.Infinity)) {
-                        AppNavigation(services, backStack, nav, twoPane)
+                        CompositionLocalProvider(LocalWide provides wide) { AppNavigation(services, backStack, nav, twoPane) }
                     }
                     SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().imePadding())
                 }
@@ -432,6 +433,9 @@ private fun AppFrame(
 
 /** From here a window gets the side rail (Material's "expanded" width). */
 private val WIDE = 840.dp
+
+/** A wide window (desktop, web, tablets): pickers open as dialogs instead of full-screen sheets. */
+internal val LocalWide = compositionLocalOf { false }
 
 /** How wide a screen grows in a big window: lines of text stay readable. */
 internal val READABLE = 820.dp

@@ -84,9 +84,9 @@ import app.benbow.client.TagRef
 import app.benbow.client.TemplateContext
 import app.benbow.client.Templates
 import app.benbow.client.addTag
+import app.benbow.client.createTag
 import app.benbow.client.effectiveVeil
 import app.benbow.client.removeTag
-import app.benbow.client.tags
 import app.benbow.core.content.DocumentCodec
 import app.benbow.core.content.DocumentFormatException
 import app.benbow.core.content.MarkdownExporter
@@ -176,8 +176,6 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
     /** For attachments and metadata: a new entry is created on the first one. */
     suspend fun ensureEntryId(): String = session.ensureEntry()
 
-    val knownTags = repo.tags().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
     private fun withEntry(action: (String) -> Unit) {
         services.scope.launch { action(ensureEntryId()) }
     }
@@ -216,7 +214,11 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
 
     fun setBackground(color: String?) = withEntry { repo.setBackground(it, color) }
 
-    fun addTag(name: String, tagId: String?) = withEntry { repo.addTag(it, name, tagId) }
+    fun addTag(tagId: String, name: String) = withEntry { repo.addTag(it, name, tagId) }
+
+    /** A new tag from the picker's «Создать», straight onto this entry. */
+    fun createTag(name: String, category: String?) =
+        withEntry { entry -> repo.createTag(name, category)?.let { repo.addTag(entry, name, it) } }
 
     fun removeTag(tag: TagRef) = withEntry { repo.removeTag(it, tag.id) }
 
@@ -596,13 +598,13 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                 TemplateRow { vm.applyTemplate(it, context) }
             }
             if (editor != null && !vm.broken) {
-                val knownTags by vm.knownTags.collectAsStateWithLifecycle()
                 MetadataRow(
+                    services,
                     mood = detail?.mood,
                     tags = detail?.tags.orEmpty(),
-                    knownTags = knownTags,
                     onMood = vm::setMood,
                     onAddTag = vm::addTag,
+                    onCreateTag = vm::createTag,
                     onRemoveTag = vm::removeTag,
                 )
             }

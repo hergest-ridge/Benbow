@@ -108,7 +108,6 @@
     <string name="mood_clear">Убрать</string>
     <string name="tag_add">Тег</string>
     <string name="tag_dialog_title">Добавить тег</string>
-    <string name="tag_hint">Например, работа</string>
     <string name="tag_remove">Убрать тег %1$s</string>
     <string name="add">Добавить</string>
     <string name="cancel">Отмена</string>
@@ -283,6 +282,17 @@
     <string name="tags">Теги</string>
     <string name="tags_empty">Тегов пока нет. Добавьте их в записи — кнопкой «+ Тег».</string>
     <string name="tags_uncategorized">Без категории</string>
+    <string name="tag_picker_done">Готово</string>
+    <string name="tag_picker_find">Найти тег</string>
+    <string name="tag_picker_find_or_create">Найти или создать тег</string>
+    <string name="tag_picker_nothing">Ничего не нашлось</string>
+    <string name="tag_picker_recent">Недавние</string>
+    <string name="tag_picker_together">Часто вместе</string>
+    <string name="tag_picker_create">Создать «%1$s»</string>
+    <string name="tag_picker_search">Тег для поиска</string>
+    <string name="tag_picker_rule">Тег для правила</string>
+    <string name="search_tag">Тег…</string>
+    <string name="gentle_pick_tag">Выбрать тег…</string>
     <string name="tag_category">Категория</string>
     <string name="tag_color">Цвет</string>
     <string name="color_default">Обычный</string>

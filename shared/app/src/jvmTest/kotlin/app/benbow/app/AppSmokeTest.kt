@@ -14,6 +14,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -54,7 +55,9 @@ import app.benbow.client.addTag
 import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.createCategory
 import app.benbow.client.db.BenbowDb
+import app.benbow.client.homeLayout
 import app.benbow.client.ruleFor
+import app.benbow.client.saveHomeLayout
 import app.benbow.client.setTagCategory
 import app.benbow.client.tagRegistry
 import app.benbow.client.tags
@@ -698,6 +701,19 @@ class AppSmokeTest {
     }
 
     @Test
+    fun homeFollowsTheOwnersLayout() = runDesktopComposeUiTest(width = 412, height = 860) {
+        services.repo.createNote("2025-" + services.today().substring(5), "Год назад тоже писал")
+        val default = runBlocking { services.repo.homeLayout().first() }
+        // Looking back first, and no question of the day.
+        services.repo.saveHomeLayout(default, default.blocks.sortedByDescending { it.id == "on-this-day" }.filter { it.id != "prompt" })
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Год назад тоже писал"), 5_000)
+        onNodeWithText(Prompts.ofTheDay(services.today())).assertDoesNotExist()
+        assertTrue(onNodeWithText("В этот день").getBoundsInRoot().top < onNodeWithText("Как сейчас дела?").getBoundsInRoot().top)
+        screenshot("12b-home-layout")
+    }
+
+    @Test
     fun questionOfTheDayAndTemplates() = runDesktopComposeUiTest(width = 412, height = 860) {
         val prompt = Prompts.ofTheDay(services.today())
         setContent { BenbowApp(services) }
@@ -872,6 +888,7 @@ class AppSmokeTest {
         services.repo.addTag(walk, "Мария")
         val plans = services.repo.createNote(services.today(), "Планы")
         setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Планы"), 5_000)
         onNodeWithText("Планы").performClick()
         waitUntilExactlyOneExists(hasText("+ Тег"), 5_000)
         onNodeWithText("+ Тег").click()

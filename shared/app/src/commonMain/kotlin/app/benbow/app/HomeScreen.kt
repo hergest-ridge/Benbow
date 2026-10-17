@@ -9,15 +9,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -33,32 +28,29 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.benbow.app.resources.Res
-import app.benbow.app.resources.days_written
 import app.benbow.app.resources.greeting_day
 import app.benbow.app.resources.greeting_evening
 import app.benbow.app.resources.greeting_morning
 import app.benbow.app.resources.greeting_night
-import app.benbow.app.resources.home_answer
-import app.benbow.app.resources.home_drafts
-import app.benbow.app.resources.home_on_this_day
-import app.benbow.app.resources.home_pinned
-import app.benbow.app.resources.home_resurfaced
-import app.benbow.app.resources.home_today
-import app.benbow.app.resources.home_today_empty
-import app.benbow.app.resources.home_write
 import app.benbow.app.resources.review_month
 import app.benbow.app.resources.review_summary
 import app.benbow.app.resources.review_week
-import app.benbow.app.resources.years_ago
 import app.benbow.client.DayInfo
 import app.benbow.client.EntrySummary
+import app.benbow.client.HomeBlock
+import app.benbow.client.HomeBlockType
 import app.benbow.client.Prompts
 import app.benbow.client.SyncStatus
 import app.benbow.client.Templates
+import app.benbow.client.homeLayout
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DateTimeUnit
@@ -76,6 +68,8 @@ import kotlin.time.Clock
 
 internal data class HomeState(
     val today: String,
+    /** The owner's blocks (ADR-034) that can be drawn and have something to show, in their order. */
+    val blocks: List<HomeBlock>,
     val todays: List<EntrySummary>,
     val pinned: List<EntrySummary>,
     val drafts: List<EntrySummary>,
@@ -105,39 +99,54 @@ internal class HomeViewModel(private val services: AppServices) : ViewModel() {
         else -> null
     }
 
-    private val reviews = combine(
-        services.repo.monthDays(date.minus(6, DateTimeUnit.DAY).toString(), today),
-        services.repo.monthDays(date.minus(29, DateTimeUnit.DAY).toString(), today),
-    ) { week, month -> summary(week.values) to summary(month.values) }
-
-    private val base = combine(
-        combine(services.repo.entriesForDay(today), services.repo.pinned(), services.repo.withDrafts(), ::Triple),
+    private val reviews: Flow<Pair<Pair<Int, Double?>, Pair<Int, Double?>>> = if (review == null) {
+        flowOf((0 to null) to (0 to null))
+    } else {
         combine(
-            services.repo.onThisDay(today),
-            services.repo.favoritesUpTo(date.minus(1, DateTimeUnit.MONTH).toString()),
-            services.repo.daysWritten(monthStart.toString(), monthStart.plus(1, DateTimeUnit.MONTH).minus(1, DateTimeUnit.DAY).toString()),
-            ::Triple,
-        ),
-        services.gentle.on,
-    ) { (todays, pinned, drafts), (allOnThisDay, allFavorites, days), gentle ->
-        // Бережно (ADR-031): quiet entries stay out of Home; what comes back unasked (On this day, the resurfaced
-        // favorite) leaves out curtained ones too.
-        val onThisDay = if (gentle) allOnThisDay.filter { it.veil == null } else allOnThisDay
-        val favorites = if (gentle) allFavorites.filter { it.veil == null } else allFavorites
-        HomeState(
-            today,
-            todays.withoutQuiet(gentle) { it },
-            pinned.withoutQuiet(gentle) { it },
-            drafts.withoutQuiet(gentle) { it },
-            onThisDay,
-            favorites.takeIf { it.isNotEmpty() }?.let {
-                it[
-                    today.hashCode().absoluteValue %
-                        it.size,
-                ]
-            },
-            days,
-        )
+            services.repo.monthDays(date.minus(6, DateTimeUnit.DAY).toString(), today),
+            services.repo.monthDays(date.minus(29, DateTimeUnit.DAY).toString(), today),
+        ) { week, month -> summary(week.values) to summary(month.values) }
+    }
+
+    /** Only the blocks on Home read the journal: a block the owner took away costs nothing. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val base = services.repo.homeLayout().flatMapLatest { layout ->
+        val kinds = layout.blocks.mapNotNullTo(HashSet()) { block -> block.kind?.takeIf { block.blockSize != null } }
+        fun <T> ifShown(kind: HomeBlockType, none: T, flow: () -> Flow<T>): Flow<T> = if (kind in kinds) flow() else flowOf(none)
+        val repo = services.repo
+        combine(
+            combine(
+                ifShown(HomeBlockType.Today, emptyList()) { repo.entriesForDay(today) },
+                ifShown(HomeBlockType.Pinned, emptyList()) { repo.pinned() },
+                ifShown(HomeBlockType.Drafts, emptyList()) { repo.withDrafts() },
+                ::Triple,
+            ),
+            combine(
+                ifShown(HomeBlockType.OnThisDay, emptyList()) { repo.onThisDay(today) },
+                ifShown(HomeBlockType.Favorite, emptyList()) { repo.favoritesUpTo(date.minus(1, DateTimeUnit.MONTH).toString()) },
+                ifShown(HomeBlockType.Stats, 0L) {
+                    repo.daysWritten(monthStart.toString(), monthStart.plus(1, DateTimeUnit.MONTH).minus(1, DateTimeUnit.DAY).toString())
+                },
+                ::Triple,
+            ),
+            services.gentle.on,
+        ) { (todays, pinned, drafts), (allOnThisDay, allFavorites, days), gentle ->
+            // Бережно (ADR-031): quiet entries stay out of Home; what comes back unasked (On this day, the resurfaced
+            // favorite) leaves out curtained ones too.
+            val onThisDay = if (gentle) allOnThisDay.filter { it.veil == null } else allOnThisDay
+            val favorites = if (gentle) allFavorites.filter { it.veil == null } else allFavorites
+            val home = HomeState(
+                today,
+                layout.blocks,
+                todays.withoutQuiet(gentle) { it },
+                pinned.withoutQuiet(gentle) { it },
+                drafts.withoutQuiet(gentle) { it },
+                onThisDay,
+                favorites.takeIf { it.isNotEmpty() }?.let { it[today.hashCode().absoluteValue % it.size] },
+                days,
+            )
+            home.copy(blocks = home.blocks.filter { it.blockSize != null && home.shows(it) })
+        }
     }
 
     val state: StateFlow<HomeState?> = combine(base, reviews, services.repo.returned(today)) { home, (week, month), returned ->
@@ -161,7 +170,10 @@ internal class HomeViewModel(private val services: AppServices) : ViewModel() {
     }
 }
 
-/** "Сегодня": the day's entries, what's unfinished, and gentle looks back. No streaks, no guilt. */
+/**
+ * "Сегодня": the owner's blocks (ADR-034) under the date and greeting. Cards that come for a reason (an entry back from
+ * "Отложить до…", the week's or month's review) sit above them and go once answered. No streaks, no guilt.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun HomeScreen(services: AppServices, nav: Navigator) {
@@ -185,8 +197,13 @@ internal fun HomeScreen(services: AppServices, nav: Navigator) {
             modifier = Modifier.padding(padding).fillMaxSize(),
         ) {
             val home = state ?: return@PullToRefreshBox
-            val open = { entry: EntrySummary -> nav.open(Route.Editor(entry.id, entry.day)) }
             val write = { template: String -> nav.open(Route.Editor(null, services.today(), opened = services.now(), template = template)) }
+            val actions = HomeActions(
+                open = { entry -> nav.open(Route.Editor(entry.id, entry.day)) },
+                write = write,
+                newEntry = newEntry,
+                checkin = vm::checkin,
+            )
             postponing?.let { entry ->
                 PostponeDialog(onPick = { day ->
                     postponing = null
@@ -200,20 +217,11 @@ internal fun HomeScreen(services: AppServices, nav: Navigator) {
                             entry,
                             onOpen = {
                                 vm.answerReturned(entry.id)
-                                open(entry)
+                                actions.open(entry)
                             },
                             onLater = { vm.answerReturned(entry.id) },
                             onAgain = { postponing = entry },
                         )
-                    }
-                }
-                item(key = "checkin") { CheckinCard(vm::checkin) }
-                if (kindness) {
-                    item(key = "kindness") {
-                        KindnessCard(Prompts.kindness(home.today), onWrite = {
-                            vm.kindness.value = false
-                            write(Templates.KINDNESS.id)
-                        }, onLater = { vm.kindness.value = false })
                     }
                 }
                 vm.review?.let { kind ->
@@ -226,86 +234,17 @@ internal fun HomeScreen(services: AppServices, nav: Navigator) {
                         ) { write(kind) }
                     }
                 }
-                item(key = "prompt") {
-                    Prompt(Prompts.ofTheDay(home.today), stringResource(Res.string.home_answer)) { write(Templates.PROMPT.id) }
-                }
-                section(Res.string.home_pinned, home.pinned, services, open)
-                item(key = "today") { SectionTitle(stringResource(Res.string.home_today)) }
-                if (home.todays.isEmpty()) {
-                    item(key = "today-empty") {
-                        Prompt(stringResource(Res.string.home_today_empty), stringResource(Res.string.home_write), newEntry)
-                    }
-                } else {
-                    items(home.todays, key = { "t" + it.id }) { EntryCard(it, onClick = { open(it) }, media = services.media) }
-                }
-                section(Res.string.home_drafts, home.drafts, services, open, keyPrefix = "d")
-                if (home.onThisDay.isNotEmpty()) {
-                    item(key = "otd") { SectionTitle(stringResource(Res.string.home_on_this_day)) }
-                    home.onThisDay.groupBy { it.day.take(4).toInt() }.forEach { (year, entries) ->
-                        val ago = home.today.take(4).toInt() - year
-                        item(key = "otd$year") {
-                            Text(
-                                pluralStringResource(Res.plurals.years_ago, ago, ago),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(start = 24.dp, top = 4.dp, bottom = 2.dp),
-                            )
+                homeBlocks(home, actions, services) { block ->
+                    if (block.kind == HomeBlockType.Checkin && kindness) {
+                        item(key = "kindness") {
+                            KindnessCard(Prompts.kindness(home.today), onWrite = {
+                                vm.kindness.value = false
+                                write(Templates.KINDNESS.id)
+                            }, onLater = { vm.kindness.value = false })
                         }
-                        items(entries, key = { "o" + it.id }) { EntryCard(it, onClick = { open(it) }, media = services.media) }
-                    }
-                }
-                home.resurfaced?.let { entry ->
-                    item(key = "fav") { SectionTitle(stringResource(Res.string.home_resurfaced)) }
-                    item(key = "f" + entry.id) { EntryCard(entry, onClick = { open(entry) }, media = services.media, showDay = true) }
-                }
-                if (home.daysThisMonth > 0) {
-                    item(key = "stats") {
-                        val days = home.daysThisMonth.toInt()
-                        Text(
-                            pluralStringResource(Res.plurals.days_written, days, days),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.fillMaxWidth().padding(24.dp),
-                        )
                     }
                 }
             }
-        }
-    }
-}
-
-private fun LazyListScope.section(
-    title: org.jetbrains.compose.resources.StringResource,
-    entries: List<EntrySummary>,
-    services: AppServices,
-    open: (EntrySummary) -> Unit,
-    keyPrefix: String = "p",
-) {
-    if (entries.isEmpty()) return
-    item(key = "title-$keyPrefix") { SectionTitle(stringResource(title)) }
-    items(entries, key = { keyPrefix + it.id }) { EntryCard(it, onClick = { open(it) }, media = services.media, showDay = true) }
-}
-
-@Composable
-private fun SectionTitle(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 6.dp),
-    )
-}
-
-@Composable
-private fun Prompt(text: String, action: String, onAction: () -> Unit) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(text, style = MaterialTheme.typography.bodyLarge)
-            TextButton(onAction, modifier = Modifier.hand()) { Text(action) }
         }
     }
 }

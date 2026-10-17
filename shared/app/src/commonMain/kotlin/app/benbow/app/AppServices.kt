@@ -9,6 +9,7 @@ import app.benbow.client.DraftSession
 import app.benbow.client.Due
 import app.benbow.client.ExportProgress
 import app.benbow.client.ExportReport
+import app.benbow.client.HomeBlock
 import app.benbow.client.IoDispatcher
 import app.benbow.client.JournalRepository
 import app.benbow.client.Media
@@ -106,6 +107,9 @@ sealed interface AppMessage {
 
     /** A category went to the trash; "Вернуть" brings it back. */
     data class CategoryTrashed(val id: String, val name: String) : AppMessage
+
+    /** A block was taken off Home from its menu (ADR-034); "Вернуть" puts it back at [at]. */
+    data class HomeBlockRemoved(val block: HomeBlock, val at: Int) : AppMessage
 
     /** A take's text is in (7.10): «Приложить запись» attaches its audio to [entryId] as a voice note. */
     data class Dictated(val take: TakeFile, val entryId: String) : AppMessage

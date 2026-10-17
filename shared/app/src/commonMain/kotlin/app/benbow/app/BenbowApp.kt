@@ -79,6 +79,7 @@ import app.benbow.app.resources.dictation_needs_model
 import app.benbow.app.resources.dictation_open_model
 import app.benbow.app.resources.gentle_turned_off
 import app.benbow.app.resources.gentle_turned_on
+import app.benbow.app.resources.home_removed
 import app.benbow.app.resources.media_mic_denied
 import app.benbow.app.resources.months_genitive
 import app.benbow.app.resources.postponed
@@ -102,6 +103,8 @@ import app.benbow.app.resources.voice_replaced
 import app.benbow.client.TagRegistry
 import app.benbow.client.Templates
 import app.benbow.client.Veil
+import app.benbow.client.editHomeLayout
+import app.benbow.client.plusBlock
 import app.benbow.client.restoreCategory
 import app.benbow.client.restoreTag
 import app.benbow.client.splitTag
@@ -374,6 +377,16 @@ private fun AppRoot(services: AppServices) {
                             duration = SnackbarDuration.Long,
                         )
                     if (result == SnackbarResult.ActionPerformed) services.repo.restoreCategory(message.id)
+                }
+
+                is AppMessage.HomeBlockRemoved -> {
+                    val name = message.block.kind?.let { getString(it.title) }.orEmpty()
+                    val result = snackbar.showSnackbar(
+                        getString(Res.string.home_removed, name),
+                        getString(Res.string.veil_undo),
+                        duration = SnackbarDuration.Long,
+                    )
+                    if (result == SnackbarResult.ActionPerformed) services.repo.editHomeLayout { it.plusBlock(message.block, message.at) }
                 }
 
                 is AppMessage.Dictated -> {

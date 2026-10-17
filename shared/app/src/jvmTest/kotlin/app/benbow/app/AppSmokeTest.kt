@@ -43,10 +43,12 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.test.waitUntilDoesNotExist
 import androidx.compose.ui.test.waitUntilExactlyOneExists
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import app.benbow.client.GentleRule
+import app.benbow.client.HomeLayout
 import app.benbow.client.Prompts
 import app.benbow.client.TagChoice
 import app.benbow.client.TagSearch
@@ -711,6 +713,53 @@ class AppSmokeTest {
         onNodeWithText(Prompts.ofTheDay(services.today())).assertDoesNotExist()
         assertTrue(onNodeWithText("В этот день").getBoundsInRoot().top < onNodeWithText("Как сейчас дела?").getBoundsInRoot().top)
         screenshot("12b-home-layout")
+    }
+
+    @Test
+    fun theOwnerArrangesHome() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val ids = { runBlocking { services.repo.homeLayout().first().blocks.map { it.id } } }
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Настроить главную"), 5_000)
+        onNodeWithText("Настроить главную").click()
+        waitUntilExactlyOneExists(hasText("Блоки идут сверху вниз", substring = true), 5_000)
+        onNodeWithText("Вопрос дня").click()
+        waitUntilExactlyOneExists(hasText("Вопрос дня, чтобы было с чего начать"), 5_000)
+        screenshot("12c-home-editor")
+
+        onNodeWithContentDescription("Ниже").click()
+        waitUntil(timeoutMillis = 5_000) { ids().take(3) == listOf("checkin", "pinned", "prompt") }
+        onNodeWithText("Убрать").click()
+        waitUntil(timeoutMillis = 5_000) { "prompt" !in ids() }
+        waitUntilExactlyOneExists(hasText("Блок «Вопрос дня» убран"), 5_000)
+        onNodeWithText("Вернуть").click()
+        waitUntil(timeoutMillis = 5_000) { ids().take(3) == listOf("checkin", "pinned", "prompt") }
+
+        // An empty block says when it comes; one taken off waits in the catalog.
+        onNodeWithText("Закреплено").click()
+        waitUntilExactlyOneExists(hasText("Появится, когда вы закрепите запись"), 5_000)
+        onNodeWithText("Убрать").click()
+        waitUntil(timeoutMillis = 5_000) { "pinned" !in ids() }
+        onNodeWithText("Добавить блок").click()
+        waitUntilExactlyOneExists(hasText("Записи, закреплённые наверху"), 5_000)
+        screenshot("12d-home-catalog")
+        onNodeWithText("Записи, закреплённые наверху").click()
+        waitUntil(timeoutMillis = 5_000) { ids().last() == "pinned" }
+
+        onNodeWithText("Вернуть обычную главную").click()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.homeLayout().first() } == HomeLayout.DEFAULT }
+        onNodeWithText("Готово").click()
+        waitUntilDoesNotExist(hasText("Блоки идут сверху вниз", substring = true), 5_000)
+
+        // A block's long press: off Home, and back from the snackbar.
+        onNodeWithText("Как сейчас дела?").performTouchInput { longClick() }
+        waitUntilExactlyOneExists(hasText("Убрать с главной"), 5_000)
+        screenshot("12e-home-block-menu")
+        onNodeWithText("Убрать с главной").click()
+        waitUntil(timeoutMillis = 5_000) { "checkin" !in ids() }
+        waitUntilDoesNotExist(hasText("Как сейчас дела?"), 5_000)
+        onNodeWithText("Вернуть").click()
+        waitUntilExactlyOneExists(hasText("Как сейчас дела?"), 5_000)
+        assertEquals("checkin", ids().first())
     }
 
     @Test

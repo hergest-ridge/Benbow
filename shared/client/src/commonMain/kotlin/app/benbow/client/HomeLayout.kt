@@ -146,13 +146,7 @@ fun JournalRepository.saveHomeLayout(from: HomeLayout, to: List<HomeBlock>) {
     db.transaction {
         to.forEach { block -> if (before[block.id] != block) setRegistryField(BLOCK_PREFIX + block.id, block.encode(), HOME_REGISTRY_ID) }
         val kept = to.mapTo(HashSet()) { it.id }
-        from.blocks.forEach { block ->
-            if (from.custom &&
-                block.id !in kept
-            ) {
-                setRegistryField(BLOCK_PREFIX + block.id, null, HOME_REGISTRY_ID)
-            }
-        }
+        if (from.custom) from.blocks.filter { it.id !in kept }.forEach { setRegistryField(BLOCK_PREFIX + it.id, null, HOME_REGISTRY_ID) }
         if (!from.custom || from.blocks.map { it.id } != to.map { it.id }) {
             setRegistryField(ORDER_FIELD, to.joinToString(",") { it.id }, HOME_REGISTRY_ID)
         }
@@ -168,6 +162,35 @@ fun JournalRepository.resetHomeLayout() {
         }
     }
 }
+
+/** Applies [edit] to the layout as it is stored now, in one transaction; nothing is written when it changes nothing. */
+fun JournalRepository.editHomeLayout(edit: (List<HomeBlock>) -> List<HomeBlock>) {
+    db.transaction {
+        val from = HomeLayout.of(q.selectEntry(HOME_REGISTRY_ID).executeAsOneOrNull()?.let { decodeFields(it.fields) }.orEmpty())
+        val to = edit(from.blocks)
+        if (to != from.blocks) saveHomeLayout(from, to)
+    }
+}
+
+/** [id] moved past the next block this app draws, earlier ([by] < 0) or later; blocks it can't draw keep their places. */
+fun List<HomeBlock>.moved(id: String, by: Int): List<HomeBlock> {
+    val from = indexOfFirst { it.id == id }
+    if (from < 0 || by == 0) return this
+    val step = if (by < 0) -1 else 1
+    var to = from + step
+    while (to in indices && this[to].blockSize == null) to += step
+    if (to !in indices) return this
+    return toMutableList().apply { add(to, removeAt(from)) }
+}
+
+fun List<HomeBlock>.minusBlock(id: String): List<HomeBlock> = filter { it.id != id }
+
+/** [block] put in at [at] (a block with its id stays as it is). */
+fun List<HomeBlock>.plusBlock(block: HomeBlock, at: Int): List<HomeBlock> =
+    if (any { it.id == block.id }) this else toMutableList().apply { add(at.coerceIn(0, size), block) }
+
+/** The kinds that can be added: each built-in block comes once. */
+fun HomeLayout.addable(): List<HomeBlockType> = HomeBlockType.entries.filter { kind -> blocks.none { it.type == kind.value } }
 
 /** Home's layout registry: a system entry like the tag registry (ADR-034). */
 internal const val HOME_REGISTRY_ID = "system-home"

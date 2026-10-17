@@ -39,10 +39,13 @@ import app.benbow.client.DayInfo
 import app.benbow.client.EntrySummary
 import app.benbow.client.HomeBlock
 import app.benbow.client.HomeBlockType
+import app.benbow.client.HomeLayout
 import app.benbow.client.Prompts
 import app.benbow.client.SyncStatus
 import app.benbow.client.Templates
+import app.benbow.client.editHomeLayout
 import app.benbow.client.homeLayout
+import app.benbow.client.minusBlock
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -70,6 +73,8 @@ internal data class HomeState(
     val today: String,
     /** The owner's blocks (ADR-034) that can be drawn and have something to show, in their order. */
     val blocks: List<HomeBlock>,
+    /** The whole layout as stored, for the editor and a block's menu. */
+    val layout: HomeLayout,
     val todays: List<EntrySummary>,
     val pinned: List<EntrySummary>,
     val drafts: List<EntrySummary>,
@@ -138,6 +143,7 @@ internal class HomeViewModel(private val services: AppServices) : ViewModel() {
             val home = HomeState(
                 today,
                 layout.blocks,
+                layout,
                 todays.withoutQuiet(gentle) { it },
                 pinned.withoutQuiet(gentle) { it },
                 drafts.withoutQuiet(gentle) { it },
@@ -183,6 +189,9 @@ internal fun HomeScreen(services: AppServices, nav: Navigator) {
     val status by services.sync.status.collectAsStateWithLifecycle()
     var refreshUntil by remember { mutableStateOf<Int?>(null) }
     var postponing by remember { mutableStateOf<EntrySummary?>(null) }
+
+    /** The editor's open with this block picked ("" for none); null while closed. */
+    var editing by remember { mutableStateOf<String?>(null) }
     val newEntry = { nav.open(Route.Editor(null, services.today(), opened = services.now())) }
     Scaffold(
         topBar = { HomeHeader(state?.today, status) { nav.open(Route.Server) } },
@@ -203,7 +212,16 @@ internal fun HomeScreen(services: AppServices, nav: Navigator) {
                 write = write,
                 newEntry = newEntry,
                 checkin = vm::checkin,
+                remove = { block ->
+                    val at = home.layout.blocks.indexOfFirst { it.id == block.id }
+                    services.scope.launch { services.repo.editHomeLayout { it.minusBlock(block.id) } }
+                    services.messages.tryEmit(AppMessage.HomeBlockRemoved(block, at))
+                },
+                customize = { block -> editing = block?.id.orEmpty() },
             )
+            editing?.let { select ->
+                HomeEditor(services, home.layout, home, select.ifEmpty { null }, onDismiss = { editing = null })
+            }
             postponing?.let { entry ->
                 PostponeDialog(onPick = { day ->
                     postponing = null

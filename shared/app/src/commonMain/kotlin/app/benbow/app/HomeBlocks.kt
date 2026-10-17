@@ -6,19 +6,32 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.days_written
 import app.benbow.app.resources.home_answer
+import app.benbow.app.resources.home_block_remove_long
+import app.benbow.app.resources.home_customize
 import app.benbow.app.resources.home_drafts
 import app.benbow.app.resources.home_on_this_day
 import app.benbow.app.resources.home_pinned
@@ -44,7 +57,35 @@ internal class HomeActions(
     val write: (template: String) -> Unit,
     val newEntry: () -> Unit,
     val checkin: (mood: Int, emotions: List<String>, text: String) -> Unit,
+    /** A block's long-press menu: «Убрать с главной», «Настроить главную» (with the block picked). */
+    val remove: (HomeBlock) -> Unit,
+    val customize: (HomeBlock?) -> Unit,
 )
+
+/** A block (or a piece of a list block): a long press anywhere on it opens its menu and no click follows. */
+@Composable
+private fun Held(block: HomeBlock, actions: HomeActions, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    var menu by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
+    Box(
+        modifier.longPress {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            menu = true
+        },
+    ) {
+        content()
+        DropdownMenu(menu, { menu = false }) {
+            DropdownMenuItem(text = { Text(stringResource(Res.string.home_block_remove_long)) }, onClick = {
+                menu = false
+                actions.remove(block)
+            }, modifier = Modifier.hand())
+            DropdownMenuItem(text = { Text(stringResource(Res.string.home_customize)) }, onClick = {
+                menu = false
+                actions.customize(block)
+            }, modifier = Modifier.hand())
+        }
+    }
+}
 
 /** Whether a block has something to show; an empty one leaves no gap (the empty day stays: it invites). */
 internal fun HomeState.shows(block: HomeBlock): Boolean = when (block.kind) {
@@ -74,12 +115,26 @@ internal fun LazyListScope.homeBlocks(
             item(key = row.joinToString("+") { it.id }) {
                 Row(Modifier.fillMaxWidth()) {
                     row.forEach { block ->
-                        Box(Modifier.weight((block.blockSize?.span(2) ?: 2).toFloat())) { TileBlock(block, home, actions, services) }
+                        Held(block, actions, Modifier.weight((block.blockSize?.span(2) ?: 2).toFloat())) {
+                            TileBlock(block, home, actions, services)
+                        }
                     }
                 }
             }
         }
         row.forEach { after(it) }
+    }
+    item(key = "customize") {
+        Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
+            TextButton({ actions.customize(null) }, modifier = Modifier.hand()) {
+                Icon(Icons.Blocks, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    stringResource(Res.string.home_customize),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            }
+        }
     }
 }
 
@@ -116,26 +171,28 @@ private fun TileBlock(block: HomeBlock, home: HomeState, actions: HomeActions, s
 private fun LazyListScope.listBlock(block: HomeBlock, home: HomeState, actions: HomeActions, services: AppServices) {
     val key = block.id
     when (block.kind) {
-        HomeBlockType.Pinned -> section(key, Res.string.home_pinned, home.pinned, actions, services)
+        HomeBlockType.Pinned -> section(block, Res.string.home_pinned, home.pinned, actions, services)
 
-        HomeBlockType.Drafts -> section(key, Res.string.home_drafts, home.drafts, actions, services)
+        HomeBlockType.Drafts -> section(block, Res.string.home_drafts, home.drafts, actions, services)
 
         HomeBlockType.Today -> {
-            item(key = "$key/title") { SectionTitle(stringResource(Res.string.home_today)) }
+            held(block, actions, "$key/title") { SectionTitle(stringResource(Res.string.home_today)) }
             if (home.todays.isEmpty()) {
-                item(key = "$key/empty") {
+                held(block, actions, "$key/empty") {
                     Prompt(stringResource(Res.string.home_today_empty), stringResource(Res.string.home_write), actions.newEntry)
                 }
             } else {
-                items(home.todays, key = { "$key/${it.id}" }) { EntryCard(it, onClick = { actions.open(it) }, media = services.media) }
+                heldItems(block, actions, home.todays, key = {
+                    "$key/${it.id}"
+                }) { EntryCard(it, onClick = { actions.open(it) }, media = services.media) }
             }
         }
 
         HomeBlockType.OnThisDay -> {
-            item(key = "$key/title") { SectionTitle(stringResource(Res.string.home_on_this_day)) }
+            held(block, actions, "$key/title") { SectionTitle(stringResource(Res.string.home_on_this_day)) }
             home.onThisDay.groupBy { it.day.take(4).toInt() }.forEach { (year, entries) ->
                 val ago = home.today.take(4).toInt() - year
-                item(key = "$key/$year") {
+                held(block, actions, "$key/$year") {
                     Text(
                         pluralStringResource(Res.plurals.years_ago, ago, ago),
                         style = MaterialTheme.typography.labelLarge,
@@ -143,7 +200,9 @@ private fun LazyListScope.listBlock(block: HomeBlock, home: HomeState, actions: 
                         modifier = Modifier.padding(start = 24.dp, top = 4.dp, bottom = 2.dp),
                     )
                 }
-                items(entries, key = { "$key/${it.id}" }) { EntryCard(it, onClick = { actions.open(it) }, media = services.media) }
+                heldItems(block, actions, entries, key = {
+                    "$key/${it.id}"
+                }) { EntryCard(it, onClick = { actions.open(it) }, media = services.media) }
             }
         }
 
@@ -152,15 +211,33 @@ private fun LazyListScope.listBlock(block: HomeBlock, home: HomeState, actions: 
 }
 
 private fun LazyListScope.section(
-    key: String,
+    block: HomeBlock,
     title: StringResource,
     entries: List<EntrySummary>,
     actions: HomeActions,
     services: AppServices,
 ) {
     if (entries.isEmpty()) return
-    item(key = "$key/title") { SectionTitle(stringResource(title)) }
-    items(entries, key = { "$key/${it.id}" }) { EntryCard(it, onClick = { actions.open(it) }, media = services.media, showDay = true) }
+    val key = block.id
+    held(block, actions, "$key/title") { SectionTitle(stringResource(title)) }
+    heldItems(block, actions, entries, key = {
+        "$key/${it.id}"
+    }) { EntryCard(it, onClick = { actions.open(it) }, media = services.media, showDay = true) }
+}
+
+/** A list block's pieces are lazy items, each with the block's long-press menu. */
+private fun LazyListScope.held(block: HomeBlock, actions: HomeActions, key: String, content: @Composable () -> Unit) {
+    item(key = key) { Held(block, actions) { content() } }
+}
+
+private fun LazyListScope.heldItems(
+    block: HomeBlock,
+    actions: HomeActions,
+    entries: List<EntrySummary>,
+    key: (EntrySummary) -> String,
+    content: @Composable (EntrySummary) -> Unit,
+) {
+    items(entries, key = key) { Held(block, actions) { content(it) } }
 }
 
 @Composable

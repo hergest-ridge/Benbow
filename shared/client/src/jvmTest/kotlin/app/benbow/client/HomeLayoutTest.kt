@@ -2,6 +2,8 @@ package app.benbow.client
 
 import app.benbow.client.db.BenbowDb
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import java.util.Properties
@@ -100,5 +102,56 @@ class HomeLayoutTest {
             packRows(blocks, 4) { it.span(4) },
             "a wide window: the same order, more in a row",
         )
+    }
+
+    @Test
+    fun theEditorShowsAtOnceAndWritesInOrder() = runTest {
+        val editor = HomeLayoutEditor(repo, CoroutineScope(Dispatchers.Unconfined), repo.homeLayout().first())
+        editor.move("stats", -1)
+        editor.move("stats", -1)
+        editor.move("checkin", -1) // already first
+        assertEquals(listOf("checkin", "prompt", "pinned", "today", "drafts", "stats", "on-this-day", "favorite"), ids(editor.layout.value))
+        assertEquals(editor.layout.value, repo.homeLayout().first())
+
+        val (drafts, at) = editor.remove("drafts")!!
+        assertEquals(null, repo.homeLayout().first().blocks.find { it.id == "drafts" })
+        assertEquals(listOf(HomeBlockType.Drafts), editor.layout.value.addable())
+        editor.put(drafts, at)
+        assertEquals(editor.layout.value, repo.homeLayout().first())
+        assertEquals("drafts", editor.layout.value.blocks[4].id, "back in its place")
+
+        editor.remove("prompt")
+        val prompt = editor.add(HomeBlockType.Prompt, after = "checkin")
+        assertEquals("prompt", prompt.id, "the kind's own id, so two devices adding it make one block")
+        assertEquals("prompt", repo.homeLayout().first().blocks[1].id)
+
+        val before = editor.reset()
+        assertEquals(HomeLayout.DEFAULT, repo.homeLayout().first())
+        editor.restore(before)
+        assertEquals(before, repo.homeLayout().first().blocks)
+        editor.close()
+    }
+
+    @Test
+    fun movesStepOverBlocksThisAppCantDraw() {
+        val a = HomeBlock.of(HomeBlockType.Checkin)
+        val b = HomeBlock.of(HomeBlockType.Prompt)
+        val unknown = HomeBlock("x", "letter", "tall")
+        val blocks = listOf(a, unknown, b)
+        assertEquals(listOf(b, a, unknown), blocks.moved(b.id, -1), "one step for the eye")
+        assertEquals(listOf(unknown, b, a), blocks.moved(a.id, 1))
+        assertEquals(blocks, blocks.moved(b.id, 1), "already last")
+        assertEquals(blocks, blocks.plusBlock(a, 0), "no block twice")
+    }
+
+    @Test
+    fun anEditMadeOnAnotherDeviceMeanwhileStays() = runTest {
+        val editor = HomeLayoutEditor(repo, CoroutineScope(Dispatchers.Unconfined), repo.homeLayout().first())
+        editor.move("today", -1)
+        repo.editHomeLayout { it.minusBlock("favorite") } // synced from elsewhere while the editor is open
+        editor.move("stats", -1)
+        assertEquals(null, repo.homeLayout().first().blocks.find { it.id == "favorite" }, "each write goes to the stored layout")
+        assertEquals(listOf("checkin", "prompt", "today", "pinned", "drafts", "stats", "on-this-day"), ids(repo.homeLayout().first()))
+        editor.close()
     }
 }

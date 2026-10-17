@@ -15,8 +15,17 @@ import kotlinx.coroutines.launch
 
 /** Turns sounds into text on this device (Android: GigaAM in a sandboxed process, 7.6); absent where it can't. */
 interface Transcriber {
-    /** Opens the recognizer once for several files (loading the model takes a moment) and runs [block] with it. */
-    suspend fun <T> session(model: SpeechModel, block: suspend (transcribe: suspend (LocalFile) -> String) -> T): T
+    /** Opens the recognizer once for several sounds (loading the model takes a moment) and runs [block] with it. */
+    suspend fun <T> session(model: SpeechModel, block: suspend (Recognizer) -> T): T
+}
+
+/** An open recognizer session. */
+interface Recognizer {
+    /** A sound file (a voice note or any audio) to text. */
+    suspend fun file(sound: LocalFile): String
+
+    /** 16 kHz mono samples to text: a phrase of dictation (7.10). */
+    suspend fun samples(samples: FloatArray): String
 }
 
 /**
@@ -85,10 +94,10 @@ class Transcriptions internal constructor(
 
     private suspend fun run(batch: List<Task>) {
         try {
-            transcriber.session(model) { transcribe ->
+            transcriber.session(model) { recognizer ->
                 for (task in batch) {
                     try {
-                        val text = transcribe(media.file(task.attachment.meta.sha256))
+                        val text = recognizer.file(media.file(task.attachment.meta.sha256))
                         if (text.isNotBlank()) repo.setTranscript(task.entryId, task.attachment.meta.id, text)
                     } catch (e: Exception) {
                         failed(e.message ?: e::class.simpleName.orEmpty())

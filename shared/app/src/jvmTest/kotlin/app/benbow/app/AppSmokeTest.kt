@@ -1220,10 +1220,13 @@ class AppSmokeTest {
             java.io.File(this, "verified").writeText(app.benbow.core.api.SpeechModelSpec.ID)
         }
         val heard = object : Transcriber {
-            override suspend fun <T> session(
-                model: app.benbow.client.SpeechModel,
-                block: suspend (transcribe: suspend (java.io.File) -> String) -> T,
-            ): T = block { "Шли вдоль берега, ветер был холодный, но солнце светило ярко." }
+            override suspend fun <T> session(model: app.benbow.client.SpeechModel, block: suspend (Recognizer) -> T): T = block(
+                object : Recognizer {
+                    override suspend fun file(sound: java.io.File) = "Шли вдоль берега, ветер был холодный, но солнце светило ярко."
+
+                    override suspend fun samples(samples: FloatArray) = error("no dictation here")
+                },
+            )
         }
         return AppServices(
             JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), BenbowDb.Schema),

@@ -29,23 +29,29 @@ fun speechPieces(samples: FloatArray, rate: Int = 16_000, minSeconds: Int = 10, 
     val window = rate / 10
     var start = 0
     while (samples.size - start > maxSeconds * rate) {
-        var bestAt = start + maxSeconds * rate
-        var bestEnergy = Double.MAX_VALUE
-        var at = start + minSeconds * rate
-        while (at + window <= start + maxSeconds * rate) {
-            var energy = 0.0
-            for (i in at until at + window) energy += samples[i] * samples[i]
-            if (energy < bestEnergy) {
-                bestEnergy = energy
-                bestAt = at + window / 2
-            }
-            at += window / 2
-        }
+        val bestAt = quietestPoint(samples, start + minSeconds * rate, start + maxSeconds * rate, window)
         pieces += start until bestAt
         start = bestAt
     }
     if (start < samples.size) pieces += start until samples.size
     return pieces
+}
+
+/** The middle of the quietest [window] of samples between [from] and [to], stepping half a window; [to] if none fits. */
+internal fun quietestPoint(samples: FloatArray, from: Int, to: Int, window: Int): Int {
+    var bestAt = to
+    var bestEnergy = Double.MAX_VALUE
+    var at = from
+    while (at + window <= to) {
+        var energy = 0.0
+        for (i in at until at + window) energy += samples[i] * samples[i]
+        if (energy < bestEnergy) {
+            bestEnergy = energy
+            bestAt = at + window / 2
+        }
+        at += window / 2
+    }
+    return bestAt
 }
 
 /** True when a piece holds nothing worth recognizing (its loudness stays under about -50 dBFS). */

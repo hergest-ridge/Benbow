@@ -45,6 +45,8 @@ internal class EntryPictures(
     private val transcripts: Map<String, String> = emptyMap(),
     /** How tall a transcript is at a width (the editor measures it with the row's text style). */
     private val textHeight: (String, Dp) -> Dp = { _, _ -> 0.dp },
+    /** «Заменить текстом» (7.10e): the editor puts a voice note's transcript in its place. */
+    private val onReplace: ((attachmentId: String, text: String) -> Unit)? = null,
 ) : AtomViews() {
     private fun find(atom: Atom.Attachment) = attachments.firstOrNull { it.meta.id == atom.ref }
 
@@ -86,6 +88,7 @@ internal class EntryPictures(
                     Modifier.align(Alignment.Center),
                     onRename = onRename?.let { rename -> { caption -> rename(meta.id, caption) } },
                     folded = false,
+                    onReplace = onReplace?.let { replace -> transcripts[meta.id]?.let { text -> { replace(meta.id, text) } } },
                 )
                 return@Box
             }

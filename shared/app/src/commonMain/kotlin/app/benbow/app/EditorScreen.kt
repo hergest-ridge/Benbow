@@ -27,6 +27,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -112,6 +113,7 @@ import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.resources.stringResource
+import kotlin.coroutines.CoroutineContext
 
 /**
  * Holds the editor while the screen lives. Typing goes to a [DraftSession]; changes that arrive from
@@ -307,6 +309,21 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     }
     var dropping by remember { mutableStateOf(false) }
     var editorFocused by remember { mutableStateOf(false) }
+    // Dictation (7.10) writes at the cursor, or after the text when the editor isn't focused, like pictures land.
+    val screenThread = rememberScreenThread()
+    val dictation = remember(vm, screenThread) { EditorDictation(vm, screenThread) { editorFocused } }
+    DisposableEffect(dictation) { onDispose { dictation.gone = true } }
+    // «Заменить текстом» (7.10e): the voice note leaves the entry; "Вернуть" puts it back in the text.
+    var replaced by remember { mutableStateOf<Pair<String, RichText>?>(null) }
+    LaunchedEffect(Unit) {
+        services.voiceBack.collect { id ->
+            val state = vm.editor
+            val last = replaced
+            if (state == null || last?.first != id) return@collect
+            if (state.model === last.second) state.undo() else state.insertAtom(Atom.Attachment(id), atEnd = true)
+            replaced = null
+        }
+    }
     LaunchedEffect(Unit) {
         // A picture or video added while writing lands in the text: at the cursor, or after the text if it isn't there.
         services.attached.collect { added ->
@@ -340,7 +357,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     val density = LocalDensity.current
     val transcriptStyle = MaterialTheme.typography.bodyMedium
     val transcripts = detail?.transcripts.orEmpty()
-    val pictures = remember(attachments, detail?.id, transcripts, transcriptStyle) {
+    val pictures = remember(attachments, detail?.id, transcripts, transcriptStyle, vm.reading) {
         EntryPictures(
             services,
             attachments,
@@ -358,6 +375,19 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
             textHeight = { text, width ->
                 val px = with(density) { width.roundToPx() }.coerceAtLeast(1)
                 with(density) { measurer.measure(text, transcriptStyle, constraints = Constraints(maxWidth = px)).size.height.toDp() }
+            },
+            onReplace = if (vm.reading) {
+                null
+            } else {
+                { id, text ->
+                    val state = vm.editor
+                    val entry = vm.entryId
+                    if (state != null && entry != null && state.replaceAttachmentWithText(id, text)) {
+                        replaced = id to state.model
+                        services.scope.launch { services.repo.removeAttachment(entry, id) }
+                        services.messages.tryEmit(AppMessage.VoiceReplaced(entry, id))
+                    }
+                }
             },
         )
     }
@@ -520,11 +550,10 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
         },
         bottomBar = {
             if (vm.reading) {
-                QuickNoteBar(onSend = vm::comment, hint = stringResource(Res.string.comment_hint))
+                QuickNoteBar(services, onSend = vm::comment, hint = stringResource(Res.string.comment_hint))
             } else if (editor != null) {
                 Column(Modifier.navigationBarsPadding().imePadding()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        MediaBar(services, vm::ensureEntryId, Modifier.weight(1f))
+                    MediaBar(services, vm::ensureEntryId, dictation) {
                         IconButton({
                             vm.drawingAtEnd = !editorFocused
                             services.scope.launch { vm.ensureEntryId().let { id -> nav.open(Route.Drawing(id, null)) } }
@@ -645,6 +674,36 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                 }
             }
         }
+    }
+}
+
+/**
+ * Dictation into the editor (7.10): each phrase goes in as typed text at the cursor, or after the text when the editor
+ * isn't [focused]; ✕ takes the take's phrases back while nothing else was typed. A take makes the entry when it begins,
+ * so one that has to stay a voice note has its entry.
+ */
+private class EditorDictation(private val vm: EditorViewModel, ui: CoroutineContext, private val focused: () -> Boolean) :
+    ScreenTarget(ui) {
+    private var count = 0
+    private var after: RichText? = null
+
+    override suspend fun begin(): String {
+        count = 0
+        after = null
+        return vm.ensureEntryId()
+    }
+
+    override fun put(phrase: String): Boolean {
+        val editor = vm.editor?.takeIf { !vm.reading } ?: return false
+        editor.insertDictated(phrase, atEnd = !focused())
+        count++
+        after = editor.model
+        return true
+    }
+
+    override suspend fun takeBack() = onScreen {
+        val editor = vm.editor ?: return@onScreen
+        if (editor.model === after) repeat(count) { editor.undo() }
     }
 }
 

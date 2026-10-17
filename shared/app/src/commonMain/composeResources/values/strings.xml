@@ -63,8 +63,6 @@
 
     <string name="media_gallery">Фото и видео</string>
     <string name="media_camera">Снять фото</string>
-    <string name="media_voice">Голосовая заметка: удерживайте</string>
-    <string name="media_recording">Запись… отпустите, чтобы сохранить</string>
     <string name="media_mic_denied">Чтобы записывать голос, разрешите доступ к микрофону</string>
     <string name="media_file">Добавить файл</string>
     <string name="media_open">Открыть в другом приложении</string>
@@ -115,8 +113,20 @@
     <string name="voice_note">Голосовое сообщение</string>
     <string name="audio_play">Слушать</string>
     <string name="audio_pause">Пауза</string>
-    <string name="voice_tap_to_finish">нажмите ещё раз, чтобы сохранить</string>
     <string name="voice_discard">Не сохранять</string>
+    <string name="recorder_voice">голос</string>
+    <string name="recorder_text">текст</string>
+    <string name="recorder_voice_about">Голосовое: щелчок пишет до второго щелчка, удержание пока держите</string>
+    <string name="recorder_text_about">Текст голосом: щелчок пишет до второго щелчка, удержание пока держите</string>
+    <string name="recording_voice">Голос</string>
+    <string name="recording_text">Текст</string>
+    <string name="dictation_done">Текст вставлен</string>
+    <string name="dictation_attach">Приложить запись</string>
+    <string name="dictation_kept">Не получилось распознать: запись сохранена голосовым</string>
+    <string name="dictation_needs_model">Для текста голосом нужна модель</string>
+    <string name="dictation_open_model">Открыть</string>
+    <string name="voice_replace">Заменить текстом</string>
+    <string name="voice_replaced">Голосовое заменено текстом</string>
     <string name="post_section">Посты</string>
     <string name="post_media">Фото без места в тексте</string>
     <string-array name="post_media_names">

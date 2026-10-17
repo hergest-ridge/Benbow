@@ -2,6 +2,7 @@ package app.benbow.app
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
@@ -27,7 +28,13 @@ import java.nio.file.Files
 import javax.imageio.ImageIO
 
 @Composable
-internal actual fun MediaBar(services: AppServices, entryId: suspend () -> String, modifier: Modifier) {
+internal actual fun MediaBar(
+    services: AppServices,
+    entryId: suspend () -> String,
+    dictation: DictationTarget?,
+    modifier: Modifier,
+    tools: @Composable RowScope.() -> Unit,
+) {
     val title = stringResource(Res.string.media_file)
     Row(modifier.padding(horizontal = 4.dp)) {
         IconButton({
@@ -37,6 +44,7 @@ internal actual fun MediaBar(services: AppServices, entryId: suspend () -> Strin
             }
             dialog.files.forEach { file -> services.attach(entryId, { file.inputStream() }) { desktopProbe(file) } }
         }, modifier = Modifier.hand()) { Icon(Icons.Attach, title) }
+        tools()
     }
 }
 
@@ -80,3 +88,7 @@ private fun jpegPreview(image: BufferedImage, max: Int = 512): ByteArray {
     }
     return ByteArrayOutputStream().also { ImageIO.write(small, "jpg", it) }.toByteArray()
 }
+
+/** No dictation on desktop: no recognizer there (ADR-025). */
+@Composable
+internal actual fun DictationKey(services: AppServices, target: DictationTarget, modifier: Modifier) = Unit

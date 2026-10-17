@@ -76,8 +76,9 @@ internal fun DayHeader(day: String) {
 }
 
 @Composable
-internal fun QuickNoteBar(onSend: (String) -> Unit, onNewEntry: (() -> Unit)? = null, hint: String? = null) {
+internal fun QuickNoteBar(services: AppServices, onSend: (String) -> Unit, onNewEntry: (() -> Unit)? = null, hint: String? = null) {
     var text by rememberSaveable { mutableStateOf("") }
+    val dictation = rememberFieldDictation({ text }) { text = it }
     Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
         Row(
             Modifier.navigationBarsPadding().imePadding().padding(horizontal = 8.dp, vertical = 6.dp),
@@ -98,6 +99,7 @@ internal fun QuickNoteBar(onSend: (String) -> Unit, onNewEntry: (() -> Unit)? = 
                 ),
                 modifier = Modifier.weight(1f),
             )
+            DictationKey(services, dictation, Modifier.padding(start = 6.dp, bottom = 1.dp))
             if (text.isBlank()) {
                 if (onNewEntry != null) {
                     IconButton(onNewEntry, Modifier.padding(bottom = 4.dp).hand()) {

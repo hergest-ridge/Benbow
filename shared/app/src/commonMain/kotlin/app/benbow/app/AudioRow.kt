@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -48,6 +49,7 @@ import app.benbow.app.resources.audio_pause
 import app.benbow.app.resources.audio_play
 import app.benbow.app.resources.speech_transcribe
 import app.benbow.app.resources.voice_note
+import app.benbow.app.resources.voice_replace
 import app.benbow.client.LocalFile
 import app.benbow.client.Media
 import app.benbow.client.SpeechModel
@@ -89,6 +91,8 @@ internal fun AudioRow(
     onTranscribe: (() -> Unit)? = null,
     /** In the text the whole transcript shows (the line is sized for it); elsewhere it folds to a few lines. */
     folded: Boolean = true,
+    /** «Заменить текстом» (7.10e): in the editor, a voice note with its transcript can give way to the words. */
+    onReplace: (() -> Unit)? = null,
 ) {
     val audio = LocalAudio.current
     val now by (audio?.now ?: remember { kotlinx.coroutines.flow.MutableStateFlow<AudioNow?>(null) }).collectAsState()
@@ -173,6 +177,10 @@ internal fun AudioRow(
                     transcript == null && onTranscribe != null -> IconButton(onTranscribe, modifier = Modifier.hand()) {
                         Icon(Icons.Transcribe, stringResource(Res.string.speech_transcribe), tint = colors.onSurfaceVariant)
                     }
+
+                    transcript != null && onReplace != null -> TextButton(onReplace, modifier = Modifier.hand()) {
+                        Text(stringResource(Res.string.voice_replace))
+                    }
                 }
             }
             if (transcript != null) {
@@ -205,6 +213,7 @@ internal fun VoiceRow(
     modifier: Modifier = Modifier,
     onRename: ((String?) -> Unit)? = null,
     folded: Boolean = true,
+    onReplace: (() -> Unit)? = null,
 ) {
     val transcriptions = services.transcriptions
     val model = transcriptions?.model?.state?.collectAsState()?.value
@@ -222,6 +231,7 @@ internal fun VoiceRow(
             null
         },
         folded = folded,
+        onReplace = onReplace,
     )
 }
 

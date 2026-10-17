@@ -358,15 +358,23 @@ class JournalRepository(
     }
 
     /** Hides the attachment (S6: the file and the link's history stay on the server). */
-    fun removeAttachment(entryId: String, attachmentId: String) {
+    fun removeAttachment(entryId: String, attachmentId: String) = setPresent(entryId, attachmentId, false)
+
+    /** Shows a hidden attachment again ("Вернуть"). */
+    fun restoreAttachment(entryId: String, attachmentId: String) = setPresent(entryId, attachmentId, true)
+
+    private fun setPresent(entryId: String, attachmentId: String, present: Boolean) {
         db.transaction {
             val entry = q.selectEntry(entryId).executeAsOneOrNull() ?: return@transaction
             val current = decodeAttachments(entry.attachments)
-            val state = current[attachmentId]?.copy(present = false, hlc = clock.next()) ?: return@transaction
+            val state = current[attachmentId]?.copy(present = present, hlc = clock.next()) ?: return@transaction
             enqueue(PutAttachment(newId(), entryId, state.meta, state.position, state.caption, state.present, state.hlc))
             putAttachments(entryId, current + (attachmentId to state))
         }
     }
+
+    /** Whether the entry is on this device (in the trash too). */
+    fun hasEntry(id: String): Boolean = q.selectEntry(id).executeAsOneOrNull() != null
 
     /**
      * Puts an attachment between two others in the hand-made order ([after] / [before], null = that end). Pictures

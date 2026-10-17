@@ -40,6 +40,7 @@ internal fun CommentsScreen(services: AppServices, nav: Navigator, route: Route.
         topBar = { TopAppBar(navigationIcon = { BackButton(nav::back) }, title = { Text(stringResource(Res.string.comments)) }) },
         bottomBar = {
             QuickNoteBar(
+                services,
                 onSend = { text -> services.scope.launch { services.repo.createComment(route.entryId, services.today(), text) } },
                 hint = stringResource(Res.string.comment_hint),
             )

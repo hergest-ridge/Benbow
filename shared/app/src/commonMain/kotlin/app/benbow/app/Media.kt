@@ -1,5 +1,6 @@
 package app.benbow.app
 
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import app.benbow.client.ByteSource
@@ -56,9 +57,23 @@ internal fun AppServices.attach(
     }
 }
 
-/** Buttons that add photos, videos, voice notes or files to an entry; what's offered depends on the device. */
+/**
+ * Buttons that add photos, videos, voice notes or files to an entry; what's offered depends on the device. [tools]
+ * follow them (the editor's drawing button). On Android the dictaphone's keys close the row (7.10): «голос» records a
+ * voice note, «текст» writes into [dictation].
+ */
 @Composable
-internal expect fun MediaBar(services: AppServices, entryId: suspend () -> String, modifier: Modifier = Modifier)
+internal expect fun MediaBar(
+    services: AppServices,
+    entryId: suspend () -> String,
+    dictation: DictationTarget?,
+    modifier: Modifier = Modifier,
+    tools: @Composable RowScope.() -> Unit = {},
+)
+
+/** The текст key for a quick note (7.10d), where this device can dictate; nothing elsewhere. */
+@Composable
+internal expect fun DictationKey(services: AppServices, target: DictationTarget, modifier: Modifier = Modifier)
 
 /** Files dropped on the screen from the desktop are attached; [onHover] tells while some are over it. No-op on Android. */
 @Composable

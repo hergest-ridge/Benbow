@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextRange
+import app.benbow.core.speech.fitPhrase
 import app.benbow.core.text.Align
 import app.benbow.core.text.Atom
 import app.benbow.core.text.BlockKeys
@@ -164,6 +165,40 @@ class EditorState(initial: RichText, private val keys: BlockKeys = BlockKeys()) 
         model = result.text
         typingMarks = result.typingMarks
         textFieldState.edit { syncText(result.text.text, TextRange(result.selectionStart, result.selectionEnd), forceSelection = true) }
+    }
+
+    /**
+     * Puts a dictated phrase in like typed text (7.10): in place of the selection, or after the text when [atEnd],
+     * fitted to what stands before it in its paragraph ([fitPhrase]); one undo step per phrase, with the marks typing
+     * would get there (inside a spoiler it stays a spoiler).
+     */
+    fun insertDictated(phrase: String, atEnd: Boolean) {
+        val before = model
+        val sel = if (atEnd) TextRange(before.text.length) else selection
+        val i = before.paragraphIndexAt(sel.min)
+        val start = before.paragraphStarts[i]
+        val lead = if (before.paragraphs[i].atom != null) "" else before.text.substring(start, sel.min)
+        val piece = fitPhrase(lead, phrase)
+        if (piece.isEmpty()) return
+        val marks = (if (atEnd) null else typingMarks) ?: before.marksForInsertion(sel.min, sel.max)
+        val result = before.applyUserEdit(sel.min, sel.max, piece, marks, keys)
+        record(Snapshot(before, selection), typing = false)
+        model = result.text
+        typingMarks = result.typingMarks
+        textFieldState.edit { syncText(result.text.text, TextRange(result.selectionStart, result.selectionEnd), forceSelection = true) }
+    }
+
+    /** Puts [text] in place of the atom of attachment [ref] (7.10e: a voice note gives way to its words); undoable. */
+    fun replaceAttachmentWithText(ref: String, text: String): Boolean {
+        val before = model
+        val i = before.paragraphs.indexOfFirst { (it.atom as? Atom.Attachment)?.ref == ref }.takeIf { it >= 0 } ?: return false
+        val words = text.trim().ifEmpty { return false }
+        val start = before.paragraphStarts[i]
+        val result = before.applyUserEdit(start, start + 1, words, emptySet(), keys)
+        record(Snapshot(before, selection), typing = false)
+        model = result.text
+        textFieldState.edit { syncText(result.text.text, TextRange(result.selectionStart), forceSelection = true) }
+        return true
     }
 
     fun undo() {

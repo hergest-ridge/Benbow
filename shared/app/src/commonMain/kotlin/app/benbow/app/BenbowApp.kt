@@ -72,8 +72,14 @@ import app.benbow.app.resources.Res
 import app.benbow.app.resources.attach_failed
 import app.benbow.app.resources.category_trashed
 import app.benbow.app.resources.copied
+import app.benbow.app.resources.dictation_attach
+import app.benbow.app.resources.dictation_done
+import app.benbow.app.resources.dictation_kept
+import app.benbow.app.resources.dictation_needs_model
+import app.benbow.app.resources.dictation_open_model
 import app.benbow.app.resources.gentle_turned_off
 import app.benbow.app.resources.gentle_turned_on
+import app.benbow.app.resources.media_mic_denied
 import app.benbow.app.resources.months_genitive
 import app.benbow.app.resources.postponed
 import app.benbow.app.resources.reminder_now
@@ -92,6 +98,7 @@ import app.benbow.app.resources.veil_undo
 import app.benbow.app.resources.veiled_curtain
 import app.benbow.app.resources.veiled_none
 import app.benbow.app.resources.veiled_quiet
+import app.benbow.app.resources.voice_replaced
 import app.benbow.client.TagRegistry
 import app.benbow.client.Templates
 import app.benbow.client.Veil
@@ -367,6 +374,36 @@ private fun AppRoot(services: AppServices) {
                             duration = SnackbarDuration.Long,
                         )
                     if (result == SnackbarResult.ActionPerformed) services.repo.restoreCategory(message.id)
+                }
+
+                is AppMessage.Dictated -> {
+                    val result = snackbar.showSnackbar(
+                        getString(Res.string.dictation_done),
+                        getString(Res.string.dictation_attach),
+                        duration = SnackbarDuration.Long,
+                    )
+                    services.dictations?.settle(message, attach = result == SnackbarResult.ActionPerformed)
+                }
+
+                AppMessage.DictationKept -> snackbar.showSnackbar(getString(Res.string.dictation_kept))
+
+                AppMessage.DictationNeedsModel -> {
+                    val result = snackbar.showSnackbar(
+                        getString(Res.string.dictation_needs_model),
+                        getString(Res.string.dictation_open_model),
+                    )
+                    if (result == SnackbarResult.ActionPerformed) nav.open(Route.Speech)
+                }
+
+                AppMessage.MicDenied -> snackbar.showSnackbar(getString(Res.string.media_mic_denied))
+
+                is AppMessage.VoiceReplaced -> {
+                    val result = snackbar.showSnackbar(
+                        getString(Res.string.voice_replaced),
+                        getString(Res.string.veil_undo),
+                        duration = SnackbarDuration.Long,
+                    )
+                    if (result == SnackbarResult.ActionPerformed) services.restoreVoice(message.entryId, message.attachmentId)
                 }
             }
         }

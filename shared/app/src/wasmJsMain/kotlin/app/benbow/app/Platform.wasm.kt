@@ -1,6 +1,7 @@
 package app.benbow.app
 
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ColorScheme
@@ -43,14 +44,25 @@ internal actual fun rememberPrint(): (PrintPage) -> Unit = { page -> openHtml(pa
 
 /** The browser's file dialog: the chosen files are attached like picked ones on the other platforms. */
 @Composable
-internal actual fun MediaBar(services: AppServices, entryId: suspend () -> String, modifier: Modifier) {
+internal actual fun MediaBar(
+    services: AppServices,
+    entryId: suspend () -> String,
+    dictation: DictationTarget?,
+    modifier: Modifier,
+    tools: @Composable RowScope.() -> Unit,
+) {
     val title = stringResource(Res.string.media_file)
     Row(modifier.padding(horizontal = 4.dp)) {
         IconButton({
             pickFiles("", multiple = true) { files -> forEachItem(files) { services.attachBrowserFile(entryId, it) } }
         }, modifier = Modifier.hand()) { Icon(Icons.Attach, title) }
+        tools()
     }
 }
+
+/** No dictation in the browser (ADR-029). */
+@Composable
+internal actual fun DictationKey(services: AppServices, target: DictationTarget, modifier: Modifier) = Unit
 
 /**
  * Files dropped on the page or pasted while the entry is open are attached, like files dragged from Explorer into the

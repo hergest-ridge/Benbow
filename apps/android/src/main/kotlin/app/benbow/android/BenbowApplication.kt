@@ -8,6 +8,7 @@ import android.os.Process
 import android.provider.Settings
 import androidx.sqlite.db.SupportSQLiteDatabase
 import app.benbow.android.asr.SandboxTranscriber
+import app.benbow.app.AndroidDictationMic
 import app.benbow.app.AppServices
 import app.benbow.app.mediaIn
 import app.benbow.client.KeystoreSecretBox
@@ -50,6 +51,7 @@ class BenbowApplication : Application() {
             reminderClock = AlarmReminderClock(this),
             transcriber = SandboxTranscriber(this),
             speechModel = { api -> SpeechModelStore(File(filesDir, "models/" + SpeechModelSpec.ID), api) },
+            mic = AndroidDictationMic(this),
         )
     }
 

@@ -106,6 +106,21 @@ sealed interface AppMessage {
 
     /** A category went to the trash; "Вернуть" brings it back. */
     data class CategoryTrashed(val id: String, val name: String) : AppMessage
+
+    /** A take's text is in (7.10): «Приложить запись» attaches its audio to [entryId] as a voice note. */
+    data class Dictated(val take: TakeFile, val entryId: String) : AppMessage
+
+    /** A take couldn't become text and was kept as a voice note. */
+    data object DictationKept : AppMessage
+
+    /** The текст key is locked: the speech model isn't on this device yet; «Открыть» goes to it. */
+    data object DictationNeedsModel : AppMessage
+
+    /** The microphone isn't allowed. */
+    data object MicDenied : AppMessage
+
+    /** A voice note gave way to its text (7.10e); "Вернуть" brings it back. */
+    data class VoiceReplaced(val entryId: String, val attachmentId: String) : AppMessage
 }
 
 /**
@@ -126,6 +141,8 @@ class AppServices(
     /** Speech to text on this device (7.6) and its model; none on desktop and in the browser. */
     transcriber: Transcriber? = null,
     speechModel: SpeechModelFactory? = null,
+    /** The microphone for dictation (7.10); Android only. */
+    mic: DictationMic? = null,
 ) {
     val scope = CoroutineScope(SupervisorJob() + IoDispatcher)
     val now: () -> Long = { Clock.System.now().toEpochMilliseconds() }
@@ -233,6 +250,24 @@ class AppServices(
             .also { t -> scope.launch { attached.collect(t::added) } }
     } else {
         null
+    }
+
+    /** Dictation (7.10): text from the microphone, where there is one and a recognizer (Android). */
+    val dictations: Dictations? = if (mic != null && transcriber != null && transcriptions != null) {
+        Dictations(this, mic, transcriber, transcriptions.model)
+    } else {
+        null
+    }
+
+    /** Voice notes brought back after «Заменить текстом» (7.10e): an open editor of their entry puts them in the text again. */
+    val voiceBack = MutableSharedFlow<String>(extraBufferCapacity = 4)
+
+    /** "Вернуть" after «Заменить текстом»: the voice note is on its entry again, and back in the text where it's open. */
+    fun restoreVoice(entryId: String, attachmentId: String) {
+        scope.launch {
+            repo.restoreAttachment(entryId, attachmentId)
+            voiceBack.emit(attachmentId)
+        }
     }
 
     /** Key combinations from the window (desktop): the app root and the open editor act on them. */

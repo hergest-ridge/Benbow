@@ -48,6 +48,9 @@ import app.benbow.app.resources.capture_hint
 import app.benbow.app.resources.capture_save
 import app.benbow.app.resources.capture_saving
 import app.benbow.app.resources.capture_title
+import app.benbow.app.resources.dictation_kept
+import app.benbow.app.resources.dictation_needs_model
+import app.benbow.app.resources.media_mic_denied
 import app.benbow.client.ByteSource
 import app.benbow.client.IoDispatcher
 import coil3.compose.AsyncImage
@@ -55,6 +58,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -101,6 +105,19 @@ fun QuickCapture(services: AppServices, shared: SharedContent, onClose: () -> Un
         var saving by remember { mutableStateOf(false) }
         var error by remember { mutableStateOf<String?>(null) }
         val scope = rememberCoroutineScope()
+        val dictation = rememberFieldDictation({ text }) { text = it }
+        // The sheet has no snackbar of its own: what dictation has to say shows under the field.
+        var notice by remember { mutableStateOf<StringResource?>(null) }
+        LaunchedEffect(Unit) {
+            services.messages.collect {
+                notice = when (it) {
+                    AppMessage.DictationNeedsModel -> Res.string.dictation_needs_model
+                    AppMessage.DictationKept -> Res.string.dictation_kept
+                    AppMessage.MicDenied -> Res.string.media_mic_denied
+                    else -> notice
+                }
+            }
+        }
         val save: () -> Unit = {
             saving = true
             error = null
@@ -148,7 +165,15 @@ fun QuickCapture(services: AppServices, shared: SharedContent, onClose: () -> Un
                         modifier = Modifier.fillMaxWidth().focusRequester(focus),
                     )
                     error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+                    notice?.let {
+                        Text(
+                            stringResource(it),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        DictationKey(services, dictation, Modifier.padding(end = 8.dp))
                         TextButton(onClose, enabled = !saving, modifier = Modifier.hand(!saving)) {
                             Text(stringResource(Res.string.cancel))
                         }

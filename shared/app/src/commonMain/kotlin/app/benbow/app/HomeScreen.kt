@@ -174,7 +174,7 @@ internal fun HomeScreen(services: AppServices, nav: Navigator) {
     val newEntry = { nav.open(Route.Editor(null, services.today(), opened = services.now())) }
     Scaffold(
         topBar = { HomeHeader(state?.today, status) { nav.open(Route.Server) } },
-        bottomBar = { QuickNoteBar(onSend = vm::quickNote, onNewEntry = newEntry) },
+        bottomBar = { QuickNoteBar(services, onSend = vm::quickNote, onNewEntry = newEntry) },
     ) { padding ->
         PullToRefreshBox(
             isRefreshing = refreshUntil?.let { status.completed < it } == true,

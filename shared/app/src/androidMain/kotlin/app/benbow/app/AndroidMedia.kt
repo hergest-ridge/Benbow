@@ -101,7 +101,7 @@ internal object AndroidProbe {
     }.getOrNull()?.takeIf { it > 0 }
 }
 
-/** Voice notes: AAC in .m4a, recorded into app storage while the mic button is held. */
+/** Voice notes: AAC in .m4a, recorded into app storage while the «голос» key is down. */
 internal class VoiceRecorder(private val context: Context) {
     var recording by mutableStateOf(false)
         private set
@@ -158,4 +158,7 @@ internal class VoiceRecorder(private val context: Context) {
 
     /** How long the current recording runs, for the timer. */
     fun elapsedMs(): Long = if (recording) SystemClock.elapsedRealtime() - startedAt else 0
+
+    /** How loud it was since the last call, 0..1, for the lamp (a peak taken as a sine's RMS). */
+    fun level(): Float = levelOf((recorder?.maxAmplitude ?: 0) / 32768f / 1.414f)
 }

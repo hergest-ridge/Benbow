@@ -1,6 +1,8 @@
 package app.benbow.app
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -292,48 +294,55 @@ internal fun HomeScreen(services: AppServices, nav: Navigator) {
                     nav.selectTab(Route.Search)
                 },
             )
-            editing?.let { select ->
-                HomeEditor(services, home.layout, home, select.ifEmpty { null }, onDismiss = { editing = null })
-            }
             postponing?.let { entry ->
                 PostponeDialog(onPick = { day ->
                     postponing = null
                     services.postpone(entry.id, day.toString(), entry.until)
                 }, onDismiss = { postponing = null })
             }
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
-                home.returned?.let { entry ->
-                    item(key = "returned") {
-                        ReturnedCard(
-                            entry,
-                            onOpen = {
-                                vm.answerReturned(entry.id)
-                                actions.open(entry)
-                            },
-                            onLater = { vm.answerReturned(entry.id) },
-                            onAgain = { postponing = entry },
-                        )
-                    }
-                }
-                vm.review?.let { kind ->
-                    item(key = "review") {
-                        val (days, mood) = if (kind == "week") home.week else home.month
-                        val face = moodEmoji(mood?.roundToInt())?.let { " · $it" }.orEmpty()
-                        ReviewCard(
-                            stringResource(if (kind == "week") Res.string.review_week else Res.string.review_month),
-                            if (days > 0) pluralStringResource(Res.plurals.review_summary, days, days) + face else "",
-                        ) { write(kind) }
-                    }
-                }
-                homeBlocks(home, actions, services) { block ->
-                    if (block.kind == HomeBlockType.Checkin && kindness) {
-                        item(key = "kindness") {
-                            KindnessCard(Prompts.kindness(home.today), onWrite = {
-                                vm.kindness.value = false
-                                write(Templates.KINDNESS.id)
-                            }, onLater = { vm.kindness.value = false })
+            // Four columns once Home itself is wide enough for two blocks of M side by side (a tablet, a desktop window;
+            // beside an open entry it is the list's pane that counts).
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                val columns = if (maxWidth >= WIDE_HOME) 4 else 2
+                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
+                    home.returned?.let { entry ->
+                        item(key = "returned") {
+                            ReturnedCard(
+                                entry,
+                                onOpen = {
+                                    vm.answerReturned(entry.id)
+                                    actions.open(entry)
+                                },
+                                onLater = { vm.answerReturned(entry.id) },
+                                onAgain = { postponing = entry },
+                            )
                         }
                     }
+                    vm.review?.let { kind ->
+                        item(key = "review") {
+                            val (days, mood) = if (kind == "week") home.week else home.month
+                            val face = moodEmoji(mood?.roundToInt())?.let { " · $it" }.orEmpty()
+                            ReviewCard(
+                                stringResource(if (kind == "week") Res.string.review_week else Res.string.review_month),
+                                if (days > 0) pluralStringResource(Res.plurals.review_summary, days, days) + face else "",
+                            ) { write(kind) }
+                        }
+                    }
+                    homeBlocks(home, actions, services, columns) { block ->
+                        if (block.kind == HomeBlockType.Checkin && kindness) {
+                            item(key = "kindness") {
+                                Box(Modifier.animateItem()) {
+                                    KindnessCard(Prompts.kindness(home.today), onWrite = {
+                                        vm.kindness.value = false
+                                        write(Templates.KINDNESS.id)
+                                    }, onLater = { vm.kindness.value = false })
+                                }
+                            }
+                        }
+                    }
+                }
+                editing?.let { select ->
+                    HomeEditor(services, home.layout, home, select.ifEmpty { null }, columns, onDismiss = { editing = null })
                 }
             }
         }
@@ -376,3 +385,6 @@ private fun greeting(): String {
         },
     )
 }
+
+/** From this width Home lays its blocks out in four columns. */
+private val WIDE_HOME = 600.dp

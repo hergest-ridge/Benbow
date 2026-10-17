@@ -184,7 +184,7 @@ private val BlockSize.label: StringResource get() = when (this) {
  * once; [home] (Home behind the sheet, live) tells which blocks have nothing to show now.
  */
 @Composable
-internal fun HomeEditor(services: AppServices, start: HomeLayout, home: HomeState, select: String?, onDismiss: () -> Unit) {
+internal fun HomeEditor(services: AppServices, start: HomeLayout, home: HomeState, select: String?, columns: Int, onDismiss: () -> Unit) {
     val editor = remember { HomeLayoutEditor(services.repo, services.scope, start) }
     DisposableEffect(editor) { onDispose { editor.close() } }
     val layout by editor.layout.collectAsState()
@@ -221,7 +221,7 @@ internal fun HomeEditor(services: AppServices, start: HomeLayout, home: HomeStat
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Schematic(layout, home, selected) { selected = it }
+                Schematic(layout, home, selected, columns) { selected = it }
                 val drawn = layout.blocks.filter { it.blockSize != null }
                 drawn.indexOfFirst { it.id == selected }.takeIf { it >= 0 }?.let { at ->
                     val block = drawn[at]
@@ -294,7 +294,7 @@ internal fun HomeEditor(services: AppServices, start: HomeLayout, home: HomeStat
 /** Home's rows in miniature, in the same packing; tiles glide to their new places. */
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-private fun Schematic(layout: HomeLayout, home: HomeState, selected: String?, onSelect: (String) -> Unit) {
+private fun Schematic(layout: HomeLayout, home: HomeState, selected: String?, columns: Int, onSelect: (String) -> Unit) {
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surface,
@@ -303,7 +303,7 @@ private fun Schematic(layout: HomeLayout, home: HomeState, selected: String?, on
     ) {
         LookaheadScope {
             Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                packHome(layout.blocks).forEach { row ->
+                packHome(layout.blocks, columns).forEach { row ->
                     key(row.first().id) {
                         Row(Modifier.animateBounds(this@LookaheadScope), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             row.forEach { block ->
@@ -312,7 +312,7 @@ private fun Schematic(layout: HomeLayout, home: HomeState, selected: String?, on
                                     empty = !home.shows(block),
                                     selected = block.id == selected,
                                     onClick = { onSelect(block.id) },
-                                    modifier = Modifier.weight((block.blockSize?.span(2) ?: 2).toFloat()),
+                                    modifier = Modifier.weight((block.blockSize?.span(columns) ?: columns).toFloat()),
                                 )
                             }
                         }

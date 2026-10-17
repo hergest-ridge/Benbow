@@ -850,6 +850,20 @@ class AppSmokeTest {
     }
 
     @Test
+    fun aWideHomeLaysBlocksSideBySide() = runDesktopComposeUiTest(width = 820, height = 860) {
+        val today = LocalDate.parse(services.today())
+        services.repo.createNote(services.today(), "Утро у окна")
+        val evening = services.repo.createNote(today.minus(60, DateTimeUnit.DAY).toString(), "Тот самый вечер")
+        services.repo.setFavorite(evening, true)
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Как сейчас дела?"), 5_000)
+        val checkin = onNodeWithText("Как сейчас дела?").getBoundsInRoot()
+        val prompt = onNodeWithText(Prompts.ofTheDay(services.today())).getBoundsInRoot()
+        assertTrue(prompt.left > checkin.right && prompt.top < checkin.bottom, "two blocks of M share a row")
+        screenshot("12m-home-wide")
+    }
+
+    @Test
     fun theOwnerArrangesHome() = runDesktopComposeUiTest(width = 412, height = 860) {
         val ids = { runBlocking { services.repo.homeLayout().first().blocks.map { it.id } } }
         setContent { BenbowApp(services) }

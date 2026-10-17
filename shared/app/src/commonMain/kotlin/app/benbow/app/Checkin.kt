@@ -35,11 +35,11 @@ import org.jetbrains.compose.resources.stringResource
 
 /** One tap for the mood; feelings and words only if wanted (affect labeling, ux.md#psychology). */
 @Composable
-internal fun CheckinCard(onSave: (mood: Int, emotions: List<String>, text: String) -> Unit) {
+internal fun CheckinCard(onSave: (mood: Int, emotions: List<String>, text: String) -> Unit, modifier: Modifier = Modifier) {
     var mood by remember { mutableStateOf<Int?>(null) }
     var emotions by remember { mutableStateOf(emptySet<String>()) }
     var text by remember { mutableStateOf("") }
-    HomeCard {
+    HomeCard(modifier = modifier) {
         Text(stringResource(Res.string.checkin_title), style = MaterialTheme.typography.titleMedium)
         Row {
             MOODS.forEach { (value, face) ->
@@ -107,11 +107,15 @@ internal fun ReviewCard(title: String, summary: String, onWrite: () -> Unit) {
 }
 
 @Composable
-internal fun HomeCard(color: Color = MaterialTheme.colorScheme.surfaceContainerLow, content: @Composable () -> Unit) {
+internal fun HomeCard(
+    color: Color = MaterialTheme.colorScheme.surfaceContainerLow,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
     Surface(
         color = color,
         shape = RoundedCornerShape(16.dp),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { content() }
     }

@@ -1469,15 +1469,20 @@ class AppSmokeTest {
         waitUntilExactlyOneExists(hasText("Голосовое сообщение"), 5_000)
         screenshot("50-post-voice")
 
-        // A tap on the title names the sound in place; Done keeps it, and the feed shows the name too.
-        onNodeWithText("Голосовое сообщение").performClick()
+        // The pencil opens a sheet: title, artist and album like a track's; «Сохранить» keeps them.
+        onNodeWithContentDescription("Название и исполнитель").performClick()
         val title = hasSetTextAction() and isFocused() // the post's comment box has a text field too
         waitUntilExactlyOneExists(title, 5_000)
         onNode(title).performTextInput("Утро у моря")
+        onNode(hasSetTextAction() and hasText("Исполнитель")).performTextInput("Я и гитара")
         screenshot("51-voice-rename")
-        onNode(title).performImeAction()
-        waitUntilExactlyOneExists(hasText("Утро у моря") and hasClickAction(), 5_000)
-        assertEquals("Утро у моря", runBlocking { services.repo.entry(entry).first()!!.attachments.single().caption })
+        onNodeWithText("Сохранить").performClick()
+        // Title and artist land in one transaction; the in-memory test DB shares one connection, so wait for both.
+        waitUntil(timeoutMillis = 5_000) {
+            val named = runBlocking { services.repo.entry(entry).first()!! }
+            named.attachments.single().caption == "Утро у моря" && named.tracks[named.attachments.single().meta.id]?.artist == "Я и гитара"
+        }
+        waitUntilExactlyOneExists(hasText("Я и гитара · 0:42"), 5_000)
     }
 
     @Test
@@ -1539,11 +1544,12 @@ class AppSmokeTest {
         waitUntilExactlyOneExists(hasText("Голосовое сообщение"), 5_000)
         val voice = services.repo.entry(entry).let { runBlocking { it.first()!! } }.attachments.single().meta.id
         val transcript = "Шли вдоль берега, ветер был холодный, но солнце светило ярко."
-        if (runBlocking { services.repo.entry(entry).first()!!.transcripts[voice] } == null) {
-            onNodeWithContentDescription("Расшифровать").performClick()
-        }
-        waitUntilExactlyOneExists(hasText(transcript), 5_000)
-        screenshot("52-feed-transcript")
+        // Nothing is transcribed on its own any more (owner 2026-10-18): the row's button does it.
+        assertEquals(null, runBlocking { services.repo.entry(entry).first()!!.transcripts[voice] })
+        onNodeWithContentDescription("Расшифровать").performClick()
+        waitUntil(timeoutMillis = 10_000) { runBlocking { services.repo.entry(entry).first()!!.transcripts[voice] } != null }
+        // The post reads it afresh. (Under a full run the feed's window on the in-memory test DB sometimes misses the change
+        // notice; that the feed's posts follow a new transcript is checked in DictationsTest.)
         onNodeWithText("Мысли по дороге").performClick()
         waitUntilExactlyOneExists(hasText(transcript), 5_000)
         screenshot("53-post-transcript")

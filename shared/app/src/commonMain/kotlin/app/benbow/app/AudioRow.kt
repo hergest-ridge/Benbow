@@ -57,6 +57,7 @@ import app.benbow.app.resources.Res
 import app.benbow.app.resources.audio_pause
 import app.benbow.app.resources.audio_play
 import app.benbow.app.resources.media_audio
+import app.benbow.app.resources.sound_edit
 import app.benbow.app.resources.speech_transcribe
 import app.benbow.app.resources.voice_note
 import app.benbow.app.resources.voice_replace
@@ -116,7 +117,8 @@ internal fun AudioRow(
     attachment: AttachmentState,
     queue: () -> List<Track>,
     modifier: Modifier = Modifier,
-    onRename: ((String?) -> Unit)? = null,
+    /** Names given by hand: the pencil (or a tap on the title) opens a sheet with title, artist and album. */
+    onRename: ((SoundNames) -> Unit)? = null,
     transcript: String? = null,
     transcribing: Boolean = false,
     onTranscribe: (() -> Unit)? = null,
@@ -132,6 +134,9 @@ internal fun AudioRow(
     // Only the current track's row follows the position; the others don't recompose as it plays.
     val mine by remember(track.id) { derivedStateOf { state.value?.takeIf { it.track.id == track.id } } }
     var renaming by remember { mutableStateOf(false) }
+    if (renaming && onRename != null) {
+        SoundNamesSheet(SoundNames(attachment.caption, track.artist, track.album), defaultTitle, onRename) { renaming = false }
+    }
     val colors = MaterialTheme.colorScheme
     Surface(color = colors.surfaceContainerHigh, shape = RoundedCornerShape(14.dp), modifier = modifier.fillMaxWidth()) {
         Column {
@@ -143,20 +148,13 @@ internal fun AudioRow(
                 val playing = mine?.playing == true
                 PlayButton(services, track, playing, loading = mine?.loading == true && !playing) { player.toggle(track, queue) }
                 Column(Modifier.weight(1f)) {
-                    if (renaming && onRename != null) {
-                        TitleField(attachment.caption.orEmpty(), defaultTitle) {
-                            renaming = false
-                            onRename(it)
-                        }
-                    } else {
-                        Text(
-                            track.title,
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = if (onRename != null) Modifier.hand().clickable { renaming = true } else Modifier,
-                        )
-                    }
+                    Text(
+                        track.title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = if (onRename != null) Modifier.hand().clickable { renaming = true } else Modifier,
+                    )
                     val now = mine
                     val total = now?.durationMs?.takeIf { it > 0 } ?: track.durationMs ?: 0
                     if (now != null && total > 0) {
@@ -169,6 +167,11 @@ internal fun AudioRow(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
+                    }
+                }
+                if (onRename != null) {
+                    IconButton({ renaming = true }, modifier = Modifier.size(36.dp).hand()) {
+                        Icon(Icons.Edit, stringResource(Res.string.sound_edit), Modifier.size(20.dp), tint = colors.onSurfaceVariant)
                     }
                 }
                 when {
@@ -284,7 +287,7 @@ internal fun VoiceRow(
     attachment: AttachmentState,
     transcript: String?,
     modifier: Modifier = Modifier,
-    onRename: ((String?) -> Unit)? = null,
+    onRename: ((SoundNames) -> Unit)? = null,
     folded: Boolean = true,
     onReplace: (() -> Unit)? = null,
     tags: TrackTags? = null,
@@ -312,47 +315,5 @@ internal fun VoiceRow(
         folded = folded,
         onReplace = onReplace,
         defaultTitle = remember(names, attachment, tags) { names.track(entryId, attachment.copy(caption = null), tags).title },
-    )
-}
-
-/** The title in place: Done (or leaving the field) keeps it; blank goes back to [hint], the default name. */
-@Composable
-private fun TitleField(initial: String, hint: String, onDone: (String?) -> Unit) {
-    var text by remember { mutableStateOf(TextFieldValue(initial, TextRange(initial.length))) }
-    val focus = remember { FocusRequester() }
-    var focused by remember { mutableStateOf(false) }
-    var done by remember { mutableStateOf(false) }
-    val finish = {
-        if (!done) {
-            done = true
-            onDone(text.text)
-        }
-    }
-    LaunchedEffect(Unit) { focus.requestFocus() }
-    val colors = MaterialTheme.colorScheme
-    BasicTextField(
-        value = text,
-        onValueChange = { text = it },
-        singleLine = true,
-        textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.onSurface),
-        cursorBrush = SolidColor(colors.primary),
-        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = { finish() }),
-        decorationBox = { inner ->
-            // A hairline under the title says it's being edited.
-            Box(
-                Modifier.drawBehind {
-                    val y = size.height + 1.dp.toPx()
-                    drawLine(colors.primary, Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
-                },
-            ) {
-                if (text.text.isEmpty()) Text(hint, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
-                inner()
-            }
-        },
-        modifier = Modifier.fillMaxWidth().focusRequester(focus).onFocusChanged {
-            if (focused && !it.isFocused) finish()
-            focused = it.isFocused
-        },
     )
 }

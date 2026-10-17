@@ -32,6 +32,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -46,6 +47,9 @@ import app.benbow.app.resources.player_close
 import app.benbow.app.resources.player_next
 import app.benbow.app.resources.player_open
 import org.jetbrains.compose.resources.stringResource
+
+/** Opens the full player: screens that show their own mini-player (a post on a phone) use it. */
+internal val LocalOpenPlayer = staticCompositionLocalOf<(() -> Unit)?> { null }
 
 /**
  * The mini-player (ADR-035): a thin strip above the tab bar while a track is loaded. Play/pause, the title and artist,

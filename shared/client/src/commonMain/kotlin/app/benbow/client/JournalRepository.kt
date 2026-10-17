@@ -441,6 +441,19 @@ class JournalRepository(
         }
     }
 
+    /**
+     * Names a sound by hand: [title] becomes its caption, [artist] and [album] go into its `track:` field next to the
+     * title its file's tags gave (ADR-035); blanks clear them. A sound with an artist counts as music.
+     */
+    fun nameSound(entryId: String, attachmentId: String, title: String?, artist: String?, album: String?) = db.transaction {
+        setCaption(entryId, attachmentId, title)
+        val entry = q.selectEntry(entryId).executeAsOneOrNull() ?: return@transaction
+        val field = TrackTags.FIELD_PREFIX + attachmentId
+        val read = TrackTags.decode(decodeFields(entry.fields)[field])
+        val named = TrackTags(read?.title, artist?.trim()?.takeIf { it.isNotEmpty() }, album?.trim()?.takeIf { it.isNotEmpty() })
+        if (named != (read ?: TrackTags())) setField(entryId, field, named.takeUnless { it.isEmpty }?.encode())
+    }
+
     private fun putAttachments(entryId: String, attachments: Map<String, AttachmentState>) {
         val (count, cover) = mediaSummary(attachments)
         q.updateAttachments(ClientJson.encodeToString(attachmentsSerializer, attachments), count.toLong(), cover, now(), entryId)

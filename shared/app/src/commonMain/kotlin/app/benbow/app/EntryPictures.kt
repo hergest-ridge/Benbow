@@ -41,7 +41,7 @@ internal class EntryPictures(
     private val services: AppServices,
     private val attachments: List<AttachmentState>,
     private val onOpen: (attachmentId: String) -> Unit,
-    private val onRename: ((attachmentId: String, caption: String?) -> Unit)? = null,
+    private val onRename: ((attachmentId: String, names: SoundNames) -> Unit)? = null,
     private val entryId: String? = null,
     private val transcripts: Map<String, String> = emptyMap(),
     /** What each sound file says it is (ADR-035). */
@@ -89,7 +89,7 @@ internal class EntryPictures(
                     attachment,
                     transcripts[meta.id],
                     Modifier.align(Alignment.Center),
-                    onRename = onRename?.let { rename -> { caption -> rename(meta.id, caption) } },
+                    onRename = onRename?.let { rename -> { names -> rename(meta.id, names) } },
                     folded = false,
                     onReplace = onReplace?.let { replace -> transcripts[meta.id]?.let { text -> { replace(meta.id, text) } } },
                     tags = tracks[meta.id],

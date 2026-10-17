@@ -73,7 +73,6 @@ import app.benbow.core.text.BlockStyle
 import app.benbow.core.text.ListKind
 import app.benbow.core.text.Mark
 import app.benbow.core.text.RichText
-import app.benbow.core.text.atoms
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -232,15 +231,26 @@ private fun BoxScope.EditorBody(state: EditorState, readOnly: Boolean, atoms: At
             }, covered),
         )
     }
-    // Each atom over its own line, which the paragraph style made exactly as tall.
+    // Each atom over its own line, which the paragraph style made exactly as tall. It is keyed by its paragraph, so
+    // typing elsewhere never rebuilds a picture (which would load and blink); for the frame the layout trails an edit,
+    // an atom stays where it last was.
     val current = layout
-    if (current != null && current.matches(state.model)) {
-        state.model.atoms().forEach { (offset, atom) ->
-            val line = current.getLineForOffset(offset)
-            val top = current.getLineTop(line)
-            val height = with(density) { (current.getLineBottom(line) - top).toDp() }
-            key(offset, atom) {
-                Box(Modifier.offset { IntOffset(0, top.roundToInt()) }.width(width).height(height)) { atoms.Content(atom) }
+    val placed = remember { HashMap<String, Pair<Float, Float>>() }
+    if (current != null) {
+        val model = state.model
+        val fresh = current.matches(model)
+        model.paragraphs.forEachIndexed { i, paragraph ->
+            val atom = paragraph.atom ?: return@forEachIndexed
+            val spot = placed[paragraph.key]?.takeIf { !fresh } ?: run {
+                val line = current.getLineForOffset(model.paragraphStarts[i].coerceAtMost(current.layoutInput.text.length))
+                (current.getLineTop(line) to current.getLineBottom(line)).also { if (fresh) placed[paragraph.key] = it }
+            }
+            key(paragraph.key) {
+                Box(
+                    Modifier.offset {
+                        IntOffset(0, spot.first.roundToInt())
+                    }.width(width).height(with(density) { (spot.second - spot.first).toDp() }),
+                ) { atoms.Content(atom) }
             }
         }
     }

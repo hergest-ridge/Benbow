@@ -98,7 +98,7 @@ internal fun PostView(
                 transcripts = detail.transcripts,
                 tracks = detail.tracks,
                 all = detail.attachments,
-                onRename = { id, caption -> services.scope.launch { services.repo.setCaption(detail.id, id, caption) } },
+                onRename = { id, names -> services.nameSound(detail.id, id, names) },
                 onOpen = { onOpenMedia(it.meta.id) },
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
             )
@@ -201,7 +201,7 @@ internal fun CommentMedia(services: AppServices, comment: Comment, onOpen: (atta
             comment.summary.id,
             sound,
             comment.transcripts[sound.meta.id],
-            onRename = { caption -> services.scope.launch { services.repo.setCaption(comment.summary.id, sound.meta.id, caption) } },
+            onRename = { names -> services.nameSound(comment.summary.id, sound.meta.id, names) },
             tags = comment.tracks[sound.meta.id],
             queue = { queue(comment.summary.id, sounds, comment.tracks) },
         )

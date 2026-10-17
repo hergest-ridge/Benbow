@@ -290,6 +290,11 @@ class AppServices(
     /** Voice notes brought back after «Заменить текстом» (7.10e): an open editor of their entry puts them in the text again. */
     val voiceBack = MutableSharedFlow<String>(extraBufferCapacity = 4)
 
+    /** A sound named by hand: the title is its caption, artist and album go to its `track:` field. */
+    internal fun nameSound(entryId: String, attachmentId: String, names: SoundNames) {
+        scope.launch { repo.nameSound(entryId, attachmentId, names.title, names.artist, names.album) }
+    }
+
     /** "Вернуть" after «Заменить текстом»: the voice note is on its entry again, and back in the text where it's open. */
     fun restoreVoice(entryId: String, attachmentId: String) {
         scope.launch {

@@ -471,6 +471,7 @@ private fun AppFrame(
     // The mini-player (ADR-035) sits on the tab bar, or at the foot of a wide window; it opens the player screen.
     var miniHeight by remember { mutableIntStateOf(0) }
     var playerOpen by rememberSaveable { mutableStateOf(false) }
+    val openPlayer: () -> Unit = remember { { playerOpen = true } }
     val scope = rememberCoroutineScope()
     BoxWithConstraints(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val wide = maxWidth >= WIDE
@@ -509,7 +510,9 @@ private fun AppFrame(
                     contentAlignment = Alignment.TopCenter,
                 ) {
                     Box(Modifier.fillMaxHeight().widthIn(max = if (wide && !twoPane) READABLE else Dp.Infinity)) {
-                        CompositionLocalProvider(LocalWide provides wide) { AppNavigation(services, backStack, nav, twoPane) }
+                        CompositionLocalProvider(LocalWide provides wide, LocalOpenPlayer provides openPlayer) {
+                            AppNavigation(services, backStack, nav, twoPane)
+                        }
                     }
                     SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().imePadding())
                 }

@@ -46,7 +46,7 @@ internal fun PostMedia(
     layout: PostMedia,
     onOpen: (AttachmentState) -> Unit,
     modifier: Modifier = Modifier,
-    onRename: ((attachmentId: String, caption: String?) -> Unit)? = null,
+    onRename: ((attachmentId: String, names: SoundNames) -> Unit)? = null,
     entryId: String? = null,
     transcripts: Map<String, String> = emptyMap(),
     tracks: Map<String, TrackTags> = emptyMap(),
@@ -70,7 +70,7 @@ internal fun PostMedia(
                     entryId,
                     it,
                     transcripts[it.meta.id],
-                    onRename = onRename?.let { rename -> { caption -> rename(it.meta.id, caption) } },
+                    onRename = onRename?.let { rename -> { names -> rename(it.meta.id, names) } },
                     tags = tracks[it.meta.id],
                     queue = { queue(entryId, all, tracks) },
                 )

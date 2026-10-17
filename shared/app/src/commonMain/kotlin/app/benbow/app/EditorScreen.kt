@@ -369,9 +369,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                     nav.open(if (drawing && !vm.reading) Route.Drawing(entry, id) else Route.Media(entry, id))
                 }
             },
-            onRename = { id, caption ->
-                detail?.id?.let { entry -> services.scope.launch { services.repo.setCaption(entry, id, caption) } }
-            },
+            onRename = { id, names -> detail?.id?.let { entry -> services.nameSound(entry, id, names) } },
             entryId = detail?.id,
             transcripts = transcripts,
             tracks = tracks,
@@ -561,7 +559,12 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
         },
         bottomBar = {
             if (vm.reading) {
-                QuickNoteBar(services, onSend = vm::comment, hint = stringResource(Res.string.comment_hint))
+                Column {
+                    // A post on a phone has no tab bar, so it shows what plays itself (wide windows have the app's strip).
+                    val openPlayer = LocalOpenPlayer.current
+                    if (!LocalWide.current && openPlayer != null) MiniPlayer(services, openPlayer, bottomInset = false)
+                    QuickNoteBar(services, onSend = vm::comment, hint = stringResource(Res.string.comment_hint))
+                }
             } else if (editor != null) {
                 Column(Modifier.navigationBarsPadding().imePadding()) {
                     MediaBar(services, vm::ensureEntryId, dictation) {

@@ -112,7 +112,9 @@ class PlaybackService : MediaSessionService() {
             Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        session = MediaSession.Builder(this, QueuePlayer(audio)).setSessionActivity(open).build()
+        // Added by hand: Media3 adds a session (and starts its notification) only when a controller connects, and the
+        // app plays through its own player, so without this the system never heard of it (owner 2026-10-18).
+        session = MediaSession.Builder(this, QueuePlayer(audio)).setSessionActivity(open).build().also(::addSession)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session

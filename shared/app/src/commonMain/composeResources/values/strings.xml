@@ -137,6 +137,12 @@
     <string name="dictation_open_model">Открыть</string>
     <string name="voice_replace">Заменить текстом</string>
     <string name="voice_replaced">Голосовое заменено текстом</string>
+    <string name="sound_edit">Название и исполнитель</string>
+    <string name="sound_names_title">Название и исполнитель</string>
+    <string name="sound_title">Название</string>
+    <string name="sound_artist">Исполнитель</string>
+    <string name="sound_album">Альбом</string>
+    <string name="sound_save">Сохранить</string>
     <string name="post_section">Посты</string>
     <string name="post_media">Фото без места в тексте</string>
     <string-array name="post_media_names">

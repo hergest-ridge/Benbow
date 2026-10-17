@@ -50,8 +50,11 @@ class Transcriptions internal constructor(
     /** Attachment ids waiting or being transcribed, for the spinners. */
     val running: StateFlow<Set<String>> = _running
 
-    /** Voice notes recorded on this device get their text on their own. */
-    val auto = MutableStateFlow(settings().get(AUTO_KEY) != "false")
+    /**
+     * Voice notes recorded on this device get their text on their own: off unless turned on (owner 2026-10-18: a voice
+     * note is often music, and a tap on the row's button transcribes one).
+     */
+    val auto = MutableStateFlow(settings().get(AUTO_KEY) == "true")
 
     init {
         scope.launch {
@@ -114,6 +117,7 @@ class Transcriptions internal constructor(
     }
 
     private companion object {
-        const val AUTO_KEY = "speech.auto"
+        /** A new key: the old one ("speech.auto") read "on" when unset, and everyone starts from off now. */
+        const val AUTO_KEY = "speech.autoOptIn"
     }
 }

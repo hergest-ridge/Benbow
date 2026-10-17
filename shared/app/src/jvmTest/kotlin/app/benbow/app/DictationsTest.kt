@@ -141,6 +141,29 @@ class DictationsTest {
         assertEquals(1, mic.takes.size, "the microphone wasn't opened")
     }
 
+    /** A transcript asked for by a tap (no longer on its own) shows in the feed's posts as soon as it's written. */
+    @Test
+    fun feedPostsFollowANewTranscript() = runBlocking {
+        val services = services()
+        val entry = services.repo.createNote(services.today(), "x")
+        services.attach({ entry }, { byteSourceOf(ByteArray(64)) }) { MediaProbe("audio/mp4", "v.m4a", "voice", durationMs = 1000) }.join()
+        val voice = services.repo.entry(entry).first()!!.attachments.single().meta.id
+        val seen = java.util.concurrent.CopyOnWriteArrayList<Map<String, String>>()
+        val job = CoroutineScope(Dispatchers.Default).launch {
+            services.repo.feedItems(listOf(entry)).collect {
+                seen +=
+                    it.single().transcripts
+            }
+        }
+        delay(500)
+        services.repo.setTranscript(entry, voice, "hello")
+        try {
+            eventually { seen.lastOrNull()?.get(voice) == "hello" }
+        } finally {
+            job.cancel()
+        }
+    }
+
     /** Voice notes on [entry], or on every entry. */
     private suspend fun voices(services: AppServices, entry: String? = null): Int {
         val ids = entry?.let(::listOf) ?: services.repo.journal().first().map { it.id }

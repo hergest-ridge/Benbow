@@ -56,6 +56,8 @@ class BrowserMedia(
 
     override fun localFile(sha256: String): LocalFile? = files[sha256]?.also { touch(sha256) }
 
+    override fun imported(file: MediaFile): LocalFile = checkNotNull(files[file.sha256]) { "${file.sha256} wasn't imported here" }
+
     override suspend fun file(sha256: String): LocalFile {
         localFile(sha256)?.let { return it }
         return loads.getOrPut(sha256) { Mutex() }.withLock {

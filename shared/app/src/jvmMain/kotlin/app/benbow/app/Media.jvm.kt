@@ -16,12 +16,15 @@ import androidx.compose.ui.unit.dp
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.media_file
 import app.benbow.app.resources.media_open
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
 import java.awt.Desktop
 import java.awt.FileDialog
 import java.awt.Frame
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
@@ -62,7 +65,7 @@ internal actual fun MediaPlayer(file: File, mime: String, modifier: Modifier) {
 }
 
 internal fun desktopProbe(file: File): MediaProbe {
-    val mime = Files.probeContentType(file.toPath()) ?: "application/octet-stream"
+    val mime = refineMime(runCatching { Files.probeContentType(file.toPath()) }.getOrNull(), file.name)
     val kind = kindOf(mime)
     val image = if (kind == "image") runCatching { ImageIO.read(file) }.getOrNull() else null
     return MediaProbe(
@@ -74,6 +77,10 @@ internal fun desktopProbe(file: File): MediaProbe {
         capturedAt = file.lastModified(),
         preview = image?.let(::jpegPreview),
     )
+}
+
+internal actual suspend fun coverJpeg(image: ByteArray): ByteArray? = withContext(Dispatchers.IO) {
+    runCatching { ImageIO.read(ByteArrayInputStream(image)) }.getOrNull()?.let { jpegPreview(it, COVER_SIZE) }
 }
 
 private fun jpegPreview(image: BufferedImage, max: Int = 512): ByteArray {

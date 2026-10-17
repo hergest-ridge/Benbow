@@ -34,6 +34,7 @@ kotlin {
             implementation(libs.navigation3.ui)
             implementation(libs.kotlinx.datetime)
             implementation(libs.coil.compose)
+            implementation(libs.materialkolor) // the player's colors from a cover (ADR-035)
         }
         // Capture (Photo Picker, camera, voice) and playback live in the platform source sets.
         androidMain {

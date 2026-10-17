@@ -38,6 +38,9 @@ class BenbowApplication : Application() {
         )
     }
 
+    /** The process's one player (ADR-035), shown to the system by [PlaybackService]. */
+    val audio: AndroidAudio by lazy { AndroidAudio(this) }
+
     /** One per process: the local DB, outbox and sync outlive activities. */
     val services: AppServices by lazy {
         val name = Settings.Global.getString(contentResolver, Settings.Global.DEVICE_NAME) ?: Build.MODEL
@@ -52,6 +55,7 @@ class BenbowApplication : Application() {
             transcriber = SandboxTranscriber(this),
             speechModel = { api -> SpeechModelStore(File(filesDir, "models/" + SpeechModelSpec.ID), api) },
             mic = AndroidDictationMic(this),
+            audio = audio,
         )
     }
 

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -57,6 +58,7 @@ import app.benbow.app.resources.media_remove
 import app.benbow.app.resources.media_remove_confirm
 import app.benbow.app.resources.media_unavailable
 import app.benbow.app.resources.server_cancel
+import app.benbow.client.EntryDetail
 import app.benbow.core.sync.AttachmentState
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
@@ -78,12 +80,12 @@ internal fun MediaScreen(services: AppServices, nav: Navigator, route: Route.Med
             LaunchedEffect(Unit) { nav.back() }
             return@Box
         }
-        MediaPager(services, nav, route.entryId, items, start = items.indexOfFirst { it.meta.id == route.attachmentId }.coerceAtLeast(0))
+        MediaPager(services, nav, entry, items, start = items.indexOfFirst { it.meta.id == route.attachmentId }.coerceAtLeast(0))
     }
 }
 
 @Composable
-private fun MediaPager(services: AppServices, nav: Navigator, entryId: String, items: List<AttachmentState>, start: Int) {
+private fun MediaPager(services: AppServices, nav: Navigator, entry: EntryDetail?, items: List<AttachmentState>, start: Int) {
     val pager = rememberPagerState(initialPage = start) { items.size }
     var zoomed by remember { mutableStateOf(false) }
     var chrome by remember { mutableStateOf(true) }
@@ -138,6 +140,7 @@ private fun MediaPager(services: AppServices, nav: Navigator, entryId: String, i
             MediaPage(
                 services,
                 items[page],
+                entry,
                 active = active,
                 onZoom = { if (active) zoomed = it },
                 onTap = { chrome = !chrome },
@@ -190,7 +193,7 @@ private fun MediaPager(services: AppServices, nav: Navigator, entryId: String, i
             confirmButton = {
                 TextButton({
                     confirm = false
-                    services.scope.launch { services.repo.removeAttachment(entryId, current.meta.id) }
+                    entry?.let { e -> services.scope.launch { services.repo.removeAttachment(e.id, current.meta.id) } }
                     if (items.size == 1) nav.back()
                 }, modifier = Modifier.hand()) { Text(stringResource(Res.string.media_remove)) }
             },
@@ -206,6 +209,7 @@ private fun MediaPager(services: AppServices, nav: Navigator, entryId: String, i
 private fun MediaPage(
     services: AppServices,
     attachment: AttachmentState,
+    entry: EntryDetail?,
     active: Boolean,
     onZoom: (Boolean) -> Unit,
     onTap: () -> Unit,
@@ -219,6 +223,20 @@ private fun MediaPage(
                 (preview as? MediaLoad.Ready)?.let { AsyncImage(it.file, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
             }
             PlayBadge()
+            return@Box
+        }
+        if (attachment.isSound) {
+            // Sounds play in the app's player (ADR-035), from here on through the entry's sounds.
+            val tracks = entry?.tracks.orEmpty()
+            VoiceRow(
+                services,
+                entry?.id,
+                attachment,
+                entry?.transcripts?.get(meta.id),
+                Modifier.padding(24.dp).widthIn(max = 480.dp),
+                tags = tracks[meta.id],
+                queue = { queue(entry?.id, entry?.attachments ?: listOf(attachment), tracks) },
+            )
             return@Box
         }
         if (meta.kind == "drawing") {
@@ -240,6 +258,7 @@ private fun MediaPage(
             is MediaLoad.Ready -> if (meta.kind == "image") {
                 ZoomableImage(load.file, onZoom = onZoom, onTap = onTap)
             } else {
+                LaunchedEffect(Unit) { services.player.pause() } // a video's sound, not the music under it
                 MediaPlayer(load.file, meta.mime)
             }
         }

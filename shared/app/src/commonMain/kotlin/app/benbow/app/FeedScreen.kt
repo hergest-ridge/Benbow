@@ -130,6 +130,18 @@ internal fun feedRows(items: List<FeedItem>, body: (FeedItem) -> FeedBody? = { n
     }
 }
 
+/**
+ * The feed's queue from a post on (ADR-035): its sounds, then those of the posts below it (older ones), leaving out
+ * posts under a curtain or quiet (ADR-031); the post it starts from was opened by the tap itself.
+ */
+internal fun TrackNames.feedQueue(rows: List<FeedRow>, fromId: String, gentle: Boolean): List<Track> {
+    val items = rows.mapNotNull { (it as? FeedRow.Item)?.item }
+    val start = items.indexOfFirst { it.summary.id == fromId }
+    if (start < 0) return emptyList()
+    return items.drop(start).filterIndexed { i, item -> i == 0 || !item.summary.curtained(gentle) }
+        .flatMap { queue(it.summary.id, it.audio, it.tracks) }
+}
+
 internal val REACTIONS = listOf("❤️", "👍", "😂", "😮", "😢", "🔥")
 
 internal class FeedViewModel(private val services: AppServices) : ViewModel() {
@@ -218,6 +230,7 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
                                 onOpen = { nav.open(Route.Editor(row.item.summary.id, row.item.summary.day, readOnly = true)) },
                                 onComments = { nav.open(Route.Editor(row.item.summary.id, row.item.summary.day, readOnly = true)) },
                                 onOpenMedia = { nav.open(Route.Media(row.item.summary.id, it.meta.id)) },
+                                queue = { feedQueue(list, row.item.summary.id, gentle) },
                             ) { emoji, on ->
                                 vm.react(row.item.summary.id, emoji, on)
                             }
@@ -300,6 +313,7 @@ private fun FeedPost(
     onOpen: () -> Unit,
     onComments: () -> Unit,
     onOpenMedia: (AttachmentState) -> Unit,
+    queue: TrackNames.() -> List<Track>,
     onReact: (String, Boolean) -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
@@ -331,7 +345,7 @@ private fun FeedPost(
                 Revealing(curtained, entry) {
                     Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         if (item.media.isNotEmpty()) MediaCarousel(services.media, item.media, onOpenMedia)
-                        PostBody(services, item, body, expanded, onExpand, onComments, onReact)
+                        PostBody(services, item, body, expanded, onExpand, onComments, queue, onReact)
                     }
                 }
             }
@@ -341,7 +355,7 @@ private fun FeedPost(
                     Column {
                         if (item.media.isNotEmpty()) MediaCarousel(services.media, item.media, onOpenMedia, rounded = false)
                         Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            PostBody(services, item, body, expanded, onExpand, onComments, onReact)
+                            PostBody(services, item, body, expanded, onExpand, onComments, queue, onReact)
                         }
                     }
                 }
@@ -421,12 +435,16 @@ private fun PostBody(
     expanded: Boolean,
     onExpand: () -> Unit,
     onComments: () -> Unit,
+    queue: TrackNames.() -> List<Track>,
     onReact: (String, Boolean) -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
     val entry = item.summary
     FeedText(body, expanded, onExpand)
-    item.audio.forEach { VoiceRow(services, item.summary.id, it, item.transcripts[it.meta.id]) }
+    // Every sound of the post, wherever it sits in the text (ADR-035).
+    item.audio.forEach {
+        VoiceRow(services, entry.id, it, item.transcripts[it.meta.id], tags = item.tracks[it.meta.id], queue = queue)
+    }
     if (entry.tags.isNotEmpty()) TagRibbon(entry.tags)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         item.reactions.sorted().forEach { emoji ->

@@ -72,6 +72,8 @@ As built (5.3): built-in templates in code (`Templates`: Итоги дня, Тр
 
 ## Ink (P2)
 `ink_layer(id, entry_id, head_ink_rev)`, `ink_revision(id, layer_id, parents, format_version, strokes_blob)` (see editor.md), for paper pages and margin marks later.
+As built (7.12, ADR-035): a sound file from elsewhere is an attachment of kind `audio`; its tags read on attaching go into the entry's LWW field `track:<attachment id>` = `{"title","artist","album"}` (only those it has), its embedded cover becomes the attachment's preview (a JPEG up to 1024 px). A track whose tags name an artist is music and is never transcribed.
+
 As built (7.5, ADR-026): drawings in notes are attachments of kind `drawing` (an SVG with the strokes in its metadata); a redraw is a new attachment, the old link turns absent and its file stays.
 
 ## System

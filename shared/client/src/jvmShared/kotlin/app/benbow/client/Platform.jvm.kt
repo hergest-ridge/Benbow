@@ -1,8 +1,11 @@
 package app.benbow.client
 
+import app.benbow.core.audio.RandomRead
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
+import java.io.RandomAccessFile
 import java.util.zip.ZipInputStream
 
 // Shared by the Android and desktop targets (src/jvmShared is a source dir of both).
@@ -10,6 +13,18 @@ import java.util.zip.ZipInputStream
 actual typealias LocalFile = java.io.File
 
 actual fun LocalFile.readAllText(): String = readText()
+
+actual fun LocalFile.randomRead(): RandomRead = object : RandomRead {
+    override val size: Long = length()
+
+    override suspend fun read(offset: Long, length: Int): ByteArray = withContext(IoDispatcher) {
+        RandomAccessFile(this@randomRead, "r").use { file ->
+            val n = (minOf(file.length(), offset + length) - offset).coerceAtLeast(0).toInt()
+            file.seek(offset)
+            ByteArray(n).also { file.readFully(it) }
+        }
+    }
+}
 
 actual fun LocalFile.uri(): String = toPath().toUri().toString()
 

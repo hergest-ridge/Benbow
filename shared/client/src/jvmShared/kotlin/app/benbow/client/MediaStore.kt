@@ -58,6 +58,8 @@ class MediaStore(
             MediaFile(sha, size, mime, target.absolutePath, name, capturedAt)
         }
 
+    override fun imported(file: MediaFile): File = File(file.path)
+
     /** The file if it is on this device, without network. */
     override fun localFile(sha256: String): File? {
         val row = q.selectMedia(sha256).executeAsOneOrNull() ?: return null

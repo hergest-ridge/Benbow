@@ -80,6 +80,9 @@ sealed interface ExportState {
 sealed interface AppMessage {
     data class AttachFailed(val reason: String) : AppMessage
 
+    /** A track's file couldn't be fetched or played (ADR-035). */
+    data object PlaybackFailed : AppMessage
+
     data class TranscriptionFailed(val reason: String) : AppMessage
 
     data object Copied : AppMessage
@@ -148,6 +151,8 @@ class AppServices(
     speechModel: SpeechModelFactory? = null,
     /** The microphone for dictation (7.10); Android only. */
     mic: DictationMic? = null,
+    /** What plays sounds here (ADR-035): Media3 in a session on Android, JavaFX on desktop, the page's <audio>. */
+    audio: AudioEngine = SilentAudio(),
 ) {
     val scope = CoroutineScope(SupervisorJob() + IoDispatcher)
     val now: () -> Long = { Clock.System.now().toEpochMilliseconds() }
@@ -186,6 +191,9 @@ class AppServices(
     val lock = AppLock(Settings(db), now)
 
     val gentle = Gentle(now)
+
+    /** The one player for every sound (ADR-035), its queue and the mini-player's state. */
+    val player = AudioPlayer(media, audio) { messages.tryEmit(AppMessage.PlaybackFailed) }
 
     /** "Отложить до…" (ADR-031): quiet until [until], or back now (null); offers to take it back. */
     fun postpone(id: String, until: String?, previous: String?) {

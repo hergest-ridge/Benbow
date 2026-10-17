@@ -357,7 +357,8 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     val density = LocalDensity.current
     val transcriptStyle = MaterialTheme.typography.bodyMedium
     val transcripts = detail?.transcripts.orEmpty()
-    val pictures = remember(attachments, detail?.id, transcripts, transcriptStyle, vm.reading) {
+    val tracks = detail?.tracks.orEmpty()
+    val pictures = remember(attachments, detail?.id, transcripts, tracks, transcriptStyle, vm.reading) {
         EntryPictures(
             services,
             attachments,
@@ -372,6 +373,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
             },
             entryId = detail?.id,
             transcripts = transcripts,
+            tracks = tracks,
             textHeight = { text, width ->
                 val px = with(density) { width.roundToPx() }.coerceAtLeast(1)
                 with(density) { measurer.measure(text, transcriptStyle, constraints = Constraints(maxWidth = px)).size.height.toDp() }

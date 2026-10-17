@@ -42,9 +42,11 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
@@ -70,6 +72,7 @@ import androidx.navigation3.scene.SinglePaneSceneStrategy
 import androidx.navigation3.ui.NavDisplay
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.attach_failed
+import app.benbow.app.resources.audio_failed
 import app.benbow.app.resources.category_trashed
 import app.benbow.app.resources.copied
 import app.benbow.app.resources.dictation_attach
@@ -247,7 +250,6 @@ fun BenbowApp(services: AppServices) {
         CompositionLocalProvider(
             LocalTags provides tags,
             LocalGentle provides gentle,
-            LocalAudio provides rememberAudioPlayback(),
             LocalPagerArrows provides (services.platform != "android"), // a mouse: side buttons on pictures
         ) { AppRoot(services) }
     }
@@ -321,6 +323,8 @@ private fun AppRoot(services: AppServices) {
         services.messages.collect { message ->
             when (message) {
                 is AppMessage.AttachFailed -> snackbar.showSnackbar(getString(Res.string.attach_failed, message.reason))
+
+                AppMessage.PlaybackFailed -> snackbar.showSnackbar(getString(Res.string.audio_failed))
 
                 is AppMessage.TranscriptionFailed -> snackbar.showSnackbar(getString(Res.string.speech_failed, message.reason))
 
@@ -461,6 +465,10 @@ private fun AppFrame(
     val current = backStack.lastOrNull { it in TAB_ROUTES }
     var barHeight by remember { mutableIntStateOf(0) }
     val bar = with(LocalDensity.current) { barHeight.toDp() }
+    // The mini-player (ADR-035) sits on the tab bar, or at the foot of a wide window; it opens the player screen.
+    var miniHeight by remember { mutableIntStateOf(0) }
+    var playerOpen by rememberSaveable { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     BoxWithConstraints(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val wide = maxWidth >= WIDE
         val twoPane = maxWidth >= TWO_PANE
@@ -483,10 +491,14 @@ private fun AppFrame(
             }
             Column(Modifier.weight(1f).fillMaxHeight()) {
                 val bottomBar = tabs && !wide
+                val miniShown = bottomBar || (wide && top?.fullWindow != true)
+                val mini = with(LocalDensity.current) { if (miniShown) miniHeight.toDp() else 0.dp }
                 Box(
                     Modifier.weight(1f).fillMaxWidth().then(
                         if (bottomBar) {
-                            Modifier.consumeWindowInsets(WindowInsets.navigationBars).consumeWindowInsets(PaddingValues(bottom = bar))
+                            Modifier.consumeWindowInsets(
+                                WindowInsets.navigationBars,
+                            ).consumeWindowInsets(PaddingValues(bottom = bar + mini))
                         } else {
                             Modifier
                         },
@@ -497,6 +509,17 @@ private fun AppFrame(
                         CompositionLocalProvider(LocalWide provides wide) { AppNavigation(services, backStack, nav, twoPane) }
                     }
                     SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().imePadding())
+                }
+                if (miniShown) {
+                    MiniPlayer(
+                        services,
+                        onOpen = { playerOpen = true },
+                        bottomInset = !bottomBar,
+                        Modifier.onSizeChanged {
+                            miniHeight =
+                                it.height
+                        },
+                    )
                 }
                 if (bottomBar) {
                     ShortNavigationBar(Modifier.onSizeChanged { barHeight = it.height }) {
@@ -512,6 +535,16 @@ private fun AppFrame(
                         }
                     }
                 }
+            }
+        }
+        if (playerOpen) {
+            CompositionLocalProvider(LocalWide provides wide) {
+                PlayerScreen(services, onOpenEntry = { id ->
+                    scope.launch {
+                        val entry = services.repo.entry(id).first() ?: return@launch
+                        nav.open(Route.Editor(entry.id, entry.day, readOnly = true))
+                    }
+                }, onDismiss = { playerOpen = false })
             }
         }
     }

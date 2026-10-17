@@ -1,5 +1,6 @@
 package app.benbow.client
 
+import app.benbow.core.audio.RandomRead
 import kotlinx.coroutines.CoroutineDispatcher
 
 // What differs between Android and desktop (the JVM) and the browser (ADR-029). On the JVM these are the
@@ -10,6 +11,9 @@ expect open class LocalFile
 
 /** Its whole content as text (a drawing's SVG). */
 expect fun LocalFile.readAllText(): String
+
+/** The file in pieces: a sound's tags are read without reading its audio (ADR-035). */
+expect fun LocalFile.randomRead(): RandomRead
 
 /** An address a page can show it by (a printable page): a file: URI on the JVM, a data: URL in the browser. */
 expect fun LocalFile.uri(): String

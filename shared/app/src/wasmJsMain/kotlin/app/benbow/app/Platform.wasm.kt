@@ -96,10 +96,3 @@ internal actual fun MediaPlayer(file: LocalFile, mime: String, modifier: Modifie
         onRelease = { pauseMedia(it) },
     )
 }
-
-@Composable
-internal actual fun rememberAudioPlayback(): AudioPlayback {
-    val playback = remember { BrowserAudio() }
-    DisposableEffect(playback) { onDispose { playback.release() } }
-    return playback
-}

@@ -82,11 +82,18 @@ internal fun PostView(
             val placed = placedIn(detail.body).toSet()
             val loose = detail.attachments.filter { it.meta.id !in placed }.ifEmpty { detail.attachments }
             val layout = services.appearance.collectAsStateWithLifecycle().value.postMedia
-            PostMedia(services, loose, layout, entryId = detail.id, transcripts = detail.transcripts, onRename = { id, caption ->
-                services.scope.launch { services.repo.setCaption(detail.id, id, caption) }
-            }, onOpen = {
-                onOpenMedia(it.meta.id)
-            }, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+            PostMedia(
+                services,
+                loose,
+                layout,
+                entryId = detail.id,
+                transcripts = detail.transcripts,
+                tracks = detail.tracks,
+                all = detail.attachments,
+                onRename = { id, caption -> services.scope.launch { services.repo.setCaption(detail.id, id, caption) } },
+                onOpen = { onOpenMedia(it.meta.id) },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+            )
         }
         BenbowEditor(
             state = editor,
@@ -179,11 +186,17 @@ private fun Reactions(chosen: Set<String>, onReact: (String, Boolean) -> Unit, m
 internal fun CommentMedia(services: AppServices, comment: Comment, onOpen: (attachmentId: String) -> Unit) {
     if (comment.media.isEmpty()) return
     val third = with(LocalDensity.current) { (LocalWindowInfo.current.containerSize.width / 3).toDp() }
-    val (sounds, rest) = comment.media.partition { it.meta.kind == "voice" || it.meta.kind == "audio" }
+    val (sounds, rest) = comment.media.partition { it.isSound }
     sounds.forEach { sound ->
-        VoiceRow(services, comment.summary.id, sound, comment.transcripts[sound.meta.id], onRename = { caption ->
-            services.scope.launch { services.repo.setCaption(comment.summary.id, sound.meta.id, caption) }
-        })
+        VoiceRow(
+            services,
+            comment.summary.id,
+            sound,
+            comment.transcripts[sound.meta.id],
+            onRename = { caption -> services.scope.launch { services.repo.setCaption(comment.summary.id, sound.meta.id, caption) } },
+            tags = comment.tracks[sound.meta.id],
+            queue = { queue(comment.summary.id, sounds, comment.tracks) },
+        )
     }
     if (rest.isEmpty()) return
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {

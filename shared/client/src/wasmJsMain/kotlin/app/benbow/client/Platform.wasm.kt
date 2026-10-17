@@ -1,7 +1,9 @@
 package app.benbow.client
 
+import app.benbow.core.audio.RandomRead
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.await
 
 // The browser's side of Platform.kt (ADR-029): a file is a Blob (kept on disk by the browser, in IndexedDB), the page
 // has one thread.
@@ -15,6 +17,18 @@ actual open class LocalFile(val name: String, val blob: JsAny, val size: Long, v
 }
 
 actual fun LocalFile.readAllText(): String = checkNotNull(bytes) { "$name is too large to read as text here" }.decodeToString()
+
+/** Slices of the blob, each read on its own (a song's tags without its audio). */
+actual fun LocalFile.randomRead(): RandomRead = object : RandomRead {
+    override val size: Long = this@randomRead.size
+
+    override suspend fun read(offset: Long, length: Int): ByteArray {
+        val end = minOf(size, offset + length)
+        if (offset >= end) return ByteArray(0)
+        bytes?.let { return it.copyOfRange(offset.toInt(), end.toInt()) }
+        return blobRange(blob, offset.toDouble(), end.toDouble()).await<JsAny>().toByteArray()
+    }
+}
 
 /** A blob: URL, valid in this page and in windows it opens (printing). */
 actual fun LocalFile.uri(): String = url ?: objectUrl(blob).also { url = it }

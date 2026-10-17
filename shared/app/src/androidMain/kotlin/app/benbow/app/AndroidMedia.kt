@@ -26,13 +26,14 @@ internal object AndroidProbe {
 
     fun uri(context: Context, uri: Uri): MediaProbe {
         val resolver = context.contentResolver
-        val mime = resolver.getType(uri) ?: "application/octet-stream"
         val name = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
             if (it.moveToFirst()) it.getString(0) else null
         }
+        val mime = refineMime(resolver.getType(uri), name)
         return when (kindOf(mime)) {
             "image" -> image(mime, name) { resolver.openInputStream(uri)!! }
             "video" -> video(mime, name) { it.setDataSource(context, uri) }
+            "audio" -> MediaProbe(mime, name, "audio", durationMs = audioDuration { it.setDataSource(context, uri) })
             else -> MediaProbe(mime, name, kindOf(mime))
         }
     }
@@ -83,6 +84,42 @@ internal object AndroidProbe {
         } finally {
             retriever.release()
         }
+    }
+
+    /** A sound's length as the platform's decoder sees it; its tags are read by our own reader (ADR-035). */
+    private fun audioDuration(source: (MediaMetadataRetriever) -> Unit): Long? {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            source(retriever)
+            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?.takeIf { it > 0 }
+        } catch (_: RuntimeException) {
+            null
+        } finally {
+            retriever.release()
+        }
+    }
+
+    /** An embedded cover, decoded at about [max] px and saved as a JPEG. */
+    fun cover(image: ByteArray, max: Int): ByteArray? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(image, 0, image.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= max) sample *= 2
+        val options = BitmapFactory.Options().apply { inSampleSize = sample }
+        val bitmap = BitmapFactory.decodeByteArray(image, 0, image.size, options) ?: return null
+        val scale = minOf(1f, max.toFloat() / maxOf(bitmap.width, bitmap.height))
+        val small = if (scale < 1f) {
+            Bitmap.createScaledBitmap(
+                bitmap,
+                (bitmap.width * scale).toInt().coerceAtLeast(1),
+                (bitmap.height * scale).toInt().coerceAtLeast(1),
+                true,
+            )
+        } else {
+            bitmap
+        }
+        return ByteArrayOutputStream().also { small.compress(Bitmap.CompressFormat.JPEG, 88, it) }.toByteArray()
     }
 
     private fun jpeg(bitmap: Bitmap, rotation: Int): ByteArray {

@@ -81,4 +81,26 @@ class EntryExportTest {
         assertTrue("[Утро у моря](<../media/voice-1.m4a>)\n> Шли вдоль берега.\n> Ветер был холодный." in markdown, markdown)
         assertTrue("transcript:" !in markdown.substringBefore("---\n\n"), "not a front-matter key")
     }
+
+    @Test
+    fun aSoundFileIsNamedByItsTagsUnlessNamedByHand() {
+        fun sound(id: String, caption: String? = null) =
+            AttachmentState(AttachmentMeta(id, "sha-$id", 10, "audio/mpeg", "audio", "$id.mp3"), 1.0, caption = caption, hlc = Hlc.ZERO)
+        val entry = EntryState(
+            id = "entry-3",
+            kind = "post",
+            day = "2026-10-17",
+            createdAt = 0,
+            fields = mapOf(
+                "track:a1" to LwwValue("""{"title":"Кукушка","artist":"Кино"}""", Hlc.ZERO),
+                "track:a2" to LwwValue("""{"title":"Без исполнителя"}""", Hlc.ZERO),
+            ),
+            attachments = mapOf("a1" to sound("a1"), "a2" to sound("a2"), "a3" to sound("a3", caption = "Моё имя")),
+        )
+        val markdown = EntryExport.markdown(entry, null, missing = "missing") { "../media/${it.meta.name}" }
+        assertTrue("[Кино — Кукушка](<../media/a1.mp3>)" in markdown, markdown)
+        assertTrue("[Без исполнителя](<../media/a2.mp3>)" in markdown, markdown)
+        assertTrue("[Моё имя](<../media/a3.mp3>)" in markdown, markdown)
+        assertTrue("track:" !in markdown.substringBefore("---\n\n"), "not a front-matter key")
+    }
 }

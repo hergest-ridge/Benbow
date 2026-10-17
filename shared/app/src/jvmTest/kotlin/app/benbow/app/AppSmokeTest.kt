@@ -26,6 +26,7 @@ import androidx.compose.ui.test.isPopup
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -310,6 +311,72 @@ class AppSmokeTest {
         onNodeWithContentDescription("Меню").click()
         onNodeWithText("Редактировать").click()
         waitUntilExactlyOneExists(hasText("Настроение"), 5_000)
+    }
+
+    /** Two tagged tracks in a post and one in an older post (ADR-035), as the feed, the mini-player and the player show them. */
+    private fun postSounds() = runBlocking {
+        val older = services.repo.createNote(services.today(), "Вчерашнее")
+        val post = services.repo.createNote(services.today(), "Плейлист на вечер")
+        val sleeve = TestSounds.jpeg(1200, 1200, top = Color(0xC0, 0x39, 0x2B), bottom = Color(0x1A, 0x1A, 0x2E))
+        val tracks = listOf(
+            older to TestSounds.mp3("Спокойная ночь", "Кино", TestSounds.jpeg(800, 800)),
+            post to TestSounds.mp3("Звезда по имени Солнце", "Кино", sleeve, album = "Звезда по имени Солнце"),
+            post to TestSounds.mp3("Кукушка", "Кино", sleeve),
+        )
+        for ((entry, bytes) in tracks) {
+            services.attach({ entry }, { bytes.inputStream() }) { MediaProbe("audio/mpeg", "track.mp3", "audio") }.join()
+        }
+    }
+
+    @Test
+    fun soundsPlayFromTheFeedThroughTheMiniPlayerAndThePlayer() = runDesktopComposeUiTest(width = 412, height = 860) {
+        postSounds()
+        setContent { BenbowApp(services) }
+        onNodeWithText("Лента").click()
+        waitUntilExactlyOneExists(hasText("Кукушка"), 5_000)
+        runBlocking { delay(1_000) } // covers decode off the test's idling
+        waitForIdle()
+        screenshot("70-feed-sounds")
+
+        onAllNodesWithContentDescription("Слушать")[0].click()
+        waitUntilExactlyOneExists(hasContentDescription("Следующий трек"), 5_000)
+        assertEquals("Звезда по имени Солнце", services.player.state.value?.track?.title)
+        assertEquals(listOf("Звезда по имени Солнце", "Кукушка", "Спокойная ночь"), services.player.state.value?.queue?.map { it.title })
+        waitForIdle()
+        screenshot("71-mini-player")
+
+        services.player.playPause()
+        waitUntilExactlyOneExists(hasContentDescription("Закрыть плеер"), 5_000)
+        screenshot("72-mini-paused")
+
+        onAllNodesWithText("Звезда по имени Солнце", substring = false).onLast().click()
+        waitUntilExactlyOneExists(hasText("Сейчас играет"), 5_000)
+        runBlocking { delay(1_500) } // the cover's colors are counted off the main thread
+        waitForIdle()
+        screenshot("73-player")
+        onNodeWithContentDescription("Следующий трек").click()
+        waitUntil(timeoutMillis = 5_000) { services.player.state.value?.track?.title == "Кукушка" }
+        onNodeWithContentDescription("Свернуть").click()
+        waitUntilDoesNotExist(hasText("Сейчас играет"), 5_000)
+        services.player.playPause()
+        waitUntilExactlyOneExists(hasContentDescription("Закрыть плеер"), 5_000)
+        onNodeWithContentDescription("Закрыть плеер").click()
+        waitUntil(timeoutMillis = 5_000) { services.player.state.value == null }
+    }
+
+    @Test
+    fun aWideWindowShowsThePlayerAsADialog() = runDesktopComposeUiTest(width = 1280, height = 800) {
+        postSounds()
+        setContent { BenbowApp(services) }
+        onNodeWithText("Лента").click()
+        waitUntilExactlyOneExists(hasText("Кукушка"), 5_000)
+        onAllNodesWithContentDescription("Слушать")[1].click()
+        waitUntilExactlyOneExists(hasContentDescription("Следующий трек"), 5_000)
+        onAllNodesWithText("Кукушка").onLast().click()
+        waitUntilExactlyOneExists(hasText("Сейчас играет"), 5_000)
+        runBlocking { delay(1_500) }
+        waitForIdle()
+        screenshot("74-player-wide")
     }
 
     @Test

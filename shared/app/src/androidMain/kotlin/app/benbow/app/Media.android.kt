@@ -35,10 +35,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.media3.common.AudioAttributes
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import app.benbow.app.resources.Res
+import app.benbow.app.resources.media_audio
 import app.benbow.app.resources.media_camera
 import app.benbow.app.resources.media_gallery
 import app.benbow.app.resources.media_mic_denied
@@ -49,7 +51,9 @@ import app.benbow.app.resources.recorder_voice_about
 import app.benbow.app.resources.recording_text
 import app.benbow.app.resources.recording_voice
 import app.benbow.client.SpeechModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
 import java.io.File
 
@@ -63,6 +67,12 @@ internal actual fun MediaBar(
 ) {
     val context = LocalContext.current
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(MAX_PICK)) { uris ->
+        uris.forEach { uri ->
+            services.attach(entryId, { context.contentResolver.openInputStream(uri)!! }) { AndroidProbe.uri(context, uri) }
+        }
+    }
+    // Sounds from elsewhere (ADR-035): the system's file picker, so music apps' and recorders' folders are all there.
+    val pickAudio = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         uris.forEach { uri ->
             services.attach(entryId, { context.contentResolver.openInputStream(uri)!! }) { AndroidProbe.uri(context, uri) }
         }
@@ -91,6 +101,7 @@ internal actual fun MediaBar(
                     askMic.launch(Manifest.permission.RECORD_AUDIO)
                     false
                 } else {
+                    services.player.pause() // the microphone mustn't hear the music
                     when (mode) {
                         RecorderMode.Voice -> recorder.start()
                         RecorderMode.Text -> target?.let { dictations?.start(it) } == true
@@ -137,6 +148,7 @@ internal actual fun MediaBar(
                         photoPath = file.path
                         camera.launch(uriFor(context, file))
                     }) { Icon(Icons.Camera, stringResource(Res.string.media_camera)) }
+                    IconButton({ pickAudio.launch(arrayOf("audio/*")) }) { Icon(Icons.MusicNote, stringResource(Res.string.media_audio)) }
                     tools()
                     if (denied) {
                         Text(stringResource(Res.string.media_mic_denied), style = MaterialTheme.typography.labelSmall, maxLines = 2)
@@ -199,6 +211,7 @@ internal actual fun DictationKey(services: AppServices, target: DictationTarget,
                     askMic.launch(Manifest.permission.RECORD_AUDIO)
                     false
                 } else {
+                    services.player.pause()
                     dictations.start(current)
                 }
             },
@@ -253,7 +266,8 @@ private fun micAllowed(context: Context) =
 internal actual fun MediaPlayer(file: File, mime: String, modifier: Modifier) {
     val context = LocalContext.current
     val player = remember(file) {
-        ExoPlayer.Builder(context).build().apply {
+        // A video takes audio focus, so the app's player (ADR-035) pauses while it plays.
+        ExoPlayer.Builder(context).setAudioAttributes(AudioAttributes.DEFAULT, true).build().apply {
             setMediaItem(MediaItem.fromUri(Uri.fromFile(file))) // the container is sniffed; files have no extension
             prepare()
             playWhenReady = true
@@ -261,6 +275,10 @@ internal actual fun MediaPlayer(file: File, mime: String, modifier: Modifier) {
     }
     DisposableEffect(player) { onDispose { player.release() } }
     AndroidView(factory = { PlayerView(it).apply { this.player = player } }, modifier = modifier.fillMaxSize())
+}
+
+internal actual suspend fun coverJpeg(image: ByteArray): ByteArray? = withContext(Dispatchers.Default) {
+    AndroidProbe.cover(image, COVER_SIZE)
 }
 
 private fun uriFor(context: android.content.Context, file: File): Uri =

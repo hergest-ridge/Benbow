@@ -1,14 +1,16 @@
 package app.benbow.client
 
 import app.benbow.client.db.BenbowDb
+import app.benbow.core.audio.TrackTags
 import app.benbow.core.content.DocumentCodec
 import app.benbow.core.content.DocumentFormatException
 import app.benbow.core.content.TagNames
 import app.benbow.core.content.toPlainText
 
 /**
- * The on-device full-text index (`entry_search`): title, all text (with what was said in voice notes and the names of
- * attachments) and tags (as they read, ADR-032) of every entry, plus the Russian stems of their words.
+ * The on-device full-text index (`entry_search`): title, all text (with what was said in voice notes, the names of
+ * attachments and the tags of sound files) and tags (as they read, ADR-032) of every entry, plus the Russian stems of
+ * their words.
  * Updated in the same transaction as the entry; rebuilt from scratch when [VERSION] changes.
  */
 internal object SearchIndex {
@@ -29,7 +31,8 @@ internal object SearchIndex {
         val fields = decodeFields(entry.fields)
         val spoken = transcriptsOf(fields).values
         val captions = decodeAttachments(entry.attachments).values.filter { it.present }.mapNotNull { it.caption }
-        val all = (listOf(text) + spoken + captions).filter { it.isNotBlank() }.joinToString("\n")
+        val tracks = TrackTags.of(fields).values.flatMap { listOfNotNull(it.title, it.artist, it.album) }
+        val all = (listOf(text) + spoken + captions + tracks).filter { it.isNotBlank() }.joinToString("\n")
         val names = tags.on(fields).joinToString(" ") { it.second }
         q.indexEntry(id, fold(entry.title), withStems(fold(all)), withStems(fold(names)))
     }

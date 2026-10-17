@@ -4,8 +4,6 @@ package app.benbow.app
 
 import app.benbow.client.LocalFile
 import app.benbow.client.uri
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import org.w3c.dom.HTMLElement
 
 // Playback in the browser (ADR-029): its own <video> and <audio> elements, fed from the media store's blobs.
@@ -22,44 +20,91 @@ internal fun mediaElement(tag: String, url: String): HTMLElement = js(
 
 internal fun pauseMedia(element: HTMLElement): Unit = js("{ element.pause(); }")
 
-/** The app's one audio player, like ExoPlayer on Android: a hidden <audio> whose state goes to [AudioPlayback.now]. */
-internal class BrowserAudio : AudioPlayback {
-    private val state = MutableStateFlow<AudioNow?>(null)
-    override val now: StateFlow<AudioNow?> = state
-    private val audio = newAudio { playing, position, duration ->
-        state.value?.let { state.value = it.copy(playing = playing, positionMs = position.toLong(), durationMs = duration.toLong()) }
+/**
+ * The page's one <audio> under the app's player (ADR-035). The browser's media keys and its media panel reach the
+ * queue through the Media Session API, which also shows the track's title, artist and cover there.
+ */
+class BrowserAudio : AudioEngine {
+    override var events: AudioEvents? = null
+    private val audio = newAudio(
+        onState = { playing, position, duration, waiting -> events?.state(playing, position.toLong(), duration.toLong(), waiting) },
+        onEnded = { events?.ended() },
+        onError = { events?.failed() },
+        onAction = { action ->
+            when (action) {
+                "next" -> events?.next()
+                "previous" -> events?.previous()
+            }
+        },
+    )
+
+    override fun load(file: LocalFile, track: Track, cover: LocalFile?) {
+        setSource(audio, file.uri())
+        describe(track.title, track.artist.orEmpty(), track.album.orEmpty(), cover?.uri())
     }
 
-    override fun toggle(id: String, file: LocalFile, mime: String) {
-        if (state.value?.id == id) {
-            togglePlay(audio)
-            return
-        }
-        state.value = AudioNow(id, false, 0, 0)
-        playFrom(audio, file.uri())
-    }
+    override fun play() = playAudio(audio)
+
+    override fun pause() = pauseAudio(audio)
 
     override fun seek(positionMs: Long) = seekTo(audio, positionMs / 1000.0)
 
-    fun release() = stopAudio(audio)
+    override fun stop() = stopAudio(audio)
 }
 
-/** An Audio that reports (playing, position ms, duration ms) on every change and four times a second while playing. */
-private fun newAudio(onState: (Boolean, Double, Double) -> Unit): JsAny = js(
+/**
+ * An Audio that reports (playing, position ms, duration ms, waiting for data) on every change and four times a second
+ * while playing; the end, a failure and the media keys' next / previous come on their own.
+ */
+private fun newAudio(
+    onState: (Boolean, Double, Double, Boolean) -> Unit,
+    onEnded: () -> Unit,
+    onError: () -> Unit,
+    onAction: (String) -> Unit,
+): JsAny = js(
     """(() => {
         const a = new Audio();
-        const report = () => onState(!a.paused && !a.ended, a.currentTime * 1000, isFinite(a.duration) ? a.duration * 1000 : 0);
+        let waiting = false;
+        const report = () => onState(!a.paused && !a.ended, a.currentTime * 1000, isFinite(a.duration) ? a.duration * 1000 : 0, waiting);
         for (const name of ['play', 'pause', 'timeupdate', 'loadedmetadata', 'seeked']) a.addEventListener(name, report);
-        a.addEventListener('ended', () => { a.currentTime = 0; report(); });
+        a.addEventListener('waiting', () => { waiting = true; report(); });
+        a.addEventListener('playing', () => { waiting = false; report(); });
+        a.addEventListener('ended', () => onEnded());
+        a.addEventListener('error', () => { if (a.getAttribute('src')) onError(); });
+        const session = navigator.mediaSession;
+        if (session) {
+            const on = (name, handler) => { try { session.setActionHandler(name, handler); } catch (e) {} };
+            on('play', () => a.play());
+            on('pause', () => a.pause());
+            on('nexttrack', () => onAction('next'));
+            on('previoustrack', () => onAction('previous'));
+            on('seekto', d => { a.currentTime = d.seekTime; });
+            a.addEventListener('play', () => { session.playbackState = 'playing'; });
+            a.addEventListener('pause', () => { session.playbackState = 'paused'; });
+        }
         return a;
     })()""",
 )
 
-private fun playFrom(audio: JsAny, url: String): Unit =
-    js("{ audio.src = url; audio.play().catch(e => console.warn('Benbow: audio', e)); }")
+private fun setSource(audio: JsAny, url: String): Unit = js("{ audio.src = url; }")
 
-private fun togglePlay(audio: JsAny): Unit = js("{ if (audio.paused) audio.play(); else audio.pause(); }")
+/** The browser's media panel: what plays. [art] is a blob: URL of the cover, or null. */
+private fun describe(title: String, artist: String, album: String, art: String?): Unit = js(
+    """{
+        if (navigator.mediaSession && typeof MediaMetadata !== 'undefined')
+            navigator.mediaSession.metadata = new MediaMetadata({ title, artist, album, artwork: art ? [{ src: art }] : [] });
+    }""",
+)
+
+private fun playAudio(audio: JsAny): Unit = js("{ audio.play().catch(e => console.warn('Benbow: audio', e)); }")
+
+private fun pauseAudio(audio: JsAny): Unit = js("{ audio.pause(); }")
 
 private fun seekTo(audio: JsAny, seconds: Double): Unit = js("{ audio.currentTime = seconds; }")
 
-private fun stopAudio(audio: JsAny): Unit = js("{ audio.pause(); audio.removeAttribute('src'); audio.load(); }")
+private fun stopAudio(audio: JsAny): Unit = js(
+    """{
+        audio.pause(); audio.removeAttribute('src'); audio.load();
+        if (navigator.mediaSession) { navigator.mediaSession.metadata = null; navigator.mediaSession.playbackState = 'none'; }
+    }""",
+)

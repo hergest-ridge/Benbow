@@ -97,6 +97,9 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     // Installs the baseline profile (src/main/baseline-prof.txt) on sideloaded installs too.
     implementation(libs.androidx.profileinstaller)
+    // The player in the background (ADR-035): a MediaSessionService over ExoPlayer.
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.session)
     // Speech recognition runs on ONNX Runtime in the sandboxed AsrService only (its telemetry provider is removed in the
     // manifest, and the sandbox has no network anyway).
     implementation(libs.onnxruntime.android)

@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.benbow.core.audio.TrackTags
 import app.benbow.core.sync.AttachmentState
 import coil3.compose.AsyncImage
 
@@ -48,6 +49,9 @@ internal fun PostMedia(
     onRename: ((attachmentId: String, caption: String?) -> Unit)? = null,
     entryId: String? = null,
     transcripts: Map<String, String> = emptyMap(),
+    tracks: Map<String, TrackTags> = emptyMap(),
+    /** The entry's attachments in order: a sound plays on into those after it, in the text too. */
+    all: List<AttachmentState> = attachments,
 ) {
     if (attachments.isEmpty()) return
     val (visual, other) = attachments.partition { it.meta.kind == "image" || it.meta.kind == "video" }
@@ -60,15 +64,15 @@ internal fun PostMedia(
             }
         }
         other.forEach {
-            if (it.meta.kind == "voice" ||
-                it.meta.kind == "audio"
-            ) {
+            if (it.isSound) {
                 VoiceRow(
                     services,
                     entryId,
                     it,
                     transcripts[it.meta.id],
                     onRename = onRename?.let { rename -> { caption -> rename(it.meta.id, caption) } },
+                    tags = tracks[it.meta.id],
+                    queue = { queue(entryId, all, tracks) },
                 )
             } else {
                 FileRow(it) { onOpen(it) }

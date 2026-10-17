@@ -13,6 +13,9 @@ interface Media {
     /** The file if it is on this device, without network. */
     fun localFile(sha256: String): LocalFile?
 
+    /** A file [import] just stored, before it is attached (a sound's tags are read from it then, ADR-035). */
+    fun imported(file: MediaFile): LocalFile
+
     /** The file, downloaded and verified first when it isn't here yet. */
     suspend fun file(sha256: String): LocalFile
 

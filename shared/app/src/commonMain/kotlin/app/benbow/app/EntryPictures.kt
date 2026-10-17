@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.attachment_gone
 import app.benbow.app.resources.drawing_title
+import app.benbow.core.audio.TrackTags
 import app.benbow.core.sync.AttachmentState
 import app.benbow.core.text.Atom
 import app.benbow.ui.editor.AtomViews
@@ -43,6 +44,8 @@ internal class EntryPictures(
     private val onRename: ((attachmentId: String, caption: String?) -> Unit)? = null,
     private val entryId: String? = null,
     private val transcripts: Map<String, String> = emptyMap(),
+    /** What each sound file says it is (ADR-035). */
+    private val tracks: Map<String, TrackTags> = emptyMap(),
     /** How tall a transcript is at a width (the editor measures it with the row's text style). */
     private val textHeight: (String, Dp) -> Dp = { _, _ -> 0.dp },
     /** «Заменить текстом» (7.10e): the editor puts a voice note's transcript in its place. */
@@ -52,7 +55,7 @@ internal class EntryPictures(
 
     override fun pictureHeight(atom: Atom.Attachment, width: Dp): Dp {
         val meta = find(atom)?.meta ?: return 48.dp
-        if (meta.kind == "voice" || meta.kind == "audio") {
+        if (find(atom)?.isSound == true) {
             val text = transcripts[meta.id] ?: return 72.dp
             return 72.dp + textHeight(text, width - TRANSCRIPT_START - TRANSCRIPT_END) + 10.dp
         }
@@ -89,6 +92,8 @@ internal class EntryPictures(
                     onRename = onRename?.let { rename -> { caption -> rename(meta.id, caption) } },
                     folded = false,
                     onReplace = onReplace?.let { replace -> transcripts[meta.id]?.let { text -> { replace(meta.id, text) } } },
+                    tags = tracks[meta.id],
+                    queue = { queue(entryId, attachments, tracks) },
                 )
                 return@Box
             }

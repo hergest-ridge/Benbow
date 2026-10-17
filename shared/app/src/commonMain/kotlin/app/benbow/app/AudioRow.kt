@@ -1,10 +1,12 @@
 package app.benbow.app
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -23,67 +25,96 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.audio_pause
 import app.benbow.app.resources.audio_play
+import app.benbow.app.resources.media_audio
 import app.benbow.app.resources.speech_transcribe
 import app.benbow.app.resources.voice_note
 import app.benbow.app.resources.voice_replace
-import app.benbow.client.LocalFile
 import app.benbow.client.Media
 import app.benbow.client.SpeechModel
+import app.benbow.core.audio.TrackTags
 import app.benbow.core.sync.AttachmentState
-import kotlinx.coroutines.flow.StateFlow
+import coil3.compose.AsyncImage
 import org.jetbrains.compose.resources.stringResource
 
-/** What the app is playing: one sound at a time. */
-data class AudioNow(val id: String, val playing: Boolean, val positionMs: Long, val durationMs: Long)
+/** The words a track falls back on: a voice note's title, and a sound with no name at all. */
+@Immutable
+internal class TrackNames(val voice: String, val sound: String) {
+    /** What the player shows for a sound: the caption given by hand, else the file's tags, else its name (ADR-035). */
+    fun track(entryId: String?, attachment: AttachmentState, tags: TrackTags?): Track {
+        val meta = attachment.meta
+        val voice = meta.kind == "voice"
+        val name = meta.name?.substringBeforeLast('.')?.takeIf { it.isNotBlank() }
+        return Track(
+            id = meta.id,
+            entryId = entryId,
+            sha256 = meta.sha256,
+            mime = meta.mime,
+            title = attachment.caption ?: tags?.title ?: (if (voice) this.voice else name) ?: sound,
+            artist = tags?.artist,
+            album = tags?.album,
+            cover = meta.previewSha256,
+            durationMs = meta.durationMs,
+            voice = voice,
+            recordedAt = if (voice) meta.capturedAt else null,
+        )
+    }
 
-/** The app's one audio player: starting a sound stops the last; [now] feeds the play buttons and seek bars. */
-interface AudioPlayback {
-    val now: StateFlow<AudioNow?>
-
-    /** Plays [file] as [id], or pauses / resumes it when it's the current one. */
-    fun toggle(id: String, file: LocalFile, mime: String)
-
-    fun seek(positionMs: Long)
+    /** An entry's sounds as a queue, in the order given (its gallery's). */
+    fun queue(entryId: String?, attachments: List<AttachmentState>, tracks: Map<String, TrackTags>): List<Track> =
+        attachments.filter { it.isSound }.map { track(entryId, it, tracks[it.meta.id]) }
 }
 
-/** Android plays in the app (Media3); desktop hands the file to the system player. */
 @Composable
-internal expect fun rememberAudioPlayback(): AudioPlayback
+internal fun rememberTrackNames(): TrackNames {
+    val voice = stringResource(Res.string.voice_note)
+    val sound = stringResource(Res.string.media_audio)
+    return remember(voice, sound) { TrackNames(voice, sound) }
+}
 
-internal val LocalAudio = compositionLocalOf<AudioPlayback?> { null }
+internal val AttachmentState.isSound: Boolean get() = meta.kind == "voice" || meta.kind == "audio"
 
 /**
- * A voice note or a sound, the way VK showed them: a round play button on the left, the title and length; while it's the
- * one playing, a seek bar with the time appears in the row. Used in the feed, in posts, in the text and under comments.
+ * A voice note or a sound, the way VK showed them: the play button on the left (a track's cover with the button over
+ * it), the title, and the artist and length; while it's the current track, a seek bar with the time. Used in the feed,
+ * in posts, in the text and under comments. A tap hands the player [queue] (the sounds that follow this one).
  */
 @Composable
 internal fun AudioRow(
-    media: Media,
+    services: AppServices,
+    track: Track,
     attachment: AttachmentState,
+    queue: () -> List<Track>,
     modifier: Modifier = Modifier,
     onRename: ((String?) -> Unit)? = null,
     transcript: String? = null,
@@ -93,15 +124,13 @@ internal fun AudioRow(
     folded: Boolean = true,
     /** «Заменить текстом» (7.10e): in the editor, a voice note with its transcript can give way to the words. */
     onReplace: (() -> Unit)? = null,
+    /** What a blank title goes back to: the name without the caption. */
+    defaultTitle: String = track.title,
 ) {
-    val audio = LocalAudio.current
-    val now by (audio?.now ?: remember { kotlinx.coroutines.flow.MutableStateFlow<AudioNow?>(null) }).collectAsState()
-    val meta = attachment.meta
-    val mine = now?.takeIf { it.id == meta.id }
-    val load by rememberMediaFile(media, meta.sha256)
-    val file = (load as? MediaLoad.Ready)?.file
-    val fallback = if (meta.kind == "voice") stringResource(Res.string.voice_note) else meta.name?.substringBeforeLast('.') ?: meta.kind
-    val title = attachment.caption ?: fallback
+    val player = services.player
+    val state = player.state.collectAsState()
+    // Only the current track's row follows the position; the others don't recompose as it plays.
+    val mine by remember(track.id) { derivedStateOf { state.value?.takeIf { it.track.id == track.id } } }
     var renaming by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
     Surface(color = colors.surfaceContainerHigh, shape = RoundedCornerShape(14.dp), modifier = modifier.fillMaxWidth()) {
@@ -112,62 +141,33 @@ internal fun AudioRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 val playing = mine?.playing == true
-                Surface(
-                    onClick = { if (file != null) audio?.toggle(meta.id, file, meta.mime) },
-                    enabled = file != null,
-                    shape = CircleShape,
-                    color = colors.primary,
-                    contentColor = colors.onPrimary,
-                    modifier = Modifier.size(42.dp).hand(file != null),
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            if (playing) Icons.Pause else Icons.Play,
-                            stringResource(if (playing) Res.string.audio_pause else Res.string.audio_play),
-                            Modifier.size(24.dp),
-                        )
-                    }
-                }
+                PlayButton(services, track, playing, loading = mine?.loading == true && !playing) { player.toggle(track, queue) }
                 Column(Modifier.weight(1f)) {
                     if (renaming && onRename != null) {
-                        TitleField(attachment.caption.orEmpty(), fallback) {
+                        TitleField(attachment.caption.orEmpty(), defaultTitle) {
                             renaming = false
                             onRename(it)
                         }
                     } else {
                         Text(
-                            title,
+                            track.title,
                             style = MaterialTheme.typography.bodyMedium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = if (onRename != null) Modifier.hand().clickable { renaming = true } else Modifier,
                         )
                     }
-                    val total = mine?.durationMs?.takeIf { it > 0 } ?: meta.durationMs ?: 0
-                    if (mine != null && total > 0) {
-                        var dragging by remember { mutableStateOf<Float?>(null) }
-                        val fraction = dragging ?: (mine.positionMs.toFloat() / total).coerceIn(0f, 1f)
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Slider(
-                                value = fraction,
-                                onValueChange = { dragging = it },
-                                onValueChangeFinished = {
-                                    dragging?.let { audio?.seek((it * total).toLong()) }
-                                    dragging = null
-                                },
-                                modifier = Modifier.weight(1f).height(28.dp),
-                            )
-                            Text(
-                                durationLabel((fraction * total).toLong()),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = colors.onSurfaceVariant,
-                            )
-                        }
+                    val now = mine
+                    val total = now?.durationMs?.takeIf { it > 0 } ?: track.durationMs ?: 0
+                    if (now != null && total > 0) {
+                        SeekLine(now.positionMs, total, onSeek = player::seek)
                     } else {
                         Text(
-                            meta.durationMs?.let(::durationLabel).orEmpty(),
+                            listOfNotNull(track.artist, track.durationMs?.let(::durationLabel)).joinToString(" · "),
                             style = MaterialTheme.typography.labelMedium,
                             color = colors.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -198,12 +198,85 @@ internal fun AudioRow(
     }
 }
 
+/** A voice note's round button, or a track's cover with the button over it. */
+@Composable
+private fun PlayButton(services: AppServices, track: Track, playing: Boolean, loading: Boolean, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val label = stringResource(if (playing) Res.string.audio_pause else Res.string.audio_play)
+    val cover = track.cover?.takeUnless { track.voice }
+    if (cover != null) {
+        Box(
+            Modifier.size(42.dp).clip(RoundedCornerShape(8.dp)).background(colors.surfaceContainerHighest).hand()
+                .clickable(onClick = onClick).semantics { contentDescription = label },
+            contentAlignment = Alignment.Center,
+        ) {
+            CoverImage(services.media, cover, Modifier.fillMaxSize())
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)))
+            PlayGlyph(playing, loading, Color.White)
+        }
+    } else {
+        Surface(
+            onClick = onClick,
+            shape = CircleShape,
+            color = colors.primary,
+            contentColor = colors.onPrimary,
+            modifier = Modifier.size(42.dp).hand().semantics { contentDescription = label },
+        ) {
+            Box(contentAlignment = Alignment.Center) { PlayGlyph(playing, loading, colors.onPrimary) }
+        }
+    }
+}
+
+/** Play or pause, or a spinner while the file comes. */
+@Composable
+internal fun PlayGlyph(playing: Boolean, loading: Boolean, tint: Color, size: Dp = 24.dp) {
+    if (loading) {
+        CircularProgressIndicator(Modifier.size(size * 0.8f), color = tint, strokeWidth = 2.dp)
+    } else {
+        Icon(if (playing) Icons.Pause else Icons.Play, null, Modifier.size(size), tint = tint)
+    }
+}
+
+/** A track's cover from the media store (fetched if it isn't here yet: it's small). */
+@Composable
+internal fun CoverImage(media: Media, sha256: String, modifier: Modifier = Modifier) {
+    val load by rememberMediaFile(media, sha256)
+    (load as? MediaLoad.Ready)?.let { AsyncImage(it.file, null, modifier, contentScale = ContentScale.Crop) }
+}
+
+/** The seek bar with the time where it points (where a finger drags it, while it does). */
+@Composable
+internal fun SeekLine(positionMs: Long, totalMs: Long, onSeek: (Long) -> Unit) {
+    var dragging by remember { mutableStateOf<Float?>(null) }
+    val fraction = dragging ?: (positionMs.toFloat() / totalMs).coerceIn(0f, 1f)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Slider(
+            value = fraction,
+            onValueChange = { dragging = it },
+            onValueChangeFinished = {
+                dragging?.let { onSeek((it * totalMs).toLong()) }
+                dragging = null
+            },
+            modifier = Modifier.weight(1f).height(28.dp).hand(),
+        )
+        Text(
+            durationLabel((fraction * totalMs).toLong()),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
 /** Where a transcript starts and ends in the row: under the title, past the play button. */
 internal val TRANSCRIPT_START = 64.dp
 internal val TRANSCRIPT_END = 12.dp
 private const val FOLDED_LINES = 3
 
-/** A sound with what was said in it, wired to this device's transcriber (7.6): the button shows once the model is here. */
+/**
+ * A sound with what was said in it, wired to the player and to this device's transcriber (7.6): the button shows once
+ * the model is here, and never for music (a file that names its artist, ADR-035). [queue] lists the sounds a tap plays from; by
+ * default just this one.
+ */
 @Composable
 internal fun VoiceRow(
     services: AppServices,
@@ -214,24 +287,31 @@ internal fun VoiceRow(
     onRename: ((String?) -> Unit)? = null,
     folded: Boolean = true,
     onReplace: (() -> Unit)? = null,
+    tags: TrackTags? = null,
+    queue: (TrackNames.() -> List<Track>)? = null,
 ) {
     val transcriptions = services.transcriptions
     val model = transcriptions?.model?.state?.collectAsState()?.value
     val running = transcriptions?.running?.collectAsState()?.value.orEmpty()
+    val names = rememberTrackNames()
+    val track = remember(names, entryId, attachment, tags) { names.track(entryId, attachment, tags) }
     AudioRow(
-        services.media,
+        services,
+        track,
         attachment,
-        modifier,
-        onRename,
+        queue = { queue?.invoke(names) ?: listOf(track) },
+        modifier = modifier,
+        onRename = onRename,
         transcript = transcript,
         transcribing = attachment.meta.id in running,
-        onTranscribe = if (transcriptions != null && entryId != null && model == SpeechModel.State.Ready) {
+        onTranscribe = if (transcriptions != null && entryId != null && model == SpeechModel.State.Ready && tags?.isMusic != true) {
             { transcriptions.transcribe(entryId, attachment) }
         } else {
             null
         },
         folded = folded,
         onReplace = onReplace,
+        defaultTitle = remember(names, attachment, tags) { names.track(entryId, attachment.copy(caption = null), tags).title },
     )
 }
 

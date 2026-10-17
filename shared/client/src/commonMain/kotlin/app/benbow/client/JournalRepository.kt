@@ -1,6 +1,7 @@
 package app.benbow.client
 
 import app.benbow.client.db.BenbowDb
+import app.benbow.core.audio.TrackTags
 import app.benbow.core.content.Document
 import app.benbow.core.content.DocumentCodec
 import app.benbow.core.content.DocumentFormatException
@@ -84,6 +85,8 @@ data class FeedItem(
     val audio: List<AttachmentState> = emptyList(),
     /** What was said in each voice note or sound, by attachment id (7.6). */
     val transcripts: Map<String, String> = emptyMap(),
+    /** What each sound file says it is (ADR-035), by attachment id. */
+    val tracks: Map<String, TrackTags> = emptyMap(),
 )
 
 /**
@@ -101,6 +104,8 @@ data class Comment(
     val media: List<AttachmentState> = emptyList(),
     /** What was said in each voice note or sound, by attachment id (7.6). */
     val transcripts: Map<String, String> = emptyMap(),
+    /** What each sound file says it is (ADR-035), by attachment id. */
+    val tracks: Map<String, TrackTags> = emptyMap(),
 )
 
 /** What to look for; empty text and off switches match everything outside the trash. [tag] is a tag's id. */
@@ -146,6 +151,9 @@ data class EntryDetail(
 
     /** What was said in each voice note or sound, by attachment id (7.6). */
     val transcripts: Map<String, String> get() = transcriptsOf(fields)
+
+    /** What each sound file says it is (ADR-035), by attachment id. */
+    val tracks: Map<String, TrackTags> get() = TrackTags.of(fields)
 }
 
 // Entry metadata as namespaced LWW fields (ADR-021).
@@ -333,6 +341,7 @@ class JournalRepository(
         height: Int? = null,
         durationMs: Long? = null,
         preview: MediaFile? = null,
+        track: TrackTags? = null,
     ): String = db.transactionWithResult {
         val entry = q.selectEntry(entryId).executeAsOneOrNull() ?: error("No entry $entryId")
         for (f in listOfNotNull(file, preview)) q.putMedia(f.sha256, f.path, f.size, f.mime, "captured", 0, f.name, f.capturedAt, now())
@@ -354,6 +363,8 @@ class JournalRepository(
         val state = AttachmentState(meta, position, hlc = clock.next())
         enqueue(PutAttachment(newId(), entryId, meta, state.position, state.caption, state.present, state.hlc))
         putAttachments(entryId, current + (meta.id to state))
+        // A sound's tags (ADR-035) go with it, after the link, so a device never sees them without the file.
+        if (track != null && !track.isEmpty) setField(entryId, TrackTags.FIELD_PREFIX + meta.id, track.encode())
         meta.id
     }
 
@@ -419,7 +430,7 @@ class JournalRepository(
         SearchIndex.update(db, entryId) // names of sounds are searchable
     }
 
-    /** Voice notes and sounds outside the trash that have no text yet, with their entries (7.6). */
+    /** Voice notes and sounds outside the trash that have no text yet, with their entries (7.6); music (ADR-035) isn't. */
     fun untranscribed(): List<Pair<String, AttachmentState>> = q.allEntryIds().executeAsList().flatMap(::untranscribedIn)
 
     /** The same for one entry. */
@@ -427,7 +438,7 @@ class JournalRepository(
         val entry = q.selectEntry(id).executeAsOneOrNull() ?: return emptyList()
         val fields = decodeFields(entry.fields)
         if (fields[TRASH_FIELD] == "true") return emptyList()
-        val done = transcriptsOf(fields).keys
+        val done = transcriptsOf(fields).keys + TrackTags.of(fields).filterValues { it.isMusic }.keys
         return decodeAttachments(entry.attachments).values
             .filter { it.present && (it.meta.kind == "voice" || it.meta.kind == "audio") && it.meta.id !in done }
             .map { id to it }
@@ -450,7 +461,8 @@ class JournalRepository(
         q.commentsOf(parentId) { id, day, createdAt, title, preview, conflictHeads, mediaCount, cover, fields, body, attachments ->
             val media = galleryOrder(decodeAttachments(attachments).values, body)
             val summary = summaryOf(id, day, createdAt, title, preview, conflictHeads, mediaCount, cover, fields)
-            Comment(summary, plainText(body), body, media, transcriptsOf(decodeFields(fields)))
+            val decoded = decodeFields(fields)
+            Comment(summary, plainText(body), body, media, transcriptsOf(decoded), TrackTags.of(decoded))
         }.asFlow().mapToList(context)
 
     fun commentCount(parentId: String): Flow<Long> = q.commentCount(parentId).asFlow().mapToOne(context)
@@ -547,17 +559,17 @@ class JournalRepository(
             } else {
                 plainText(body).take(FEED_TEXT_MAX)
             }
-            val reactions = decodeFields(fields).filter { it.key.startsWith(REACTION_PREFIX) && it.value != null }.keys
+            val decoded = decodeFields(fields)
+            val reactions = decoded.filter { it.key.startsWith(REACTION_PREFIX) && it.value != null }.keys
             val gallery = galleryOrder(decodeAttachments(attachments).values, body)
             val media = gallery.filter { it.meta.kind in VISUAL_KINDS }
             val audio = gallery.filter { it.meta.kind == "voice" || it.meta.kind == "audio" }
-            val transcripts = transcriptsOf(decodeFields(fields))
             FeedItem(
                 summary, kind, text,
                 reactions.map {
                     it.removePrefix(REACTION_PREFIX)
                 }.toSet(),
-                comments.toInt(), media, body, audio, transcripts,
+                comments.toInt(), media, body, audio, transcriptsOf(decoded), TrackTags.of(decoded),
             )
         }.asFlow().mapToList(context).let { feed ->
             combine(feed, gentleRules()) { items, rules -> items.map { it.copy(summary = rules.apply(it.summary)) } }

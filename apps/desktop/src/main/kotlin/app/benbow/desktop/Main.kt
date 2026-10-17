@@ -40,6 +40,7 @@ fun main() {
         deviceName = System.getenv("COMPUTERNAME") ?: InetAddress.getLocalHost().hostName,
         mediaCacheBytes = 10L * 1024 * 1024 * 1024, // the PC has room; originals open without waiting
         reminderClock = clock,
+        audio = JavaFxAudio(),
     )
     application { BenbowDesktop(services, tray) }
 }

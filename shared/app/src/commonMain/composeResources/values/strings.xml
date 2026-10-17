@@ -63,6 +63,7 @@
 
     <string name="media_gallery">Фото и видео</string>
     <string name="media_camera">Снять фото</string>
+    <string name="media_audio">Аудио</string>
     <string name="media_mic_denied">Чтобы записывать голос, разрешите доступ к микрофону</string>
     <string name="media_file">Добавить файл</string>
     <string name="media_open">Открыть в другом приложении</string>
@@ -70,6 +71,15 @@
     <string name="media_remove_confirm">Убрать вложение из записи? Файл останется на сервере и в истории.</string>
     <string name="media_unavailable">Файл сейчас недоступен: %1$s</string>
     <string name="attach_failed">Не удалось добавить файл: %1$s</string>
+    <string name="player_next">Следующий трек</string>
+    <string name="player_previous">Предыдущий трек</string>
+    <string name="player_close">Закрыть плеер</string>
+    <string name="player_open">Открыть плеер</string>
+    <string name="player_collapse">Свернуть</string>
+    <string name="player_now">Сейчас играет</string>
+    <string name="player_entry">К записи</string>
+    <string name="player_queue">Далее</string>
+    <string name="audio_failed">Не получается воспроизвести: файла нет на этом устройстве или он не читается</string>
     <string name="drawing_title">Рисунок</string>
     <string name="drawing_add">Нарисовать</string>
     <string name="drawing_canvas">Холст</string>

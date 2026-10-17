@@ -7,6 +7,7 @@ import androidx.compose.ui.window.ComposeViewport
 import app.benbow.app.AppMessage
 import app.benbow.app.AppServices
 import app.benbow.app.BenbowApp
+import app.benbow.app.BrowserAudio
 import app.benbow.app.BrowserReminderClock
 import app.benbow.app.MediaFactory
 import app.benbow.app.WebNotice
@@ -68,6 +69,7 @@ private suspend fun start() {
             deviceName = browserName(),
             mediaCacheBytes = 2L * 1024 * 1024 * 1024, // downloads kept in IndexedDB; the PC has room
             reminderClock = reminders,
+            audio = BrowserAudio(),
         )
         val media = services.media as BrowserMedia
         // Hidden (another tab, minimized, closing): typing becomes a revision and everything goes to browser storage now.

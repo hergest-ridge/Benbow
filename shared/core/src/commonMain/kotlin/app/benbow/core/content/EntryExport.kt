@@ -1,5 +1,6 @@
 package app.benbow.core.content
 
+import app.benbow.core.audio.TrackTags
 import app.benbow.core.sync.AttachmentState
 import app.benbow.core.sync.EntryState
 import kotlinx.serialization.json.Json
@@ -48,7 +49,10 @@ object EntryExport {
             val fields = entry.fields.mapNotNull { (k, v) -> v.value?.let { k to it } }.sortedBy { it.first }.toMap()
             val names = tags.on(fields).map { it.second }
             val reactions = fields.keys.filter { it.startsWith("reaction:") }.map { it.removePrefix("reaction:") }
-            fields.filterKeys { !it.startsWith("tag:") && !it.startsWith("reaction:") && !it.startsWith(TRANSCRIPT) }
+            fields.filterKeys {
+                !it.startsWith("tag:") && !it.startsWith("reaction:") && !it.startsWith(TRANSCRIPT) &&
+                    !it.startsWith(TrackTags.FIELD_PREFIX)
+            }
                 .forEach { (k, v) -> appendLine("$k: ${yaml(v)}") }
             if (names.isNotEmpty()) appendLine("tags: [${names.joinToString(", ") { yaml(it) }}]")
             if (reactions.isNotEmpty()) appendLine("reactions: [${reactions.joinToString(", ") { yaml(it) }}]")
@@ -91,7 +95,8 @@ object EntryExport {
 
     /**
      * Present attachments as links relative to the note, so the folder stays browsable without the app. A voice note's
-     * transcript follows its link as a quote; one placed in the text is linked again here for its transcript.
+     * transcript follows its link as a quote; one placed in the text is linked again here for its transcript. A sound
+     * file is named by its tags (ADR-035), "Artist — Title", unless it was named by hand.
      */
     private fun attachments(entry: EntryState, missing: String, inline: Set<String>, link: (AttachmentState) -> String?): String {
         val transcripts = entry.fields.mapNotNull { (k, v) ->
@@ -104,8 +109,10 @@ object EntryExport {
             it.present && (it.meta.id !in inline || it.meta.id in transcripts)
         }.sortedBy { it.position }
         if (visible.isEmpty()) return ""
+        val tracks = TrackTags.of(entry.fields.mapValues { it.value.value })
         return visible.joinToString("\n", prefix = "\n", postfix = "\n") { a ->
-            val label = (a.caption ?: a.meta.name ?: a.meta.kind).replace('[', '(').replace(']', ')')
+            val tagged = tracks[a.meta.id]?.let { t -> listOfNotNull(t.artist, t.title).joinToString(" — ").ifEmpty { null } }
+            val label = (a.caption ?: tagged ?: a.meta.name ?: a.meta.kind).replace('[', '(').replace(']', ')')
             val path = link(a)
             val line = when {
                 path == null -> "<!-- ${a.meta.kind} ${a.meta.sha256} $missing -->"

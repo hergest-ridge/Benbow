@@ -373,7 +373,8 @@ class AppSmokeTest {
         onAllNodesWithContentDescription("Слушать")[1].click()
         waitUntilExactlyOneExists(hasContentDescription("Следующий трек"), 5_000)
         onAllNodesWithText("Кукушка").onLast().click()
-        waitUntilExactlyOneExists(hasText("Сейчас играет"), 5_000)
+        // The dialog's first frame can take a while when the whole gate runs at once.
+        waitUntilExactlyOneExists(hasText("Сейчас играет"), 10_000)
         runBlocking { delay(1_500) }
         waitForIdle()
         screenshot("74-player-wide")

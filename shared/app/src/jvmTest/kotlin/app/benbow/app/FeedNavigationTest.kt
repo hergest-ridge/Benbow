@@ -1,31 +1,20 @@
 package app.benbow.app
 
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.semantics.SemanticsNode
-import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.MouseButton
-import androidx.compose.ui.test.SemanticsNodeInteraction
-import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
-import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
-import androidx.compose.ui.test.isRoot
-import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performScrollToIndex
-import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import app.benbow.client.FeedKey
@@ -37,9 +26,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.minus
-import java.io.File
 import java.util.Properties
-import javax.imageio.ImageIO
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -230,25 +217,8 @@ class FeedNavigationTest {
         assertNull(emptyList<FeedRow>().postNear(0))
     }
 
-    /** The numbers of the posts laid out on screen. */
-    private fun ComposeUiTest.shownPosts(): Set<Int> = onAllNodes(hasText("Запись ", substring = true)).fetchSemanticsNodes()
-        .filter { it.isShown() }
-        .flatMap { node -> node.config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text } }
-        .mapNotNull { it.removePrefix("Запись ").toIntOrNull() }.toSet()
-
-    private fun SemanticsNodeInteractionsProvider.screenshot(name: String) {
-        val file = File("build/screens/$name.png").apply { parentFile.mkdirs() }
-        ImageIO.write(onAllNodes(isRoot()).onLast().captureToImage().toAwtImage(), "png", file)
-    }
-
-    private fun SemanticsNodeInteraction.click() = performSemanticsAction(SemanticsActions.OnClick)
-
-    private fun SemanticsNode.isShown() = boundsInRoot.let { it.bottom > 0f && it.top < 860f && it.height > 0f }
-
     private companion object {
         const val POSTS = 600
-        val MONTHS = listOf(
-            "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
-        )
+        val MONTHS = MONTH_NAMES
     }
 }

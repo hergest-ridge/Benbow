@@ -113,10 +113,17 @@ data class Comment(
 )
 
 /**
- * A post's place in the feed (ADR-036): enough to order, date and veil it, and to keep about its room ([media]: it has
- * pictures or sounds) until it is read in full, without its text.
+ * A post's place in the feed (ADR-036): enough to order, date, veil and filter it ([tags]: the ids it carries), and to
+ * keep about its room ([media]: it has pictures or sounds) until it is read in full, without its text.
  */
-data class FeedKey(val id: String, val day: String, val createdAt: Long, val veil: Veil? = null, val media: Boolean = false)
+data class FeedKey(
+    val id: String,
+    val day: String,
+    val createdAt: Long,
+    val veil: Veil? = null,
+    val media: Boolean = false,
+    val tags: List<String> = emptyList(),
+)
 
 /** What to look for; empty text and off switches match everything outside the trash. [tag] is a tag's id. */
 data class SearchQuery(val text: String = "", val tag: String? = null, val favorites: Boolean = false, val withMedia: Boolean = false)
@@ -566,7 +573,7 @@ class JournalRepository(
             val marks = if (row.marks == NO_MARKS) emptyMap() else decodeFields(row.marks)
             val tags = tagsOf(marks).map { it.id }
             val veil = rules.veilOf(Veil.of(marks[VEIL_FIELD]), marks[VEIL_UNTIL_FIELD], row.day, tags)
-            FeedKey(row.id, row.day, row.created_at, veil, media = row.media_count > 0)
+            FeedKey(row.id, row.day, row.created_at, veil, media = row.media_count > 0, tags = tags)
         }
     }
 

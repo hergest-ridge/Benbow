@@ -297,6 +297,16 @@
     <string name="feed_jump_year_ago">Год назад</string>
     <string name="feed_jump_random">Наугад</string>
     <string name="feed_jump_date">Дата…</string>
+    <string name="feed_filter">Фильтр</string>
+    <string name="feed_filter_hint">Покажутся записи хотя бы с одним из выбранных тегов или категорий, за выбранные годы</string>
+    <string name="feed_filter_tags">Теги</string>
+    <string name="feed_filter_categories">Категории</string>
+    <string name="feed_filter_years">Годы</string>
+    <string name="feed_filter_pick_tag">Выбрать тег…</string>
+    <string name="feed_filter_picker">Теги для ленты</string>
+    <string name="feed_filter_reset">Сбросить</string>
+    <string name="feed_filter_done">Готово</string>
+    <string name="feed_filter_empty">По этому фильтру в ленте ничего нет</string>
     <string name="pin">Закрепить</string>
     <string name="unpin">Открепить</string>
     <string name="react">Реакция</string>

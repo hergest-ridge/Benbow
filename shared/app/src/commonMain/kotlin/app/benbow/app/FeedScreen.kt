@@ -42,10 +42,12 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -84,6 +86,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.comments
 import app.benbow.app.resources.feed_empty
+import app.benbow.app.resources.feed_filter
+import app.benbow.app.resources.feed_filter_empty
+import app.benbow.app.resources.feed_filter_reset
 import app.benbow.app.resources.feed_jump_desc
 import app.benbow.app.resources.feed_title
 import app.benbow.app.resources.feed_to_today
@@ -93,6 +98,7 @@ import app.benbow.client.FeedItem
 import app.benbow.client.FeedKey
 import app.benbow.client.Veil
 import app.benbow.client.effectiveVeil
+import app.benbow.client.tagRegistry
 import app.benbow.core.sync.AttachmentState
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
@@ -102,10 +108,12 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -199,9 +207,24 @@ internal class FeedViewModel(private val services: AppServices) : ViewModel() {
     private val chunks = MutableStateFlow(listOf(0..1))
     private var jumping = false
 
+    // One index for the rows and for what the filter offers.
+    private val index = services.repo.feedIndex().shareIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
+    private val registry = services.repo.tagRegistry().shareIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
+
+    init {
+        // A new filter is a new feed: it starts from its top.
+        viewModelScope.launch { services.feedFilter.drop(1).collect { chunks.value = listOf(0..1) } }
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
-    val rows: StateFlow<List<FeedRow>?> = combine(services.repo.feedIndex(), services.gentle.on, chunks) { keys, gentle, chunks ->
-        val shown = if (gentle) keys.filter { it.veil != Veil.Quiet } else keys
+    val rows: StateFlow<List<FeedRow>?> = combine(index, services.gentle.on, chunks, services.feedFilter, registry) {
+            keys,
+            gentle,
+            chunks,
+            filter,
+            registry,
+        ->
+        val shown = keys.filter { filter.shows(it, gentle, registry) }
         shown to feedWindow(shown, chunks)
     }.distinctUntilChanged().flatMapLatest { (keys, ids) ->
         // The index and its window come out together, so a new post never shows as a placeholder first.
@@ -215,6 +238,11 @@ internal class FeedViewModel(private val services: AppServices) : ViewModel() {
             last = rows.associateBy { it.key }
             rows
         }
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** What the filter offers: the feed's years, categories and most used tags, as it shows without a filter. */
+    val choices: StateFlow<FeedChoices?> = combine(index, services.gentle.on, registry) { keys, gentle, registry ->
+        FeedChoices.of(if (gentle) keys.filter { it.veil != Veil.Quiet } else keys, registry)
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /** Rows [first]..[last] are on screen: the window follows them a chunk at a time. */
@@ -305,6 +333,17 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
     }
     // Back after five minutes away, the feed starts at today again, not deep in some past month.
     LaunchedEffect(state, vm) { services.cameBack.collect { vm.toToday(state, glide = false) } }
+    // The filter (ADR-036 N5): a new one starts its feed from the top.
+    val filter by services.feedFilter.collectAsStateWithLifecycle()
+    val choices by vm.choices.collectAsStateWithLifecycle()
+    var filtering by remember { mutableStateOf(false) }
+    val seenFilter = remember { arrayOf(filter) }
+    LaunchedEffect(filter) {
+        if (filter != seenFilter[0]) {
+            seenFilter[0] = filter
+            state.scrollToItem(0)
+        }
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -315,6 +354,15 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
                     }
                 },
                 actions = {
+                    if (!rows.isNullOrEmpty() || filter.active) {
+                        IconButton({ filtering = true }, Modifier.hand()) {
+                            Icon(
+                                Icons.Filter,
+                                stringResource(Res.string.feed_filter),
+                                tint = if (filter.active) MaterialTheme.colorScheme.primary else LocalContentColor.current,
+                            )
+                        }
+                    }
                     if (!rows.isNullOrEmpty()) {
                         IconButton({ openJump(month) }, Modifier.hand()) { Icon(Icons.JumpTo, stringResource(Res.string.feed_jump_desc)) }
                     }
@@ -323,95 +371,111 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
             )
         },
     ) { padding ->
-        val list = rows ?: return@Scaffold
-        if (list.isEmpty()) {
-            Box(Modifier.padding(padding).fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                Text(
-                    stringResource(Res.string.feed_empty),
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            return@Scaffold
+        val offer = choices
+        if (filtering && offer != null) {
+            FeedFilterSheet(services, filter, offer, onChange = { services.feedFilter.value = it }, onDismiss = { filtering = false })
         }
-        Box(
-            Modifier.padding(padding).fillMaxSize().clipToBounds().nestedScroll(pull).pageScrolling(
-                state,
-                enabled = services.platform != "android",
-                home = { vm.toToday(state, glide = true) },
-                end = { vm.toOldest(state) },
-            ),
-        ) {
-            LazyColumn(
-                Modifier.fillMaxSize().offset { IntOffset(0, pull.shown.roundToInt()) },
-                state = state,
-                // Room below the very first post, so «К сегодня» never covers it.
-                contentPadding = PaddingValues(top = if (appearance.feedCards) 8.dp else 0.dp, bottom = 72.dp),
+        Column(Modifier.padding(padding).fillMaxSize()) {
+            if (filter.active) FeedFilterRow(filter, { services.feedFilter.value = it })
+            val list = rows ?: return@Column
+            if (list.isEmpty()) {
+                Column(
+                    Modifier.fillMaxSize().padding(32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text(
+                        stringResource(if (filter.active) Res.string.feed_filter_empty else Res.string.feed_empty),
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (filter.active) {
+                        TextButton({ services.feedFilter.value = FeedFilter() }, Modifier.hand()) {
+                            Text(stringResource(Res.string.feed_filter_reset))
+                        }
+                    }
+                }
+                return@Column
+            }
+            Box(
+                Modifier.weight(1f).fillMaxWidth().clipToBounds().nestedScroll(pull).pageScrolling(
+                    state,
+                    enabled = services.platform != "android",
+                    home = { vm.toToday(state, glide = true) },
+                    end = { vm.toOldest(state) },
+                ),
             ) {
-                // Posts that turn quiet or come back slide out and in where they are; the post in view stays put.
-                items(list, key = { it.key }, contentType = { it.contentType }) { row ->
-                    Box(Modifier.animateItem()) {
-                        when (row) {
-                            is FeedRow.Day -> DayHeader(row.day)
+                LazyColumn(
+                    Modifier.fillMaxSize().offset { IntOffset(0, pull.shown.roundToInt()) },
+                    state = state,
+                    // Room below the very first post, so «К сегодня» never covers it.
+                    contentPadding = PaddingValues(top = if (appearance.feedCards) 8.dp else 0.dp, bottom = 72.dp),
+                ) {
+                    // Posts that turn quiet or come back slide out and in where they are; the post in view stays put.
+                    items(list, key = { it.key }, contentType = { it.contentType }) { row ->
+                        Box(Modifier.animateItem()) {
+                            when (row) {
+                                is FeedRow.Day -> DayHeader(row.day)
 
-                            is FeedRow.Month -> MonthHeader(row.month) { openJump(row.month) }
+                                is FeedRow.Month -> MonthHeader(row.month) { openJump(row.month) }
 
-                            is FeedRow.Item -> {
-                                val item = row.item
-                                if (item == null) {
-                                    PostPlaceholder(row.place.media, cards = appearance.feedCards)
-                                } else {
-                                    val id = item.summary.id
-                                    FeedPost(
-                                        services,
-                                        item,
-                                        row.body,
-                                        cards = appearance.feedCards,
-                                        expanded = expanded[id] == true,
-                                        onExpand = { expanded[id] = true },
-                                        onOpen = { nav.open(Route.Editor(id, item.summary.day, readOnly = true)) },
-                                        onComments = { nav.open(Route.Editor(id, item.summary.day, readOnly = true)) },
-                                        onOpenMedia = { nav.open(Route.Media(id, it.meta.id)) },
-                                        // The rows as they are when tapped: a moving window doesn't recompose the post.
-                                        queue = { feedQueue(vm.rows.value.orEmpty(), id, gentle) },
-                                    ) { emoji, on ->
-                                        vm.react(id, emoji, on)
+                                is FeedRow.Item -> {
+                                    val item = row.item
+                                    if (item == null) {
+                                        PostPlaceholder(row.place.media, cards = appearance.feedCards)
+                                    } else {
+                                        val id = item.summary.id
+                                        FeedPost(
+                                            services,
+                                            item,
+                                            row.body,
+                                            cards = appearance.feedCards,
+                                            expanded = expanded[id] == true,
+                                            onExpand = { expanded[id] = true },
+                                            onOpen = { nav.open(Route.Editor(id, item.summary.day, readOnly = true)) },
+                                            onComments = { nav.open(Route.Editor(id, item.summary.day, readOnly = true)) },
+                                            onOpenMedia = { nav.open(Route.Media(id, it.meta.id)) },
+                                            // The rows as they are when tapped: a moving window doesn't recompose the post.
+                                            queue = { feedQueue(vm.rows.value.orEmpty(), id, gentle) },
+                                        ) { emoji, on ->
+                                            vm.react(id, emoji, on)
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
+                if (appearance.feedScrubber) {
+                    FeedScrubber(
+                        list,
+                        state,
+                        mouse = services.platform != "android",
+                        jump = { pos, row -> vm.jumpTo(pos) { state.scrollToItem(row) } },
+                    )
+                }
+                if (jumping) {
+                    FeedJumpSheet(
+                        list,
+                        jumpFrom,
+                        onJump = { row -> scope.launch { vm.jumpTo(list.postNear(row) ?: 0) { state.scrollToItem(row) } } },
+                        onToday = { scope.launch { vm.toToday(state, glide = true) } },
+                        onDismiss = { jumping = false },
+                    )
+                }
+                ToToday(far, Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp)) {
+                    scope.launch { vm.toToday(state, glide = true) }
+                }
+                // As tall as it is pulled out: nothing of it lies outside, so a hidden strip takes no taps (or screen readers).
+                Box(
+                    Modifier.fillMaxWidth().clipToBounds().layout { measurable, constraints ->
+                        val strip = measurable.measure(constraints.copy(minHeight = 0, maxHeight = Constraints.Infinity))
+                        pull.height = strip.height.toFloat()
+                        val shown = pull.shown.roundToInt().coerceIn(0, strip.height)
+                        layout(strip.width, shown) { strip.place(0, shown - strip.height) }
+                    }.then(if (stripHidden) Modifier.clearAndSetSemantics {} else Modifier),
+                ) { GentleStrip(gentle, services.gentle::set) }
             }
-            if (appearance.feedScrubber) {
-                FeedScrubber(
-                    list,
-                    state,
-                    mouse = services.platform != "android",
-                    jump = { pos, row -> vm.jumpTo(pos) { state.scrollToItem(row) } },
-                )
-            }
-            if (jumping) {
-                FeedJumpSheet(
-                    list,
-                    jumpFrom,
-                    onJump = { row -> scope.launch { vm.jumpTo(list.postNear(row) ?: 0) { state.scrollToItem(row) } } },
-                    onToday = { scope.launch { vm.toToday(state, glide = true) } },
-                    onDismiss = { jumping = false },
-                )
-            }
-            ToToday(far, Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp)) {
-                scope.launch { vm.toToday(state, glide = true) }
-            }
-            // As tall as it is pulled out: nothing of it lies outside, so a hidden strip takes no taps (or screen readers).
-            Box(
-                Modifier.fillMaxWidth().clipToBounds().layout { measurable, constraints ->
-                    val strip = measurable.measure(constraints.copy(minHeight = 0, maxHeight = Constraints.Infinity))
-                    pull.height = strip.height.toFloat()
-                    val shown = pull.shown.roundToInt().coerceIn(0, strip.height)
-                    layout(strip.width, shown) { strip.place(0, shown - strip.height) }
-                }.then(if (stripHidden) Modifier.clearAndSetSemantics {} else Modifier),
-            ) { GentleStrip(gentle, services.gentle::set) }
         }
     }
 }

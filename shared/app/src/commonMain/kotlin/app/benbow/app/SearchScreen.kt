@@ -14,7 +14,9 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -178,9 +180,17 @@ internal fun SearchScreen(services: AppServices, nav: Navigator) {
                 }
             } else if (query.withMedia) {
                 // Entries with media as a grid of their pictures, like the tag block that may have opened it.
+                val grid = rememberLazyGridState()
                 LazyVerticalGrid(
                     GridCells.Adaptive(112.dp),
-                    Modifier.fillMaxSize(),
+                    Modifier.fillMaxSize().pageScrolling(
+                        grid,
+                        enabled = services.platform != "android",
+                        takeFocus = false,
+                        home = { grid.scrollToItem(0) },
+                        end = { grid.scrollToItem(found.lastIndex) },
+                    ),
+                    state = grid,
                     contentPadding = PaddingValues(12.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -192,7 +202,18 @@ internal fun SearchScreen(services: AppServices, nav: Navigator) {
                     }
                 }
             } else {
-                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 8.dp)) {
+                val list = rememberLazyListState()
+                LazyColumn(
+                    Modifier.fillMaxSize().pageScrolling(
+                        list,
+                        enabled = services.platform != "android",
+                        takeFocus = false,
+                        home = { list.toFirst() },
+                        end = { list.toLast() },
+                    ),
+                    state = list,
+                    contentPadding = PaddingValues(vertical = 8.dp),
+                ) {
                     items(found, key = { it.id }) { entry ->
                         EntryCard(entry, onClick = { nav.open(Route.Editor(entry.id, entry.day)) }, media = services.media, showDay = true)
                     }

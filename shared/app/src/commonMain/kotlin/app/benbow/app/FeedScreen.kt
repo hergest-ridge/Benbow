@@ -320,7 +320,14 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
             }
             return@Scaffold
         }
-        Box(Modifier.padding(padding).fillMaxSize().clipToBounds().nestedScroll(pull)) {
+        Box(
+            Modifier.padding(padding).fillMaxSize().clipToBounds().nestedScroll(pull).pageScrolling(
+                state,
+                enabled = services.platform != "android",
+                home = { vm.toToday(state, glide = true) },
+                end = { vm.toOldest(state) },
+            ),
+        ) {
             LazyColumn(
                 Modifier.fillMaxSize().offset { IntOffset(0, pull.shown.roundToInt()) },
                 state = state,
@@ -704,6 +711,12 @@ private suspend fun FeedViewModel.toToday(state: LazyListState, glide: Boolean) 
         if (state.firstVisibleItemIndex > GLIDE_ROWS) state.scrollToItem(GLIDE_ROWS)
         state.animateScrollToItem(0)
     }
+}
+
+/** Down to the very first post (End): its window is read first, so the list lands on posts. */
+private suspend fun FeedViewModel.toOldest(state: LazyListState) {
+    val oldest = rows.value?.lastOrNull { it is FeedRow.Item } as? FeedRow.Item ?: return
+    jumpTo(oldest.pos) { state.scrollToItem(rows.value?.lastIndex ?: return@jumpTo) }
 }
 
 /** Rows down (titles and day lines count) before «К сегодня» shows: a few screens. */

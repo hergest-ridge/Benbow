@@ -14,6 +14,7 @@ import app.benbow.app.WebNotice
 import app.benbow.app.WithBundledFonts
 import app.benbow.app.installWebImages
 import app.benbow.app.installWebShortcuts
+import app.benbow.app.keepMiddleButton
 import app.benbow.app.preloadTexts
 import app.benbow.app.showNotification
 import app.benbow.client.BrowserMedia
@@ -88,6 +89,7 @@ private suspend fun start() {
         }
         installWebImages()
         installWebShortcuts(services)
+        keepMiddleButton()
         texts.await()
         ComposeViewport { WithBundledFonts(onReady = ::hideLoading) { BenbowApp(services) } }
     }

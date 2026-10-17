@@ -19,3 +19,11 @@ private fun listenKeys(onKey: (String, Boolean, Boolean) -> Boolean): Unit = js(
         }, true);
     }""",
 )
+
+/**
+ * The middle button is the app's autoscroll (ADR-036 N2, [pageScrolling]): its press does nothing of the browser's own
+ * (no paste on Linux, no autoscroll of its own). The app still gets the press: it listens to pointer events.
+ */
+fun keepMiddleButton(): Unit = js(
+    """{ document.addEventListener('mousedown', e => { if (e.button === 1) e.preventDefault(); }, true); }""",
+)

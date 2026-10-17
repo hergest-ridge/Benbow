@@ -64,7 +64,15 @@ internal fun PostView(
     pictures: AtomViews,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.verticalScroll(rememberScrollState())) {
+    val scroll = rememberScrollState()
+    Column(
+        modifier.pageScrolling(
+            scroll,
+            enabled = services.platform != "android",
+            home = { scroll.animateScrollTo(0) },
+            end = { scroll.animateScrollTo(scroll.maxValue) },
+        ).verticalScroll(scroll),
+    ) {
         if (detail.mood != null || detail.tags.isNotEmpty()) {
             FlowRow(
                 Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),

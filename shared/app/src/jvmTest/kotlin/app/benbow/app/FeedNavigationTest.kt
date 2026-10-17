@@ -1,22 +1,31 @@
 package app.benbow.app
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.toAwtImage
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.MouseButton
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import app.benbow.client.FeedKey
 import app.benbow.client.calendar.db.CalendarDb
@@ -81,6 +90,78 @@ class FeedNavigationTest {
         // Back after five minutes away: today again.
         services.cameBack.tryEmit(Unit)
         waitUntil(timeoutMillis = 5_000) { shownPosts().contains(POSTS - 1) }
+    }
+
+    @Test
+    fun keysAndTheMiddleButtonMoveTheFeed() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val today = LocalDate.parse(services.today())
+        repeat(POSTS) { i -> services.repo.createNote(today.minus(i / 2, DateTimeUnit.DAY).toString(), "Запись ${POSTS - 1 - i}") }
+        setContent { BenbowApp(services) }
+        onNodeWithText("Лента").click()
+        waitUntil(timeoutMillis = 5_000) { shownPosts().contains(POSTS - 1) }
+
+        // The feed has the keyboard as it shows: PgDn glides a screen down, End goes to the first post ever, Home back.
+        val top = shownPosts()
+        onNode(isFocused()).performKeyInput { pressKey(Key.PageDown) }
+        waitUntil(timeoutMillis = 3_000) { shownPosts().min() < top.min() - 3 }
+        onNode(isFocused()).performKeyInput { pressKey(Key.MoveEnd) }
+        waitUntil(timeoutMillis = 5_000) { shownPosts().contains(0) }
+        onNode(isFocused()).performKeyInput { pressKey(Key.MoveHome) }
+        waitUntil(timeoutMillis = 5_000) { shownPosts().contains(POSTS - 1) }
+
+        // The middle button held and moved down: the feed runs down until it is let go. The autoscroll wants a frame
+        // after frame, so the clock goes by hand from here (waiting for idle would wait forever).
+        mainClock.autoAdvance = false
+        onRoot().performMouseInput {
+            moveTo(Offset(200f, 420f))
+            press(MouseButton.Tertiary)
+            moveBy(Offset(0f, 160f))
+        }
+        advanceUntil { shownPosts().max() < POSTS - 15 }
+        screenshot("82-feed-autoscroll")
+        onRoot().performMouseInput { release(MouseButton.Tertiary) }
+        mainClock.advanceTimeBy(300)
+        val stopped = shownPosts()
+        mainClock.advanceTimeBy(500)
+        assertEquals(stopped, shownPosts(), "let go after a move: it stops")
+
+        // A click of it keeps it going (up, this time) until the next click, which opens nothing.
+        onRoot().performMouseInput {
+            moveTo(Offset(200f, 420f))
+            press(MouseButton.Tertiary)
+            release(MouseButton.Tertiary)
+            moveBy(Offset(0f, -160f))
+        }
+        advanceUntil { shownPosts().max() > stopped.max() + 5 }
+        onRoot().performMouseInput { click(Offset(200f, 420f)) }
+        mainClock.advanceTimeBy(300)
+        val after = shownPosts()
+        mainClock.advanceTimeBy(500)
+        assertEquals(after, shownPosts(), "the click stopped it")
+        assertTrue(onAllNodes(hasText("Моя лента")).fetchSemanticsNodes().isNotEmpty(), "no post opened")
+
+        // Esc stops it too.
+        onRoot().performMouseInput {
+            press(MouseButton.Tertiary)
+            release(MouseButton.Tertiary)
+            moveBy(Offset(0f, 160f))
+        }
+        mainClock.advanceTimeBy(500)
+        onNode(isFocused()).performKeyInput { pressKey(Key.Escape) }
+        mainClock.advanceTimeBy(300)
+        val escaped = shownPosts()
+        mainClock.advanceTimeBy(500)
+        assertEquals(escaped, shownPosts(), "Esc stopped it")
+    }
+
+    /** Moves the clock on a frame or so at a time, letting the feed's windows load in between, until [done]. */
+    private fun ComposeUiTest.advanceUntil(done: () -> Boolean) {
+        repeat(150) {
+            if (done()) return
+            mainClock.advanceTimeBy(32)
+            Thread.sleep(10)
+        }
+        throw AssertionError("still not there after 150 steps")
     }
 
     @Test

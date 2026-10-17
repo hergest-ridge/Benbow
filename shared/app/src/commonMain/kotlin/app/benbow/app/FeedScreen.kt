@@ -41,6 +41,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -83,6 +84,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.comments
 import app.benbow.app.resources.feed_empty
+import app.benbow.app.resources.feed_jump_desc
 import app.benbow.app.resources.feed_title
 import app.benbow.app.resources.feed_to_today
 import app.benbow.app.resources.months_nominative
@@ -294,6 +296,13 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
         snapshotFlow { state.layoutInfo.visibleItemsInfo.let { (it.firstOrNull()?.index ?: 0) to (it.lastOrNull()?.index ?: 0) } }
             .collect { (first, last) -> vm.showing(first, last) }
     }
+    // «Перейти» (ADR-036 N4): open with the month to start from (the one tapped, or the one in view).
+    var jumping by remember { mutableStateOf(false) }
+    var jumpFrom by remember { mutableStateOf<String?>(null) }
+    val openJump = { from: String? ->
+        jumpFrom = from
+        jumping = true
+    }
     // Back after five minutes away, the feed starts at today again, not deep in some past month.
     LaunchedEffect(state, vm) { services.cameBack.collect { vm.toToday(state, glide = false) } }
     Scaffold(
@@ -302,10 +311,15 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
                 title = {
                     Column(Modifier.hand().clickable(interactionSource = null, indication = null) { scope.launch { pull.toggle() } }) {
                         Text(stringResource(Res.string.feed_title))
-                        MonthInView(month)
+                        MonthInView(month) { openJump(month) }
                     }
                 },
-                actions = { SyncBadge(status) { nav.open(Route.Server) } },
+                actions = {
+                    if (!rows.isNullOrEmpty()) {
+                        IconButton({ openJump(month) }, Modifier.hand()) { Icon(Icons.JumpTo, stringResource(Res.string.feed_jump_desc)) }
+                    }
+                    SyncBadge(status) { nav.open(Route.Server) }
+                },
             )
         },
     ) { padding ->
@@ -340,7 +354,7 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
                         when (row) {
                             is FeedRow.Day -> DayHeader(row.day)
 
-                            is FeedRow.Month -> MonthHeader(row.month)
+                            is FeedRow.Month -> MonthHeader(row.month) { openJump(row.month) }
 
                             is FeedRow.Item -> {
                                 val item = row.item
@@ -375,6 +389,15 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
                     state,
                     mouse = services.platform != "android",
                     jump = { pos, row -> vm.jumpTo(pos) { state.scrollToItem(row) } },
+                )
+            }
+            if (jumping) {
+                FeedJumpSheet(
+                    list,
+                    jumpFrom,
+                    onJump = { row -> scope.launch { vm.jumpTo(list.postNear(row) ?: 0) { state.scrollToItem(row) } } },
+                    onToday = { scope.launch { vm.toToday(state, glide = true) } },
+                    onDismiss = { jumping = false },
                 )
             }
             ToToday(far, Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp)) {
@@ -629,17 +652,18 @@ internal fun monthTitle(month: String, withYear: Boolean = false): String? {
 
 /** The month's title above its posts. */
 @Composable
-private fun MonthHeader(month: String) {
+private fun MonthHeader(month: String, onClick: () -> Unit) {
     Text(
         monthTitle(month) ?: return,
         style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 22.dp, bottom = 2.dp),
+        modifier = Modifier.padding(start = 6.dp, end = 16.dp, top = 12.dp).clip(RoundedCornerShape(12.dp)).hand()
+            .clickable(onClick = onClick).padding(start = 10.dp, end = 10.dp, top = 10.dp, bottom = 2.dp),
     )
 }
 
-/** Under the feed's title, the month in view (ADR-036); it slides in once the newest posts scroll away. */
+/** Under the feed's title, the month in view (ADR-036); it slides in once the newest posts scroll away. A tap: «Перейти». */
 @Composable
-private fun MonthInView(month: String?) {
+private fun MonthInView(month: String?, onClick: () -> Unit) {
     // The last month shown stays while the line slides away.
     val last = remember { arrayOf("") }
     if (month != null) last[0] = month
@@ -654,6 +678,7 @@ private fun MonthInView(month: String?) {
                 monthTitle(it).orEmpty(),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.hand().clickable(interactionSource = null, indication = null, onClick = onClick),
             )
         }
     }

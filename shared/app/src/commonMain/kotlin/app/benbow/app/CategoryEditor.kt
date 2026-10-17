@@ -56,10 +56,12 @@ import app.benbow.client.setCategoryColor
 import app.benbow.client.setCategoryEmoji
 import app.benbow.client.setCategoryOrder
 import app.benbow.client.setGentleLevel
+import app.benbow.client.tagRegistry
 import app.benbow.client.tags
 import app.benbow.client.trashCategory
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -75,11 +77,14 @@ internal fun CategoryEditor(services: AppServices, categoryId: String, onDismiss
     val tags by remember { repo.tags() }.collectAsStateWithLifecycle(emptyList())
     val order = registry.categories.map { it.id }
     if (categoryId !in order) {
-        // In the trash meanwhile: close. Just made: the registry catches up in a moment.
+        // In the trash meanwhile: close. Just made: it is in the journal already, and the lists catch up however slow
+        // the device is; only one that isn't there at all closes the editor.
         val gone = categoryId in registry.categoryTrash
         LaunchedEffect(gone) {
-            if (!gone) delay(CATCH_UP_MILLIS)
-            onDismiss()
+            val stored = !gone && withTimeoutOrNull(CATCH_UP_MILLIS) {
+                repo.tagRegistry().first { stored -> stored.categories.any { it.id == categoryId } }
+            } != null
+            if (!stored) onDismiss()
         }
         return
     }

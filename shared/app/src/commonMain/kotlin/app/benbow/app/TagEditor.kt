@@ -77,8 +77,9 @@ import app.benbow.client.setTagColor
 import app.benbow.client.tagName
 import app.benbow.client.tags
 import app.benbow.client.trashTag
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
@@ -97,11 +98,12 @@ internal fun TagEditor(services: AppServices, tagId: String, onDismiss: () -> Un
     val all = tags ?: return
     val tag = all.firstOrNull { it.id == tagId }
     if (tag == null) {
-        // Merged or in the trash meanwhile: close. Just made: the list catches up in a moment.
+        // Merged or in the trash meanwhile: close. Just made: it is in the journal already, and the list catches up
+        // however slow the device is; only one that isn't there at all closes the editor.
         val gone = registry.inTrash(tagId) || registry.root(tagId) != tagId
         LaunchedEffect(gone) {
-            if (!gone) delay(CATCH_UP_MILLIS)
-            onDismiss()
+            val stored = !gone && withTimeoutOrNull(CATCH_UP_MILLIS) { repo.tags().first { list -> list.any { it.id == tagId } } } != null
+            if (!stored) onDismiss()
         }
         return
     }
@@ -310,7 +312,7 @@ internal fun NameDialog(title: String, onDismiss: () -> Unit, onName: (String) -
     )
 }
 
-/** How long an editor waits for a tag or category just made to reach the lists before it gives up. */
+/** How long an editor waits for a tag or category it was opened for to be in the journal at all before it closes. */
 internal const val CATCH_UP_MILLIS = 2_000L
 
 /** Where each Бережно level sits in `gentle_levels`. */

@@ -98,10 +98,13 @@ class Gentle internal constructor(private val now: () -> Long) {
         leftAt = now()
     }
 
-    fun onReturn() {
-        val left = leftAt ?: return
+    /** True after five minutes away or more: Бережно is on again, and the feed starts at today (ADR-036). */
+    fun onReturn(): Boolean {
+        val left = leftAt ?: return false
         leftAt = null
-        if (now() - left >= AWAY_MILLIS) _on.value = true
+        val away = now() - left >= AWAY_MILLIS
+        if (away) _on.value = true
+        return away
     }
 
     companion object {

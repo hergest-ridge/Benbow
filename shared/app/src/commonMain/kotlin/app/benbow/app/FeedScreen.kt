@@ -1,13 +1,18 @@
 package app.benbow.app
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -26,6 +31,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.layout.LazyLayoutCacheWindow
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -41,6 +47,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -50,6 +57,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -76,92 +84,187 @@ import app.benbow.app.resources.Res
 import app.benbow.app.resources.comments
 import app.benbow.app.resources.feed_empty
 import app.benbow.app.resources.feed_title
+import app.benbow.app.resources.feed_to_today
 import app.benbow.app.resources.months_nominative
 import app.benbow.client.EntrySummary
 import app.benbow.client.FeedItem
+import app.benbow.client.FeedKey
+import app.benbow.client.Veil
 import app.benbow.client.effectiveVeil
 import app.benbow.core.sync.AttachmentState
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.roundToInt
 
-/** A row of the feed: an entry, or the day line drawn above a day's entries. */
+/** A row of the feed: a post, or the day line or month title drawn above a day's or a month's posts. */
 internal sealed interface FeedRow {
     val key: String
 
-    /** Rows of a kind reuse each other's composition while scrolling; posts with pictures are their own kind. */
+    /** "YYYY-MM": the month the row belongs to. */
+    val month: String
+
+    /** Rows of a kind reuse each other's composition while scrolling; posts with pictures and placeholders are their own kinds. */
     val contentType: Int get() = when (this) {
         is Month -> 0
+
         is Day -> 1
-        is Item -> if (item.media.isEmpty()) 2 else 3
+
+        is Item -> when {
+            item == null -> 4
+            item.media.isEmpty() -> 2
+            else -> 3
+        }
     }
 
-    /** [body] is the post's text, parsed off the main thread. */
-    data class Item(val item: FeedItem, val body: FeedBody? = null) : FeedRow {
-        override val key get() = item.summary.id
+    /**
+     * A post: [place] is where it stands, [pos] its place among the posts; [item] is the post in full once its window
+     * has been read (ADR-036), a placeholder of about its height until then; [body] is its text, parsed off the main thread.
+     */
+    data class Item(val place: FeedKey, val pos: Int, val item: FeedItem? = null, val body: FeedBody? = null) : FeedRow {
+        override val key get() = place.id
+        override val month get() = place.day.take(7)
     }
 
     data class Day(val day: String) : FeedRow {
         override val key get() = "day:$day"
+        override val month get() = day.take(7)
     }
 
-    /** "YYYY-MM": a month's title above its newest day. */
-    data class Month(val month: String) : FeedRow {
+    /** A month's title above its newest day. */
+    data class Month(override val month: String) : FeedRow {
         override val key get() = "month:$month"
     }
 }
 
-/** Newest first, top down: each month's title, then each day's line above its entries. */
-internal fun feedRows(items: List<FeedItem>, body: (FeedItem) -> FeedBody? = { null }): List<FeedRow> = buildList {
-    items.forEachIndexed { i, item ->
-        val month = item.summary.day.take(7)
-        if (items.getOrNull(i - 1)?.summary?.day?.take(7) != month) add(FeedRow.Month(month))
-        if (items.getOrNull(i - 1)?.summary?.day != item.summary.day) add(FeedRow.Day(item.summary.day))
-        add(FeedRow.Item(item, body(item)))
+/** Newest first, top down: each month's title, then each day's line above its posts; [items] are those read in full. */
+internal fun feedRows(
+    keys: List<FeedKey>,
+    items: Map<String, FeedItem> = emptyMap(),
+    body: (FeedItem) -> FeedBody? = { null },
+): List<FeedRow> = buildList {
+    keys.forEachIndexed { i, key ->
+        val previous = keys.getOrNull(i - 1)?.day
+        if (previous == null || !previous.regionMatches(0, key.day, 0, 7)) add(FeedRow.Month(key.day.take(7)))
+        if (previous != key.day) add(FeedRow.Day(key.day))
+        val item = items[key.id]
+        add(FeedRow.Item(key, i, item, item?.let(body)))
     }
 }
 
 /**
- * The feed's queue from a post on (ADR-035): its sounds, then those of the posts below it (older ones), leaving out
- * posts under a curtain or quiet (ADR-031); the post it starts from was opened by the tap itself.
+ * The feed's queue from a post on (ADR-035): its sounds, then those of the posts below it (older ones) as far as they
+ * have been read (a window reaches a chunk or more past the screen, ADR-036), leaving out posts under a curtain or
+ * quiet (ADR-031); the post it starts from was opened by the tap itself.
  */
 internal fun TrackNames.feedQueue(rows: List<FeedRow>, fromId: String, gentle: Boolean): List<Track> {
-    val items = rows.mapNotNull { (it as? FeedRow.Item)?.item }
-    val start = items.indexOfFirst { it.summary.id == fromId }
+    val posts = rows.filterIsInstance<FeedRow.Item>()
+    val start = posts.indexOfFirst { it.key == fromId }
     if (start < 0) return emptyList()
-    return items.drop(start).filterIndexed { i, item -> i == 0 || !item.summary.curtained(gentle) }
-        .flatMap { queue(it.summary.id, it.audio, it.tracks) }
+    val items = posts.drop(start).asSequence().map { it.item }.takeWhile { it != null }.filterNotNull()
+    return items.filterIndexed { i, item -> i == 0 || !item.summary.curtained(gentle) }
+        .flatMap { queue(it.summary.id, it.audio, it.tracks) }.toList()
 }
 
 internal val REACTIONS = listOf("❤️", "👍", "😂", "😮", "😢", "🔥")
 
+/**
+ * The feed over the whole journal (ADR-036): every post's place from a light index, and the posts in full a window at
+ * a time, [FEED_CHUNK] posts to a chunk: the chunks on screen and one on each side.
+ */
 internal class FeedViewModel(private val services: AppServices) : ViewModel() {
     // Each post's text is parsed here, once per change, not while it scrolls into view.
     private val parsed = HashMap<String, Pair<String, FeedBody?>>()
 
-    val rows: StateFlow<List<FeedRow>?> = combine(services.repo.feed(), services.gentle.on) { items, gentle ->
-        items.withoutQuiet(gentle) { it.summary }
-    }.map { items ->
-        val rows = feedRows(items) { item ->
-            val id = item.summary.id
-            parsed[id]?.takeIf { it.first == item.body }?.second ?: feedBody(item.body).also { parsed[id] = item.body to it }
+    // A row that didn't change keeps its instance, so the posts on screen skip recomposing when the window moves on.
+    private var last: Map<String, FeedRow> = emptyMap()
+
+    /** The chunks read in full: those around the screen, and while a jump gets ready, those around where it lands. */
+    private val chunks = MutableStateFlow(listOf(0..1))
+    private var jumping = false
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val rows: StateFlow<List<FeedRow>?> = combine(services.repo.feedIndex(), services.gentle.on, chunks) { keys, gentle, chunks ->
+        val shown = if (gentle) keys.filter { it.veil != Veil.Quiet } else keys
+        shown to feedWindow(shown, chunks)
+    }.distinctUntilChanged().flatMapLatest { (keys, ids) ->
+        // The index and its window come out together, so a new post never shows as a placeholder first.
+        services.repo.feedItems(ids).map { items ->
+            val read = items.associateBy { it.summary.id }
+            parsed.keys.retainAll(read.keys)
+            val rows = feedRows(keys, read) { item ->
+                val id = item.summary.id
+                parsed[id]?.takeIf { it.first == item.body }?.second ?: feedBody(item.body).also { parsed[id] = item.body to it }
+            }.map { row -> last[row.key]?.takeIf { it == row } ?: row }
+            last = rows.associateBy { it.key }
+            rows
         }
-        parsed.keys.retainAll(items.mapTo(HashSet()) { it.summary.id })
-        rows
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Rows [first]..[last] are on screen: the window follows them a chunk at a time. */
+    fun showing(first: Int, last: Int) {
+        if (jumping) return
+        val rows = rows.value ?: return
+        val from = rows.postNear(first) ?: return
+        chunks.value = listOf(chunksAround(from, rows.postNear(last) ?: from))
+    }
+
+    /**
+     * Reads the posts around [pos] before the list jumps there, so it lands on posts and not on placeholders; what is
+     * on screen stays read meanwhile. [jump] scrolls, then the window follows the screen again.
+     */
+    suspend fun jumpTo(pos: Int, jump: suspend () -> Unit) {
+        jumping = true
+        try {
+            chunks.value = (chunks.value.take(1) + listOf(chunksAround(pos, pos))).distinct()
+            withTimeoutOrNull(JUMP_WAIT_MILLIS) {
+                rows.first { rows -> rows?.any { it is FeedRow.Item && it.pos == pos && it.item != null } == true }
+            }
+            jump()
+        } finally {
+            jumping = false
+        }
+    }
 
     fun react(id: String, emoji: String, on: Boolean) {
         services.scope.launch { services.repo.toggleReaction(id, emoji, on) }
     }
+}
+
+/** Posts to a chunk of the feed's window (ADR-036): a screen holds a few, so one chunk past it is many screens ahead. */
+internal const val FEED_CHUNK = 40
+
+private const val JUMP_WAIT_MILLIS = 1_000L
+
+/** The chunks from the one before [from]'s to the one after [to]'s. */
+internal fun chunksAround(from: Int, to: Int) = (from / FEED_CHUNK - 1).coerceAtLeast(0)..(to / FEED_CHUNK + 1)
+
+/** The ids of the posts in [chunks], in feed order. */
+internal fun feedWindow(keys: List<FeedKey>, chunks: List<IntRange>): List<String> =
+    chunks.flatMap { it }.distinct().sorted().flatMap { chunk ->
+        val from = (chunk * FEED_CHUNK).coerceAtMost(keys.size)
+        keys.subList(from, (from + FEED_CHUNK).coerceAtMost(keys.size))
+    }.map { it.id }
+
+/** The place of the post at row [index], or of the nearest one below it (above it at the very end). */
+internal fun List<FeedRow>.postNear(index: Int): Int? {
+    for (i in index.coerceAtLeast(0) until size) (this[i] as? FeedRow.Item)?.let { return it.pos }
+    for (i in (index - 1).coerceAtMost(lastIndex) downTo 0) (this[i] as? FeedRow.Item)?.let { return it.pos }
+    return null
 }
 
 /** Everything as a stream, newest on top; long-press to react. Writing happens on Home. */
@@ -179,14 +282,28 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
     val pull = remember(services.platform) { StripPull(pulls = services.platform == "android") }
     val stripHidden by remember(pull) { derivedStateOf { pull.shown <= 0f } }
     val scope = rememberCoroutineScope()
+    // Posts a screen ahead (and half a screen behind) are composed in the spare time between frames, so a post
+    // scrolling in is already built: composing pictures and text in the frame it appears in drops frames.
+    val state = rememberLazyListState(cacheWindow = LazyLayoutCacheWindow(aheadFraction = 1f, behindFraction = 0.5f))
+    // Where the feed is (ADR-036): the month of the top row once the newest posts have scrolled away.
+    val month by remember(state) {
+        derivedStateOf { if (state.firstVisibleItemIndex == 0) null else rows?.getOrNull(state.firstVisibleItemIndex)?.month }
+    }
+    val far by remember(state) { derivedStateOf { state.firstVisibleItemIndex >= TODAY_AFTER_ROWS } }
+    LaunchedEffect(state, vm) {
+        snapshotFlow { state.layoutInfo.visibleItemsInfo.let { (it.firstOrNull()?.index ?: 0) to (it.lastOrNull()?.index ?: 0) } }
+            .collect { (first, last) -> vm.showing(first, last) }
+    }
+    // Back after five minutes away, the feed starts at today again, not deep in some past month.
+    LaunchedEffect(state, vm) { services.cameBack.collect { vm.toToday(state, glide = false) } }
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        stringResource(Res.string.feed_title),
-                        Modifier.hand().clickable(interactionSource = null, indication = null) { scope.launch { pull.toggle() } },
-                    )
+                    Column(Modifier.hand().clickable(interactionSource = null, indication = null) { scope.launch { pull.toggle() } }) {
+                        Text(stringResource(Res.string.feed_title))
+                        MonthInView(month)
+                    }
                 },
                 actions = { SyncBadge(status) { nav.open(Route.Server) } },
             )
@@ -203,14 +320,12 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
             }
             return@Scaffold
         }
-        // Posts a screen ahead (and half a screen behind) are composed in the spare time between frames, so a post
-        // scrolling in is already built: composing pictures and text in the frame it appears in drops frames.
-        val state = rememberLazyListState(cacheWindow = LazyLayoutCacheWindow(aheadFraction = 1f, behindFraction = 0.5f))
         Box(Modifier.padding(padding).fillMaxSize().clipToBounds().nestedScroll(pull)) {
             LazyColumn(
                 Modifier.fillMaxSize().offset { IntOffset(0, pull.shown.roundToInt()) },
                 state = state,
-                contentPadding = PaddingValues(vertical = if (appearance.feedCards) 8.dp else 0.dp),
+                // Room below the very first post, so «К сегодня» never covers it.
+                contentPadding = PaddingValues(top = if (appearance.feedCards) 8.dp else 0.dp, bottom = 72.dp),
             ) {
                 // Posts that turn quiet or come back slide out and in where they are; the post in view stays put.
                 items(list, key = { it.key }, contentType = { it.contentType }) { row ->
@@ -220,23 +335,35 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
 
                             is FeedRow.Month -> MonthHeader(row.month)
 
-                            is FeedRow.Item -> FeedPost(
-                                services,
-                                row.item,
-                                row.body,
-                                cards = appearance.feedCards,
-                                expanded = expanded[row.item.summary.id] == true,
-                                onExpand = { expanded[row.item.summary.id] = true },
-                                onOpen = { nav.open(Route.Editor(row.item.summary.id, row.item.summary.day, readOnly = true)) },
-                                onComments = { nav.open(Route.Editor(row.item.summary.id, row.item.summary.day, readOnly = true)) },
-                                onOpenMedia = { nav.open(Route.Media(row.item.summary.id, it.meta.id)) },
-                                queue = { feedQueue(list, row.item.summary.id, gentle) },
-                            ) { emoji, on ->
-                                vm.react(row.item.summary.id, emoji, on)
+                            is FeedRow.Item -> {
+                                val item = row.item
+                                if (item == null) {
+                                    PostPlaceholder(row.place.media, cards = appearance.feedCards)
+                                } else {
+                                    val id = item.summary.id
+                                    FeedPost(
+                                        services,
+                                        item,
+                                        row.body,
+                                        cards = appearance.feedCards,
+                                        expanded = expanded[id] == true,
+                                        onExpand = { expanded[id] = true },
+                                        onOpen = { nav.open(Route.Editor(id, item.summary.day, readOnly = true)) },
+                                        onComments = { nav.open(Route.Editor(id, item.summary.day, readOnly = true)) },
+                                        onOpenMedia = { nav.open(Route.Media(id, it.meta.id)) },
+                                        // The rows as they are when tapped: a moving window doesn't recompose the post.
+                                        queue = { feedQueue(vm.rows.value.orEmpty(), id, gentle) },
+                                    ) { emoji, on ->
+                                        vm.react(id, emoji, on)
+                                    }
+                                }
                             }
                         }
                     }
                 }
+            }
+            ToToday(far, Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp)) {
+                scope.launch { vm.toToday(state, glide = true) }
             }
             // As tall as it is pulled out: nothing of it lies outside, so a hidden strip takes no taps (or screen readers).
             Box(
@@ -475,16 +602,112 @@ private fun PostBody(
 /** A season's sign for each month, January first. */
 private val MONTH_SIGNS = listOf("❄️", "🌨️", "🌱", "🌷", "🌸", "☀️", "🌻", "🍉", "🍁", "🍂", "🌧️", "🎄")
 
-/** "🍂 Октябрь" above a month's posts; the year too when it isn't this one. */
+/** "🍂 Октябрь" for "YYYY-MM", "🍂 Октябрь 2024" when it isn't this year; null for anything else. */
+@Composable
+private fun monthTitle(month: String): String? {
+    val names = stringArrayResource(Res.array.months_nominative)
+    val year = month.take(4).toIntOrNull() ?: return null
+    val index = (month.drop(5).toIntOrNull() ?: return null) - 1
+    val name = names.getOrNull(index) ?: return null
+    return "${MONTH_SIGNS[index]} $name" + if (year != journalToday().year) " $year" else ""
+}
+
+/** The month's title above its posts. */
 @Composable
 private fun MonthHeader(month: String) {
-    val year = month.take(4).toIntOrNull() ?: return
-    val index = (month.drop(5).toIntOrNull() ?: return) - 1
-    val name = stringArrayResource(Res.array.months_nominative).getOrNull(index) ?: return
-    val thisYear = journalToday().year
     Text(
-        "${MONTH_SIGNS[index]} $name" + if (year != thisYear) " $year" else "",
+        monthTitle(month) ?: return,
         style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
         modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 22.dp, bottom = 2.dp),
     )
 }
+
+/** Under the feed's title, the month in view (ADR-036); it slides in once the newest posts scroll away. */
+@Composable
+private fun MonthInView(month: String?) {
+    // The last month shown stays while the line slides away.
+    val last = remember { arrayOf("") }
+    if (month != null) last[0] = month
+    AnimatedVisibility(month != null, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+        AnimatedContent(
+            month ?: last[0],
+            // Only the words change: no size animation, so a new month costs the bar no layout on every frame.
+            transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(120)) using null },
+            label = "month in view",
+        ) {
+            Text(
+                monthTitle(it).orEmpty(),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** «К сегодня»: one tap back to the newest post once the feed is a few screens down (ADR-036). */
+@Composable
+private fun ToToday(visible: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    AnimatedVisibility(
+        visible,
+        modifier,
+        enter = fadeIn() + scaleIn(initialScale = 0.85f),
+        exit = fadeOut() + scaleOut(targetScale = 0.85f),
+    ) {
+        Surface(
+            onClick = onClick,
+            shape = RoundedCornerShape(50),
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            shadowElevation = 3.dp,
+            modifier = Modifier.hand(),
+        ) {
+            Row(
+                Modifier.padding(start = 12.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(Icons.ArrowUp, null, Modifier.size(18.dp))
+                Text(stringResource(Res.string.feed_to_today), style = MaterialTheme.typography.labelLarge)
+            }
+        }
+    }
+}
+
+/**
+ * A post not read yet (ADR-036): about its room, taller with pictures or sounds. Windows reach well past the screen,
+ * so it shows only after a long fling, for a moment.
+ */
+@Composable
+private fun PostPlaceholder(media: Boolean, cards: Boolean) {
+    val colors = MaterialTheme.colorScheme
+    val height = if (media) 320.dp else 96.dp
+    if (cards) {
+        Box(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).height(height)
+                .clip(RoundedCornerShape(18.dp)).background(colors.surfaceContainerLow).clearAndSetSemantics {},
+        )
+    } else {
+        Column(Modifier.fillMaxWidth().clearAndSetSemantics {}) {
+            Box(Modifier.fillMaxWidth().height(height))
+            HorizontalDivider(Modifier.padding(top = 4.dp), thickness = 0.5.dp, color = colors.outlineVariant)
+        }
+    }
+}
+
+/**
+ * Up to the newest post: from far down a jump near it first, then a short glide; straight there when nobody is
+ * looking ([glide] false: back after a while away).
+ */
+private suspend fun FeedViewModel.toToday(state: LazyListState, glide: Boolean) = jumpTo(0) {
+    if (!glide) {
+        state.scrollToItem(0)
+    } else {
+        if (state.firstVisibleItemIndex > GLIDE_ROWS) state.scrollToItem(GLIDE_ROWS)
+        state.animateScrollToItem(0)
+    }
+}
+
+/** Rows down (titles and day lines count) before «К сегодня» shows: a few screens. */
+private const val TODAY_AFTER_ROWS = 12
+
+/** How far from the top «К сегодня» glides; from farther it jumps to here first. */
+private const val GLIDE_ROWS = 8

@@ -13,11 +13,21 @@ const val PACKAGE = "app.benbow.bench"
 
 private const val TIMEOUT = 10_000L
 private const val SETTLE_MS = 1_500L
+private const val SEED_MILLIS = 20 * 60_000L
 
-/** Fills the bench build's journal once (made-up entries and drawn pictures), then stops it so the next start is cold. */
+/**
+ * Fills the bench build's journal once (made-up entries and drawn pictures), then stops it so the next start is cold.
+ * `-Pandroid.testInstrumentationRunnerArguments.seedYears=N` adds N years of older posts (a long feed, ADR-036).
+ */
 fun seedJournal() {
     val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-    device.executeShellCommand("am start -W -n $PACKAGE/app.benbow.android.BenchSeedActivity")
+    val years = InstrumentationRegistry.getArguments().getString("seedYears")?.toIntOrNull() ?: 0
+    device.executeShellCommand("am start -W -n $PACKAGE/app.benbow.android.BenchSeedActivity --ei years $years")
+    // `am start -W` gives up after 10 s, long before the pictures (or years of posts) are in: wait for the seed to finish.
+    val until = SystemClock.uptimeMillis() + SEED_MILLIS
+    while (SystemClock.uptimeMillis() < until && "BenchSeedActivity" in device.executeShellCommand("dumpsys activity activities")) {
+        SystemClock.sleep(1_000)
+    }
     device.executeShellCommand("am force-stop $PACKAGE")
 }
 

@@ -33,6 +33,21 @@ class FeedBenchmark {
         },
     ) { skim() }
 
+    /** Far down a long feed (seedYears): many windows of posts read on the way (ADR-036). */
+    @Test
+    fun skimFar() = rule.measureRepeated(
+        packageName = PACKAGE,
+        metrics = listOf(FrameTimingMetric()),
+        compilationMode = CompilationMode.Partial(),
+        startupMode = StartupMode.WARM,
+        iterations = 5,
+        setupBlock = {
+            startActivityAndWait()
+            waitForHome()
+            openFeed()
+        },
+    ) { skim(flings = 20) }
+
     @Test
     fun openPosts() = rule.measureRepeated(
         packageName = PACKAGE,

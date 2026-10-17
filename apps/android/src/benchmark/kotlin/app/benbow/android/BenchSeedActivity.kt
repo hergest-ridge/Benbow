@@ -23,8 +23,9 @@ import kotlin.random.Random
 
 /**
  * Benchmark builds only (app.benbow.bench, its own DB): fills an empty journal with half a year of made-up entries,
- * drawn pictures, comments, reactions and tags, so startup and scrolling are measured on a lived-in feed. Runs
- * synchronously so `am start -W` returns when it's done; does nothing when the journal already has entries.
+ * drawn pictures, comments, reactions and tags, so startup and scrolling are measured on a lived-in feed; `--ei years N`
+ * adds N years of older posts below them (a long feed, ADR-036). Runs synchronously so `am start -W` returns when it's
+ * done; does nothing when the journal already has entries.
  */
 class BenchSeedActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -32,9 +33,11 @@ class BenchSeedActivity : Activity() {
         val services = (application as BenbowApplication).services
         runBlocking {
             if (services.repo.journal().first().isEmpty()) {
-                seed(services.repo) { bytes, name ->
+                val import: suspend (ByteArray, String) -> MediaFile = { bytes, name ->
                     services.media.import(bytes.inputStream(), "image/jpeg", name, null)
                 }
+                seed(services.repo, import)
+                archive(services.repo, intent.getIntExtra("years", 0), import)
             }
         }
         finish()
@@ -71,6 +74,35 @@ class BenchSeedActivity : Activity() {
             if (i % 9 == 0) repo.createCheckin(day, 1 + random.nextInt(5), listOf("спокойствие"), "")
         }
         repo.createNote(today.toString(), "Длинная запись\n" + List(60) { PHRASES[it % PHRASES.size] }.joinToString("\n"))
+    }
+
+    /**
+     * [years] of older posts below the half year: two or three a day, some with tags and reactions, every
+     * twelfth with one of a few pictures (the same files again: drawing thousands would take an hour).
+     */
+    private suspend fun archive(repo: JournalRepository, years: Int, import: suspend (ByteArray, String) -> MediaFile) {
+        if (years <= 0) return
+        val random = Random(11)
+        val pictures = List(4) { n ->
+            val (w, h) = SHAPES[n].let { (w, h) -> w / 2 to h / 2 }
+            val original = import(picture(w, h, random), "OLD_$n.jpg")
+            Triple(original, import(picture(512, 512 * h / w, random), "OLD_$n-preview.jpg"), w to h)
+        }
+        val start = LocalDate.now().minusDays(ENTRIES / 2L + 1)
+        var i = 0
+        for (back in 0 until years * 365L) {
+            repeat(random.nextInt(6)) {
+                val lines = List(1 + random.nextInt(4)) { PHRASES[random.nextInt(PHRASES.size)] }
+                val id = repo.createNote(start.minusDays(back).toString(), TITLES[i % TITLES.size] + "\n" + lines.joinToString("\n"))
+                if (i % 12 == 0) {
+                    val (original, preview, size) = pictures[i / 12 % pictures.size]
+                    repo.attach(id, original, "image", size.first, size.second, preview = preview)
+                }
+                if (i % 4 == 0) repo.toggleReaction(id, REACTIONS[i % REACTIONS.size], true)
+                if (i % 6 == 0) repo.addTag(id, TAGS[i % TAGS.size])
+                i++
+            }
+        }
     }
 
     /** A soft two-color gradient with a few circles: something to decode, nothing personal. */

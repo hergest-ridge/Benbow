@@ -260,7 +260,7 @@ private fun AppRoot(services: AppServices) {
     LifecycleEventEffect(Lifecycle.Event.ON_START) {
         services.sync.foreground = true
         services.lock.onReturn()
-        services.gentle.onReturn()
+        if (services.gentle.onReturn()) services.cameBack.tryEmit(Unit)
     }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
         services.sync.foreground = false

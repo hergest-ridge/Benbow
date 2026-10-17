@@ -24,8 +24,12 @@ import app.cash.sqldelight.coroutines.mapToList
 import app.cash.sqldelight.coroutines.mapToOne
 import app.cash.sqldelight.coroutines.mapToOneOrNull
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
@@ -107,6 +111,12 @@ data class Comment(
     /** What each sound file says it is (ADR-035), by attachment id. */
     val tracks: Map<String, TrackTags> = emptyMap(),
 )
+
+/**
+ * A post's place in the feed (ADR-036): enough to order, date and veil it, and to keep about its room ([media]: it has
+ * pictures or sounds) until it is read in full, without its text.
+ */
+data class FeedKey(val id: String, val day: String, val createdAt: Long, val veil: Veil? = null, val media: Boolean = false)
 
 /** What to look for; empty text and off switches match everything outside the trash. [tag] is a tag's id. */
 data class SearchQuery(val text: String = "", val tag: String? = null, val favorites: Boolean = false, val withMedia: Boolean = false)
@@ -550,30 +560,64 @@ class JournalRepository(
 
     fun daysWritten(fromDay: String, toDay: String): Flow<Long> = q.daysWritten(fromDay, toDay).asFlow().mapToOne(context)
 
-    /** Newest first; the feed draws it bottom-up like a chat. */
-    fun feed(limit: Long = 300): Flow<List<FeedItem>> =
-        q.feed(limit) { id, kind, day, createdAt, title, preview, body, conflictHeads, mediaCount, cover, fields, attachments, comments ->
-            val summary = summaryOf(id, day, createdAt, title, preview, conflictHeads, mediaCount, cover, fields)
-            val text = if (kind == "journal") {
-                listOf(title, preview).filter { it.isNotBlank() }.joinToString("\n")
-            } else {
-                plainText(body).take(FEED_TEXT_MAX)
-            }
-            val decoded = decodeFields(fields)
-            val reactions = decoded.filter { it.key.startsWith(REACTION_PREFIX) && it.value != null }.keys
-            val gallery = galleryOrder(decodeAttachments(attachments).values, body)
-            val media = gallery.filter { it.meta.kind in VISUAL_KINDS }
-            val audio = gallery.filter { it.meta.kind == "voice" || it.meta.kind == "audio" }
-            FeedItem(
-                summary, kind, text,
-                reactions.map {
-                    it.removePrefix(REACTION_PREFIX)
-                }.toSet(),
-                comments.toInt(), media, body, audio, transcriptsOf(decoded), TrackTags.of(decoded),
-            )
-        }.asFlow().mapToList(context).let { feed ->
-            combine(feed, gentleRules()) { items, rules -> items.map { it.copy(summary = rules.apply(it.summary)) } }
+    /** Every post's place, newest first, with its veil (ADR-036); the posts themselves come a window at a time ([feedItems]). */
+    fun feedIndex(): Flow<List<FeedKey>> = combine(q.feedIndex().asFlow().mapToList(context), gentleRules()) { rows, rules ->
+        rows.map { row ->
+            val marks = if (row.marks == NO_MARKS) emptyMap() else decodeFields(row.marks)
+            val tags = tagsOf(marks).map { it.id }
+            val veil = rules.veilOf(Veil.of(marks[VEIL_FIELD]), marks[VEIL_UNTIL_FIELD], row.day, tags)
+            FeedKey(row.id, row.day, row.created_at, veil, media = row.media_count > 0)
         }
+    }
+
+    /** The newest [limit] posts in full: the feed's first window. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun feed(limit: Int = 300): Flow<List<FeedItem>> = feedIndex().map { keys -> keys.take(limit).map { it.id } }
+        .distinctUntilChanged().flatMapLatest(::feedItems)
+
+    /** The posts [ids] names in full, in that order (a missing one is left out). */
+    fun feedItems(ids: List<String>): Flow<List<FeedItem>> {
+        if (ids.isEmpty()) return flowOf(emptyList())
+        val order = ids.withIndex().associate { it.value to it.index }
+        return feedItemsOf(ids).map { items -> items.sortedBy { order[it.summary.id] } }
+    }
+
+    private fun feedItemsOf(ids: List<String>): Flow<List<FeedItem>> = q.feedItems(ids) {
+            id,
+            kind,
+            day,
+            createdAt,
+            title,
+            preview,
+            body,
+            conflictHeads,
+            mediaCount,
+            cover,
+            fields,
+            attachments,
+            comments,
+        ->
+        val summary = summaryOf(id, day, createdAt, title, preview, conflictHeads, mediaCount, cover, fields)
+        val text = if (kind == "journal") {
+            listOf(title, preview).filter { it.isNotBlank() }.joinToString("\n")
+        } else {
+            plainText(body).take(FEED_TEXT_MAX)
+        }
+        val decoded = decodeFields(fields)
+        val reactions = decoded.filter { it.key.startsWith(REACTION_PREFIX) && it.value != null }.keys
+        val gallery = galleryOrder(decodeAttachments(attachments).values, body)
+        val media = gallery.filter { it.meta.kind in VISUAL_KINDS }
+        val audio = gallery.filter { it.meta.kind == "voice" || it.meta.kind == "audio" }
+        FeedItem(
+            summary, kind, text,
+            reactions.map {
+                it.removePrefix(REACTION_PREFIX)
+            }.toSet(),
+            comments.toInt(), media, body, audio, transcriptsOf(decoded), TrackTags.of(decoded),
+        )
+    }.asFlow().mapToList(context).let { feed ->
+        combine(feed, gentleRules()) { items, rules -> items.map { it.copy(summary = rules.apply(it.summary)) } }
+    }
 
     /** Builds the search index after an update changed it (or on the first start); quick otherwise. */
     fun prepareSearch() = SearchIndex.rebuildIfNeeded(db)
@@ -772,6 +816,9 @@ private fun plainText(body: String): String = try {
 }
 
 private const val FEED_TEXT_MAX = 4_000
+
+/** The index's marks of a post without any (feedIndex in Benbow.sq). */
+private const val NO_MARKS = """{"":null}"""
 private const val TITLE_MAX = 120
 private const val PREVIEW_MAX = 200
 

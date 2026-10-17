@@ -192,6 +192,9 @@ class AppServices(
 
     val gentle = Gentle(now)
 
+    /** The app is back after five minutes away ([Gentle.onReturn]): a feed on screen starts at today again (ADR-036). */
+    val cameBack = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
     /** The one player for every sound (ADR-035), its queue and the mini-player's state. */
     val player = AudioPlayer(media, audio) { messages.tryEmit(AppMessage.PlaybackFailed) }
 

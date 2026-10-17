@@ -281,6 +281,7 @@
     </plurals>
     <string name="feed_title">Моя лента</string>
     <string name="feed_empty">Здесь будет ваша лента. Заметки с главной появятся тут.</string>
+    <string name="feed_to_today">К сегодня</string>
     <string name="pin">Закрепить</string>
     <string name="unpin">Открепить</string>
     <string name="react">Реакция</string>

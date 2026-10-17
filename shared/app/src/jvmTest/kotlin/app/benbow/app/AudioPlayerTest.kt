@@ -2,6 +2,7 @@ package app.benbow.app
 
 import app.benbow.client.EntrySummary
 import app.benbow.client.FeedItem
+import app.benbow.client.FeedKey
 import app.benbow.client.LocalFile
 import app.benbow.client.SearchQuery
 import app.benbow.client.Veil
@@ -139,7 +140,10 @@ class AudioPlayerTest {
 
     @Test
     fun theFeedsQueueRunsDownToOlderPostsAndSkipsCurtains() {
+        var pos = 0
         fun post(id: String, veil: Veil? = null, vararg sounds: String) = FeedRow.Item(
+            FeedKey(id, "2026-10-17", 0, veil),
+            pos++,
             FeedItem(
                 EntrySummary(id, "2026-10-17", 0, id, "", false, veil = veil),
                 "post",
@@ -157,6 +161,8 @@ class AudioPlayerTest {
             post("start", Veil.Curtain, "s1", "s2"),
             post("curtained", Veil.Curtain, "c1"),
             post("older", null, "o1"),
+            FeedRow.Item(FeedKey("unread", "2026-10-17", 0), pos++), // past the window (ADR-036): the queue ends here
+            post("oldest", null, "x1"),
         )
         assertEquals(listOf("s1", "s2", "o1"), names.feedQueue(rows, "start", gentle = true).map { it.id })
         assertEquals(listOf("s1", "s2", "c1", "o1"), names.feedQueue(rows, "start", gentle = false).map { it.id })

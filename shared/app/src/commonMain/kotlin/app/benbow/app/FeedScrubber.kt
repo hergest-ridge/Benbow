@@ -2,6 +2,7 @@ package app.benbow.app
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -99,7 +100,7 @@ internal fun scrubTick(from: String?, to: String): HapticFeedbackType? = when {
 
 /**
  * The feed's date scrubber (ADR-036 N3), over the feed's right edge. On a phone ([mouse] false) it shows while the
- * feed scrolls and fades a moment after; its thumb is dragged (the system's back swipe gives way to it there), with a
+ * feed scrolls and fades 0.6 s after; its thumb is dragged (the system's back swipe gives way to it there), with a
  * tick at each month and a stronger one at each year. With a mouse a thin track stays; hovering it tells the month
  * there, a click goes there ([jump]: its posts read first), the thumb or the track can be dragged. While it is held
  * or hovered, the month under it shows beside it and the years mark the track. Only for a feed long enough to need it.
@@ -218,8 +219,8 @@ internal fun FeedScrubber(
         AnimatedVisibility(
             shown,
             Modifier.align(Alignment.TopEnd).fillMaxHeight().width(strip),
-            enter = fadeIn(),
-            exit = fadeOut(),
+            enter = fadeIn(tween(SHOW_MILLIS)),
+            exit = fadeOut(tween(FADE_MILLIS)),
         ) {
             // Hover is heard over the track and the thumb alike: it tells the month under the pointer.
             val hover = if (!mouse) {
@@ -279,5 +280,9 @@ internal fun FeedScrubber(
 
 /** Posts below which the feed needs no scrubber: a few flings reach its end. */
 private const val MIN_POSTS = 50
-private const val HIDE_AFTER_MILLIS = 1_500L
+
+/** On a phone it goes soon after the feed stops: in the way of nothing while one reads. */
+private const val HIDE_AFTER_MILLIS = 600L
+private const val SHOW_MILLIS = 120
+private const val FADE_MILLIS = 200
 private val THUMB_HEIGHT = 48.dp

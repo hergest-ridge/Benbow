@@ -399,7 +399,10 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                     val (date, weekday) = dayTitle(detail?.day ?: route.day)
                     val label = detail?.let { "$date, ${timeLabel(it.createdAt)}" } ?: date
                     Column(if (vm.reading) Modifier else Modifier.clip(RoundedCornerShape(8.dp)).hand().clickable { moving = true }) {
-                        Text(if (vm.reading) label else "$label ▾", style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(label, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                            if (!vm.reading) Icon(Icons.ArrowDropDown, null, Modifier.size(20.dp)) // drawn: "▾" would need a web font
+                        }
                         weekday?.let {
                             Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }

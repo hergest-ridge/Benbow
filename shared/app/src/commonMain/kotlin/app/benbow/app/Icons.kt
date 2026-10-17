@@ -43,6 +43,7 @@ internal object Icons {
     )
     val Play = icon("Play", "M8,5v14l11,-7z")
     val Check = icon("Check", "M9,16.17L4.83,12l-1.42,1.41L9,19 21,7l-1.41,-1.41z")
+    val ArrowDropDown = icon("ArrowDropDown", "M7,10l5,5 5,-5z")
     val Add = icon("Add", "M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z")
     val Search = icon(
         "Search",

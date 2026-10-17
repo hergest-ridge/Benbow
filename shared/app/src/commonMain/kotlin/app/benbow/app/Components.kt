@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.back
 import app.benbow.app.resources.conflict_badge
+import app.benbow.app.resources.filter_favorites
 import app.benbow.app.resources.sync_attention
 import app.benbow.app.resources.sync_done
 import app.benbow.app.resources.sync_incompatible
@@ -62,6 +63,12 @@ internal fun BackButton(onClick: () -> Unit) {
 
 /** The pointing hand over what can be clicked (desktop and the browser; ignored on touch screens). */
 internal fun Modifier.hand(enabled: Boolean = true): Modifier = if (enabled) pointerHoverIcon(PointerIcon.Hand) else this
+
+/** A favorite's star, drawn (a typed "★" needs a font the web build doesn't have, ADR-030). */
+@Composable
+internal fun FavoriteMark(modifier: Modifier = Modifier, description: String? = stringResource(Res.string.filter_favorites)) {
+    Icon(Icons.Star, description, modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+}
 
 /** A journal entry in a list: time, title, a few lines of preview; while Бережно is on a veiled one shows its time and a curtain. */
 @Composable
@@ -92,7 +99,7 @@ internal fun EntryCard(
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(time, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
-                    if (entry.favorite) Text("  ★", style = MaterialTheme.typography.labelMedium, color = colors.primary)
+                    if (entry.favorite) FavoriteMark(Modifier.padding(start = 6.dp))
                     moodEmoji(entry.mood)?.let { Text("  $it", style = MaterialTheme.typography.labelMedium) }
                     if (entry.conflict) {
                         Spacer(Modifier.width(8.dp))

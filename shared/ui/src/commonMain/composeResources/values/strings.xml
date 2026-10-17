@@ -1,6 +1,13 @@
 <resources>
     <string name="app_name">Benbow</string>
     <string name="unknown_block">Блок из новой версии Benbow</string>
+    <string name="tool_undo">Отменить</string>
+    <string name="tool_redo">Повторить</string>
+    <string name="tool_highlight">Выделить цветом</string>
+    <string name="tool_checklist">Список дел</string>
+    <string name="tool_align_start">По левому краю</string>
+    <string name="tool_align_center">По центру</string>
+    <string name="tool_align_end">По правому краю</string>
     <string name="home_greeting">Добро пожаловать в «Адмирал Бенбоу»</string>
     <string name="home_tagline">Тёплое место, откуда начинается каждая история.</string>
     <string name="editor_spike_title">Редактор · прототип</string>

@@ -217,12 +217,12 @@ class AppSmokeTest {
         onNode(hasSetTextAction()).performTextInput("мор")
         waitUntilExactlyOneExists(hasText("Прогулка у моря"), 5_000)
         onNode(hasSetTextAction()).performTextClearance()
-        onNodeWithText("★ Избранное").performClick()
+        onNodeWithText("Избранное").performClick()
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Прогулка у моря")).fetchSemanticsNodes().isEmpty() }
         waitUntilExactlyOneExists(hasText("Планы на неделю"), 5_000)
         screenshot("11-search")
 
-        onNodeWithText("★ Избранное").performClick()
+        onNodeWithText("Избранное").performClick()
         onNodeWithText("Тег…").click()
         waitUntilExactlyOneExists(hasText("Тег для поиска"), 5_000)
         onNode(hasSetTextAction() and hasText("Найти", substring = true)).performTextInput("hf,")

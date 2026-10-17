@@ -448,7 +448,7 @@ private fun PostBody(
             }
         }
         Box(Modifier.weight(1f))
-        if (entry.favorite) Text("★", style = MaterialTheme.typography.labelMedium, color = colors.primary)
+        if (entry.favorite) FavoriteMark()
         moodEmoji(entry.mood)?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
         Text(timeLabel(entry.createdAt), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
     }

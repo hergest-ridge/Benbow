@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -30,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.font.FontWeight
@@ -39,7 +41,16 @@ import app.benbow.core.text.BlockStyle
 import app.benbow.core.text.ListKind
 import app.benbow.core.text.Mark
 import app.benbow.core.text.SizeStep
+import app.benbow.ui.resources.Res
+import app.benbow.ui.resources.tool_align_center
+import app.benbow.ui.resources.tool_align_end
+import app.benbow.ui.resources.tool_align_start
+import app.benbow.ui.resources.tool_checklist
+import app.benbow.ui.resources.tool_highlight
+import app.benbow.ui.resources.tool_redo
+import app.benbow.ui.resources.tool_undo
 import app.benbow.ui.theme.BenbowPalette
+import org.jetbrains.compose.resources.stringResource
 
 private enum class Picker { Color, Highlight, Callout }
 
@@ -65,8 +76,8 @@ fun EditorToolbar(state: EditorState, modifier: Modifier = Modifier) {
                 modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Tool("↶", enabled = state.canUndo) { state.undo() }
-                Tool("↷", enabled = state.canRedo) { state.redo() }
+                Tool(EditorIcons.Undo, stringResource(Res.string.tool_undo), enabled = state.canUndo) { state.undo() }
+                Tool(EditorIcons.Redo, stringResource(Res.string.tool_redo), enabled = state.canRedo) { state.redo() }
                 Divider()
                 Tool("B", active = Mark.Bold in marks, bold = true) { state.toggleMark(Mark.Bold) }
                 Tool("I", active = Mark.Italic in marks) { state.toggleMark(Mark.Italic) }
@@ -75,7 +86,7 @@ fun EditorToolbar(state: EditorState, modifier: Modifier = Modifier) {
                 Tool("</>", active = Mark.Code in marks) { state.toggleMark(Mark.Code) }
                 Tool("||", active = Mark.Spoiler in marks) { state.toggleMark(Mark.Spoiler) }
                 Tool("A", active = marks.any { it is Mark.Color }) { picker = if (picker == Picker.Color) null else Picker.Color }
-                Tool("▰", active = marks.any { it is Mark.Highlight }) {
+                Tool(EditorIcons.Highlight, stringResource(Res.string.tool_highlight), active = marks.any { it is Mark.Highlight }) {
                     picker = if (picker ==
                         Picker.Highlight
                     ) {
@@ -97,13 +108,21 @@ fun EditorToolbar(state: EditorState, modifier: Modifier = Modifier) {
                 Divider()
                 Tool("•", active = paragraph.list == ListKind.Bullet) { state.toggleList(ListKind.Bullet) }
                 Tool("1.", active = paragraph.list == ListKind.Number) { state.toggleList(ListKind.Number) }
-                Tool("☐", active = paragraph.list == ListKind.Check) { state.toggleList(ListKind.Check) }
+                Tool(EditorIcons.Checklist, stringResource(Res.string.tool_checklist), active = paragraph.list == ListKind.Check) {
+                    state.toggleList(ListKind.Check)
+                }
                 Tool("«", enabled = paragraph.list != null) { state.indent(-1) }
                 Tool("»", enabled = paragraph.list != null) { state.indent(1) }
                 Divider()
-                Tool("⇤", active = paragraph.align == Align.Start) { state.setAlign(Align.Start) }
-                Tool("↔", active = paragraph.align == Align.Center) { state.setAlign(Align.Center) }
-                Tool("⇥", active = paragraph.align == Align.End) { state.setAlign(Align.End) }
+                Tool(EditorIcons.AlignStart, stringResource(Res.string.tool_align_start), active = paragraph.align == Align.Start) {
+                    state.setAlign(Align.Start)
+                }
+                Tool(EditorIcons.AlignCenter, stringResource(Res.string.tool_align_center), active = paragraph.align == Align.Center) {
+                    state.setAlign(Align.Center)
+                }
+                Tool(EditorIcons.AlignEnd, stringResource(Res.string.tool_align_end), active = paragraph.align == Align.End) {
+                    state.setAlign(Align.End)
+                }
             }
         }
     }
@@ -122,6 +141,19 @@ private fun EditorState.cycleSize(marks: Set<Mark>) {
 
 @Composable
 private fun Tool(label: String, active: Boolean = false, enabled: Boolean = true, bold: Boolean = false, onClick: () -> Unit) {
+    ToolBox(active, enabled, onClick) { color ->
+        Text(text = label, style = MaterialTheme.typography.titleSmall, fontWeight = if (bold) FontWeight.Bold else null, color = color)
+    }
+}
+
+/** A tool drawn as a picture (symbols such as arrows would need a font the web build doesn't have). */
+@Composable
+private fun Tool(icon: ImageVector, description: String, active: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
+    ToolBox(active, enabled, onClick) { color -> Icon(icon, description, Modifier.size(20.dp), tint = color) }
+}
+
+@Composable
+private fun ToolBox(active: Boolean, enabled: Boolean, onClick: () -> Unit, content: @Composable (Color) -> Unit) {
     val colors = MaterialTheme.colorScheme
     Box(
         modifier = Modifier
@@ -133,11 +165,8 @@ private fun Tool(label: String, active: Boolean = false, enabled: Boolean = true
             .hand(enabled).clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = if (bold) FontWeight.Bold else null,
-            color = when {
+        content(
+            when {
                 !enabled -> colors.onSurface.copy(alpha = 0.38f)
                 active -> colors.onSecondaryContainer
                 else -> colors.onSurface

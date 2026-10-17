@@ -111,7 +111,9 @@ internal fun SearchScreen(services: AppServices, nav: Navigator) {
                 item {
                     FilterChip(query.favorites, {
                         vm.edit { it.copy(favorites = !it.favorites) }
-                    }, { Text("★ " + stringResource(Res.string.filter_favorites)) }, modifier = Modifier.hand())
+                    }, {
+                        Text(stringResource(Res.string.filter_favorites))
+                    }, leadingIcon = { FavoriteMark(description = null) }, modifier = Modifier.hand())
                 }
                 item {
                     FilterChip(query.withMedia, {

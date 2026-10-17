@@ -144,7 +144,7 @@
         <item>Ctrl+F|Поиск</item>
         <item>Ctrl+1 … Ctrl+5|Главная, Лента, Календарь, Поиск, Ещё</item>
         <item>Ctrl+S|Сохранить версию записи</item>
-        <item>Alt+←|Назад</item>
+        <item>Alt+Влево|Назад</item>
         <item>Ctrl+B, I, U, E|Жирный, курсив, подчёркнутый, код</item>
         <item>Ctrl+Z, Ctrl+Y|Отменить, повторить</item>
     </string-array>
@@ -153,7 +153,7 @@
         <item>Ctrl+F|Поиск</item>
         <item>Alt+1 … Alt+5|Главная, Лента, Календарь, Поиск, Ещё</item>
         <item>Ctrl+S|Сохранить версию записи</item>
-        <item>Alt+←|Назад (и кнопка «Назад» браузера)</item>
+        <item>Alt+Влево|Назад (и кнопка «Назад» браузера)</item>
         <item>Ctrl+V|Вставить картинку из буфера в запись</item>
         <item>Ctrl+B, I, U, E|Жирный, курсив, подчёркнутый, код</item>
         <item>Ctrl+Z, Ctrl+Y|Отменить, повторить</item>

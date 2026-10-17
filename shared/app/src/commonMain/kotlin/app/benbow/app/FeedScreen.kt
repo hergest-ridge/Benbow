@@ -369,6 +369,14 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
                     }
                 }
             }
+            if (appearance.feedScrubber) {
+                FeedScrubber(
+                    list,
+                    state,
+                    mouse = services.platform != "android",
+                    jump = { pos, row -> vm.jumpTo(pos) { state.scrollToItem(row) } },
+                )
+            }
             ToToday(far, Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp)) {
                 scope.launch { vm.toToday(state, glide = true) }
             }
@@ -609,14 +617,14 @@ private fun PostBody(
 /** A season's sign for each month, January first. */
 private val MONTH_SIGNS = listOf("❄️", "🌨️", "🌱", "🌷", "🌸", "☀️", "🌻", "🍉", "🍁", "🍂", "🌧️", "🎄")
 
-/** "🍂 Октябрь" for "YYYY-MM", "🍂 Октябрь 2024" when it isn't this year; null for anything else. */
+/** "🍂 Октябрь" for "YYYY-MM", "🍂 Октябрь 2024" when it isn't this year (or [withYear]); null for anything else. */
 @Composable
-private fun monthTitle(month: String): String? {
+internal fun monthTitle(month: String, withYear: Boolean = false): String? {
     val names = stringArrayResource(Res.array.months_nominative)
     val year = month.take(4).toIntOrNull() ?: return null
     val index = (month.drop(5).toIntOrNull() ?: return null) - 1
     val name = names.getOrNull(index) ?: return null
-    return "${MONTH_SIGNS[index]} $name" + if (year != journalToday().year) " $year" else ""
+    return "${MONTH_SIGNS[index]} $name" + if (withYear || year != journalToday().year) " $year" else ""
 }
 
 /** The month's title above its posts. */

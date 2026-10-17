@@ -14,6 +14,7 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
@@ -162,6 +163,37 @@ class FeedNavigationTest {
             Thread.sleep(10)
         }
         throw AssertionError("still not there after 150 steps")
+    }
+
+    @Test
+    fun theScrubberGoesWhereItIsDraggedOrClickedAndCanBeTurnedOff() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val today = LocalDate.parse(services.today())
+        repeat(POSTS) { i -> services.repo.createNote(today.minus(i / 2, DateTimeUnit.DAY).toString(), "Запись ${POSTS - 1 - i}") }
+        setContent { BenbowApp(services) }
+        onNodeWithText("Лента").click()
+        waitUntil(timeoutMillis = 5_000) { shownPosts().contains(POSTS - 1) }
+
+        // Hovering the track tells the month there and marks the years along it.
+        onRoot().performMouseInput { moveTo(Offset(406f, 600f)) }
+        waitUntil(timeoutMillis = 3_000) {
+            onAllNodes(hasText(today.minus(1, DateTimeUnit.YEAR).year.toString())).fetchSemanticsNodes().isNotEmpty()
+        }
+        screenshot("83-feed-scrubber-hover")
+
+        // A click halfway down the track goes halfway through the posts; the thumb dragged to the end, to the first one.
+        onRoot().performMouseInput { click(Offset(406f, 64f + (796f - 64f) / 2)) }
+        waitUntil(timeoutMillis = 5_000) { shownPosts().any { it in 200..400 } }
+        onNode(hasContentDescription("Ползунок по датам")).performMouseInput {
+            moveTo(center)
+            press()
+            moveBy(Offset(0f, 400f))
+            moveBy(Offset(0f, 1_600f))
+            release()
+        }
+        waitUntil(timeoutMillis = 5_000) { shownPosts().contains(0) }
+
+        services.setAppearance(services.appearance.value.copy(feedScrubber = false))
+        waitUntil(timeoutMillis = 3_000) { onAllNodes(hasContentDescription("Ползунок по датам")).fetchSemanticsNodes().isEmpty() }
     }
 
     @Test

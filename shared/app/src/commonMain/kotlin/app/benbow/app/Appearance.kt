@@ -16,6 +16,8 @@ data class Appearance(
     val palette: ThemePalette = ThemePalette.Inn,
     /** Posts in the feed as rounded cards; off = edge to edge, media across the full width. */
     val feedCards: Boolean = true,
+    /** The feed's date scrubber on its right edge (ADR-036 N3). */
+    val feedScrubber: Boolean = true,
     /** How a post shows pictures that aren't placed in its text, when read. */
     val postMedia: PostMedia = PostMedia.Carousel,
 ) {
@@ -23,6 +25,7 @@ data class Appearance(
         settings.put(MODE, mode.name)
         settings.put(PALETTE, palette.name)
         settings.put(FEED_CARDS, feedCards.toString())
+        settings.put(FEED_SCRUBBER, feedScrubber.toString())
         settings.put(POST_MEDIA, postMedia.name)
     }
 
@@ -30,12 +33,14 @@ data class Appearance(
         private const val MODE = "theme.mode"
         private const val PALETTE = "theme.palette"
         private const val FEED_CARDS = "feed.cards"
+        private const val FEED_SCRUBBER = "feed.scrubber"
         private const val POST_MEDIA = "post.media"
 
         internal fun load(settings: Settings) = Appearance(
             mode = ThemeMode.entries.firstOrNull { it.name == settings.get(MODE) } ?: ThemeMode.System,
             palette = ThemePalette.entries.firstOrNull { it.name == settings.get(PALETTE) } ?: ThemePalette.Inn,
             feedCards = settings.get(FEED_CARDS) != "false",
+            feedScrubber = settings.get(FEED_SCRUBBER) != "false",
             postMedia = PostMedia.entries.firstOrNull { it.name == settings.get(POST_MEDIA) } ?: PostMedia.Carousel,
         )
     }

@@ -151,6 +151,9 @@
     <string name="feed_section">Лента</string>
     <string name="feed_cards">Карточки постов в ленте</string>
     <string name="feed_cards_hint">Выключите, чтобы посты шли без рамок и фото занимали всю ширину</string>
+    <string name="feed_scrubber">Ползунок с датой</string>
+    <string name="feed_scrubber_hint">Справа в длинной ленте: потяните его, чтобы перейти к нужному месяцу</string>
+    <string name="feed_scrubber_label">Ползунок по датам</string>
     <string name="attachment_gone">Вложение удалено</string>
     <string name="saved">Сохранено</string>
     <string name="save_failed">Не получилось сохранить: %1$s</string>

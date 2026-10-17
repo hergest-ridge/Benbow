@@ -45,6 +45,7 @@ import app.benbow.client.EntrySummary
 import app.benbow.client.HomeBlock
 import app.benbow.client.HomeBlockType
 import app.benbow.client.Prompts
+import app.benbow.client.SearchQuery
 import app.benbow.client.Templates
 import app.benbow.client.packHome
 import org.jetbrains.compose.resources.StringResource
@@ -60,6 +61,8 @@ internal class HomeActions(
     /** A block's long-press menu: «Убрать с главной», «Настроить главную» (with the block picked). */
     val remove: (HomeBlock) -> Unit,
     val customize: (HomeBlock?) -> Unit,
+    /** Search with a block's selection (a tag block's chip). */
+    val search: (SearchQuery) -> Unit,
 )
 
 /** A block (or a piece of a list block): a long press anywhere on it opens its menu and no click follows. */
@@ -94,6 +97,7 @@ internal fun HomeState.shows(block: HomeBlock): Boolean = when (block.kind) {
     HomeBlockType.OnThisDay -> onThisDay.isNotEmpty()
     HomeBlockType.Favorite -> resurfaced != null
     HomeBlockType.Stats -> daysThisMonth > 0
+    HomeBlockType.Tag -> galleries[block.id]?.picks?.isNotEmpty() == true
     else -> true
 }
 
@@ -113,10 +117,12 @@ internal fun LazyListScope.homeBlocks(
             listBlock(single, home, actions, services)
         } else {
             item(key = row.joinToString("+") { it.id }) {
-                Row(Modifier.fillMaxWidth()) {
+                // Side by side, blocks keep 12 dp from the edges and 8 dp between them.
+                val alone = row.size == 1
+                Row(Modifier.fillMaxWidth().padding(horizontal = if (alone) 0.dp else 8.dp)) {
                     row.forEach { block ->
                         Held(block, actions, Modifier.weight((block.blockSize?.span(2) ?: 2).toFloat())) {
-                            TileBlock(block, home, actions, services)
+                            TileBlock(block, home, actions, services, Modifier.padding(horizontal = if (alone) 12.dp else 4.dp))
                         }
                     }
                 }
@@ -139,7 +145,7 @@ internal fun LazyListScope.homeBlocks(
 }
 
 @Composable
-private fun TileBlock(block: HomeBlock, home: HomeState, actions: HomeActions, services: AppServices) {
+private fun TileBlock(block: HomeBlock, home: HomeState, actions: HomeActions, services: AppServices, edges: Modifier) {
     when (block.kind) {
         HomeBlockType.Checkin -> CheckinCard(actions.checkin)
 
@@ -161,6 +167,17 @@ private fun TileBlock(block: HomeBlock, home: HomeState, actions: HomeActions, s
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth().padding(24.dp),
+            )
+        }
+
+        HomeBlockType.Tag -> home.galleries[block.id]?.let { gallery ->
+            TagBlock(
+                gallery,
+                block.blockSize ?: BlockSize.M,
+                services.media,
+                onSearch = { actions.search(gallery.query) },
+                onOpen = actions.open,
+                modifier = edges,
             )
         }
 

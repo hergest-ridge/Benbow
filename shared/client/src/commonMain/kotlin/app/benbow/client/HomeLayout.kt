@@ -31,8 +31,11 @@ enum class BlockSize(val value: String) {
     }
 }
 
-/** The blocks this app can draw, with the sizes each comes in (the first is the one it starts with). */
-enum class HomeBlockType(val value: String, val sizes: List<BlockSize>) {
+/**
+ * The blocks this app can draw, with the sizes each comes in (the first is the one it starts with); a block that isn't
+ * [once] may be on Home many times (a tag block per tag).
+ */
+enum class HomeBlockType(val value: String, val sizes: List<BlockSize>, val once: Boolean = true) {
     Checkin("checkin", listOf(BlockSize.M)),
     Prompt("prompt", listOf(BlockSize.M)),
     Pinned("pinned", listOf(BlockSize.List)),
@@ -41,6 +44,9 @@ enum class HomeBlockType(val value: String, val sizes: List<BlockSize>) {
     OnThisDay("on-this-day", listOf(BlockSize.List)),
     Favorite("favorite", listOf(BlockSize.M)),
     Stats("stats", listOf(BlockSize.M)),
+
+    /** A tag's entries as a small gallery (config [HomeBlock.TAG], [HomeBlock.ORDER]). */
+    Tag("tag", listOf(BlockSize.M, BlockSize.S, BlockSize.L), once = false),
     ;
 
     companion object {
@@ -68,7 +74,13 @@ data class HomeBlock(
     private class Stored(val type: String = "", val size: String = "", val config: Map<String, String> = emptyMap())
 
     companion object {
-        fun of(type: HomeBlockType, id: String = type.value) = HomeBlock(id, type.value, type.sizes.first().value)
+        fun of(type: HomeBlockType, id: String = type.value, config: Map<String, String> = emptyMap()) =
+            HomeBlock(id, type.value, type.sizes.first().value, config)
+
+        /** A tag block's tag (its id) and order ([RANDOM]: shuffled once a day; newest first otherwise). */
+        const val TAG = "tag"
+        const val ORDER = "order"
+        const val RANDOM = "random"
 
         internal fun decode(id: String, json: String): HomeBlock {
             val stored = runCatching { ClientJson.decodeFromString(Stored.serializer(), json) }.getOrElse { Stored() }
@@ -189,8 +201,8 @@ fun List<HomeBlock>.minusBlock(id: String): List<HomeBlock> = filter { it.id != 
 fun List<HomeBlock>.plusBlock(block: HomeBlock, at: Int): List<HomeBlock> =
     if (any { it.id == block.id }) this else toMutableList().apply { add(at.coerceIn(0, size), block) }
 
-/** The kinds that can be added: each built-in block comes once. */
-fun HomeLayout.addable(): List<HomeBlockType> = HomeBlockType.entries.filter { kind -> blocks.none { it.type == kind.value } }
+/** The kinds that can be added: a block that comes [HomeBlockType.once] only while Home doesn't have it. */
+fun HomeLayout.addable(): List<HomeBlockType> = HomeBlockType.entries.filter { kind -> !kind.once || blocks.none { it.type == kind.value } }
 
 /** Home's layout registry: a system entry like the tag registry (ADR-034). */
 internal const val HOME_REGISTRY_ID = "system-home"

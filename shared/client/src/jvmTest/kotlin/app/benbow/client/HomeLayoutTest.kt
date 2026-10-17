@@ -115,7 +115,7 @@ class HomeLayoutTest {
 
         val (drafts, at) = editor.remove("drafts")!!
         assertEquals(null, repo.homeLayout().first().blocks.find { it.id == "drafts" })
-        assertEquals(listOf(HomeBlockType.Drafts), editor.layout.value.addable())
+        assertEquals(listOf(HomeBlockType.Drafts, HomeBlockType.Tag), editor.layout.value.addable(), "a tag block can always come")
         editor.put(drafts, at)
         assertEquals(editor.layout.value, repo.homeLayout().first())
         assertEquals("drafts", editor.layout.value.blocks[4].id, "back in its place")
@@ -152,6 +152,33 @@ class HomeLayoutTest {
         editor.move("stats", -1)
         assertEquals(null, repo.homeLayout().first().blocks.find { it.id == "favorite" }, "each write goes to the stored layout")
         assertEquals(listOf("checkin", "prompt", "today", "pinned", "drafts", "stats", "on-this-day"), ids(repo.homeLayout().first()))
+        editor.close()
+    }
+
+    @Test
+    fun tagBlocksComeManyTimesWithTheirSizesAndSettings() = runTest {
+        val editor = HomeLayoutEditor(repo, CoroutineScope(Dispatchers.Unconfined), repo.homeLayout().first())
+        val sea = editor.add(HomeBlockType.Tag, after = null, config = mapOf(HomeBlock.TAG to "море"))
+        val music = editor.add(HomeBlockType.Tag, after = sea.id, config = mapOf(HomeBlock.TAG to "музыка"))
+        assertTrue(sea.id != music.id && sea.id != "tag", "each its own id")
+        assertEquals(BlockSize.M, sea.blockSize, "a strip to start with")
+        assertTrue(HomeBlockType.Tag in editor.layout.value.addable(), "a tag block per tag")
+
+        editor.resize(sea.id, BlockSize.S)
+        editor.configure(sea.id, HomeBlock.ORDER, HomeBlock.RANDOM)
+        editor.resize(music.id, BlockSize.List) // not a size it comes in: kept, not drawn
+        val stored = repo.homeLayout().first().blocks
+        assertEquals(
+            HomeBlock(sea.id, "tag", "s", mapOf(HomeBlock.TAG to "море", HomeBlock.ORDER to HomeBlock.RANDOM)),
+            stored.single {
+                it.id ==
+                    sea.id
+            },
+        )
+        assertEquals(null, stored.single { it.id == music.id }.blockSize)
+
+        editor.configure(sea.id, HomeBlock.ORDER, null)
+        assertEquals(mapOf(HomeBlock.TAG to "море"), repo.homeLayout().first().blocks.single { it.id == sea.id }.config)
         editor.close()
     }
 }

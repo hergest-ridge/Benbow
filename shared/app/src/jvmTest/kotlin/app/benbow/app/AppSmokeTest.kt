@@ -22,6 +22,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isFocused
+import androidx.compose.ui.test.isPopup
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.longClick
@@ -48,6 +49,7 @@ import androidx.compose.ui.test.waitUntilExactlyOneExists
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import app.benbow.client.GentleRule
+import app.benbow.client.HomeBlock
 import app.benbow.client.HomeLayout
 import app.benbow.client.Prompts
 import app.benbow.client.TagChoice
@@ -77,6 +79,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import java.awt.Color
 import java.awt.image.BufferedImage
@@ -713,6 +716,62 @@ class AppSmokeTest {
         onNodeWithText(Prompts.ofTheDay(services.today())).assertDoesNotExist()
         assertTrue(onNodeWithText("В этот день").getBoundsInRoot().top < onNodeWithText("Как сейчас дела?").getBoundsInRoot().top)
         screenshot("12b-home-layout")
+    }
+
+    @Test
+    fun aTagBlockShowsItsPicturesAndOpensTheSameInSearch() = runDesktopComposeUiTest(width = 412, height = 860) {
+        // Weeks back, so neither the day nor On this day shows them (with their tag chips) on Home too.
+        val sea = (1..4).map {
+            services.repo.createNote(LocalDate.parse(services.today()).minus(40 + it, DateTimeUnit.DAY).toString(), "Море $it")
+        }
+        val tag = services.repo.addTag(sea[0], "Море")!!
+        sea.drop(1).forEach { services.repo.addTag(it, "Море") }
+        runBlocking {
+            sea.take(3).forEach { entry ->
+                val bytes = picture(480, 360)
+                services.attach({ entry }, { bytes.inputStream() }) { MediaProbe("image/jpeg", "$entry.jpg", "image", 480, 360) }.join()
+            }
+        }
+        val default = runBlocking { services.repo.homeLayout().first() }
+        services.repo.saveHomeLayout(default, listOf(HomeBlock("sea", "tag", "l", mapOf(HomeBlock.TAG to tag))) + default.blocks)
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Море"), 5_000)
+        onNodeWithText("3").assertExists() // the pictures only: the entry without one is search's too, not the gallery's
+        runBlocking { delay(1_500) } // Coil decodes on its own threads
+        waitForIdle()
+        screenshot("12f-home-tag-block")
+
+        onNodeWithText("Море").click()
+        waitUntil(timeoutMillis = 5_000) {
+            services.searchFor.value == null &&
+                onAllNodesWithText("С вложениями").fetchSemanticsNodes().isNotEmpty()
+        }
+        assertTrue(onAllNodesWithText("Море 4").fetchSemanticsNodes().isEmpty(), "the same selection, as a grid of pictures")
+        runBlocking { delay(1_000) }
+        waitForIdle()
+        screenshot("12g-search-grid")
+
+        onNodeWithText("Главная").click()
+        waitUntilExactlyOneExists(hasText("Море"), 5_000)
+        onNodeWithText("Море").performTouchInput { longClick() }
+        onNode(hasText("Настроить главную") and hasAnyAncestor(isPopup())).click()
+        waitUntilExactlyOneExists(hasText("Тег «Море»"), 5_000)
+        onNodeWithText("Малый").click()
+        onNodeWithText("Случайные на сегодня").click()
+        val block = { runBlocking { services.repo.homeLayout().first().blocks.find { it.id == "sea" } } }
+        waitUntil(timeoutMillis = 5_000) { block()?.size == "s" && block()?.config?.get(HomeBlock.ORDER) == HomeBlock.RANDOM }
+        screenshot("12h-home-editor-tag")
+
+        // Another tag block from the catalog: the tag picker comes first.
+        onNodeWithText("Добавить блок").click()
+        onNode(hasText("Записи с тегом сеточкой", substring = true) and hasClickAction()).click()
+        val field = hasSetTextAction() and hasText("Найти", substring = true)
+        waitUntilExactlyOneExists(field, 5_000)
+        onNode(field).performTextInput("мор")
+        onNode(hasSetTextAction() and hasText("мор")).performKeyInput { pressKey(Key.Enter) }
+        waitUntil(timeoutMillis = 5_000) {
+            runBlocking { services.repo.homeLayout().first().blocks.count { it.type == "tag" && it.config[HomeBlock.TAG] == tag } } == 2
+        }
     }
 
     @Test

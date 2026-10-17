@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -61,6 +62,10 @@ import app.benbow.app.resources.block_prompt_about
 import app.benbow.app.resources.block_stats
 import app.benbow.app.resources.block_stats_about
 import app.benbow.app.resources.block_stats_empty
+import app.benbow.app.resources.block_tag
+import app.benbow.app.resources.block_tag_about
+import app.benbow.app.resources.block_tag_empty
+import app.benbow.app.resources.block_tag_named
 import app.benbow.app.resources.block_today
 import app.benbow.app.resources.block_today_about
 import app.benbow.app.resources.cancel
@@ -75,6 +80,13 @@ import app.benbow.app.resources.home_editor_title
 import app.benbow.app.resources.home_removed
 import app.benbow.app.resources.home_reset
 import app.benbow.app.resources.home_reset_done
+import app.benbow.app.resources.home_size_l
+import app.benbow.app.resources.home_size_m
+import app.benbow.app.resources.home_size_s
+import app.benbow.app.resources.home_tag_change
+import app.benbow.app.resources.home_tag_newest
+import app.benbow.app.resources.home_tag_pick
+import app.benbow.app.resources.home_tag_random
 import app.benbow.app.resources.tag_picker_done
 import app.benbow.app.resources.veil_undo
 import app.benbow.client.BlockSize
@@ -82,6 +94,7 @@ import app.benbow.client.HomeBlock
 import app.benbow.client.HomeBlockType
 import app.benbow.client.HomeLayout
 import app.benbow.client.HomeLayoutEditor
+import app.benbow.client.TagRef
 import app.benbow.client.addable
 import app.benbow.client.packHome
 import kotlinx.coroutines.launch
@@ -98,6 +111,7 @@ internal val HomeBlockType.title: StringResource get() = when (this) {
     HomeBlockType.OnThisDay -> Res.string.block_on_this_day
     HomeBlockType.Favorite -> Res.string.block_favorite
     HomeBlockType.Stats -> Res.string.block_stats
+    HomeBlockType.Tag -> Res.string.block_tag
 }
 
 private val HomeBlockType.about: StringResource get() = when (this) {
@@ -109,6 +123,7 @@ private val HomeBlockType.about: StringResource get() = when (this) {
     HomeBlockType.OnThisDay -> Res.string.block_on_this_day_about
     HomeBlockType.Favorite -> Res.string.block_favorite_about
     HomeBlockType.Stats -> Res.string.block_stats_about
+    HomeBlockType.Tag -> Res.string.block_tag_about
 }
 
 /** When a block that has nothing to show now (and so isn't on Home) comes up. */
@@ -118,7 +133,25 @@ private val HomeBlockType.whenEmpty: StringResource get() = when (this) {
     HomeBlockType.OnThisDay -> Res.string.block_on_this_day_empty
     HomeBlockType.Favorite -> Res.string.block_favorite_empty
     HomeBlockType.Stats -> Res.string.block_stats_empty
+    HomeBlockType.Tag -> Res.string.block_tag_empty
     else -> about
+}
+
+/** A block's name in the editor: a tag block goes by its tag. */
+@Composable
+private fun blockName(block: HomeBlock): String {
+    val tag = block.config[HomeBlock.TAG]
+    return if (block.kind == HomeBlockType.Tag && tag != null) {
+        LocalTags.current.name(TagRef(tag, tag))
+    } else {
+        block.kind?.let { stringResource(it.title) }.orEmpty()
+    }
+}
+
+private val BlockSize.label: StringResource get() = when (this) {
+    BlockSize.S -> Res.string.home_size_s
+    BlockSize.L -> Res.string.home_size_l
+    else -> Res.string.home_size_m
 }
 
 /**
@@ -133,6 +166,9 @@ internal fun HomeEditor(services: AppServices, start: HomeLayout, home: HomeStat
     val layout by editor.layout.collectAsState()
     var selected by remember { mutableStateOf(select) }
     var adding by remember { mutableStateOf(false) }
+
+    /** The tag picker for a tag block: its id, or "" for a new one. */
+    var pickingTag by remember { mutableStateOf<String?>(null) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     fun offerUndo(text: suspend () -> String, undo: () -> Unit) {
@@ -165,26 +201,33 @@ internal fun HomeEditor(services: AppServices, start: HomeLayout, home: HomeStat
                 val drawn = layout.blocks.filter { it.blockSize != null }
                 drawn.indexOfFirst { it.id == selected }.takeIf { it >= 0 }?.let { at ->
                     val block = drawn[at]
+                    val name = blockName(block)
                     BlockTools(
                         block,
+                        name,
                         empty = !home.shows(block),
                         canUp = at > 0,
                         canDown = at < drawn.lastIndex,
                         onMove = { editor.move(block.id, it) },
+                        onResize = { editor.resize(block.id, it) },
+                        onConfigure = { key, value -> editor.configure(block.id, key, value) },
+                        onPickTag = { pickingTag = block.id },
                         onRemove = {
                             val (removed, place) = editor.remove(block.id) ?: return@BlockTools
                             selected = null
-                            offerUndo({
-                                getString(Res.string.home_removed, block.kind?.let { getString(it.title) }.orEmpty())
-                            }) { editor.put(removed, place) }
+                            offerUndo({ getString(Res.string.home_removed, name) }) { editor.put(removed, place) }
                         },
                     )
                 }
                 val addable = layout.addable()
                 if (adding && addable.isNotEmpty()) {
                     Catalog(addable, onPick = { kind ->
-                        selected = editor.add(kind, after = selected).id
-                        adding = false
+                        if (kind == HomeBlockType.Tag) {
+                            pickingTag = ""
+                        } else {
+                            selected = editor.add(kind, after = selected).id
+                            adding = false
+                        }
                     }, onCancel = { adding = false })
                 } else if (addable.isNotEmpty()) {
                     OutlinedButton({ adding = true }, modifier = Modifier.fillMaxWidth().hand()) {
@@ -202,6 +245,25 @@ internal fun HomeEditor(services: AppServices, start: HomeLayout, home: HomeStat
             }
             SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
         }
+    }
+    pickingTag?.let { target ->
+        val current = layout.blocks.find { it.id == target }?.config?.get(HomeBlock.TAG)
+        TagPicker(
+            services,
+            title = stringResource(Res.string.home_tag_pick),
+            chosen = listOfNotNull(current?.let { TagRef(it, it) }),
+            multi = false,
+            onPick = { tag ->
+                if (target.isEmpty()) {
+                    selected = editor.add(HomeBlockType.Tag, after = selected, config = mapOf(HomeBlock.TAG to tag.id)).id
+                    adding = false
+                } else {
+                    editor.configure(target, HomeBlock.TAG, tag.id)
+                }
+                pickingTag = null
+            },
+            onDismiss = { pickingTag = null },
+        )
     }
 }
 
@@ -259,9 +321,8 @@ private fun Tile(block: HomeBlock, empty: Boolean, selected: Boolean, onClick: (
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            val title = block.kind?.let { stringResource(it.title) }.orEmpty()
             Text(
-                title,
+                blockName(block),
                 style = MaterialTheme.typography.labelLarge,
                 color = if (empty && !selected) colors.onSurfaceVariant else colors.onSurface,
                 maxLines = 1,
@@ -279,17 +340,55 @@ private fun Tile(block: HomeBlock, empty: Boolean, selected: Boolean, onClick: (
 }
 
 @Composable
-private fun BlockTools(block: HomeBlock, empty: Boolean, canUp: Boolean, canDown: Boolean, onMove: (Int) -> Unit, onRemove: () -> Unit) {
+private fun BlockTools(
+    block: HomeBlock,
+    name: String,
+    empty: Boolean,
+    canUp: Boolean,
+    canDown: Boolean,
+    onMove: (Int) -> Unit,
+    onResize: (BlockSize) -> Unit,
+    onConfigure: (key: String, value: String?) -> Unit,
+    onPickTag: () -> Unit,
+    onRemove: () -> Unit,
+) {
     val kind = block.kind ?: return
     Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)) {
-            Text(stringResource(kind.title), style = MaterialTheme.typography.titleMedium)
+            Text(
+                if (kind == HomeBlockType.Tag) stringResource(Res.string.block_tag_named, name) else name,
+                style = MaterialTheme.typography.titleMedium,
+            )
             Text(
                 stringResource(if (empty) kind.whenEmpty else kind.about),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 2.dp, end = 8.dp),
             )
+            if (kind.sizes.size > 1) {
+                Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    kind.sizes.sortedBy { it.ordinal }.forEach { size ->
+                        FilterChip(block.blockSize == size, {
+                            onResize(size)
+                        }, { Text(stringResource(size.label)) }, modifier = Modifier.hand())
+                    }
+                }
+            }
+            if (kind == HomeBlockType.Tag) {
+                val random = block.config[HomeBlock.ORDER] == HomeBlock.RANDOM
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(!random, {
+                        onConfigure(HomeBlock.ORDER, null)
+                    }, { Text(stringResource(Res.string.home_tag_newest)) }, modifier = Modifier.hand())
+                    FilterChip(
+                        random,
+                        { onConfigure(HomeBlock.ORDER, HomeBlock.RANDOM) },
+                        { Text(stringResource(Res.string.home_tag_random)) },
+                        modifier = Modifier.hand(),
+                    )
+                }
+                TextButton(onPickTag, modifier = Modifier.hand()) { Text(stringResource(Res.string.home_tag_change)) }
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton({ onMove(-1) }, enabled = canUp, modifier = Modifier.hand()) {
                     Icon(Icons.ArrowUp, stringResource(Res.string.home_block_up), Modifier.size(22.dp))

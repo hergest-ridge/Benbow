@@ -627,4 +627,15 @@
     <string name="block_on_this_day_empty">Появится, когда найдутся записи этого дня из прошлых лет</string>
     <string name="block_favorite_empty">Появится, когда в избранном будет запись старше месяца</string>
     <string name="block_stats_empty">Появится, когда в этом месяце будут записи</string>
+    <string name="block_tag">Тег</string>
+    <string name="block_tag_named">Тег «%1$s»</string>
+    <string name="block_tag_about">Записи с тегом сеточкой: картинки, первые строки, звуки</string>
+    <string name="block_tag_empty">Появится, когда будут записи с этим тегом</string>
+    <string name="home_size_s">Малый</string>
+    <string name="home_size_m">Полоса</string>
+    <string name="home_size_l">Большой</string>
+    <string name="home_tag_change">Другой тег</string>
+    <string name="home_tag_newest">Новые</string>
+    <string name="home_tag_random">Случайные на сегодня</string>
+    <string name="home_tag_pick">Тег для блока</string>
 </resources>

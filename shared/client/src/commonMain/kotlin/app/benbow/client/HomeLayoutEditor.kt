@@ -32,13 +32,20 @@ class HomeLayoutEditor(private val repo: JournalRepository, scope: CoroutineScop
 
     fun put(block: HomeBlock, at: Int) = edit { it.plusBlock(block, at) }
 
+    fun resize(id: String, size: BlockSize) = change(id) { it.copy(size = size.value) }
+
+    /** One of a block's settings; null takes it away. */
+    fun configure(id: String, key: String, value: String?) =
+        change(id) { block -> block.copy(config = if (value == null) block.config - key else block.config + (key to value)) }
+
     /**
      * A block of [kind] after [after] (at the end without it). Its id is the kind's own while that is free, so the same
      * block added on two devices is one.
      */
-    fun add(kind: HomeBlockType, after: String?): HomeBlock {
+    fun add(kind: HomeBlockType, after: String?, config: Map<String, String> = emptyMap()): HomeBlock {
         val blocks = state.value.blocks
-        val block = HomeBlock.of(kind, kind.value.takeIf { id -> blocks.none { it.id == id } } ?: repo.newId())
+        val id = kind.value.takeIf { kind.once && blocks.none { it.id == kind.value } } ?: repo.newId()
+        val block = HomeBlock.of(kind, id, config)
         put(block, blocks.indexOfFirst { it.id == after }.let { if (it < 0) blocks.size else it + 1 })
         return block
     }
@@ -57,6 +64,8 @@ class HomeLayoutEditor(private val repo: JournalRepository, scope: CoroutineScop
     fun close() {
         writes.close()
     }
+
+    private fun change(id: String, change: (HomeBlock) -> HomeBlock) = edit { blocks -> blocks.map { if (it.id == id) change(it) else it } }
 
     private fun edit(change: (List<HomeBlock>) -> List<HomeBlock>) {
         val now = state.value

@@ -35,17 +35,20 @@ import app.benbow.app.resources.greeting_night
 import app.benbow.app.resources.review_month
 import app.benbow.app.resources.review_summary
 import app.benbow.app.resources.review_week
+import app.benbow.client.BlockSize
 import app.benbow.client.DayInfo
 import app.benbow.client.EntrySummary
 import app.benbow.client.HomeBlock
 import app.benbow.client.HomeBlockType
 import app.benbow.client.HomeLayout
 import app.benbow.client.Prompts
+import app.benbow.client.SearchQuery
 import app.benbow.client.SyncStatus
 import app.benbow.client.Templates
 import app.benbow.client.editHomeLayout
 import app.benbow.client.homeLayout
 import app.benbow.client.minusBlock
+import app.benbow.client.tagRegistry
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,6 +57,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DateTimeUnit
@@ -67,6 +71,7 @@ import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
+import kotlin.random.Random
 import kotlin.time.Clock
 
 internal data class HomeState(
@@ -82,6 +87,8 @@ internal data class HomeState(
     /** One favorite from over a month ago, the same all day (savoring, ux.md#psychology). */
     val resurfaced: EntrySummary?,
     val daysThisMonth: Long,
+    /** Each tag block's gallery by the block's id (none while its tag is gone). */
+    val galleries: Map<String, TagGallery> = emptyMap(),
     /** Days with entries and their average mood over the last 7 and 30 days, for the review cards. */
     val week: Pair<Int, Double?> = 0 to null,
     val month: Pair<Int, Double?> = 0 to null,
@@ -134,8 +141,9 @@ internal class HomeViewModel(private val services: AppServices) : ViewModel() {
                 },
                 ::Triple,
             ),
+            tagGalleries(layout.blocks.filter { it.kind == HomeBlockType.Tag && it.blockSize != null }),
             services.gentle.on,
-        ) { (todays, pinned, drafts), (allOnThisDay, allFavorites, days), gentle ->
+        ) { (todays, pinned, drafts), (allOnThisDay, allFavorites, days), found, gentle ->
             // Бережно (ADR-031): quiet entries stay out of Home; what comes back unasked (On this day, the resurfaced
             // favorite) leaves out curtained ones too.
             val onThisDay = if (gentle) allOnThisDay.filter { it.veil == null } else allOnThisDay
@@ -150,10 +158,53 @@ internal class HomeViewModel(private val services: AppServices) : ViewModel() {
                 onThisDay,
                 favorites.takeIf { it.isNotEmpty() }?.let { it[today.hashCode().absoluteValue % it.size] },
                 days,
+                galleries(found, gentle),
             )
             home.copy(blocks = home.blocks.filter { it.blockSize != null && home.shows(it) })
         }
     }
+
+    /**
+     * What each tag block shows: the same as search with its tag (merged tags read as the one they went into) and
+     * "with media", or with the tag alone when none of its entries has media. A tag in the trash shows nothing.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun tagGalleries(blocks: List<HomeBlock>): Flow<Map<HomeBlock, Pair<SearchQuery, List<EntrySummary>>>> {
+        if (blocks.isEmpty()) return flowOf(emptyMap())
+        val repo = services.repo
+        return repo.tagRegistry().flatMapLatest { registry ->
+            combine(
+                blocks.map { block ->
+                    val tag = block.config[HomeBlock.TAG]?.let(registry::root)?.takeIf { !registry.inTrash(it) }
+                    if (tag == null) {
+                        flowOf(null)
+                    } else {
+                        val pictures = SearchQuery(tag = tag, withMedia = true)
+                        repo.search(pictures).flatMapLatest { found ->
+                            if (found.isNotEmpty()) {
+                                flowOf(block to (pictures to found))
+                            } else {
+                                SearchQuery(tag = tag).let { all -> repo.search(all).map { block to (all to it) } }
+                            }
+                        }
+                    }
+                },
+            ) { pairs -> pairs.filterNotNull().toMap() }
+        }
+    }
+
+    /** A tag block is a passive place (ADR-031): with Бережно on, no quiet or curtained entry comes up in it. */
+    private fun galleries(found: Map<HomeBlock, Pair<SearchQuery, List<EntrySummary>>>, gentle: Boolean): Map<String, TagGallery> =
+        found.entries.associate { (block, result) ->
+            val (query, all) = result
+            val entries = if (gentle) all.filter { it.veil == null } else all
+            val ordered = if (block.config[HomeBlock.ORDER] == HomeBlock.RANDOM) {
+                entries.shuffled(Random(today.hashCode() * 31 + block.id.hashCode())) // the same all day
+            } else {
+                entries
+            }
+            block.id to TagGallery(query.tag.orEmpty(), query, entries.size, ordered.take((block.blockSize ?: BlockSize.M).cells))
+        }
 
     val state: StateFlow<HomeState?> = combine(base, reviews, services.repo.returned(today)) { home, (week, month), returned ->
         home.copy(week = week, month = month, returned = returned.firstOrNull())
@@ -218,6 +269,10 @@ internal fun HomeScreen(services: AppServices, nav: Navigator) {
                     services.messages.tryEmit(AppMessage.HomeBlockRemoved(block, at))
                 },
                 customize = { block -> editing = block?.id.orEmpty() },
+                search = { query ->
+                    services.searchFor.value = query
+                    nav.selectTab(Route.Search)
+                },
             )
             editing?.let { select ->
                 HomeEditor(services, home.layout, home, select.ifEmpty { null }, onDismiss = { editing = null })

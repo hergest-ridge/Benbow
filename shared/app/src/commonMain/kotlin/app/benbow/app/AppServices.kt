@@ -16,6 +16,7 @@ import app.benbow.client.Media
 import app.benbow.client.Pairing
 import app.benbow.client.PairingException
 import app.benbow.client.ReminderItem
+import app.benbow.client.SearchQuery
 import app.benbow.client.ServerHistory
 import app.benbow.client.Settings
 import app.benbow.client.SpeechModel
@@ -229,6 +230,9 @@ class AppServices(
 
     /** Things the user must hear about (shown as a snackbar). */
     val messages = MutableSharedFlow<AppMessage>(extraBufferCapacity = 8)
+
+    /** What the Search tab is to show when it opens next (a tag block's selection); it takes it and clears it. */
+    val searchFor = MutableStateFlow<SearchQuery?>(null)
 
     /** Set by the platform when it is opened for something; the app takes it and clears it. */
     val launch = MutableStateFlow<AppLaunch?>(null)

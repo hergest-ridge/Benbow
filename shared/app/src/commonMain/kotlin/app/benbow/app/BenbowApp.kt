@@ -80,6 +80,7 @@ import app.benbow.app.resources.dictation_done
 import app.benbow.app.resources.dictation_kept
 import app.benbow.app.resources.dictation_needs_model
 import app.benbow.app.resources.dictation_open_model
+import app.benbow.app.resources.feed_hidden
 import app.benbow.app.resources.gentle_turned_off
 import app.benbow.app.resources.gentle_turned_on
 import app.benbow.app.resources.home_removed
@@ -356,6 +357,8 @@ private fun AppRoot(services: AppServices) {
 
                 is AppMessage.GentleSwitched ->
                     snackbar.showSnackbar(getString(if (message.on) Res.string.gentle_turned_on else Res.string.gentle_turned_off))
+
+                AppMessage.HiddenFromFeed -> snackbar.showSnackbar(getString(Res.string.feed_hidden))
 
                 is AppMessage.TagsTrashed -> {
                     val text = message.names.singleOrNull()?.let { getString(Res.string.tag_trashed, it) }

@@ -103,6 +103,9 @@ sealed interface AppMessage {
     /** Бережно was switched from the Feed tab (a long press). */
     data class GentleSwitched(val on: Boolean) : AppMessage
 
+    /** «Показать в ленте» of an entry the feed keeps out (quiet while Бережно is on, ADR-031). */
+    data object HiddenFromFeed : AppMessage
+
     /** Tags went to the trash (7.9); "Вернуть" brings them back. */
     data class TagsTrashed(val ids: List<String>, val names: List<String>) : AppMessage
 
@@ -197,6 +200,9 @@ class AppServices(
 
     /** The feed's filter (ADR-036 N5): it outlasts a switch of tabs, not the app; a new start shows the whole feed. */
     val feedFilter = MutableStateFlow(FeedFilter())
+
+    /** «Показать в ленте» (ADR-036 N6): the entry the Feed opens at, among its neighbours; the Feed takes it. */
+    val showInFeed = MutableStateFlow<String?>(null)
 
     /** The one player for every sound (ADR-035), its queue and the mini-player's state. */
     val player = AudioPlayer(media, audio) { messages.tryEmit(AppMessage.PlaybackFailed) }

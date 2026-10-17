@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -65,6 +66,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -103,12 +105,14 @@ import app.benbow.core.sync.AttachmentState
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
@@ -270,6 +274,21 @@ internal class FeedViewModel(private val services: AppServices) : ViewModel() {
         }
     }
 
+    /**
+     * Where post [id] is in the feed as it shows (its place, its row), once the feed has its rows; null when the feed
+     * keeps it out. A filter that hides it is let go first («Показать в ленте» asks for the post itself, ADR-036 N6).
+     */
+    suspend fun find(id: String): Pair<Int, Int>? {
+        fun List<FeedRow>.place(): Pair<Int, Int>? {
+            val row = indexOfFirst { it is FeedRow.Item && it.key == id }
+            return if (row < 0) null else (this[row] as FeedRow.Item).pos to row
+        }
+        rows.filterNotNull().first().place()?.let { return it }
+        if (!services.feedFilter.value.active) return null
+        services.feedFilter.value = FeedFilter()
+        return withTimeoutOrNull(FIND_WAIT_MILLIS) { rows.filterNotNull().first { it.place() != null } }?.place()
+    }
+
     fun react(id: String, emoji: String, on: Boolean) {
         services.scope.launch { services.repo.toggleReaction(id, emoji, on) }
     }
@@ -279,6 +298,10 @@ internal class FeedViewModel(private val services: AppServices) : ViewModel() {
 internal const val FEED_CHUNK = 40
 
 private const val JUMP_WAIT_MILLIS = 1_000L
+private const val FIND_WAIT_MILLIS = 2_000L
+
+/** How long a post found by «Показать в ленте» glows, so the eye finds it. */
+private const val GLOW_MILLIS = 1_600L
 
 /** The chunks from the one before [from]'s to the one after [to]'s. */
 internal fun chunksAround(from: Int, to: Int) = (from / FEED_CHUNK - 1).coerceAtLeast(0)..(to / FEED_CHUNK + 1)
@@ -333,6 +356,21 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
     }
     // Back after five minutes away, the feed starts at today again, not deep in some past month.
     LaunchedEffect(state, vm) { services.cameBack.collect { vm.toToday(state, glide = false) } }
+    // «Показать в ленте» (ADR-036 N6): the post among its neighbours (the one above it in sight too), glowing a moment.
+    var glowing by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(state, vm) {
+        services.showInFeed.filterNotNull().collect { id ->
+            services.showInFeed.value = null
+            val (pos, row) = vm.find(id) ?: run {
+                services.messages.tryEmit(AppMessage.HiddenFromFeed)
+                return@collect
+            }
+            vm.jumpTo(pos) { state.scrollToItem((row - 1).coerceAtLeast(0)) }
+            glowing = id
+            delay(GLOW_MILLIS)
+            glowing = null
+        }
+    }
     // The filter (ADR-036 N5): a new one starts its feed from the top.
     val filter by services.feedFilter.collectAsStateWithLifecycle()
     val choices by vm.choices.collectAsStateWithLifecycle()
@@ -435,6 +473,7 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
                                             onOpen = { nav.open(Route.Editor(id, item.summary.day, readOnly = true)) },
                                             onComments = { nav.open(Route.Editor(id, item.summary.day, readOnly = true)) },
                                             onOpenMedia = { nav.open(Route.Media(id, it.meta.id)) },
+                                            glow = glowing == id,
                                             // The rows as they are when tapped: a moving window doesn't recompose the post.
                                             queue = { feedQueue(vm.rows.value.orEmpty(), id, gentle) },
                                         ) { emoji, on ->
@@ -543,10 +582,17 @@ private fun FeedPost(
     onComments: () -> Unit,
     onOpenMedia: (AttachmentState) -> Unit,
     queue: TrackNames.() -> List<Track>,
+    glow: Boolean = false,
     onReact: (String, Boolean) -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
     val entry = item.summary
+    // Found by «Показать в ленте»: a light comes up at once and fades.
+    val glowAlpha by animateFloatAsState(if (glow) 0.22f else 0f, tween(if (glow) 150 else 1_200), label = "glow")
+    val glowing = Modifier.drawWithContent {
+        drawContent()
+        if (glowAlpha > 0f) drawRect(colors.primary.copy(alpha = glowAlpha))
+    }
     var picking by remember { mutableStateOf(false) }
     var postponing by remember { mutableStateOf(false) }
     // A curtain opens in place and closes again once the post scrolls away (this state goes with it).
@@ -569,7 +615,7 @@ private fun FeedPost(
                 color = tint ?: colors.surfaceContainerLow,
                 shape = RoundedCornerShape(18.dp),
                 border = if (shown) BorderStroke(2.dp, colors.primary) else null,
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).then(open),
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).then(glowing).then(open),
             ) {
                 Revealing(curtained, entry) {
                     Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -579,7 +625,7 @@ private fun FeedPost(
                 }
             }
         } else {
-            Column(Modifier.fillMaxWidth().background(tint ?: colors.background).then(open)) {
+            Column(Modifier.fillMaxWidth().background(tint ?: colors.background).then(glowing).then(open)) {
                 Revealing(curtained, entry, Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
                     Column {
                         if (item.media.isNotEmpty()) MediaCarousel(services.media, item.media, onOpenMedia, rounded = false)

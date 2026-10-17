@@ -307,6 +307,8 @@
     <string name="feed_filter_reset">Сбросить</string>
     <string name="feed_filter_done">Готово</string>
     <string name="feed_filter_empty">По этому фильтру в ленте ничего нет</string>
+    <string name="show_in_feed">Показать в ленте</string>
+    <string name="feed_hidden">Эта запись не показывается в ленте: её прячет Бережно</string>
     <string name="pin">Закрепить</string>
     <string name="unpin">Открепить</string>
     <string name="react">Реакция</string>

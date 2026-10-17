@@ -76,6 +76,7 @@ import app.benbow.app.resources.pin
 import app.benbow.app.resources.print
 import app.benbow.app.resources.restore
 import app.benbow.app.resources.share
+import app.benbow.app.resources.show_in_feed
 import app.benbow.app.resources.unpin
 import app.benbow.client.DraftSession
 import app.benbow.client.EntryDetail
@@ -527,6 +528,14 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                     menu = false
                                     if (choose) postponing = true else vm.entryId?.let { services.postpone(it, null, detail?.until) }
                                 }
+                                if (detail != null && detail.kind !in NOT_IN_FEED && !detail.inTrash) {
+                                    DropdownMenuItem(text = { Text(stringResource(Res.string.show_in_feed)) }, onClick = {
+                                        menu = false
+                                        vm.commit()
+                                        services.showInFeed.value = detail.id
+                                        nav.selectTab(Route.Feed)
+                                    }, modifier = Modifier.hand())
+                                }
                                 DropdownMenuItem(text = { Text(stringResource(Res.string.print)) }, onClick = {
                                     menu = false
                                     vm.commit()
@@ -711,3 +720,6 @@ private class EditorDictation(private val vm: EditorViewModel, ui: CoroutineCont
 
 /** Attachments that go into the text when added while writing (pictures, videos, sounds); files stay in the ribbon. */
 private val INLINE_KINDS = setOf("image", "video", "voice", "audio")
+
+/** Kinds the feed never shows: «Показать в ленте» isn't offered for them (ADR-036 N6). */
+private val NOT_IN_FEED = setOf("comment", "system", "event", "reminder")

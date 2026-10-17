@@ -41,8 +41,8 @@ enum class HomeBlockType(val value: String, val sizes: List<BlockSize>, val once
     Pinned("pinned", listOf(BlockSize.List)),
     Today("today", listOf(BlockSize.List)),
     Drafts("drafts", listOf(BlockSize.List)),
-    OnThisDay("on-this-day", listOf(BlockSize.List)),
-    Favorite("favorite", listOf(BlockSize.M)),
+    OnThisDay("on-this-day", listOf(BlockSize.List, BlockSize.M, BlockSize.L)),
+    Favorite("favorite", listOf(BlockSize.M, BlockSize.S)),
     Stats("stats", listOf(BlockSize.M, BlockSize.S)),
 
     /** A tag's entries as a small gallery (config [HomeBlock.TAG], [HomeBlock.ORDER]). */
@@ -84,6 +84,10 @@ data class HomeBlock(
 
         /** A stats block's figures, comma-separated [StatFigure] values (see [figures]). */
         const val FIGURES = "figures"
+
+        /** On this day with [MONTHS]: also a month and half a year ago (a journal's first year has no years ago yet). */
+        const val ALSO = "also"
+        const val MONTHS = "months"
 
         internal fun decode(id: String, json: String): HomeBlock {
             val stored = runCatching { ClientJson.decodeFromString(Stored.serializer(), json) }.getOrElse { Stored() }

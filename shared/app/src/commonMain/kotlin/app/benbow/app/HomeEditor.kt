@@ -76,6 +76,7 @@ import app.benbow.app.resources.figure_mood
 import app.benbow.app.resources.figure_pictures
 import app.benbow.app.resources.figure_since
 import app.benbow.app.resources.figure_tags
+import app.benbow.app.resources.home_also_months
 import app.benbow.app.resources.home_block_add
 import app.benbow.app.resources.home_block_down
 import app.benbow.app.resources.home_block_empty
@@ -90,6 +91,7 @@ import app.benbow.app.resources.home_removed
 import app.benbow.app.resources.home_reset
 import app.benbow.app.resources.home_reset_done
 import app.benbow.app.resources.home_size_l
+import app.benbow.app.resources.home_size_list
 import app.benbow.app.resources.home_size_m
 import app.benbow.app.resources.home_size_s
 import app.benbow.app.resources.home_tag_change
@@ -171,8 +173,9 @@ private val StatFigure.label: StringResource get() = when (this) {
 
 private val BlockSize.label: StringResource get() = when (this) {
     BlockSize.S -> Res.string.home_size_s
+    BlockSize.M -> Res.string.home_size_m
     BlockSize.L -> Res.string.home_size_l
-    else -> Res.string.home_size_m
+    BlockSize.List -> Res.string.home_size_list
 }
 
 /**
@@ -409,6 +412,15 @@ private fun BlockTools(
                     )
                 }
                 TextButton(onPickTag, modifier = Modifier.hand()) { Text(stringResource(Res.string.home_tag_change)) }
+            }
+            if (kind == HomeBlockType.OnThisDay) {
+                val months = block.config[HomeBlock.ALSO] == HomeBlock.MONTHS
+                FilterChip(
+                    months,
+                    { onConfigure(HomeBlock.ALSO, if (months) null else HomeBlock.MONTHS) },
+                    { Text(stringResource(Res.string.home_also_months)) },
+                    modifier = Modifier.hand(),
+                )
             }
             if (kind == HomeBlockType.Stats) {
                 // S shows one figure: a tap picks it. M up to three: taps add and take away (a fourth lets the first go).

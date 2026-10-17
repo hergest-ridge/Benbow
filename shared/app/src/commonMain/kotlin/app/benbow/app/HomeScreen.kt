@@ -85,7 +85,8 @@ internal data class HomeState(
     val todays: List<EntrySummary>,
     val pinned: List<EntrySummary>,
     val drafts: List<EntrySummary>,
-    val onThisDay: List<EntrySummary>,
+    /** On this day: years ago, then (when a block asks) a month and half a year ago; nearest first. */
+    val onThisDay: List<LookBack>,
     /** One favorite from over a month ago, the same all day (savoring, ux.md#psychology). */
     val resurfaced: EntrySummary?,
     /** Soft stats for the stats blocks: the month counted up (null without a stats block). */
@@ -137,7 +138,7 @@ internal class HomeViewModel(private val services: AppServices) : ViewModel() {
                 ::Triple,
             ),
             combine(
-                ifShown(HomeBlockType.OnThisDay, emptyList()) { repo.onThisDay(today) },
+                ifShown(HomeBlockType.OnThisDay, emptyList()) { lookBack(layout.blocks) },
                 ifShown(HomeBlockType.Favorite, emptyList()) { repo.favoritesUpTo(date.minus(1, DateTimeUnit.MONTH).toString()) },
                 ifShown(HomeBlockType.Stats, null) {
                     val monthEnd = monthStart.plus(1, DateTimeUnit.MONTH).minus(1, DateTimeUnit.DAY).toString()
@@ -151,7 +152,7 @@ internal class HomeViewModel(private val services: AppServices) : ViewModel() {
         ) { (todays, pinned, drafts), (allOnThisDay, allFavorites, stats), found, gentle ->
             // Бережно (ADR-031): quiet entries stay out of Home; what comes back unasked (On this day, the resurfaced
             // favorite) leaves out curtained ones too.
-            val onThisDay = if (gentle) allOnThisDay.filter { it.veil == null } else allOnThisDay
+            val onThisDay = if (gentle) allOnThisDay.filter { it.entry.veil == null } else allOnThisDay
             val favorites = if (gentle) allFavorites.filter { it.veil == null } else allFavorites
             val home = HomeState(
                 today,
@@ -167,6 +168,18 @@ internal class HomeViewModel(private val services: AppServices) : ViewModel() {
             )
             home.copy(blocks = home.blocks.filter { it.blockSize != null && home.shows(it) })
         }
+    }
+
+    /** On this day's entries, with a month and half a year ago (the same day of the month) when a block asks for them. */
+    private fun lookBack(blocks: List<HomeBlock>): Flow<List<LookBack>> {
+        val repo = services.repo
+        val years = repo.onThisDay(today).map { entries -> entries.map { LookBack(it, (date.year - LocalDate.parse(it.day).year) * 12) } }
+        if (blocks.none { it.kind == HomeBlockType.OnThisDay && it.config[HomeBlock.ALSO] == HomeBlock.MONTHS }) return years
+        return combine(
+            repo.entriesForDay(date.minus(1, DateTimeUnit.MONTH).toString()),
+            repo.entriesForDay(date.minus(6, DateTimeUnit.MONTH).toString()),
+            years,
+        ) { month, half, ago -> month.map { LookBack(it, 1) } + half.map { LookBack(it, 6) } + ago }
     }
 
     /**

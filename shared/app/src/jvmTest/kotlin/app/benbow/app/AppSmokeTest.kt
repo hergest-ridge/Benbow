@@ -811,6 +811,45 @@ class AppSmokeTest {
     }
 
     @Test
+    fun lookingBackComesInSizes() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val today = LocalDate.parse(services.today())
+        val year = services.repo.createNote(today.minus(1, DateTimeUnit.YEAR).toString(), "Год назад у моря")
+        services.repo.createNote(today.minus(1, DateTimeUnit.MONTH).toString(), "Месяц назад в лесу")
+        services.repo.createNote(today.minus(6, DateTimeUnit.MONTH).toString(), "Полгода назад в горах")
+        val favorite = services.repo.createNote(today.minus(70, DateTimeUnit.DAY).toString(), "Любимый вечер")
+        services.repo.setFavorite(favorite, true)
+        runBlocking {
+            val bytes = picture(800, 600)
+            services.attach({ year }, { bytes.inputStream() }) { MediaProbe("image/jpeg", "year.jpg", "image", 800, 600) }.join()
+        }
+        val default = runBlocking { services.repo.homeLayout().first() }
+        services.repo.saveHomeLayout(
+            default,
+            listOf(
+                HomeBlock("otd", "on-this-day", "m", mapOf(HomeBlock.ALSO to HomeBlock.MONTHS)),
+                HomeBlock("favorite", "favorite", "s"),
+                HomeBlock("stats", "stats", "s", mapOf(HomeBlock.FIGURES to "since")),
+            ),
+        )
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Месяц назад"), 5_000)
+        onNodeWithText("Полгода назад").assertExists() // nearest first; a year ago waits past the edge of the strip
+        onNodeWithText("Из избранного").assertExists()
+        runBlocking { delay(1_500) } // Coil decodes on its own threads
+        waitForIdle()
+        screenshot("12k-home-look-back")
+
+        // Large, and only years ago again.
+        val now = runBlocking { services.repo.homeLayout().first() }
+        services.repo.saveHomeLayout(now, listOf(HomeBlock("otd", "on-this-day", "l")))
+        waitUntilDoesNotExist(hasText("Месяц назад"), 5_000)
+        waitUntilExactlyOneExists(hasText("1 год назад"), 5_000)
+        runBlocking { delay(1_500) }
+        waitForIdle()
+        screenshot("12l-home-on-this-day-large")
+    }
+
+    @Test
     fun theOwnerArrangesHome() = runDesktopComposeUiTest(width = 412, height = 860) {
         val ids = { runBlocking { services.repo.homeLayout().first().blocks.map { it.id } } }
         setContent { BenbowApp(services) }

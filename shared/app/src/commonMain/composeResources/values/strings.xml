@@ -626,7 +626,7 @@
     <string name="block_tag_about">Записи с тегом сеточкой: картинки, первые строки, звуки</string>
     <string name="block_tag_empty">Появится, когда будут записи с этим тегом</string>
     <string name="home_size_s">Малый</string>
-    <string name="home_size_m">Полоса</string>
+    <string name="home_size_m">Широкий</string>
     <string name="home_size_l">Большой</string>
     <string name="home_tag_change">Другой тег</string>
     <string name="home_tag_newest">Новые</string>
@@ -661,4 +661,8 @@
     <string name="figure_mood">Настроение недели</string>
     <string name="home_figures_one">Какую цифру показывать</string>
     <string name="home_figures_three">До трёх цифр</string>
+    <string name="home_size_list">Список</string>
+    <string name="home_also_months">Ещё месяц и полгода назад</string>
+    <string name="ago_month">Месяц назад</string>
+    <string name="ago_half_year">Полгода назад</string>
 </resources>

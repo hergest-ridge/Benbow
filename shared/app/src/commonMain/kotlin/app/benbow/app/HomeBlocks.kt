@@ -97,7 +97,7 @@ private fun Held(block: HomeBlock, actions: HomeActions, modifier: Modifier = Mo
 internal fun HomeState.shows(block: HomeBlock): Boolean = when (block.kind) {
     HomeBlockType.Pinned -> pinned.isNotEmpty()
     HomeBlockType.Drafts -> drafts.isNotEmpty()
-    HomeBlockType.OnThisDay -> onThisDay.isNotEmpty()
+    HomeBlockType.OnThisDay -> lookBack(block).isNotEmpty()
     HomeBlockType.Favorite -> resurfaced != null
     HomeBlockType.Stats -> stats != null && block.figures.any(stats::has)
     HomeBlockType.Tag -> galleries[block.id]?.picks?.isNotEmpty() == true
@@ -165,6 +165,10 @@ private fun TileBlock(block: HomeBlock, home: HomeState, actions: HomeActions, s
         }
 
         HomeBlockType.Favorite -> home.resurfaced?.let { entry ->
+            if (block.blockSize == BlockSize.S) {
+                FavoriteTile(entry, services.media, onOpen = { actions.open(entry) }, modifier = edges)
+                return@let
+            }
             Column {
                 SectionTitle(stringResource(Res.string.home_resurfaced))
                 EntryCard(entry, onClick = { actions.open(entry) }, media = services.media, showDay = true)
@@ -173,6 +177,15 @@ private fun TileBlock(block: HomeBlock, home: HomeState, actions: HomeActions, s
 
         HomeBlockType.Stats -> home.stats?.let { stats ->
             StatsBlock(stats, block.figures, block.blockSize ?: BlockSize.M, home.today, edges)
+        }
+
+        HomeBlockType.OnThisDay -> {
+            val items = home.lookBack(block)
+            if (block.blockSize == BlockSize.L) {
+                OnThisDayPager(items, services.media, actions.open)
+            } else {
+                OnThisDayStrip(items, services.media, actions.open)
+            }
         }
 
         HomeBlockType.Tag -> home.galleries[block.id]?.let { gallery ->
@@ -212,19 +225,18 @@ private fun LazyListScope.listBlock(block: HomeBlock, home: HomeState, actions: 
 
         HomeBlockType.OnThisDay -> {
             held(block, actions, "$key/title") { SectionTitle(stringResource(Res.string.home_on_this_day)) }
-            home.onThisDay.groupBy { it.day.take(4).toInt() }.forEach { (year, entries) ->
-                val ago = home.today.take(4).toInt() - year
-                held(block, actions, "$key/$year") {
+            home.lookBack(block).groupBy { it.monthsAgo }.forEach { (ago, items) ->
+                held(block, actions, "$key/$ago") {
                     Text(
-                        pluralStringResource(Res.plurals.years_ago, ago, ago),
+                        agoLabel(ago),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(start = 24.dp, top = 4.dp, bottom = 2.dp),
                     )
                 }
-                heldItems(block, actions, entries, key = {
-                    "$key/${it.id}"
-                }) { EntryCard(it, onClick = { actions.open(it) }, media = services.media) }
+                heldItems(block, actions, items.map { it.entry }, key = { "$key/${it.id}" }) {
+                    EntryCard(it, onClick = { actions.open(it) }, media = services.media)
+                }
             }
         }
 

@@ -28,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -101,8 +102,8 @@ internal fun scrubTick(from: String?, to: String): HapticFeedbackType? = when {
 /**
  * The feed's date scrubber (ADR-036 N3), over the feed's right edge. On a phone ([mouse] false) it shows while the
  * feed scrolls and fades 0.6 s after; its thumb is dragged (the system's back swipe gives way to it there), with a
- * tick at each month and a stronger one at each year. With a mouse a thin track stays; hovering it tells the month
- * there, a click goes there ([jump]: its posts read first), the thumb or the track can be dragged. While it is held
+ * tick at each month and a stronger one at each year. With a mouse the thumb stays; hovering its strip tells the month
+ * there, a click goes there ([jump]: its posts read first), the thumb or the strip can be dragged. While it is held
  * or hovered, the month under it shows beside it and the years mark the track. Only for a feed long enough to need it.
  */
 @Composable
@@ -158,11 +159,17 @@ internal fun FeedScrubber(
         val share = dragging ?: current
         val thumbTop = share * travel
         val where = monthTitle(index.monthOf[index.posAt(share)], withYear = true).orEmpty()
+        // The pointer handlers live as long as the scrubber: the rows change under a drag as windows are read, and a
+        // handler started again mid-drag would drop it and leave its month hanging. They read the latest of these.
+        val latestIndex by rememberUpdatedState(index)
+        val latestTravel by rememberUpdatedState(travel)
+        val latestCurrent by rememberUpdatedState(current)
 
-        fun shareAt(y: Float) = ((y - thumbHeight / 2) / travel).coerceIn(0f, 1f)
+        fun shareAt(y: Float) = ((y - thumbHeight / 2) / latestTravel).coerceIn(0f, 1f)
 
         var lastMonth by remember { mutableStateOf<String?>(null) }
         fun scrubTo(to: Float) {
+            val index = latestIndex
             dragging = to
             val pos = index.posAt(to)
             val month = index.monthOf[pos]
@@ -171,40 +178,52 @@ internal fun FeedScrubber(
             scope.launch { state.scrollToItem(index.rowOf[pos]) }
         }
 
-        val drag = Modifier.pointerInput(index, travel) {
-            detectVerticalDragGestures(
-                onDragStart = { lastMonth = index.monthOf[index.posAt(current)] },
-                onDragEnd = { dragging = null },
-                onDragCancel = { dragging = null },
-            ) { change, dy ->
-                change.consume()
-                scrubTo(((dragging ?: current) * travel + dy) / travel)
+        val drag = Modifier.pointerInput(Unit) {
+            try {
+                detectVerticalDragGestures(
+                    onDragStart = { lastMonth = latestIndex.monthOf[latestIndex.posAt(latestCurrent)] },
+                    onDragEnd = { dragging = null },
+                    onDragCancel = { dragging = null },
+                ) { change, dy ->
+                    change.consume()
+                    scrubTo(((dragging ?: latestCurrent) * latestTravel + dy) / latestTravel)
+                }
+            } finally {
+                dragging = null
             }
         }
 
-        // The years along the track and the month beside the thumb, while it is held or hovered.
+        // The years along the track and the month beside the thumb, while it is held or hovered: each on its own
+        // backing, so they read over pictures too.
         val telling = dragging ?: hovered
         if (telling != null) {
             var lastY = -1_000f
-            val gap = with(density) { 18.dp.toPx() }
+            val gap = with(density) { 20.dp.toPx() }
             index.years.forEach { (year, at) ->
                 val y = at * travel + thumbHeight / 2
                 if (y - lastY < gap) return@forEach
                 lastY = y
-                Text(
-                    year,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colors.onSurfaceVariant,
-                    modifier = Modifier.align(Alignment.TopEnd).padding(end = strip + 4.dp)
-                        .offset { IntOffset(0, (y - 8.dp.toPx()).roundToInt()) },
-                )
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = colors.surfaceContainerHighest.copy(alpha = 0.92f),
+                    shadowElevation = 1.dp,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(end = strip + 2.dp)
+                        .offset { IntOffset(0, (y - 9.dp.toPx()).roundToInt()) },
+                ) {
+                    Text(
+                        year,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.onSurface,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                    )
+                }
             }
             val y = telling * travel + thumbHeight / 2
             Surface(
                 shape = RoundedCornerShape(50),
                 color = colors.primaryContainer,
                 shadowElevation = 2.dp,
-                modifier = Modifier.align(Alignment.TopEnd).padding(end = strip + 40.dp)
+                modifier = Modifier.align(Alignment.TopEnd).padding(end = strip + 44.dp)
                     .offset { IntOffset(0, (y - 18.dp.toPx()).roundToInt()) },
             ) {
                 Text(
@@ -226,7 +245,7 @@ internal fun FeedScrubber(
             val hover = if (!mouse) {
                 Modifier
             } else {
-                Modifier.pointerInput(index, travel) {
+                Modifier.pointerInput(Unit) {
                     awaitPointerEventScope {
                         while (true) {
                             val event = awaitPointerEvent(PointerEventPass.Initial)
@@ -240,21 +259,29 @@ internal fun FeedScrubber(
                 }
             }
             Box(Modifier.fillMaxSize().then(hover)) {
-                if (mouse) {
-                    // A thin track: a click goes where it is clicked, a press drags.
+                // The track shows with the years only: at rest the thumb is alone, unlike the line between two panes.
+                AnimatedVisibility(
+                    telling != null,
+                    Modifier.align(Alignment.TopCenter).fillMaxHeight(),
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                ) {
                     Box(
-                        Modifier.fillMaxSize().hand().pointerInput(index, travel) {
+                        Modifier.fillMaxHeight().width(if (mouse) 6.dp else 2.dp)
+                            .background(colors.onSurface.copy(alpha = if (mouse) 0.08f else 0.16f), RoundedCornerShape(50)),
+                    )
+                }
+                if (mouse) {
+                    // A click on the strip goes where it is clicked, a press drags.
+                    Box(
+                        Modifier.fillMaxSize().hand().pointerInput(Unit) {
                             detectTapGestures { offset ->
+                                val index = latestIndex
                                 val pos = index.posAt(shareAt(offset.y))
                                 scope.launch { jump(pos, index.rowOf[pos]) }
                             }
                         }.then(drag),
-                    ) {
-                        Box(
-                            Modifier.align(Alignment.TopCenter).fillMaxHeight().width(2.dp)
-                                .background(colors.onSurface.copy(alpha = 0.08f), RoundedCornerShape(1.dp)),
-                        )
-                    }
+                    )
                 }
                 Box(
                     Modifier.align(Alignment.TopEnd)

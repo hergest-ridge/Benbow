@@ -343,6 +343,28 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
         derivedStateOf { if (state.firstVisibleItemIndex == 0) null else rows?.getOrNull(state.firstVisibleItemIndex)?.month }
     }
     val far by remember(state) { derivedStateOf { state.firstVisibleItemIndex >= TODAY_AFTER_ROWS } }
+    // «К сегодня» shows only while the feed goes up toward today from far down, and goes once it stands still.
+    var headingUp by remember { mutableStateOf(false) }
+    LaunchedEffect(state) {
+        var last = 0 to 0
+        snapshotFlow { state.firstVisibleItemIndex to state.firstVisibleItemScrollOffset }.collect { now ->
+            val up = now.first < last.first || (now.first == last.first && now.second < last.second)
+            val down = now.first > last.first || (now.first == last.first && now.second > last.second)
+            if (up) {
+                headingUp = true
+            } else if (down) {
+                headingUp = false
+            }
+            last = now
+        }
+    }
+    val moving = state.isScrollInProgress
+    LaunchedEffect(moving, headingUp) {
+        if (headingUp && !moving) {
+            delay(TODAY_HIDE_MILLIS)
+            headingUp = false
+        }
+    }
     LaunchedEffect(state, vm) {
         snapshotFlow { state.layoutInfo.visibleItemsInfo.let { (it.firstOrNull()?.index ?: 0) to (it.lastOrNull()?.index ?: 0) } }
             .collect { (first, last) -> vm.showing(first, last) }
@@ -502,7 +524,7 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
                         onDismiss = { jumping = false },
                     )
                 }
-                ToToday(far, Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp)) {
+                ToToday(far && headingUp, Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp)) {
                     scope.launch { vm.toToday(state, glide = true) }
                 }
                 // As tall as it is pulled out: nothing of it lies outside, so a hidden strip takes no taps (or screen readers).
@@ -864,6 +886,9 @@ private suspend fun FeedViewModel.toOldest(state: LazyListState) {
 
 /** Rows down (titles and day lines count) before «К сегодня» shows: a few screens. */
 private const val TODAY_AFTER_ROWS = 12
+
+/** How long «К сегодня» stays once the feed stands still. */
+private const val TODAY_HIDE_MILLIS = 1_500L
 
 /** How far from the top «К сегодня» glides; from farther it jumps to here first. */
 private const val GLIDE_ROWS = 8

@@ -61,12 +61,18 @@ class FeedNavigationTest {
         // Deep down, the window follows: posts, not placeholders, the month under the title and «К сегодня».
         onNode(hasScrollToIndexAction()).performScrollToIndex(middle)
         waitUntil(timeoutMillis = 5_000) { shownPosts().contains(there) }
-        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("К сегодня")).fetchSemanticsNodes().isNotEmpty() }
         val month = MONTHS[rows[middle].month.drop(5).toInt() - 1]
         assertTrue(onAllNodes(hasText(month, substring = true)).fetchSemanticsNodes().isNotEmpty(), "$month under the title")
-        screenshot("80-feed-deep")
+        assertTrue(onAllNodes(hasText("К сегодня")).fetchSemanticsNodes().isEmpty(), "going down, «К сегодня» stays away")
 
+        // A little way back up, it comes (and would go again once the feed stood still: the clock waits here).
+        mainClock.autoAdvance = false
+        onNode(hasScrollToIndexAction()).performScrollToIndex(middle - 4)
+        mainClock.advanceTimeBy(200)
+        assertTrue(onAllNodes(hasText("К сегодня")).fetchSemanticsNodes().isNotEmpty(), "going up, «К сегодня» comes")
+        screenshot("80-feed-deep")
         onNodeWithText("К сегодня").click()
+        mainClock.autoAdvance = true
         waitUntil(timeoutMillis = 5_000) { shownPosts().contains(POSTS - 1) }
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("К сегодня")).fetchSemanticsNodes().isEmpty() }
 

@@ -2,6 +2,7 @@ package app.benbow.app
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -268,15 +269,16 @@ internal fun HomeScreen(services: AppServices, nav: Navigator) {
         topBar = { HomeHeader(state?.today, status) { nav.open(Route.Server) } },
         bottomBar = { QuickNoteBar(services, onSend = vm::quickNote, onNewEntry = newEntry) },
     ) { padding ->
-        PullToRefreshBox(
-            isRefreshing = refreshUntil?.let { status.completed < it } == true,
+        SyncPull(
+            enabled = services.platform == "android",
+            refreshing = refreshUntil?.let { status.completed < it } == true,
             onRefresh = {
                 refreshUntil = status.completed + 1 + if (status.syncing) 1 else 0
                 services.sync.requestSync()
             },
             modifier = Modifier.padding(padding).fillMaxSize(),
         ) {
-            val home = state ?: return@PullToRefreshBox
+            val home = state ?: return@SyncPull
             val write = { template: String -> nav.open(Route.Editor(null, services.today(), opened = services.now(), template = template)) }
             val actions = HomeActions(
                 open = { entry -> nav.open(Route.Editor(entry.id, entry.day)) },
@@ -388,3 +390,19 @@ private fun greeting(): String {
 
 /** From this width Home lays its blocks out in four columns. */
 private val WIDE_HOME = 600.dp
+
+/**
+ * Pull down to sync, on a touch screen. A mouse wheel or a trackpad would pull it by accident at the top and leave it
+ * hanging there (web, desktop): no pull there; sync runs by itself anyway.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SyncPull(
+    enabled: Boolean,
+    refreshing: Boolean,
+    onRefresh: () -> Unit,
+    modifier: Modifier,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    if (enabled) PullToRefreshBox(refreshing, onRefresh, modifier, content = content) else Box(modifier, content = content)
+}

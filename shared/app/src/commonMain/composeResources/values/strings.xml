@@ -143,6 +143,8 @@
     <string name="sound_artist">Исполнитель</string>
     <string name="sound_album">Альбом</string>
     <string name="sound_save">Сохранить</string>
+    <string name="transcript_remove">Убрать расшифровку</string>
+    <string name="transcript_removed">Расшифровка убрана</string>
     <string name="post_section">Посты</string>
     <string name="post_media">Фото без места в тексте</string>
     <string-array name="post_media_names">

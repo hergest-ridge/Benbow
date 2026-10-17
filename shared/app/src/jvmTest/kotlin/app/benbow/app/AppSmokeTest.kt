@@ -1548,8 +1548,9 @@ class AppSmokeTest {
         assertEquals(null, runBlocking { services.repo.entry(entry).first()!!.transcripts[voice] })
         onNodeWithContentDescription("Расшифровать").performClick()
         waitUntil(timeoutMillis = 10_000) { runBlocking { services.repo.entry(entry).first()!!.transcripts[voice] } != null }
-        // The post reads it afresh. (Under a full run the feed's window on the in-memory test DB sometimes misses the change
-        // notice; that the feed's posts follow a new transcript is checked in DictationsTest.)
+        // The post reads it afresh. Under a full run the in-memory test DB (one connection for every thread) sometimes drops
+        // the change notice of a write made while another thread is in a transaction, so the feed's window can miss it
+        // here; the phone's driver keeps a transaction per thread.
         onNodeWithText("Мысли по дороге").performClick()
         waitUntilExactlyOneExists(hasText(transcript), 5_000)
         screenshot("53-post-transcript")

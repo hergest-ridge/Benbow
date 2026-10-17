@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -17,6 +19,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -39,6 +42,7 @@ import app.benbow.app.resources.sound_artist
 import app.benbow.app.resources.sound_names_title
 import app.benbow.app.resources.sound_save
 import app.benbow.app.resources.sound_title
+import app.benbow.app.resources.transcript_remove
 import org.jetbrains.compose.resources.stringResource
 
 /** A sound's names given by hand (owner 2026-10-18): the title is its caption, artist and album go to its `track:` field. */
@@ -47,10 +51,17 @@ internal data class SoundNames(val title: String?, val artist: String?, val albu
 /**
  * Names a voice note or a sound like a track: title, artist, album (a sheet on a phone, a dialog on a wide window). A
  * blank title goes back to [defaultTitle]; a voice note given an artist counts as music (no transcription is offered).
+ * With [onRemoveTranscript], a sound that has a transcript can let it go here too.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun SoundNamesSheet(current: SoundNames, defaultTitle: String, onSave: (SoundNames) -> Unit, onDismiss: () -> Unit) {
+internal fun SoundNamesSheet(
+    current: SoundNames,
+    defaultTitle: String,
+    onSave: (SoundNames) -> Unit,
+    onDismiss: () -> Unit,
+    onRemoveTranscript: (() -> Unit)? = null,
+) {
     val content = @Composable {
         var title by remember { mutableStateOf(TextFieldValue(current.title.orEmpty(), TextRange(current.title.orEmpty().length))) }
         var artist by remember { mutableStateOf(current.artist.orEmpty()) }
@@ -62,7 +73,7 @@ internal fun SoundNamesSheet(current: SoundNames, defaultTitle: String, onSave: 
             onDismiss()
         }
         Column(
-            Modifier.fillMaxWidth().imePadding().padding(start = 20.dp, end = 20.dp, bottom = 16.dp),
+            Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(stringResource(Res.string.sound_names_title), style = MaterialTheme.typography.titleMedium)
@@ -93,6 +104,12 @@ internal fun SoundNamesSheet(current: SoundNames, defaultTitle: String, onSave: 
                 modifier = Modifier.fillMaxWidth(),
             )
             Row {
+                if (onRemoveTranscript != null) {
+                    TextButton({
+                        onRemoveTranscript()
+                        onDismiss()
+                    }, modifier = Modifier.hand()) { Text(stringResource(Res.string.transcript_remove)) }
+                }
                 Spacer(Modifier.weight(1f))
                 TextButton(onDismiss, modifier = Modifier.hand()) { Text(stringResource(Res.string.cancel)) }
                 Button(save, modifier = Modifier.hand()) { Text(stringResource(Res.string.sound_save)) }
@@ -106,7 +123,10 @@ internal fun SoundNamesSheet(current: SoundNames, defaultTitle: String, onSave: 
             }
         }
     } else {
-        ModalBottomSheet(onDismissRequest = onDismiss) { content() }
+        // Open all the way: half open, the keyboard covered the fields (owner 2026-10-18).
+        ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+            content()
+        }
     }
 }
 

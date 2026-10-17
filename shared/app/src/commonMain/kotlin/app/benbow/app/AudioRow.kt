@@ -135,7 +135,18 @@ internal fun AudioRow(
     val mine by remember(track.id) { derivedStateOf { state.value?.takeIf { it.track.id == track.id } } }
     var renaming by remember { mutableStateOf(false) }
     if (renaming && onRename != null) {
-        SoundNamesSheet(SoundNames(attachment.caption, track.artist, track.album), defaultTitle, onRename) { renaming = false }
+        val entryId = track.entryId
+        SoundNamesSheet(
+            SoundNames(attachment.caption, track.artist, track.album),
+            defaultTitle,
+            onRename,
+            onDismiss = { renaming = false },
+            onRemoveTranscript = if (transcript != null && entryId != null) {
+                { services.removeTranscript(entryId, attachment.meta.id, transcript) }
+            } else {
+                null
+            },
+        )
     }
     val colors = MaterialTheme.colorScheme
     Surface(color = colors.surfaceContainerHigh, shape = RoundedCornerShape(14.dp), modifier = modifier.fillMaxWidth()) {

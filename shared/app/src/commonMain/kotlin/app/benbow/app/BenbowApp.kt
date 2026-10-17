@@ -99,6 +99,7 @@ import app.benbow.app.resources.tab_search
 import app.benbow.app.resources.tag_trashed
 import app.benbow.app.resources.tags_merged
 import app.benbow.app.resources.tags_trashed
+import app.benbow.app.resources.transcript_removed
 import app.benbow.app.resources.veil_undo
 import app.benbow.app.resources.veiled_curtain
 import app.benbow.app.resources.veiled_none
@@ -416,6 +417,19 @@ private fun AppRoot(services: AppServices) {
                 }
 
                 AppMessage.MicDenied -> snackbar.showSnackbar(getString(Res.string.media_mic_denied))
+
+                is AppMessage.TranscriptRemoved -> {
+                    val result = snackbar.showSnackbar(
+                        getString(Res.string.transcript_removed),
+                        getString(Res.string.veil_undo),
+                        duration = SnackbarDuration.Long,
+                    )
+                    if (result ==
+                        SnackbarResult.ActionPerformed
+                    ) {
+                        services.repo.setTranscript(message.entryId, message.attachmentId, message.text)
+                    }
+                }
 
                 is AppMessage.VoiceReplaced -> {
                     val result = snackbar.showSnackbar(

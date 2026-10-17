@@ -130,6 +130,9 @@ sealed interface AppMessage {
     /** The microphone isn't allowed. */
     data object MicDenied : AppMessage
 
+    /** A sound's transcript was let go; "Вернуть" puts [text] back. */
+    data class TranscriptRemoved(val entryId: String, val attachmentId: String, val text: String) : AppMessage
+
     /** A voice note gave way to its text (7.10e); "Вернуть" brings it back. */
     data class VoiceReplaced(val entryId: String, val attachmentId: String) : AppMessage
 }
@@ -293,6 +296,12 @@ class AppServices(
     /** A sound named by hand: the title is its caption, artist and album go to its `track:` field. */
     internal fun nameSound(entryId: String, attachmentId: String, names: SoundNames) {
         scope.launch { repo.nameSound(entryId, attachmentId, names.title, names.artist, names.album) }
+    }
+
+    /** «Убрать расшифровку»: the sound keeps no text; the message offers it back. */
+    internal fun removeTranscript(entryId: String, attachmentId: String, text: String) {
+        scope.launch { repo.setTranscript(entryId, attachmentId, null) }
+        messages.tryEmit(AppMessage.TranscriptRemoved(entryId, attachmentId, text))
     }
 
     /** "Вернуть" after «Заменить текстом»: the voice note is on its entry again, and back in the text where it's open. */

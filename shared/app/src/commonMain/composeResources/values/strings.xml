@@ -269,12 +269,6 @@
         <item quantity="many">%1$d лет назад</item>
         <item quantity="other">%1$d года назад</item>
     </plurals>
-    <plurals name="days_written">
-        <item quantity="one">В этом месяце вы писали %1$d день</item>
-        <item quantity="few">В этом месяце вы писали %1$d дня</item>
-        <item quantity="many">В этом месяце вы писали %1$d дней</item>
-        <item quantity="other">В этом месяце вы писали %1$d дня</item>
-    </plurals>
     <string name="feed_title">Моя лента</string>
     <string name="feed_empty">Здесь будет ваша лента. Заметки с главной появятся тут.</string>
     <string name="pin">Закрепить</string>
@@ -621,12 +615,12 @@
     <string name="block_drafts_about">Начатое и не законченное</string>
     <string name="block_on_this_day_about">Этот день в прошлые годы</string>
     <string name="block_favorite_about">Одна избранная запись постарше, каждый день другая</string>
-    <string name="block_stats_about">Сколько дней вы писали в этом месяце</string>
+    <string name="block_stats_about">Сколько вы написали: дни, записи, фото, частые теги</string>
     <string name="block_pinned_empty">Появится, когда вы закрепите запись</string>
     <string name="block_drafts_empty">Появится, когда останется недописанная запись</string>
     <string name="block_on_this_day_empty">Появится, когда найдутся записи этого дня из прошлых лет</string>
     <string name="block_favorite_empty">Появится, когда в избранном будет запись старше месяца</string>
-    <string name="block_stats_empty">Появится, когда в этом месяце будут записи</string>
+    <string name="block_stats_empty">Появится, когда будет что посчитать</string>
     <string name="block_tag">Тег</string>
     <string name="block_tag_named">Тег «%1$s»</string>
     <string name="block_tag_about">Записи с тегом сеточкой: картинки, первые строки, звуки</string>
@@ -638,4 +632,33 @@
     <string name="home_tag_newest">Новые</string>
     <string name="home_tag_random">Случайные на сегодня</string>
     <string name="home_tag_pick">Тег для блока</string>
+    <plurals name="stats_days">
+        <item quantity="one">день в этом месяце</item>
+        <item quantity="few">дня в этом месяце</item>
+        <item quantity="many">дней в этом месяце</item>
+        <item quantity="other">дня в этом месяце</item>
+    </plurals>
+    <plurals name="stats_moments">
+        <item quantity="one">запись за месяц</item>
+        <item quantity="few">записи за месяц</item>
+        <item quantity="many">записей за месяц</item>
+        <item quantity="other">записи за месяц</item>
+    </plurals>
+    <plurals name="stats_since">
+        <item quantity="one">день с первой записи</item>
+        <item quantity="few">дня с первой записи</item>
+        <item quantity="many">дней с первой записи</item>
+        <item quantity="other">дня с первой записи</item>
+    </plurals>
+    <string name="stats_pictures">фото и видео за месяц</string>
+    <string name="stats_tags">чаще всего в этом месяце</string>
+    <string name="stats_mood">настроение недели</string>
+    <string name="figure_days">Дни с записями</string>
+    <string name="figure_moments">Записи</string>
+    <string name="figure_pictures">Фото и видео</string>
+    <string name="figure_tags">Частые теги</string>
+    <string name="figure_since">С первой записи</string>
+    <string name="figure_mood">Настроение недели</string>
+    <string name="home_figures_one">Какую цифру показывать</string>
+    <string name="home_figures_three">До трёх цифр</string>
 </resources>

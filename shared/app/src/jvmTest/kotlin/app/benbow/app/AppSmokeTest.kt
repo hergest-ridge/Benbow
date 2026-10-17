@@ -50,6 +50,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import app.benbow.client.GentleRule
 import app.benbow.client.HomeBlock
+import app.benbow.client.HomeBlockType
 import app.benbow.client.HomeLayout
 import app.benbow.client.Prompts
 import app.benbow.client.TagChoice
@@ -772,6 +773,41 @@ class AppSmokeTest {
         waitUntil(timeoutMillis = 5_000) {
             runBlocking { services.repo.homeLayout().first().blocks.count { it.type == "tag" && it.config[HomeBlock.TAG] == tag } } == 2
         }
+    }
+
+    @Test
+    fun theStatsBlockCountsUpAndShowsWhatTheOwnerPicks() = runDesktopComposeUiTest(width = 412, height = 860) {
+        services.repo.createNote(services.today(), "Сегодня утром")
+        services.repo.createNote(LocalDate.parse(services.today()).minus(400, DateTimeUnit.DAY).toString(), "Давно")
+        val walk = services.repo.createNote(services.today(), "Прогулка")
+        val tag = services.repo.addTag(walk, "Море")!!
+        val default = runBlocking { services.repo.homeLayout().first() }
+        services.repo.saveHomeLayout(
+            default,
+            listOf(
+                HomeBlock.of(HomeBlockType.Stats),
+                HomeBlock("pair-tag", "tag", "s", mapOf(HomeBlock.TAG to tag)),
+                HomeBlock("pair-stats", "stats", "s", mapOf(HomeBlock.FIGURES to "since")),
+                HomeBlock.of(HomeBlockType.Checkin),
+            ),
+        )
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("день в этом месяце"), 5_000)
+        onNodeWithText("записи за месяц").assertExists()
+        onNodeWithText("фото и видео за месяц").assertDoesNotExist() // a zero is left out
+        onNodeWithText("401").assertExists()
+        onNodeWithText("день с первой записи").assertExists()
+        screenshot("12i-home-stats")
+
+        onNodeWithText("день в этом месяце").performTouchInput { longClick() }
+        onNode(hasText("Настроить главную") and hasAnyAncestor(isPopup())).click()
+        waitUntilExactlyOneExists(hasText("До трёх цифр"), 5_000)
+        onNodeWithText("Частые теги").click()
+        val figures = { runBlocking { services.repo.homeLayout().first().blocks.first().config[HomeBlock.FIGURES] } }
+        waitUntil(timeoutMillis = 5_000) { figures() == "moments,pictures,tags" }
+        onNodeWithText("Малый").click()
+        waitUntilExactlyOneExists(hasText("Какую цифру показывать"), 5_000)
+        screenshot("12j-home-editor-stats")
     }
 
     @Test

@@ -41,12 +41,14 @@ import app.benbow.client.EntrySummary
 import app.benbow.client.HomeBlock
 import app.benbow.client.HomeBlockType
 import app.benbow.client.HomeLayout
+import app.benbow.client.HomeStats
 import app.benbow.client.Prompts
 import app.benbow.client.SearchQuery
 import app.benbow.client.SyncStatus
 import app.benbow.client.Templates
 import app.benbow.client.editHomeLayout
 import app.benbow.client.homeLayout
+import app.benbow.client.homeStats
 import app.benbow.client.minusBlock
 import app.benbow.client.tagRegistry
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -86,7 +88,8 @@ internal data class HomeState(
     val onThisDay: List<EntrySummary>,
     /** One favorite from over a month ago, the same all day (savoring, ux.md#psychology). */
     val resurfaced: EntrySummary?,
-    val daysThisMonth: Long,
+    /** Soft stats for the stats blocks: the month counted up (null without a stats block). */
+    val stats: HomeStats?,
     /** Each tag block's gallery by the block's id (none while its tag is gone). */
     val galleries: Map<String, TagGallery> = emptyMap(),
     /** Days with entries and their average mood over the last 7 and 30 days, for the review cards. */
@@ -136,14 +139,16 @@ internal class HomeViewModel(private val services: AppServices) : ViewModel() {
             combine(
                 ifShown(HomeBlockType.OnThisDay, emptyList()) { repo.onThisDay(today) },
                 ifShown(HomeBlockType.Favorite, emptyList()) { repo.favoritesUpTo(date.minus(1, DateTimeUnit.MONTH).toString()) },
-                ifShown(HomeBlockType.Stats, 0L) {
-                    repo.daysWritten(monthStart.toString(), monthStart.plus(1, DateTimeUnit.MONTH).minus(1, DateTimeUnit.DAY).toString())
+                ifShown(HomeBlockType.Stats, null) {
+                    val monthEnd = monthStart.plus(1, DateTimeUnit.MONTH).minus(1, DateTimeUnit.DAY).toString()
+                    val weekStart = date.minus(6, DateTimeUnit.DAY).toString()
+                    services.gentle.on.flatMapLatest { gentle -> repo.homeStats(monthStart.toString(), monthEnd, weekStart, today, gentle) }
                 },
                 ::Triple,
             ),
             tagGalleries(layout.blocks.filter { it.kind == HomeBlockType.Tag && it.blockSize != null }),
             services.gentle.on,
-        ) { (todays, pinned, drafts), (allOnThisDay, allFavorites, days), found, gentle ->
+        ) { (todays, pinned, drafts), (allOnThisDay, allFavorites, stats), found, gentle ->
             // Бережно (ADR-031): quiet entries stay out of Home; what comes back unasked (On this day, the resurfaced
             // favorite) leaves out curtained ones too.
             val onThisDay = if (gentle) allOnThisDay.filter { it.veil == null } else allOnThisDay
@@ -157,7 +162,7 @@ internal class HomeViewModel(private val services: AppServices) : ViewModel() {
                 drafts.withoutQuiet(gentle) { it },
                 onThisDay,
                 favorites.takeIf { it.isNotEmpty() }?.let { it[today.hashCode().absoluteValue % it.size] },
-                days,
+                stats,
                 galleries(found, gentle),
             )
             home.copy(blocks = home.blocks.filter { it.blockSize != null && home.shows(it) })

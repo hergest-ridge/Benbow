@@ -164,6 +164,16 @@ SELECT COUNT(DISTINCT day) FROM entry
 WHERE (day BETWEEN :fromDay AND :toDay) AND json_extract(fields, '$.deleted') IS NOT 'true'
   AND kind NOT IN ('system', 'event', 'reminder');
 
+-- Home's stats (7.11 H4): each entry of the days with its fields and attachments, and the journal's first day.
+statsEntries:
+SELECT day, fields, attachments FROM entry
+WHERE (day BETWEEN :fromDay AND :toDay) AND json_extract(fields, '$.deleted') IS NOT 'true'
+  AND kind NOT IN ('comment', 'system', 'event', 'reminder');
+
+firstDay:
+SELECT MIN(day) AS first FROM entry
+WHERE json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system', 'event', 'reminder');
+
 -- Feed: newest first (the list is drawn bottom-up), with bodies to show notes in full.
 feed:
 SELECT id, kind, day, created_at, title, preview, body, conflict_heads, media_count, cover, fields, attachments,

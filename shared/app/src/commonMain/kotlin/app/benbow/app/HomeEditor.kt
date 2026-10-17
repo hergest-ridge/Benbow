@@ -6,6 +6,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -69,6 +70,12 @@ import app.benbow.app.resources.block_tag_named
 import app.benbow.app.resources.block_today
 import app.benbow.app.resources.block_today_about
 import app.benbow.app.resources.cancel
+import app.benbow.app.resources.figure_days
+import app.benbow.app.resources.figure_moments
+import app.benbow.app.resources.figure_mood
+import app.benbow.app.resources.figure_pictures
+import app.benbow.app.resources.figure_since
+import app.benbow.app.resources.figure_tags
 import app.benbow.app.resources.home_block_add
 import app.benbow.app.resources.home_block_down
 import app.benbow.app.resources.home_block_empty
@@ -77,6 +84,8 @@ import app.benbow.app.resources.home_block_remove
 import app.benbow.app.resources.home_block_up
 import app.benbow.app.resources.home_editor_hint
 import app.benbow.app.resources.home_editor_title
+import app.benbow.app.resources.home_figures_one
+import app.benbow.app.resources.home_figures_three
 import app.benbow.app.resources.home_removed
 import app.benbow.app.resources.home_reset
 import app.benbow.app.resources.home_reset_done
@@ -94,8 +103,11 @@ import app.benbow.client.HomeBlock
 import app.benbow.client.HomeBlockType
 import app.benbow.client.HomeLayout
 import app.benbow.client.HomeLayoutEditor
+import app.benbow.client.StatFigure
 import app.benbow.client.TagRef
 import app.benbow.client.addable
+import app.benbow.client.figureCount
+import app.benbow.client.figures
 import app.benbow.client.packHome
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.StringResource
@@ -146,6 +158,15 @@ private fun blockName(block: HomeBlock): String {
     } else {
         block.kind?.let { stringResource(it.title) }.orEmpty()
     }
+}
+
+private val StatFigure.label: StringResource get() = when (this) {
+    StatFigure.Days -> Res.string.figure_days
+    StatFigure.Moments -> Res.string.figure_moments
+    StatFigure.Pictures -> Res.string.figure_pictures
+    StatFigure.Tags -> Res.string.figure_tags
+    StatFigure.Since -> Res.string.figure_since
+    StatFigure.Mood -> Res.string.figure_mood
 }
 
 private val BlockSize.label: StringResource get() = when (this) {
@@ -388,6 +409,28 @@ private fun BlockTools(
                     )
                 }
                 TextButton(onPickTag, modifier = Modifier.hand()) { Text(stringResource(Res.string.home_tag_change)) }
+            }
+            if (kind == HomeBlockType.Stats) {
+                // S shows one figure: a tap picks it. M up to three: taps add and take away (a fourth lets the first go).
+                val count = (block.blockSize ?: BlockSize.M).figureCount
+                val chosen = block.figures
+                Text(
+                    stringResource(if (count == 1) Res.string.home_figures_one else Res.string.home_figures_three),
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    StatFigure.entries.forEach { figure ->
+                        FilterChip(figure in chosen, {
+                            val next = when {
+                                count == 1 -> listOf(figure)
+                                figure in chosen -> (chosen - figure).ifEmpty { chosen }
+                                else -> (chosen + figure).takeLast(count)
+                            }
+                            onConfigure(HomeBlock.FIGURES, next.joinToString(",") { it.value })
+                        }, { Text(stringResource(figure.label)) }, modifier = Modifier.hand())
+                    }
+                }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton({ onMove(-1) }, enabled = canUp, modifier = Modifier.hand()) {

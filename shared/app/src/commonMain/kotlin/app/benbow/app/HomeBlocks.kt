@@ -3,8 +3,11 @@ package app.benbow.app
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListScope
@@ -28,7 +31,6 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import app.benbow.app.resources.Res
-import app.benbow.app.resources.days_written
 import app.benbow.app.resources.home_answer
 import app.benbow.app.resources.home_block_remove_long
 import app.benbow.app.resources.home_customize
@@ -47,6 +49,7 @@ import app.benbow.client.HomeBlockType
 import app.benbow.client.Prompts
 import app.benbow.client.SearchQuery
 import app.benbow.client.Templates
+import app.benbow.client.figures
 import app.benbow.client.packHome
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
@@ -96,7 +99,7 @@ internal fun HomeState.shows(block: HomeBlock): Boolean = when (block.kind) {
     HomeBlockType.Drafts -> drafts.isNotEmpty()
     HomeBlockType.OnThisDay -> onThisDay.isNotEmpty()
     HomeBlockType.Favorite -> resurfaced != null
-    HomeBlockType.Stats -> daysThisMonth > 0
+    HomeBlockType.Stats -> stats != null && block.figures.any(stats::has)
     HomeBlockType.Tag -> galleries[block.id]?.picks?.isNotEmpty() == true
     else -> true
 }
@@ -117,12 +120,20 @@ internal fun LazyListScope.homeBlocks(
             listBlock(single, home, actions, services)
         } else {
             item(key = row.joinToString("+") { it.id }) {
-                // Side by side, blocks keep 12 dp from the edges and 8 dp between them.
+                // Side by side, blocks keep 12 dp from the edges and 8 dp between them, and are as tall as the taller one.
                 val alone = row.size == 1
-                Row(Modifier.fillMaxWidth().padding(horizontal = if (alone) 0.dp else 8.dp)) {
+                val side = if (alone) Modifier else Modifier.height(IntrinsicSize.Max)
+                Row(Modifier.fillMaxWidth().padding(horizontal = if (alone) 0.dp else 8.dp).then(side)) {
                     row.forEach { block ->
                         Held(block, actions, Modifier.weight((block.blockSize?.span(2) ?: 2).toFloat())) {
-                            TileBlock(block, home, actions, services, Modifier.padding(horizontal = if (alone) 12.dp else 4.dp))
+                            val edges = if (alone) {
+                                Modifier.padding(
+                                    horizontal = 12.dp,
+                                )
+                            } else {
+                                Modifier.padding(horizontal = 4.dp).fillMaxHeight()
+                            }
+                            TileBlock(block, home, actions, services, edges)
                         }
                     }
                 }
@@ -160,14 +171,8 @@ private fun TileBlock(block: HomeBlock, home: HomeState, actions: HomeActions, s
             }
         }
 
-        HomeBlockType.Stats -> {
-            val days = home.daysThisMonth.toInt()
-            Text(
-                pluralStringResource(Res.plurals.days_written, days, days),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth().padding(24.dp),
-            )
+        HomeBlockType.Stats -> home.stats?.let { stats ->
+            StatsBlock(stats, block.figures, block.blockSize ?: BlockSize.M, home.today, edges)
         }
 
         HomeBlockType.Tag -> home.galleries[block.id]?.let { gallery ->

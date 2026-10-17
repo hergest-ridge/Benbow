@@ -43,7 +43,7 @@ enum class HomeBlockType(val value: String, val sizes: List<BlockSize>, val once
     Drafts("drafts", listOf(BlockSize.List)),
     OnThisDay("on-this-day", listOf(BlockSize.List)),
     Favorite("favorite", listOf(BlockSize.M)),
-    Stats("stats", listOf(BlockSize.M)),
+    Stats("stats", listOf(BlockSize.M, BlockSize.S)),
 
     /** A tag's entries as a small gallery (config [HomeBlock.TAG], [HomeBlock.ORDER]). */
     Tag("tag", listOf(BlockSize.M, BlockSize.S, BlockSize.L), once = false),
@@ -81,6 +81,9 @@ data class HomeBlock(
         const val TAG = "tag"
         const val ORDER = "order"
         const val RANDOM = "random"
+
+        /** A stats block's figures, comma-separated [StatFigure] values (see [figures]). */
+        const val FIGURES = "figures"
 
         internal fun decode(id: String, json: String): HomeBlock {
             val stored = runCatching { ClientJson.decodeFromString(Stored.serializer(), json) }.getOrElse { Stored() }

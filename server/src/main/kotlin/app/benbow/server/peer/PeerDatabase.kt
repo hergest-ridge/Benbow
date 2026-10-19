@@ -47,7 +47,7 @@ data class MailSettings(val host: String, val port: Int, val user: String, val p
 class PeerDatabase private constructor(private val connection: Connection) : AutoCloseable {
     private val lock = ReentrantLock()
 
-    private fun <T> transaction(block: (Connection) -> T): T = lock.withLock {
+    internal fun <T> transaction(block: (Connection) -> T): T = lock.withLock {
         val c = connection
         if (!c.autoCommit) return@withLock block(c)
         c.autoCommit = false
@@ -219,6 +219,12 @@ class PeerDatabase private constructor(private val connection: Connection) : Aut
             val connection = DriverManager.getConnection("jdbc:sqlite:$file")
             try {
                 configureDurable(connection)
+                val schema = connection.userVersion()
+                if (schema in 1 until PeerMigrations.SCHEMA_VERSION) {
+                    // A copy beside the file before its schema changes (S10); the link's store has no snapshots of its own yet.
+                    val copy = file.resolveSibling("peers-pre-v${schema + 1}-${System.currentTimeMillis()}.sqlite")
+                    connection.createStatement().use { it.execute("VACUUM INTO '${copy.toString().replace("'", "''")}'") }
+                }
                 PeerMigrations.apply(connection)
                 return PeerDatabase(connection)
             } catch (e: Throwable) {
@@ -236,13 +242,13 @@ class PeerDatabase private constructor(private val connection: Connection) : Aut
     }
 }
 
-private fun <T> ResultSet.all(row: ResultSet.() -> T): List<T> = buildList { while (next()) add(row()) }
+internal fun <T> ResultSet.all(row: ResultSet.() -> T): List<T> = buildList { while (next()) add(row()) }
 
-private fun ResultSet.longOrNull(column: Int): Long? = getLong(column).takeUnless { wasNull() }
+internal fun ResultSet.longOrNull(column: Int): Long? = getLong(column).takeUnless { wasNull() }
 
 /** Forward-only schema steps of `peers.sqlite`, tracked by `PRAGMA user_version`. */
 internal object PeerMigrations {
-    const val SCHEMA_VERSION = 1
+    const val SCHEMA_VERSION = 2
 
     private val steps: List<List<String>> = listOf(
         // 1: contacts, letters out and in, settings
@@ -257,6 +263,17 @@ internal object PeerMigrations {
                 sent_at INTEGER NOT NULL, received_at INTEGER NOT NULL, PRIMARY KEY (contact, seq)
             )""",
             "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+        ),
+        // 2: files through the shared Drive folder, both ways
+        listOf(
+            """CREATE TABLE files_out (
+                id TEXT PRIMARY KEY, contact TEXT NOT NULL, name TEXT NOT NULL, size INTEGER NOT NULL, sha256 TEXT NOT NULL,
+                created_at INTEGER NOT NULL, done_at INTEGER, removed_at INTEGER
+            )""",
+            """CREATE TABLE files_in (
+                id TEXT PRIMARY KEY, contact TEXT NOT NULL, name TEXT NOT NULL, size INTEGER NOT NULL, sha256 TEXT NOT NULL,
+                file_key TEXT NOT NULL, announced_at INTEGER NOT NULL, received_at INTEGER, path TEXT, last_error TEXT
+            )""",
         ),
     )
 

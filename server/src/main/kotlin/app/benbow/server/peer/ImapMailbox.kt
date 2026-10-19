@@ -41,7 +41,7 @@ class ImapMailbox(settings: MailSettings) : Mailbox {
     )
     private val log = LoggerFactory.getLogger(ImapMailbox::class.java)
 
-    /** Logs IMAP steps slower than a second: the provider, not the code, is usually where letters wait. */
+    /** Logs IMAP steps slower than three seconds (Gmail takes one or two for most): letters usually wait on the provider. */
     private inline fun <T> timed(what: String, block: () -> T): T {
         val start = System.nanoTime()
         try {
@@ -180,6 +180,6 @@ class ImapMailbox(settings: MailSettings) : Mailbox {
     companion object {
         private const val READ_TIMEOUT_MS = 12 * 60_000L
         private const val POOL_TIMEOUT_MS = 10 * 60_000L
-        private const val SLOW_MS = 1_000L
+        private const val SLOW_MS = 3_000L
     }
 }

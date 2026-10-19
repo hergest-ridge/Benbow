@@ -16,25 +16,30 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
+/** An admin POST of the friends' section: only from the server PC; a person's mistake comes back as a short page. */
+internal suspend fun RoutingContext.peerAdmin(ctx: ServerContext, block: suspend RoutingContext.(PeerLink) -> String?) {
+    if (!adminAllowed(call, ctx)) return call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
+    val peers = ctx.peers ?: return call.respondText("Связь с друзьями не открылась", status = HttpStatusCode.ServiceUnavailable)
+    val error = try {
+        block(peers)
+    } catch (e: IllegalArgumentException) {
+        e.message ?: "неверные данные"
+    }
+    if (error == null) return call.respondRedirect("/#friends")
+    call.respondText(
+        "<!doctype html><meta charset=\"utf-8\"><title>Benbow</title><p>Не получилось: ${esc(
+            error,
+        )}</p><p><a href=\"/#friends\">Назад</a></p>",
+        ContentType.Text.Html,
+        HttpStatusCode.BadRequest,
+    )
+}
+
 /** The link with friends' servers on the admin page (ADR-039, F1): the card, the mailbox, contacts and test notes. */
 internal fun Route.peerAdminRoutes(ctx: ServerContext) {
-    suspend fun RoutingContext.admin(block: suspend RoutingContext.(PeerLink) -> String?) {
-        if (!adminAllowed(call, ctx)) return call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
-        val peers = ctx.peers ?: return call.respondText("Связь с друзьями не открылась", status = HttpStatusCode.ServiceUnavailable)
-        val error = try {
-            block(peers)
-        } catch (e: IllegalArgumentException) {
-            e.message ?: "неверные данные"
-        }
-        if (error == null) return call.respondRedirect("/#friends")
-        call.respondText(
-            "<!doctype html><meta charset=\"utf-8\"><title>Benbow</title><p>Не получилось: ${esc(
-                error,
-            )}</p><p><a href=\"/#friends\">Назад</a></p>",
-            ContentType.Text.Html,
-            HttpStatusCode.BadRequest,
-        )
-    }
+    suspend fun RoutingContext.admin(block: suspend RoutingContext.(PeerLink) -> String?) = peerAdmin(ctx, block)
+
+    peerFileRoutes(ctx)
 
     post("/admin/peers/mail") {
         admin { peers ->
@@ -90,7 +95,7 @@ internal fun Route.peerAdminRoutes(ctx: ServerContext) {
 
 private val clockFormat = DateTimeFormatter.ofPattern("dd.MM HH:mm:ss").withZone(ZoneId.systemDefault())
 
-private fun stamp(ms: Long?) = ms?.let { clockFormat.format(Instant.ofEpochMilli(it)) } ?: "—"
+internal fun stamp(ms: Long?) = ms?.let { clockFormat.format(Instant.ofEpochMilli(it)) } ?: "—"
 
 internal fun peersSection(peers: PeerLink?): String = buildString {
     append("<section id=\"friends\"><h2>Друзья: связь с другими серверами Benbow</h2>")
@@ -100,13 +105,13 @@ internal fun peersSection(peers: PeerLink?): String = buildString {
     }
     append(
         "<p>Сервер друга получает от этого сервера запечатанные письма: их может прочитать только он, а почтовый ящик, " +
-            "через который они идут, видит лишь зашифрованный текст. Порты не открываются. Пока это проверка связи: " +
-            "тестовые сообщения туда и обратно.</p>",
+            "через который они идут, видит лишь зашифрованный текст. Файлы идут через Google Диск, тоже зашифрованными. " +
+            "Порты не открываются. Пока это проверка связи: тестовые сообщения и файлы туда и обратно.</p>",
     )
     val card = peers.identity.card
     append("<h3>Карточка этого сервера</h3>")
-    append("<p>Отдайте её другу (лучше при встрече) и возьмите его. Отпечаток: <b>${card.fingerprint}</b> — сверьте его с тем, ")
-    append("что покажет страница друга для вашей карточки.</p><p><code>${card.encode()}</code></p>")
+    append("<p>Пошлите её другу и возьмите его. Отпечаток: <b>${card.fingerprint}</b>. Сверьте его с другом голосом ")
+    append("(по телефону или при встрече): так никто посередине не подменит карточку.</p><p><code>${card.encode()}</code></p>")
 
     append("<h3>Почтовый ящик</h3>")
     val settings = peers.db.mailSettings()
@@ -127,6 +132,7 @@ internal fun peersSection(peers: PeerLink?): String = buildString {
         В Gmail в настройках IMAP выберите «сразу удалять навсегда» для писем, удалённых по IMAP, иначе прочитанные письма
         копятся во «Всей почте».</small></p>""",
     )
+    append(driveSection(peers, input))
 
     append("<h3>Контакты</h3>")
     val contacts = peers.db.contacts()
@@ -145,6 +151,7 @@ internal fun peersSection(peers: PeerLink?): String = buildString {
             )}/note\" style=\"display:flex;gap:.5rem;margin:.5rem 0\">" +
                 "<input name=\"text\" $input placeholder=\"Тестовое сообщение\"><button>Отправить</button></form>",
         )
+        append(filesBlock(peers, contact))
         append(
             "<form method=\"post\" action=\"/admin/peers/contacts/${esc(contact.id)}/remove\" " +
                 "onsubmit=\"return confirm('Убрать контакт? Письма от него перестанут читаться.')\"><button>Убрать контакт</button></form>",

@@ -88,7 +88,8 @@ fun main(args: Array<String>) {
     }
     // The link with friends' servers (ADR-039) is a store of its own too, and off until a mailbox is set.
     val peers = try {
-        PeerLink(PeerDatabase.open(dataDir), PeerIdentity.ensure(dataDir.resolve("peer"))).also { it.start() }
+        val peerDir = dataDir.resolve("peer")
+        PeerLink(PeerDatabase.open(dataDir), PeerIdentity.ensure(peerDir), peerDir = peerDir).also { it.start() }
     } catch (e: Exception) {
         log.error("The link with friends' servers didn't open; the journal works without it", e)
         null

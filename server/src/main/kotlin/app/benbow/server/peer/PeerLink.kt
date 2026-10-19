@@ -1,8 +1,12 @@
 package app.benbow.server.peer
 
+import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
+import java.io.InputStream
+import java.nio.file.Path
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import kotlin.io.path.isDirectory
 
 /**
  * Keeps the link with friends' servers going (ADR-039): one worker thread that connects to the shared mailbox, runs a
@@ -15,6 +19,9 @@ class PeerLink(
     private val connect: (MailSettings) -> Mailbox = ::ImapMailbox,
     private val clock: () -> Long = System::currentTimeMillis,
     private val idleMs: Long = IDLE_MS,
+    /** `<data>/peer`: where files are sealed, opened and kept; null where files aren't needed (tests). */
+    peerDir: Path? = null,
+    private val sweepMs: Long = SWEEP_MS,
 ) : AutoCloseable {
     sealed interface Status {
         data object Off : Status
@@ -43,6 +50,45 @@ class PeerLink(
     private var courier: Courier? = null
     private var worker: Thread? = null
     private val sender = Executors.newSingleThreadScheduledExecutor { Thread(it, "benbow-peers-send").apply { isDaemon = true } }
+
+    /** Files through the Drive folder; their sweep has a thread of its own, since opening a large file takes a while. */
+    val files: FileCarrier? = peerDir?.let { FileCarrier(db, identity, it, clock) }
+    private val sweeper = Executors.newSingleThreadScheduledExecutor { Thread(it, "benbow-peers-files").apply { isDaemon = true } }
+
+    init {
+        if (files != null) sweeper.scheduleWithFixedDelay(::sweep, sweepMs, sweepMs, TimeUnit.MILLISECONDS)
+    }
+
+    /**
+     * Seals [source] into the Drive folder for [contact] and announces it by letter. Throws with a message for a person
+     * when the folder isn't set or isn't there.
+     */
+    fun sendFile(contact: String, name: String, source: InputStream) {
+        val carrier = requireNotNull(files) { "файлы на этом сервере выключены" }
+        val root = requireNotNull(db.driveFolder()) { "сначала укажите папку Google Диска" }
+        require(root.isDirectory()) { "папки $root нет: проверьте, что Google Диск запущен" }
+        val friend = requireNotNull(db.contacts().firstOrNull { it.id == contact }) { "такого контакта нет" }
+        val file = carrier.send(DriveFolder(root), friend, name, source)
+        db.enqueue(contact, Letter.FILE, Json.encodeToString(file), clock())
+        hotUntil = clock() + HOT_MS
+        sendSoon(attempt = 0)
+    }
+
+    private fun sweep() {
+        val carrier = files ?: return
+        val root = db.driveFolder()?.takeIf { it.isDirectory() } ?: return
+        try {
+            val taken = carrier.sweep(DriveFolder(root))
+            for ((contact, id) in taken) db.enqueue(contact, Letter.FILE_DONE, id, clock())
+            if (taken.isNotEmpty()) {
+                log.info("Files taken in through Drive: {}", taken.size)
+                hotUntil = clock() + HOT_MS
+                sendSoon(attempt = 0)
+            }
+        } catch (e: Exception) {
+            log.warn("The Drive folder sweep failed; again in {} s", sweepMs / 1000, e)
+        }
+    }
 
     @Synchronized
     fun start() {
@@ -150,6 +196,8 @@ class PeerLink(
     override fun close() {
         halt()
         sender.shutdownNow()
+        sweeper.shutdownNow()
+        sweeper.awaitTermination(5, TimeUnit.SECONDS)
         db.close()
     }
 
@@ -161,5 +209,8 @@ class PeerLink(
         private val RETRY_DELAYS_MS = listOf(3_000L, 10_000L, 30_000L)
         private const val HOT_MS = 2 * 60_000L
         private const val HOT_POLL_MS = 3_000L
+
+        /** How often the Drive folder is looked at for files that came through. */
+        const val SWEEP_MS = 10_000L
     }
 }

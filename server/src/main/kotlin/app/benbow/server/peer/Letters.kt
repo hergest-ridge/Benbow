@@ -31,6 +31,12 @@ data class Letter(
     companion object {
         const val NOTE = "note"
         const val ACK = "ack"
+
+        /** [text] is a [SharedFile] as JSON: the body waits in the Drive folder. */
+        const val FILE = "file"
+
+        /** [text] is the id of a file whose body arrived and matched. */
+        const val FILE_DONE = "file-done"
     }
 }
 

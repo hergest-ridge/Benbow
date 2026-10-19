@@ -6,12 +6,17 @@ import app.benbow.server.storage.Database
 import app.benbow.server.storage.Devices
 import app.benbow.server.storage.PairingCodes
 import io.ktor.client.HttpClient
+import io.ktor.client.request.forms.formData
 import io.ktor.client.request.forms.submitForm
+import io.ktor.client.request.forms.submitFormWithBinaryData
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.Headers
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.parameters
 import io.ktor.server.testing.testApplication
+import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -19,9 +24,16 @@ import kotlin.test.assertTrue
 
 /** The friends' section of the admin page: only for the server PC, cards checked, the password never shown. */
 class PeerAdminTest {
+    private val dir = Files.createTempDirectory("benbow-peer-admin")
+
     private fun withPage(loopback: Boolean = true, block: suspend (PeerLink, HttpClient) -> Unit) {
         val db = Database.inMemory()
-        val peers = PeerLink(PeerDatabase.inMemory(), PeerIdentity.generate(), connect = { error("no network in this test") })
+        val peers = PeerLink(
+            PeerDatabase.inMemory(),
+            PeerIdentity.generate(),
+            connect = { error("no network in this test") },
+            peerDir = dir.resolve("peer"),
+        )
         val ctx = ServerContext(db, Devices(db), PairingCodes(), "AA:BB", null, 8765, isLoopback = { loopback }, peers = peers)
         testApplication {
             application { benbowModule(ctx) }
@@ -86,5 +98,53 @@ class PeerAdminTest {
 
         client.submitForm("/admin/peers/contacts/${friend.id}/remove", parameters {})
         assertTrue(peers.db.contacts().isEmpty())
+    }
+
+    @Test
+    fun aFileGoesSealedIntoTheDriveFolder() = withPage { peers, client ->
+        val friend = PeerIdentity.generate().card
+        peers.db.addContact("Аня", friend, 0)
+        assertTrue("Отправить файл" !in client.get("/").bodyAsText(), "no sending before the folder is set")
+        assertTrue(
+            "нет" in client.submitForm(
+                "/admin/peers/drive",
+                parameters {
+                    append("path", dir.resolve("missing").toString())
+                },
+            ).bodyAsText(),
+        )
+        val drive = Files.createDirectories(dir.resolve("My Drive"))
+        assertEquals(HttpStatusCode.Found, client.submitForm("/admin/peers/drive", parameters { append("path", "\"$drive\"") }).status)
+
+        val content = "секретное содержимое".toByteArray()
+        val upload = client.submitFormWithBinaryData(
+            "/admin/peers/contacts/${friend.id}/file",
+            formData {
+                append(
+                    "file",
+                    content,
+                    Headers.build {
+                        append(HttpHeaders.ContentType, "text/plain")
+                        append(HttpHeaders.ContentDisposition, "filename=\"заметка.txt\"")
+                    },
+                )
+            },
+        )
+        assertEquals(HttpStatusCode.Found, upload.status)
+        val sent = peers.db.filesOut(friend.id, 10).single()
+        assertEquals("заметка.txt", sent.name)
+        assertEquals(content.size.toLong(), sent.size)
+        val body = DriveFolder(drive).bodyFor(friend, sent.id)
+        assertTrue(Files.exists(body))
+        assertFalse(
+            "секретное".toByteArray().let { needle ->
+                Files.readAllBytes(body).toList().windowed(needle.size).any {
+                    it ==
+                        needle.toList()
+                }
+            },
+        )
+        val page = client.get("/").bodyAsText()
+        assertTrue("заметка.txt" in page && "в папке Диска" in page)
     }
 }

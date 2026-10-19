@@ -1,5 +1,6 @@
 package app.benbow.server.peer
 
+import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import java.util.UUID
 
@@ -117,6 +118,7 @@ class Courier(
                         acknowledged += db.acknowledge(from, opened.letter.acks, clock())
                     } else {
                         if (db.receive(from, opened.letter, clock())) received++
+                        files(from, opened.letter)
                         toAcknowledge.getOrPut(from) { mutableListOf() } += opened.letter.seq
                     }
                     done += item.uid
@@ -140,6 +142,18 @@ class Courier(
         }
         if (done.isNotEmpty()) mailbox.delete(inbox, done)
         return Round(received = received, acknowledged = acknowledged, refused = refused, waiting = waiting)
+    }
+
+    /** A file's announcement (its body comes through Drive), or the friend's word that a file of ours arrived. */
+    private fun files(from: String, letter: Letter) {
+        val text = letter.text ?: return
+        when (letter.kind) {
+            Letter.FILE -> runCatching { Json.decodeFromString<SharedFile>(text) }
+                .onSuccess { db.announceFile(from, it, clock()) }
+                .onFailure { log.warn("A file letter from {} didn't parse", from) }
+
+            Letter.FILE_DONE -> db.fileDone(from, text, clock())
+        }
     }
 
     companion object {

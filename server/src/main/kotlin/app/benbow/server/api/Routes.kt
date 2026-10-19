@@ -57,7 +57,6 @@ import io.ktor.server.routing.patch
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
-import io.ktor.utils.io.jvm.javaio.toInputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.InetAddress
@@ -270,6 +269,7 @@ fun Application.benbowModule(ctx: ServerContext) {
                 /**
                  * Appends a chunk (at most 16 MB) at `Upload-Offset`; a wrong offset answers 409 with the one to
                  * resume from. The last chunk is verified (size, SHA-256) and placed; a mismatch answers 422.
+                 * A chunk that doesn't arrive whole (cut off, or silent for [CHUNK_IDLE]) is dropped: 400 / 408.
                  */
                 patch("/uploads/{id}") {
                     val store =
@@ -278,8 +278,26 @@ fun Application.benbowModule(ctx: ServerContext) {
                     val id = call.parameters["id"]!!
                     val offset = call.request.header("Upload-Offset")?.toLongOrNull()
                         ?: return@patch call.respond(HttpStatusCode.BadRequest, ApiError("bad_upload", "Upload-Offset header missing"))
-                    val channel = call.receiveChannel()
-                    val result = withContext(Dispatchers.IO) { channel.toInputStream().use { store.append(id, offset, it) } }
+                    val declared = call.request.header(HttpHeaders.ContentLength)?.toLongOrNull()
+                    val bytes = when (val body = call.receiveChannel().readChunk(declared, BlobStore.MAX_CHUNK)) {
+                        is ChunkBody.Complete -> body.bytes
+
+                        ChunkBody.TooLarge -> return@patch call.respond(
+                            HttpStatusCode.PayloadTooLarge,
+                            ApiError("too_large", "Chunk over 16 MB"),
+                        )
+
+                        ChunkBody.Incomplete -> return@patch call.respond(
+                            HttpStatusCode.BadRequest,
+                            ApiError("incomplete", "The chunk was cut off; send it again"),
+                        )
+
+                        ChunkBody.Stalled -> return@patch call.respond(
+                            HttpStatusCode.RequestTimeout,
+                            ApiError("stalled", "The chunk stopped arriving; send it again"),
+                        )
+                    }
+                    val result = withContext(Dispatchers.IO) { store.append(id, offset, bytes) }
                     when (result) {
                         is BlobStore.Chunk.Accepted -> call.respond(UploadStatus(id, result.offset, complete = result.blob != null))
 

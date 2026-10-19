@@ -27,6 +27,8 @@ actual fun createHttpClient(trust: ServerTrust): HttpClient {
         install(HttpTimeout) {
             connectTimeoutMillis = 5_000
             requestTimeoutMillis = 30_000
+            // Silence on an open connection (OkHttp's own default would be 10 s): the server gives up a chunk after 30 s.
+            socketTimeoutMillis = 30_000
         }
         expectSuccess = false
     }

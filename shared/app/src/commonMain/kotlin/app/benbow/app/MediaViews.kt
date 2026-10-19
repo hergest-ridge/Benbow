@@ -45,6 +45,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -376,7 +377,11 @@ internal fun MediaCarousel(
     rounded: Boolean = true,
 ) {
     if (items.isEmpty()) return
-    val pager = rememberPagerState { items.size }
+    // The page count and the pages' keys read the same list. The frame below recomposes a frame later (inside
+    // BoxWithConstraints), so a count taken from the new list once asked the old one for a page it didn't have:
+    // an item added to a post crashed the app (MediaCarouselTest).
+    val current = rememberUpdatedState(items)
+    val pager = rememberPagerState { current.value.size }
     val first = items.first().meta
     val shapeRatio = if ((first.width ?: 0) > 0 && (first.height ?: 0) > 0) first.width!!.toFloat() / first.height!! else 4f / 3
     val shape = if (rounded) RoundedCornerShape(12.dp) else RectangleShape
@@ -387,14 +392,14 @@ internal fun MediaCarousel(
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val height = (maxWidth / shapeRatio.coerceIn(0.8f, 1.9f)).coerceAtMost(tallest.coerceAtLeast(160.dp))
         val ratio = maxWidth / height
-        MediaCarouselFrame(media, items, pager, ratio, shape, label, onOpen, Modifier.fillMaxWidth().height(height))
+        MediaCarouselFrame(media, current, pager, ratio, shape, label, onOpen, Modifier.fillMaxWidth().height(height))
     }
 }
 
 @Composable
 private fun MediaCarouselFrame(
     media: Media,
-    items: List<AttachmentState>,
+    current: State<List<AttachmentState>>,
     pager: PagerState,
     ratio: Float,
     shape: Shape,
@@ -402,11 +407,12 @@ private fun MediaCarouselFrame(
     onOpen: (AttachmentState) -> Unit,
     modifier: Modifier,
 ) {
+    val items = current.value
     Box(
         modifier.clip(shape).background(MaterialTheme.colorScheme.surfaceContainerHigh).semantics { contentDescription = label },
     ) {
-        HorizontalPager(pager, key = { items[it].meta.id }, modifier = Modifier.fillMaxSize()) { page ->
-            val item = items[page]
+        HorizontalPager(pager, key = { current.value[it].meta.id }, modifier = Modifier.fillMaxSize()) { page ->
+            val item = current.value[page]
             Box(Modifier.fillMaxSize().hand().clickable { onOpen(item) }, contentAlignment = Alignment.Center) {
                 FittedPicture(media, item, carousel = ratio)
                 if (item.meta.kind == "video") {

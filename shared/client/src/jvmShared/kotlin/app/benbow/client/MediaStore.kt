@@ -113,15 +113,13 @@ class MediaStore(
     override suspend fun uploadPending(): Int = withContext(Dispatchers.IO) {
         val connection = Settings(db).connection ?: return@withContext 0
         val api = apiFor(connection)
-        var finished = 0
-        for (media in q.pendingUploads().executeAsList()) {
+        uploadEach(q.pendingUploads().executeAsList()) { media ->
             val file = File(media.path)
-            if (!file.exists()) continue // never expected; the row stays so it isn't forgotten
+            if (!file.exists()) return@uploadEach false // never expected; the row stays so it isn't forgotten
             upload(api, UploadStart(media.sha256, media.size, media.mime, media.name, media.captured_at), file)
             q.markUploaded(now(), media.sha256)
-            finished++
+            true
         }
-        finished
     }
 
     private suspend fun upload(api: BenbowApi, announce: UploadStart, file: File) {

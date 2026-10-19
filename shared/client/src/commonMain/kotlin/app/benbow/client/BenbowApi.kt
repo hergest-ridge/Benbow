@@ -23,6 +23,7 @@ import app.benbow.core.sync.RevisionRecord
 import app.benbow.core.sync.SyncOp
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.plugins.timeout
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -85,6 +86,9 @@ class ApiException(val status: Int, val error: String?, message: String) : Excep
 /** Clients ignore unknown fields so a newer server within the same protocol doesn't break them. */
 val ClientJson = Json { ignoreUnknownKeys = true }
 
+/** One upload chunk, sending included: 8 MB needs at least ~220 kbit/s. */
+internal const val CHUNK_REQUEST_TIMEOUT_MS = 5 * 60_000L
+
 class KtorBenbowApi(private val client: HttpClient, private val baseUrl: String, private val token: () -> String?) :
     BenbowApi,
     AutoCloseable {
@@ -141,6 +145,8 @@ class KtorBenbowApi(private val client: HttpClient, private val baseUrl: String,
     override suspend fun uploadChunk(id: String, offset: Long, data: ByteArray): UploadStatus {
         val response = client.patch("$baseUrl/api/v1/uploads/$id") {
             auth()
+            // 8 MB over weak Wi-Fi takes longer than the usual 30 s; a dead connection is caught by the socket timeout.
+            timeout { requestTimeoutMillis = CHUNK_REQUEST_TIMEOUT_MS }
             header("Upload-Offset", offset)
             contentType(ContentType.Application.OctetStream)
             setBody(data)

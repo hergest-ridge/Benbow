@@ -1,6 +1,5 @@
 package app.benbow.server.storage
 
-import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.Files
@@ -96,30 +95,23 @@ class BlobStore(private val db: Database, val root: Path, private val now: () ->
         }
     }
 
-    /** Appends the bytes of [input] at [offset] (must equal what was received so far). */
-    fun append(id: String, offset: Long, input: InputStream): Chunk = synchronized(locks.computeIfAbsent(id) { Any() }) {
+    /**
+     * Appends [data] at [offset] (must equal what was received so far). The chunk is already in memory: the
+     * upload's lock never waits on a network connection (a dead one held it for hours, see ChunkBody).
+     */
+    fun append(id: String, offset: Long, data: ByteArray): Chunk = synchronized(locks.computeIfAbsent(id) { Any() }) {
         val upload = upload(id) ?: return Chunk.NotFound
         if (offset != upload.received) return Chunk.WrongOffset(upload.received)
+        if (data.size > MAX_CHUNK || upload.received + data.size > upload.size) return Chunk.TooLarge
         val part = uploads.resolve("$id.part")
-        var received = upload.received
         FileChannel.open(part, StandardOpenOption.CREATE, StandardOpenOption.WRITE).use { channel ->
             channel.truncate(upload.received) // bytes written after the last recorded offset (crash) are dropped
             channel.position(upload.received)
-            val buffer = ByteArray(1 shl 16)
-            var chunk = 0L
-            while (true) {
-                val n = input.read(buffer)
-                if (n < 0) break
-                chunk += n
-                if (chunk > MAX_CHUNK || received + n > upload.size) {
-                    channel.truncate(upload.received)
-                    return Chunk.TooLarge
-                }
-                channel.write(ByteBuffer.wrap(buffer, 0, n))
-                received += n
-            }
+            val buffer = ByteBuffer.wrap(data)
+            while (buffer.hasRemaining()) channel.write(buffer)
             channel.force(true)
         }
+        val received = upload.received + data.size
         db.transaction { c ->
             c.prepareStatement("UPDATE uploads SET received = ?, updated_at = ? WHERE id = ?").use { st ->
                 st.setLong(1, received)

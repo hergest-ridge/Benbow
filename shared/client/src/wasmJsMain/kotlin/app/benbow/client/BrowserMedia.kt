@@ -119,14 +119,13 @@ class BrowserMedia(
     override suspend fun uploadPending(): Int {
         val connection = Settings(db).connection ?: return 0
         val api = apiFor(connection)
-        var finished = 0
-        for (media in q.pendingUploads().executeAsList()) {
-            val blob = files[media.sha256]?.blob ?: shelf.load(key(media.sha256)) ?: continue // never expected; the row stays
+        return uploadEach(q.pendingUploads().executeAsList()) { media ->
+            // never expected; the row stays
+            val blob = files[media.sha256]?.blob ?: shelf.load(key(media.sha256)) ?: return@uploadEach false
             upload(api, UploadStart(media.sha256, media.size, media.mime, media.name, media.captured_at), blob)
             q.markUploaded(now(), media.sha256)
-            finished++
+            true
         }
-        return finished
     }
 
     private suspend fun upload(api: BenbowApi, announce: UploadStart, blob: JsAny) {

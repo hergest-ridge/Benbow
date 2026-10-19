@@ -73,6 +73,9 @@ internal class FakeApi(var server: FakeServer, var serverStore: String = server.
 
     /** e.g. the server's disk is full (HTTP 507). */
     var uploadsRefused: ApiException? = null
+
+    /** Files whose chunks never get an answer (the server held their upload, 2026-10-19). */
+    var stuck: Set<String> = emptySet()
     var chunksAccepted = 0
 
     override suspend fun info() = ServerInfo(
@@ -135,6 +138,7 @@ internal class FakeApi(var server: FakeServer, var serverStore: String = server.
     override suspend fun uploadChunk(id: String, offset: Long, data: ByteArray): UploadStatus {
         if (failAfterChunks == chunksAccepted) throw IOException("connection reset")
         val (file, bytes) = server.uploads.getValue(id)
+        if (file.sha256 in stuck) throw IOException("Socket timeout has expired")
         if (offset != bytes.size().toLong()) return UploadStatus(id, bytes.size().toLong(), complete = false)
         bytes.write(data)
         chunksAccepted++

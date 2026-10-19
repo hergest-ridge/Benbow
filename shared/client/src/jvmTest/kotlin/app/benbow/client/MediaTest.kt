@@ -69,6 +69,27 @@ class MediaTest {
         assertContentEquals(photo, server.blobs[sha256(photo)])
     }
 
+    /** A file the server doesn't answer for (2026-10-19: one held 65 others back for hours) is skipped for now. */
+    @Test
+    fun oneStuckFileDoesNotHoldBackTheOthers() = runTest {
+        val server = FakeServer()
+        val phone = Device(server, "phone")
+        val entry = phone.repo.createEntry("2026-10-19")
+        val drawing = phone.media.import(Random(4).nextBytes(3_000).inputStream(), "image/jpeg", "117686.jpg", 900)
+        phone.repo.attach(entry, drawing, "image", 800, 600)
+        phone.attachPhoto(entry)
+        phone.engine.sync()
+        phone.api.stuck = setOf(drawing.sha256)
+
+        assertFailsWith<IOException>("the sync still reports it") { phone.media.uploadPending() }
+        assertContentEquals(photo, server.blobs[sha256(photo)], "the file queued behind it went through")
+        assertEquals(1, phone.waitingFiles(), "the stuck one is kept for the next try")
+
+        phone.api.stuck = emptySet()
+        assertEquals(1, phone.media.uploadPending())
+        assertEquals(0, phone.waitingFiles())
+    }
+
     @Test
     fun anotherDeviceDownloadsAndVerifies() = runTest {
         val server = FakeServer()

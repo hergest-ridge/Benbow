@@ -44,6 +44,7 @@ dependencies {
     testImplementation(libs.kotlin.test)
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.ktor.client.content.negotiation)
+    testImplementation(libs.ktor.client.okhttp) // OkHttp itself: cutting a phone's connection mid-request (UploadCutOffTest)
     testImplementation(project(":shared:testing"))
     testImplementation(project(":shared:client"))
     testImplementation(libs.sqldelight.sqlite.driver)

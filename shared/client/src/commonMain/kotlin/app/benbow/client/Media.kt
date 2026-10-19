@@ -1,6 +1,7 @@
 package app.benbow.client
 
 import kotlinx.coroutines.flow.Flow
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Media files on this device, by SHA-256 (docs/sync.md#blobs): a folder on Android and desktop ([MediaStore] there),
@@ -30,4 +31,31 @@ interface Media {
 
     /** Uploads every captured file the server hasn't confirmed; returns how many finished. */
     suspend fun uploadPending(): Int
+}
+
+/** Failures in a row after which the rest of the queue waits for the next sync (the server is likely gone). */
+internal const val UPLOAD_FAILURES_IN_A_ROW = 3
+
+/**
+ * Runs [upload] for each file (true = sent and confirmed) so that one that fails doesn't keep the rest waiting:
+ * on 2026-10-19 one stuck file held 65 others back for hours. The first failure is rethrown at the end, so the
+ * sync reports it and tries again later; the files that went through are done.
+ */
+internal suspend fun <T> uploadEach(files: List<T>, upload: suspend (T) -> Boolean): Int {
+    var finished = 0
+    var first: Exception? = null
+    var inARow = 0
+    for (file in files) {
+        try {
+            if (upload(file)) finished++
+            inARow = 0
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (first == null) first = e
+            if (++inARow >= UPLOAD_FAILURES_IN_A_ROW) break
+        }
+    }
+    first?.let { throw it }
+    return finished
 }

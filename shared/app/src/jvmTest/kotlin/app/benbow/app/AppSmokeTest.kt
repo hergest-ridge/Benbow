@@ -103,7 +103,7 @@ class AppSmokeTest {
         mediaIn(java.nio.file.Files.createTempDirectory("benbow-media").toFile()),
         "desktop",
         "Test PC",
-    )
+    ).apply { pageReader = { null } } // a shared link's card never reads a real page in tests
 
     /** The topmost layer: the screen, or an open dialog over it. */
     private fun SemanticsNodeInteractionsProvider.screenshot(name: String) {

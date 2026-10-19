@@ -120,9 +120,17 @@ internal expect fun MediaBar(
 @Composable
 internal expect fun DictationKey(services: AppServices, target: DictationTarget, modifier: Modifier = Modifier)
 
-/** Files dropped on the screen from the desktop are attached; [onHover] tells while some are over it. No-op on Android. */
+/**
+ * Files dropped on the screen from the desktop are attached; [onHover] tells while some are over it. A link dragged from a
+ * browser goes to [onLink] (ADR-038). No-op on Android.
+ */
 @Composable
-internal expect fun Modifier.attachOnDrop(services: AppServices, entryId: suspend () -> String, onHover: (Boolean) -> Unit): Modifier
+internal expect fun Modifier.attachOnDrop(
+    services: AppServices,
+    entryId: suspend () -> String,
+    onHover: (Boolean) -> Unit,
+    onLink: (String) -> Unit = {},
+): Modifier
 
 /** Plays a video or audio file, or offers to open it outside the app where there is no player. */
 @Composable

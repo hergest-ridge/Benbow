@@ -2,6 +2,8 @@ package app.benbow.client
 
 import app.benbow.core.api.ApiError
 import app.benbow.core.api.KnownEntry
+import app.benbow.core.api.LinkPreviewInfo
+import app.benbow.core.api.LinkPreviewRequest
 import app.benbow.core.api.PairRequest
 import app.benbow.core.api.PairResponse
 import app.benbow.core.api.Protocol
@@ -70,6 +72,9 @@ interface BenbowApi {
     /** Whether the server has the speech-recognition model (7.6). */
     suspend fun speechModel(): SpeechModelInfo
 
+    /** Reads a page for a link card on the server (ADR-038; the web client can't reach other hosts). */
+    suspend fun linkPreview(url: String): LinkPreviewInfo = throw UnsupportedOperationException("linkPreview")
+
     /**
      * A speech model file from byte [from] on (a Range request); [write] learns whether the server continued there
      * (`resumed`) or sent it from the start.
@@ -111,6 +116,12 @@ class KtorBenbowApi(private val client: HttpClient, private val baseUrl: String,
         auth()
         parameter("cursor", cursor)
         parameter("limit", limit)
+    }.ok().body()
+
+    override suspend fun linkPreview(url: String): LinkPreviewInfo = client.post("$baseUrl/api/v1/links/preview") {
+        auth()
+        contentType(ContentType.Application.Json)
+        setBody(LinkPreviewRequest(url))
     }.ok().body()
 
     override suspend fun revisions(entryId: String): List<RevisionInfo> =

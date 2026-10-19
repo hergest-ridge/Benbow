@@ -21,7 +21,8 @@ import org.jetbrains.compose.resources.stringResource
 
 /**
  * How [BenbowEditor] draws atom paragraphs, each over its own line: the app supplies pictures (it knows the files);
- * dividers and blocks from a newer version have a built-in look. Atoms are never edited in place, only removed whole.
+ * link cards, dividers and blocks from a newer version have a built-in look. Atoms are never edited in place, only removed
+ * whole.
  */
 open class AtomViews {
     /** Height of a picture laid out across [width]. */
@@ -39,14 +40,17 @@ open class AtomViews {
 
     internal fun height(atom: Atom, width: Dp): Dp = when (atom) {
         is Atom.Attachment -> pictureHeight(atom, width)
+        is Atom.LinkCard -> linkCardHeight(atom, width)
         is Atom.Divider -> 28.dp
         is Atom.Unknown -> 44.dp
     }
 
     @Composable
-    internal fun Content(atom: Atom) {
+    internal fun Content(atom: Atom, key: String) {
         when (atom) {
             is Atom.Attachment -> Picture(atom)
+
+            is Atom.LinkCard -> EditorLinkCard(atom, key)
 
             is Atom.Divider -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 HorizontalDivider(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.outlineVariant)

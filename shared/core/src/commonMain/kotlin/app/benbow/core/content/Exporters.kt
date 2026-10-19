@@ -1,5 +1,7 @@
 package app.benbow.core.content
 
+import app.benbow.core.text.Links
+
 /** Plain text for search, previews and notifications (content-format.md#derived-forms). */
 fun Document.toPlainText(includeSpoilers: Boolean = true): String = blocks.joinToString("\n") { block ->
     when (block) {
@@ -12,6 +14,9 @@ fun Document.toPlainText(includeSpoilers: Boolean = true): String = blocks.joinT
         is CodeBlock -> block.code
 
         is AttachmentBlock -> block.caption.orEmpty()
+
+        // The title (searchable, the words a preview shows) and the address (its site is searchable, a copy keeps it).
+        is LinkCardBlock -> listOfNotNull(block.title?.replace('\n', ' '), block.href).joinToString(" ")
 
         is DividerBlock, is UnknownBlock -> ""
     }
@@ -61,6 +66,7 @@ class MarkdownExporter(
         is CodeBlock -> calloutWrap(block.callout, previous, codeFence(block))
         is DividerBlock -> "---"
         is AttachmentBlock -> "![${escape(block.caption.orEmpty())}](${attachmentUrl(block.ref)})"
+        is LinkCardBlock -> linkCard(block)
         is UnknownBlock -> if (rich()) "<!-- benbow:unknown ${block.raw.toString().replace("--", "\\u002d\\u002d")} -->" else ""
     }
 
@@ -148,7 +154,7 @@ class MarkdownExporter(
     private fun markers(span: Span, defs: Map<String, MarkDef>): List<Marker> {
         val result = ArrayList<Marker>()
         val annotations = span.marks.mapNotNull { defs[it] }
-        annotations.filterIsInstance<MarkDef.Link>().forEach { result.add(Marker("link:${it.href}", "[", "](${it.href})")) }
+        annotations.filterIsInstance<MarkDef.Link>().forEach { result.add(Marker("link:${it.href}", "[", "](${destination(it.href)})")) }
         annotations.filterIsInstance<MarkDef.EntryLink>().forEach {
             result.add(Marker("entry:${it.entryId}:${it.blockKey}", "[", "](${entryUrl(it.entryId, it.blockKey)})"))
         }
@@ -177,6 +183,24 @@ class MarkdownExporter(
             result.add(Marker("code", fence + pad, pad + fence))
         }
         return result
+    }
+
+    /** `[Title](address)` and, on the next line, what the page said about itself. */
+    private fun linkCard(block: LinkCardBlock): String {
+        val title = block.title?.replace('\n', ' ')?.takeIf { it.isNotBlank() } ?: Links.display(block.href)
+        val line = "[${escape(title)}](${destination(block.href)})"
+        val about = listOfNotNull(block.description?.replace('\n', ' '), block.site).filter { it.isNotBlank() }.joinToString(" · ")
+        return if (about.isEmpty()) line else "$line  \n${escape(about)}"
+    }
+
+    /** A link destination CommonMark reads whole: in angle brackets when it has spaces or brackets. */
+    private fun destination(href: String): String = if (href.any {
+            it == ' ' || it == '(' || it == ')' || it == '<' || it == '>'
+        }
+    ) {
+        "<${href.replace("<", "%3C").replace(">", "%3E")}>"
+    } else {
+        href
     }
 
     private fun escape(text: String): String = buildString {

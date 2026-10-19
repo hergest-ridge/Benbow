@@ -714,4 +714,23 @@
     <string name="home_also_months">Ещё месяц и полгода назад</string>
     <string name="ago_month">Месяц назад</string>
     <string name="ago_half_year">Полгода назад</string>
+    <string name="link_previews">Превью ссылок</string>
+    <string name="link_previews_hint">Карточка ссылки один раз читает заголовок и картинку страницы, когда ссылку вставили. Сайт при этом видит запрос, как при открытии.</string>
+    <string name="link_sheet_title">Ссылка</string>
+    <string name="link_sheet_card">Карточка ссылки</string>
+    <string name="link_tab_web">Адрес</string>
+    <string name="link_tab_entry">Запись</string>
+    <string name="link_address">Адрес</string>
+    <string name="link_words">Текст ссылки</string>
+    <string name="link_card_title">Заголовок</string>
+    <string name="link_from_clipboard">Вставить из буфера</string>
+    <string name="link_bad_address">Такой адрес не открыть: нужен http(s), mailto: или tel:</string>
+    <string name="link_entry_search">Найти запись</string>
+    <string name="link_entry_none">Ничего не нашлось</string>
+    <string name="link_done">Готово</string>
+    <string name="link_unlink">Убрать ссылку</string>
+    <string name="removed_atom">Удалено из текста</string>
+    <string name="removed_card">Карточка удалена</string>
+    <string name="removed_link">Ссылка убрана, текст остался</string>
+    <string name="card_became_text">Карточка стала ссылкой в тексте</string>
 </resources>

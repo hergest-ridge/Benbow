@@ -43,6 +43,39 @@ class DocumentCodecTest {
     }
 
     @Test
+    fun linkCardsRoundTripAndBadOnesStayVerbatim() {
+        val json = """{"v":1,"blocks":[
+            {"_key":"c1","_type":"linkCard","href":"https://x.org/a","title":"Маяки","description":"о линзах","site":"Хабр","image":"${"b".repeat(
+            64,
+        )}","view":"large","fetched":"2026-10-19"},
+            {"_key":"c2","_type":"linkCard","href":"https://x.org/b"},
+            {"_key":"c3","_type":"linkCard","href":"https://x.org/c","image":"not-a-hash"},
+            {"_key":"c4","_type":"linkCard","href":"https://x.org/d","view":"huge"}
+            ]}"""
+        val doc = DocumentCodec.decode(json)
+        assertEquals(
+            LinkCardBlock("c1", "https://x.org/a", "Маяки", "о линзах", "Хабр", "b".repeat(64), "large", "2026-10-19"),
+            doc.blocks[0],
+        )
+        assertEquals(LinkCardBlock("c2", "https://x.org/b"), doc.blocks[1])
+        assertIs<UnknownBlock>(doc.blocks[2])
+        assertIs<UnknownBlock>(doc.blocks[3])
+        val encoded = DocumentCodec.encode(doc)
+        assertTrue("""{"_key":"c2","_type":"linkCard","href":"https://x.org/b"}""" in encoded)
+        assertEquals(encoded, DocumentCodec.encode(DocumentCodec.decode(encoded)))
+        // A row is the default look and isn't written.
+        val row = DocumentCodec.decode(
+            """{"v":1,"blocks":[{"_key":"c5","_type":"linkCard","href":"https://x.org","view":"row","title":""}]}""",
+        )
+        assertEquals(
+            """{"v":1,"blocks":[
+{"_key":"c5","_type":"linkCard","href":"https://x.org"}
+]}""",
+            DocumentCodec.encode(row),
+        )
+    }
+
+    @Test
     fun newerFormatIsReadOnly() {
         val newer = DocumentCodec.decode("""{"v":2,"blocks":[]}""")
         assertFalse(newer.isEditable)

@@ -130,10 +130,8 @@ data class EditorStyles(
 
                 is Mark.Size -> size = sizeFactor(mark.step).em
 
-                is Mark.Link, is Mark.EntryLink -> {
-                    if (color == Color.Unspecified) color = colors.primary
-                    decorations += TextDecoration.Underline
-                }
+                // The underline is drawn apart, thin and a little lower (drawLinkUnderlines).
+                is Mark.Link, is Mark.EntryLink -> if (color == Color.Unspecified) color = colors.primary
             }
         }
         return SpanStyle(

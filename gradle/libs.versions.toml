@@ -4,6 +4,7 @@ agp = "9.4.1"
 compose-multiplatform = "1.12.1"
 compose-material3 = "1.12.0-alpha03"
 androidx-activity = "1.13.0"
+androidx-browser = "1.10.0"
 androidx-work = "2.12.0"
 glance = "1.2.0"
 benchmark = "1.5.0"
@@ -45,6 +46,8 @@ compose-ui-test = { module = "org.jetbrains.compose.ui:ui-test", version.ref = "
 compose-components-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "compose-multiplatform" }
 compose-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "compose-material3" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
+# Custom Tabs: links open as a browser sheet over the entry (ADR-038).
+androidx-browser = { module = "androidx.browser:browser", version.ref = "androidx-browser" }
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 materialkolor = { module = "com.materialkolor:material-kolor", version.ref = "materialkolor" }
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }

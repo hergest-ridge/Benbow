@@ -1,6 +1,7 @@
 package app.benbow.server.api
 
 import app.benbow.core.api.ApiError
+import app.benbow.core.api.LinkPreviewRequest
 import app.benbow.core.api.PairRequest
 import app.benbow.core.api.PairResponse
 import app.benbow.core.api.Protocol
@@ -17,6 +18,7 @@ import app.benbow.core.calendar.CalendarProtocol
 import app.benbow.core.calendar.CalendarPushRequest
 import app.benbow.core.calendar.CalendarRules
 import app.benbow.core.sync.SyncRules
+import app.benbow.core.text.Links
 import app.benbow.server.SERVER_VERSION
 import app.benbow.server.SpeechModel
 import app.benbow.server.backup.BackupStatus
@@ -106,6 +108,7 @@ fun Application.benbowModule(ctx: ServerContext) {
             authenticate { credential -> ctx.devices.authenticate(credential.token)?.let { DevicePrincipal(it.id) } }
         }
     }
+    val linkPreviews = LinkPreviews(ctx.blobs)
     routing {
         adminRoutes(ctx)
         webApp(ctx.webRoot)
@@ -318,6 +321,20 @@ fun Application.benbowModule(ctx: ServerContext) {
 
                         BlobStore.Chunk.NotFound -> call.respond(HttpStatusCode.NotFound, ApiError("not_found", "No such upload"))
                     }
+                }
+
+                /**
+                 * Reads a page for a link card (ADR-038): the web client's page reaches nothing but this server. Public
+                 * addresses only; the page's picture is kept as a JPEG blob named in the answer.
+                 */
+                post("/links/preview") {
+                    val request = call.receive<LinkPreviewRequest>()
+                    val href = Links.parse(request.url)
+                        ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("bad_url", "Not a web address"))
+                    val device = call.principal<DevicePrincipal>()!!.deviceId
+                    val info = linkPreviews.read(href, device)
+                        ?: return@post call.respond(HttpStatusCode.BadGateway, ApiError("no_page", "The page couldn't be read"))
+                    call.respond(info)
                 }
 
                 /**

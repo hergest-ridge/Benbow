@@ -107,6 +107,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -241,8 +242,27 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
     }
 
     override fun onCleared() {
+        alive = false
         services.openDrafts -= session
         commit()
+    }
+
+    private var alive = true
+
+    /**
+     * Reads the pages of the cards nobody read yet (ADR-038). Each page fills its card here, on [ui], or the stored entry
+     * once the editor is gone; a card no longer in the text is left alone.
+     */
+    fun readCards(ui: CoroutineContext) {
+        val state = editor?.takeIf { !reading } ?: return
+        val cards = state.model.paragraphs.mapNotNull { p ->
+            (p.atom as? Atom.LinkCard)?.takeIf { it.fetched == null }?.let { p.key to it }
+        }
+        if (cards.isEmpty()) return
+        services.readCards(cards) { key, preview ->
+            val filled = withContext(ui) { alive && editor?.fillCard(key) { it.filled(preview, services.today()) } == true }
+            if (!filled) entryId?.let { services.fillStoredCard(it, key, preview) }
+        }
     }
 
     private fun onEntry(entry: EntryDetail) {
@@ -349,6 +369,23 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
             services.drawn.value = null
         }
     }
+    // Links (ADR-038): cards read their pages as they appear; the link sheet; «Вернуть» after a removal.
+    LaunchedEffect(editor, vm.reading) {
+        val state = editor?.takeIf { !vm.reading } ?: return@LaunchedEffect
+        snapshotFlow { state.model.paragraphs.count { (it.atom as? Atom.LinkCard)?.fetched == null } }
+            .collect { if (it > 0) vm.readCards(screenThread) }
+    }
+    LaunchedEffect(editor) {
+        val state = editor ?: return@LaunchedEffect
+        snapshotFlow { state.removal }.filterNotNull().collect { services.messages.emit(AppMessage.TextRemoved(it)) }
+    }
+    LaunchedEffect(Unit) { services.removalBack.collect { vm.editor?.undoRemoval(it) } }
+    editor?.linkRequest?.let { request ->
+        LinkSheet(services, request, onDone = { mark, words -> editor.applyLink(request, mark, words) }, onDismiss = {
+            editor.linkRequest =
+                null
+        })
+    }
     // The attachments ribbon: open by default unless every attachment already sits in the text; the clip toggles it.
     var ribbonChoice by rememberSaveable { mutableStateOf<Boolean?>(null) }
     val attachments = detail?.attachments.orEmpty()
@@ -414,7 +451,9 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
 
     Scaffold(
         // Files dragged in from the desktop are attached like picked ones.
-        modifier = Modifier.attachOnDrop(services, vm::ensureEntryId) { dropping = it },
+        modifier = Modifier.attachOnDrop(services, vm::ensureEntryId, onHover = { dropping = it }, onLink = { href ->
+            vm.editor?.takeIf { !vm.reading }?.insertAtom(Atom.LinkCard(href), atEnd = !editorFocused)
+        }),
         containerColor = noteColor ?: MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(

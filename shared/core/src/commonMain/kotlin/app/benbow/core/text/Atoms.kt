@@ -55,6 +55,29 @@ internal fun RichText.atomEdit(start: Int, end: Int, inserted: String, typingMar
     }
 }
 
+/**
+ * The paragraph whose atom a Backspace or Delete over `[start, end)` would take out whole (see [atomEdit]), or null; the
+ * editor selects that atom first and removes it on the second press (ADR-038).
+ */
+fun RichText.atomRemovedBy(start: Int, end: Int, inserted: String): Int? {
+    if (inserted.isNotEmpty() || end != start + 1 || end > text.length) return null
+    val i = paragraphIndexAt(start)
+    return when {
+        text[start] == ATOM_CHAR && paragraphs[i].atom != null -> i
+        text[start] == '\n' && paragraphs[i].atom != null -> i
+        else -> null
+    }
+}
+
+/** Takes the atom of paragraph [index] out of the text with its line, as Backspace after it would. */
+fun RichText.removeAtom(index: Int, keys: BlockKeys): EditResult? = if (paragraphs.getOrNull(index)?.atom ==
+    null
+) {
+    null
+} else {
+    removeParagraph(index, keys)
+}
+
 /** Removes paragraph [index] with one of its line breaks; the cursor lands where it was. */
 private fun RichText.removeParagraph(index: Int, keys: BlockKeys): EditResult {
     val last = index == paragraphs.size - 1

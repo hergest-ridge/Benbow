@@ -11,15 +11,25 @@ import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTarget
 import androidx.compose.ui.draganddrop.DragData
 import androidx.compose.ui.draganddrop.dragData
+import app.benbow.core.text.Links
 import java.io.File
 import java.net.URI
 
-/** Files dragged from Explorer onto the entry: each is copied into the media folder and attached, like a picked one. */
+/**
+ * Files dragged from Explorer onto the entry: each is copied into the media folder and attached, like a picked one. A
+ * link dragged from a browser becomes a card (ADR-038).
+ */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-internal actual fun Modifier.attachOnDrop(services: AppServices, entryId: suspend () -> String, onHover: (Boolean) -> Unit): Modifier {
+internal actual fun Modifier.attachOnDrop(
+    services: AppServices,
+    entryId: suspend () -> String,
+    onHover: (Boolean) -> Unit,
+    onLink: (String) -> Unit,
+): Modifier {
     val hover by rememberUpdatedState(onHover)
     val entry by rememberUpdatedState(entryId)
+    val link by rememberUpdatedState(onLink)
     val target = remember(services) {
         object : DragAndDropTarget {
             override fun onEntered(event: DragAndDropEvent) = hover(true)
@@ -30,6 +40,12 @@ internal actual fun Modifier.attachOnDrop(services: AppServices, entryId: suspen
 
             override fun onDrop(event: DragAndDropEvent): Boolean {
                 hover(false)
+                val dropped = event.dragData()
+                if (dropped is DragData.Text) {
+                    val href = Links.parse(dropped.readText().lineSequence().firstOrNull().orEmpty()) ?: return false
+                    link(href)
+                    return true
+                }
                 val files = (event.dragData() as? DragData.FilesList)?.readFiles().orEmpty()
                     .mapNotNull { runCatching { File(URI(it)) }.getOrNull() }
                     .filter { it.isFile }
@@ -38,5 +54,7 @@ internal actual fun Modifier.attachOnDrop(services: AppServices, entryId: suspen
             }
         }
     }
-    return dragAndDropTarget(shouldStartDragAndDrop = { it.dragData() is DragData.FilesList }, target = target)
+    return dragAndDropTarget(shouldStartDragAndDrop = {
+        it.dragData().let { d -> d is DragData.FilesList || d is DragData.Text }
+    }, target = target)
 }

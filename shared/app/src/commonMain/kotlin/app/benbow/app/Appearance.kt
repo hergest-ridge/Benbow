@@ -20,6 +20,8 @@ data class Appearance(
     val feedScrubber: Boolean = true,
     /** How a post shows pictures that aren't placed in its text, when read. */
     val postMedia: PostMedia = PostMedia.Carousel,
+    /** A link card reads its page once, as it goes in (ADR-038); off, cards show the address only. */
+    val linkPreviews: Boolean = true,
 ) {
     internal fun save(settings: Settings) {
         settings.put(MODE, mode.name)
@@ -27,6 +29,7 @@ data class Appearance(
         settings.put(FEED_CARDS, feedCards.toString())
         settings.put(FEED_SCRUBBER, feedScrubber.toString())
         settings.put(POST_MEDIA, postMedia.name)
+        settings.put(LINK_PREVIEWS, linkPreviews.toString())
     }
 
     companion object {
@@ -35,6 +38,7 @@ data class Appearance(
         private const val FEED_CARDS = "feed.cards"
         private const val FEED_SCRUBBER = "feed.scrubber"
         private const val POST_MEDIA = "post.media"
+        private const val LINK_PREVIEWS = "links.previews"
 
         internal fun load(settings: Settings) = Appearance(
             mode = ThemeMode.entries.firstOrNull { it.name == settings.get(MODE) } ?: ThemeMode.System,
@@ -42,6 +46,7 @@ data class Appearance(
             feedCards = settings.get(FEED_CARDS) != "false",
             feedScrubber = settings.get(FEED_SCRUBBER) != "false",
             postMedia = PostMedia.entries.firstOrNull { it.name == settings.get(POST_MEDIA) } ?: PostMedia.Carousel,
+            linkPreviews = settings.get(LINK_PREVIEWS) != "false",
         )
     }
 }

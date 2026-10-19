@@ -52,6 +52,8 @@ The server denormalizes the head into `entry_text(entry_id, title, plain_text)` 
 - Client-only: `attachment_local(attachment_id, local_path, state (local|uploading|uploaded|evicted), last_access_at, pinned)`
 - As built (3.2): `AttachmentMeta` (the `attachment` fields, immutable but for a later preview) + `AttachmentState(meta, position, caption, present, hlc)` stored per entry as `attachments` (server `entries.attachments`, client `entry.attachments`). Bytes are separate: server `blobs(sha256, size, mime, path, verified_at)`, client `media(sha256, path, origin, uploaded, last_access_at)`.
 
+As built (7.15, ADR-038): a link card is a `linkCard` block in the body with a snapshot of its page (title, description, site, the day it was read) and its picture's SHA-256; the picture is a blob outside the attachments, so it never shows in the gallery, counts or covers.
+
 ## Calendar (P1)
 - As built (5.1), until 7.3a: an entry of kind `event` (the text is the title, `day` is its date) with the LWW field `start` = "YYYY-MM-DD" (all day) or "YYYY-MM-DDTHH:MM". Events stay out of Home, Feed and the writing stats; the calendar lists them per day.
 - As built (7.3a, ADR-027): a **separate calendar store** (server `db/calendar.sqlite`, client `calendar.db`), never the `entry` table. Two record types, each a set of LWW fields (value + HLC) with no revisions. In use: `calendar`, `title`, `start`, `end`, `description`, `deleted` (7.3a); `rrule`, `exdate`, `location` and the calendar records (7.3b); `uid` and `import` (7.3d):

@@ -1,5 +1,6 @@
 package app.benbow.ui.editor
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
@@ -11,11 +12,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -23,13 +26,16 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
@@ -51,8 +57,16 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isMetaPressed
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextLayoutResult
@@ -69,10 +83,13 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.benbow.core.text.Atom
 import app.benbow.core.text.BlockStyle
 import app.benbow.core.text.ListKind
 import app.benbow.core.text.Mark
+import app.benbow.core.text.MarkSpan
 import app.benbow.core.text.RichText
+import app.benbow.core.text.linkAt
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -119,12 +136,26 @@ private fun BoxScope.EditorBody(state: EditorState, readOnly: Boolean, atoms: At
         var lastModel = state.model
         var lastSelection = state.selection
         snapshotFlow { state.model to state.selection }.collect { (model, selection) ->
-            if (model === lastModel) state.typingMarks = null
+            if (model === lastModel) {
+                state.typingMarks = null
+                if (selection != lastSelection) state.selectedAtom = null
+            }
+            state.cursorPlaced = model === lastModel
             state.noteSelection(selection, lastSelection)
             lastModel = model
             lastSelection = selection
         }
     }
+    // Links (ADR-038): a thin underline; reading, a tap opens one (its press shows first); writing, Ctrl+click does.
+    val links = rememberLinkActions()
+    val linkSpans = remember(state.model) { state.model.linkRanges() }
+    // Read by the gesture handlers as they are now: keyed on them, a handler would restart with every key typed.
+    val spansNow by rememberUpdatedState(linkSpans)
+    var pressedLink by remember { mutableStateOf<MarkSpan?>(null) }
+    var hoverLink by remember { mutableStateOf(false) }
+    var focused by remember { mutableStateOf(false) }
+    var placedField by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val origin: () -> Offset? = { placedField?.takeIf { it.isAttached }?.positionInRoot() }
 
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
@@ -154,10 +185,43 @@ private fun BoxScope.EditorBody(state: EditorState, readOnly: Boolean, atoms: At
                 state = state.textFieldState,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .onGloballyPositioned { placedField = it }
+                    .onFocusChanged { focused = it.isFocused }
                     .onPreviewKeyEvent { state.handleShortcut(it, clipboardActions) }
-                    .pointerInput(state, styles) {
+                    .then(if (hoverLink) Modifier.pointerHoverIcon(PointerIcon.Hand, overrideDescendants = true) else Modifier)
+                    .pointerInput(state, readOnly) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                val at = event.changes.firstOrNull()?.position ?: continue
+                                hoverLink = event.type != PointerEventType.Exit && (readOnly || event.keyboardModifiers.isCtrlPressed) &&
+                                    layout?.takeIf { it.matches(state.model) }?.linkUnder(spansNow, at, 0f) != null
+                            }
+                        }
+                    }
+                    .pointerInput(state, styles, readOnly) {
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                            val opensLinks =
+                                readOnly || currentEvent.keyboardModifiers.isCtrlPressed || currentEvent.keyboardModifiers.isMetaPressed
+                            val link = if (opensLinks &&
+                                !(readOnly && !reveal.opened && layout?.spoilerAt(state.model, down.position) == true)
+                            ) {
+                                layout?.takeIf { it.matches(state.model) }?.linkUnder(spansNow, down.position, 6.dp.toPx())
+                            } else {
+                                null
+                            }
+                            if (link != null) {
+                                down.consume()
+                                pressedLink = link
+                                val up = awaitLinkTap(down, origin)
+                                pressedLink = null
+                                if (up != null) {
+                                    up.consume()
+                                    links.open(link.mark)
+                                }
+                                return@awaitEachGesture
+                            }
                             if (readOnly && !reveal.opened && layout?.spoilerAt(state.model, down.position) == true) {
                                 down.consume()
                                 val up = waitForUpOrCancellation(PointerEventPass.Initial)
@@ -189,7 +253,14 @@ private fun BoxScope.EditorBody(state: EditorState, readOnly: Boolean, atoms: At
                             }
                         }
                     }
-                    .drawBehind { layout?.let { drawDecorations(it, state.model, styles, measurer, textStyle) } }
+                    .drawBehind {
+                        val l = layout ?: return@drawBehind
+                        drawDecorations(l, state.model, styles, measurer, textStyle)
+                        if (l.matches(state.model)) {
+                            pressedLink?.let { drawPressedLink(l, it, colors.primary.copy(alpha = 0.14f)) }
+                            drawLinkUnderlines(l, linkSpans, colors.primary.copy(alpha = 0.45f))
+                        }
+                    }
                     .drawWithContent {
                         val path = covered()
                         when {
@@ -236,21 +307,65 @@ private fun BoxScope.EditorBody(state: EditorState, readOnly: Boolean, atoms: At
     // an atom stays where it last was.
     val current = layout
     val placed = remember { HashMap<String, Pair<Float, Float>>() }
+    val host = remember(state, readOnly) { AtomHost(state, readOnly) }
     if (current != null) {
         val model = state.model
         val fresh = current.matches(model)
-        model.paragraphs.forEachIndexed { i, paragraph ->
-            val atom = paragraph.atom ?: return@forEachIndexed
-            val spot = placed[paragraph.key]?.takeIf { !fresh } ?: run {
-                val line = current.getLineForOffset(model.paragraphStarts[i].coerceAtMost(current.layoutInput.text.length))
-                (current.getLineTop(line) to current.getLineBottom(line)).also { if (fresh) placed[paragraph.key] = it }
+        val selectedOutline = colors.primary
+        CompositionLocalProvider(LocalAtomHost provides host) {
+            model.paragraphs.forEachIndexed { i, paragraph ->
+                val atom = paragraph.atom ?: return@forEachIndexed
+                val spot = placed[paragraph.key]?.takeIf { !fresh } ?: run {
+                    val line = current.getLineForOffset(model.paragraphStarts[i].coerceAtMost(current.layoutInput.text.length))
+                    (current.getLineTop(line) to current.getLineBottom(line)).also { if (fresh) placed[paragraph.key] = it }
+                }
+                // The first Backspace selects a picture or a divider (ADR-038); a card draws its own outline.
+                val outlined = !readOnly && state.selectedAtom == paragraph.key && atom !is Atom.LinkCard
+                key(paragraph.key) {
+                    Box(
+                        Modifier.offset {
+                            IntOffset(0, spot.first.roundToInt())
+                        }.width(width).height(with(density) { (spot.second - spot.first).toDp() })
+                            .then(if (outlined) Modifier.border(2.dp, selectedOutline, RoundedCornerShape(12.dp)) else Modifier),
+                    ) { atoms.Content(atom, paragraph.key) }
+                }
             }
-            key(paragraph.key) {
-                Box(
-                    Modifier.offset {
-                        IntOffset(0, spot.first.roundToInt())
-                    }.width(width).height(with(density) { (spot.second - spot.first).toDp() }),
-                ) { atoms.Content(atom) }
+        }
+        if (!readOnly && fresh && state.linkRequest == null) {
+            val widthPx = with(density) { width.toPx() }
+            val card = state.selectedAtom?.let { state.card(it) }
+            val sel = state.selection
+            val span = if (card == null && focused && sel.collapsed && state.cursorPlaced) model.linkAt(sel.min) else null
+            when {
+                card != null -> {
+                    val (index, atom) = card
+                    val key = model.paragraphs[index].key
+                    val spot = placed[key]
+                    if (spot != null) {
+                        BubbleAt(Rect(widthPx - 1f, spot.first, widthPx, spot.second), Modifier.matchParentSize()) {
+                            CardBubble(
+                                atom,
+                                onOpen = { links.open(Mark.Link(atom.href)) },
+                                onLarge = { state.setCardLarge(key, it) },
+                                onToText = { state.cardToText(key) },
+                                onEdit = { state.requestCardEdit(key) },
+                                onRemove = { state.removeAtom(key) },
+                            )
+                        }
+                    }
+                }
+
+                span != null -> current.rangeRects(span.start, span.end).firstOrNull()?.let { rect ->
+                    BubbleAt(rect, Modifier.matchParentSize()) {
+                        LinkBubble(
+                            span.mark,
+                            onOpen = { links.open(span.mark) },
+                            onEdit = state::requestLink,
+                            onCopy = (span.mark as? Mark.Link)?.let { link -> { links.copy(link.href) } },
+                            onUnlink = { state.unlinkAt(sel.min) },
+                        )
+                    }
+                }
             }
         }
     }
@@ -303,6 +418,7 @@ private fun EditorState.handleShortcut(event: KeyEvent, clipboard: ClipboardActi
         Key.I -> toggleMark(Mark.Italic)
         Key.U -> toggleMark(Mark.Underline)
         Key.E -> toggleMark(Mark.Code)
+        Key.K -> requestLink()
         Key.C -> return clipboard.copy()
         Key.X -> return clipboard.cut()
         else -> return false

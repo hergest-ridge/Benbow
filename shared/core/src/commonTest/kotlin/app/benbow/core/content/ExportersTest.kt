@@ -2,6 +2,7 @@ package app.benbow.core.content
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class ExportersTest {
     private val doc = Document(
@@ -70,5 +71,30 @@ class ExportersTest {
         assertEquals(false, "секрет" in preview)
         assertEquals(true, "секрет" in doc.toPlainText())
         assertEquals("Утро #1", doc.toPlainText().lines().first())
+    }
+
+    @Test
+    fun linkCardsExportReadably() {
+        val card = Document(
+            listOf(
+                LinkCardBlock(
+                    "c1",
+                    "https://x.org/a (b)",
+                    title = "Маяки",
+                    description = "О линзах",
+                    site = "Хабр",
+                    image = "c".repeat(64),
+                ),
+                LinkCardBlock("c2", "https://habr.com/ru/articles/1/"),
+            ),
+        )
+        assertEquals(
+            "[Маяки](<https://x.org/a (b)>)  \nО линзах · Хабр\n\n[habr.com/ru/articles/1](https://habr.com/ru/articles/1/)",
+            MarkdownExporter().export(card),
+        )
+        assertEquals("Маяки https://x.org/a (b)\nhttps://habr.com/ru/articles/1/", card.toPlainText())
+        val html = HtmlExporter(imageUrl = { "img/$it.jpg" }).export(card)
+        assertTrue("<a class=\"link-card\" href=\"https://x.org/a (b)\"><img src=\"img/${"c".repeat(64)}.jpg\"" in html, html)
+        assertTrue("<span class=\"link-site\">habr.com</span><strong>habr.com/ru/articles/1</strong>" in html, html)
     }
 }

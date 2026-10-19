@@ -45,6 +45,7 @@ kotlin {
         }
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
+            implementation(libs.androidx.browser)
             implementation(libs.media3.exoplayer)
             implementation(libs.media3.ui)
             implementation(libs.androidx.exifinterface)

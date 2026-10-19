@@ -7,6 +7,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -35,9 +36,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -56,12 +62,21 @@ import app.benbow.core.text.Atom
 import app.benbow.core.text.BlockStyle
 import app.benbow.core.text.ListKind
 import app.benbow.core.text.Mark
+import app.benbow.core.text.MarkSpan
 import app.benbow.core.text.Paragraph
 import app.benbow.core.text.RichText
 import app.benbow.ui.editor.EditorStyles
+import app.benbow.ui.editor.ReadingLinkCard
 import app.benbow.ui.editor.SpoilerDots
 import app.benbow.ui.editor.SpoilerLayout
 import app.benbow.ui.editor.SpoilerReveal
+import app.benbow.ui.editor.awaitLinkTap
+import app.benbow.ui.editor.drawLinkUnderlines
+import app.benbow.ui.editor.drawPressedLink
+import app.benbow.ui.editor.linkCardHeight
+import app.benbow.ui.editor.linkRanges
+import app.benbow.ui.editor.linkUnder
+import app.benbow.ui.editor.rememberLinkActions
 import app.benbow.ui.editor.rememberSpoilerDots
 import app.benbow.ui.editor.spoilerClock
 import app.benbow.ui.editor.spoilerDots
@@ -214,6 +229,11 @@ private fun FeedBlock(rich: RichText, block: Block, styles: EditorStyles, dark: 
     when {
         first.atom is Atom.Divider -> HorizontalDivider(Modifier.padding(vertical = 6.dp), color = colors.outlineVariant)
 
+        first.atom is Atom.LinkCard -> BoxWithConstraints(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+            val card = first.atom as Atom.LinkCard
+            ReadingLinkCard(card, Modifier.fillMaxWidth().height(linkCardHeight(card, maxWidth) - 8.dp))
+        }
+
         callout != null -> Surface(
             color = BenbowPalette.tint(callout.tone, dark) ?: colors.surfaceContainerHigh,
             shape = RoundedCornerShape(10.dp),
@@ -339,8 +359,17 @@ private fun Line(rich: RichText, index: Int, styles: EditorStyles, style: TextSt
     }
     val spoilers = LocalFeedSpoilers.current
     val ranges = remember(rich, index) { rich.spoilerRanges(rich.paragraphStarts[index], rich.paragraphEnd(index)) }
+    val links = remember(rich, index) { rich.linkRanges(rich.paragraphStarts[index], rich.paragraphEnd(index)) }
+    var laidOut by remember { mutableStateOf<TextLayoutResult?>(null) }
     if (spoilers == null || ranges.isEmpty()) {
-        Text(text, style = style, maxLines = maxLines, overflow = TextOverflow.Ellipsis, modifier = modifier)
+        Text(
+            text,
+            style = style,
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { laidOut = it },
+            modifier = modifier.feedLinks(links) { laidOut },
+        )
         return
     }
     var area by remember { mutableStateOf<SpoilerLayout?>(null) }
@@ -352,8 +381,12 @@ private fun Line(rich: RichText, index: Int, styles: EditorStyles, style: TextSt
             style = style,
             maxLines = maxLines,
             overflow = TextOverflow.Ellipsis,
-            onTextLayout = { area = it.spoilerLayout(ranges) },
+            onTextLayout = {
+                area = it.spoilerLayout(ranges)
+                laidOut = it
+            },
             modifier = Modifier
+                .feedLinks(links) { laidOut }
                 .spoilerMask { area?.let { reveal.hidden(index, it) } }
                 .pointerInput(reveal) {
                     // A tap on a closed spoiler opens the post's spoilers instead of the post.
@@ -380,6 +413,39 @@ private fun Line(rich: RichText, index: Int, styles: EditorStyles, style: TextSt
             )
         }
     }
+}
+
+/**
+ * Links in a post's line (ADR-038): the thin underline, the press shown before the finger lifts, a tap opens the link
+ * (not the post); scrolling over one does nothing.
+ */
+@Composable
+private fun Modifier.feedLinks(links: List<MarkSpan>, layout: () -> TextLayoutResult?): Modifier {
+    if (links.isEmpty()) return this
+    val actions = rememberLinkActions()
+    val color = MaterialTheme.colorScheme.primary
+    var pressed by remember { mutableStateOf<MarkSpan?>(null) }
+    var placed by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    return onGloballyPositioned { placed = it }
+        .drawBehind {
+            val l = layout() ?: return@drawBehind
+            pressed?.let { drawPressedLink(l, it, color.copy(alpha = 0.14f)) }
+            drawLinkUnderlines(l, links, color.copy(alpha = 0.45f))
+        }
+        .pointerInput(links) {
+            awaitEachGesture {
+                val down = awaitFirstDown()
+                val link = layout()?.linkUnder(links, down.position, 6.dp.toPx()) ?: return@awaitEachGesture
+                down.consume()
+                pressed = link
+                val up = awaitLinkTap(down) { placed?.takeIf { it.isAttached }?.positionInRoot() }
+                pressed = null
+                if (up != null) {
+                    up.consume()
+                    actions.open(link.mark)
+                }
+            }
+        }
 }
 
 /** One paragraph with its marks in the editor's styles; soft line breaks become real ones. */

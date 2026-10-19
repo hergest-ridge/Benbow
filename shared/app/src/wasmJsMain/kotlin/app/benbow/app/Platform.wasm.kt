@@ -20,6 +20,7 @@ import app.benbow.app.resources.Res
 import app.benbow.app.resources.media_file
 import app.benbow.client.LocalFile
 import app.benbow.client.uri
+import app.benbow.core.text.Links
 import org.jetbrains.compose.resources.stringResource
 
 // The browser's side of the app's platform pieces (ADR-029).
@@ -69,13 +70,20 @@ internal actual fun DictationKey(services: AppServices, target: DictationTarget,
  * desktop app. Pasted text stays with the editor.
  */
 @Composable
-internal actual fun Modifier.attachOnDrop(services: AppServices, entryId: suspend () -> String, onHover: (Boolean) -> Unit): Modifier {
+internal actual fun Modifier.attachOnDrop(
+    services: AppServices,
+    entryId: suspend () -> String,
+    onHover: (Boolean) -> Unit,
+    onLink: (String) -> Unit,
+): Modifier {
     val hover by rememberUpdatedState(onHover)
     val entry by rememberUpdatedState(entryId)
+    val link by rememberUpdatedState(onLink)
     DisposableEffect(services) {
         val listeners = listenForFiles(
             onHover = { hover(it) },
             onFiles = { files -> forEachItem(files) { services.attachBrowserFile({ entry() }, it) } },
+            onLink = { href -> Links.parse(href)?.let(link) },
         )
         onDispose { stopFileListeners(listeners) }
     }

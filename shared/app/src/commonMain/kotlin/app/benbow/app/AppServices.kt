@@ -18,6 +18,7 @@ import app.benbow.client.PairingException
 import app.benbow.client.ReminderItem
 import app.benbow.client.SearchQuery
 import app.benbow.client.ServerHistory
+import app.benbow.client.ServerPages
 import app.benbow.client.Settings
 import app.benbow.client.SpeechModel
 import app.benbow.client.SyncController
@@ -31,6 +32,7 @@ import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.calendar.moveJournalEvents
 import app.benbow.client.db.BenbowDb
 import app.benbow.client.upcoming
+import app.benbow.ui.editor.Removal
 import app.cash.sqldelight.db.SqlDriver
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -135,6 +137,9 @@ sealed interface AppMessage {
 
     /** A voice note gave way to its text (7.10e); "Вернуть" brings it back. */
     data class VoiceReplaced(val entryId: String, val attachmentId: String) : AppMessage
+
+    /** Something left the text in one tap or key (ADR-038: a card, a picture, a link); "Вернуть" undoes it there. */
+    data class TextRemoved(val removal: Removal) : AppMessage
 }
 
 /**
@@ -167,6 +172,21 @@ class AppServices(
     val repo = JournalRepository(db, now, today = { today() })
     val pairing = Pairing(db)
     val history = ServerHistory(db, apis)
+
+    /** Pages read on the server for link cards (the browser's way, ADR-038). */
+    internal val pages = ServerPages(db, apis)
+
+    /** Addresses whose pages are being read for their cards right now (they shimmer). */
+    val linkLoading = MutableStateFlow<Set<String>>(emptySet())
+
+    /** Pages asked for in this run, so a card isn't read twice at once or again after it failed now. */
+    internal val triedPages: MutableSet<String> = HashSet()
+
+    /** How a card's page is read (ADR-038); tests put their own pages here. */
+    internal var pageReader: suspend (String) -> LinkPreview? = { readPage(this, it) }
+
+    /** Where a tapped web link goes instead of the browser (tests); null: the platform's way. */
+    internal var openUrlOverride: ((String) -> Unit)? = null
     val media: Media = mediaStore.create(db, apis, now)
     private val engine = SyncEngine(db, apis, now)
     private val calendarDb = CalendarDb(calendarDriver)
@@ -292,6 +312,9 @@ class AppServices(
 
     /** Voice notes brought back after «Заменить текстом» (7.10e): an open editor of their entry puts them in the text again. */
     val voiceBack = MutableSharedFlow<String>(extraBufferCapacity = 4)
+
+    /** "Вернуть" for [AppMessage.TextRemoved]: the editor that removed it undoes it. */
+    val removalBack = MutableSharedFlow<Removal>(extraBufferCapacity = 4)
 
     /** A sound named by hand: the title is its caption, artist and album go to its `track:` field. */
     internal fun nameSound(entryId: String, attachmentId: String, names: SoundNames) {

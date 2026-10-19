@@ -63,7 +63,12 @@ import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 /** What the capture sheet starts with: text and files another app shared, or nothing (the tile, a shortcut). */
-class SharedContent internal constructor(val text: String, internal val files: List<SharedFile>) {
+class SharedContent internal constructor(
+    val text: String,
+    internal val files: List<SharedFile>,
+    /** The shared page's title (Android's EXTRA_SUBJECT): a shared link's card takes it (ADR-038). */
+    internal val linkTitle: String? = null,
+) {
     val isEmpty: Boolean get() = text.isBlank() && files.isEmpty()
 
     companion object {
@@ -127,7 +132,8 @@ fun QuickCapture(services: AppServices, shared: SharedContent, onClose: () -> Un
                     val listener = launch(start = CoroutineStart.UNDISPATCHED) {
                         services.messages.collect { if (it is AppMessage.AttachFailed) failures += it.reason }
                     }
-                    val id = services.repo.createNote(services.today(), text.trim())
+                    val id = services.repo.createNote(services.today(), text.trim(), shared.linkTitle)
+                    services.readCardsOf(id)
                     shared.files.map { file -> services.attach({ id }, { file.open() }, probe = { file.probe() }) }.joinAll()
                     listener.cancel()
                 }

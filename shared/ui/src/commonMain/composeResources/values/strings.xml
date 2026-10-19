@@ -8,6 +8,16 @@
     <string name="tool_align_start">По левому краю</string>
     <string name="tool_align_center">По центру</string>
     <string name="tool_align_end">По правому краю</string>
+    <string name="tool_link">Ссылка</string>
+    <string name="link_open">Открыть</string>
+    <string name="link_edit">Изменить</string>
+    <string name="link_copy">Копировать ссылку</string>
+    <string name="link_unlink">Убрать ссылку</string>
+    <string name="link_entry">Запись</string>
+    <string name="card_large">Крупно</string>
+    <string name="card_row">Строкой</string>
+    <string name="card_to_text">В текст</string>
+    <string name="card_remove">Удалить</string>
     <string name="home_greeting">Добро пожаловать в «Адмирал Бенбоу»</string>
     <string name="home_tagline">Тёплое место, откуда начинается каждая история.</string>
     <string name="editor_spike_title">Редактор · прототип</string>

@@ -2,9 +2,11 @@ package app.benbow.client
 
 import app.benbow.client.db.BenbowDb
 import app.benbow.core.audio.TrackTags
+import app.benbow.core.content.Block
 import app.benbow.core.content.Document
 import app.benbow.core.content.DocumentCodec
 import app.benbow.core.content.DocumentFormatException
+import app.benbow.core.content.LinkCardBlock
 import app.benbow.core.content.Span
 import app.benbow.core.content.TagNames
 import app.benbow.core.content.TextBlock
@@ -18,6 +20,7 @@ import app.benbow.core.sync.PutAttachment
 import app.benbow.core.sync.PutRevision
 import app.benbow.core.sync.SetField
 import app.benbow.core.sync.SyncOp
+import app.benbow.core.text.Links
 import app.benbow.core.uuidV7
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
@@ -295,8 +298,22 @@ class JournalRepository(
         }
     }
 
-    /** Quick capture: every line of [text] becomes a paragraph. */
-    fun createNote(day: String, text: String): String = createEntry(day, kind = "note", body = textBody(text, random))
+    /**
+     * Rewrites entry [id]'s body (its draft if it has one) with [change] and commits it as a revision: a link card read
+     * after its editor closed (ADR-038). False when the entry is gone or nothing changed.
+     */
+    fun reviseBody(id: String, change: (String) -> String?): Boolean = db.transactionWithResult {
+        val entry = q.selectEntry(id).executeAsOneOrNull() ?: return@transactionWithResult false
+        val draft = q.selectDraft(id).executeAsOneOrNull()
+        val body = draft?.body ?: entry.body
+        val next = change(body)?.takeIf { it != body } ?: return@transactionWithResult false
+        q.upsertDraft(id, next, draft?.base_rev ?: entry.head_rev, now())
+        commitDraftInTransaction(id)
+    }
+
+    /** Quick capture: every line of [text] becomes a paragraph, a lone address a link card ([noteBody]). */
+    fun createNote(day: String, text: String, linkTitle: String? = null): String =
+        createEntry(day, kind = "note", body = noteBody(text, linkTitle, random))
 
     /** Turns the draft into a revision (docs/sync.md#revisions-from-drafts). Returns true if one was created. */
     fun commitDraft(id: String): Boolean = db.transactionWithResult { commitDraftInTransaction(id) }
@@ -384,6 +401,10 @@ class JournalRepository(
         if (track != null && !track.isEmpty) setField(entryId, TrackTags.FIELD_PREFIX + meta.id, track.encode())
         meta.id
     }
+
+    /** Keeps a file no attachment names (a link card's picture, ADR-038): it uploads and stays like a preview. */
+    fun keepFile(file: MediaFile) =
+        q.putMedia(file.sha256, file.path, file.size, file.mime, "captured", 0, file.name, file.capturedAt, now())
 
     /** Hides the attachment (S6: the file and the link's history stay on the server). */
     fun removeAttachment(entryId: String, attachmentId: String) = setPresent(entryId, attachmentId, false)
@@ -760,6 +781,27 @@ class JournalRepository(
     companion object {
         fun emptyBody(random: Random = Random.Default): String = textBody("", random)
 
+        /**
+         * A quick note's lines as paragraphs; a line that is only an address becomes a link card (ADR-038), titled
+         * [linkTitle] (a shared page's title) when the line above it says just that, which then goes.
+         */
+        fun noteBody(text: String, linkTitle: String?, random: Random = Random.Default): String {
+            val blocks = ArrayList<Block>()
+            for (line in text.trim().lines()) {
+                val key = uuidV7(0, random).takeLast(8)
+                val href = Links.parse(line)
+                if (href == null) {
+                    blocks += TextBlock(key, children = listOf(Span(line)))
+                    continue
+                }
+                val above = (blocks.lastOrNull() as? TextBlock)?.children?.joinToString("") { it.text }?.trim()
+                val title = linkTitle?.trim()?.takeIf { it.isNotEmpty() && it == above }
+                if (title != null) blocks.removeAt(blocks.lastIndex)
+                blocks += LinkCardBlock(key, href, title = title)
+            }
+            return DocumentCodec.encode(Document(blocks))
+        }
+
         fun textBody(text: String, random: Random = Random.Default): String = DocumentCodec.encode(
             Document(text.trim().lines().map { TextBlock(uuidV7(0, random).takeLast(8), children = listOf(Span(it))) }),
         )
@@ -819,9 +861,13 @@ internal fun summarize(body: String): Pair<String, String> {
         return "" to ""
     }
     // Spoilers stay out of both (ADR-031): lists, Home and search show them, and they show the words openly.
-    val first = document.blocks.firstOrNull() as? TextBlock
+    // A link card reads as its title or its short address there, not as the whole address (ADR-038).
+    val blocks = document.blocks.map { block ->
+        if (block is LinkCardBlock) TextBlock(block.key, children = listOf(Span(block.title ?: Links.display(block.href)))) else block
+    }
+    val first = blocks.firstOrNull() as? TextBlock
     val title = first?.children?.filter { SPOILER !in it.marks }?.joinToString("") { it.text }.orEmpty().squeezed()
-    val rest = (if (first != null) document.copy(blocks = document.blocks.drop(1)) else document).toPlainText(includeSpoilers = false)
+    val rest = document.copy(blocks = if (first != null) blocks.drop(1) else blocks).toPlainText(includeSpoilers = false)
     return title.take(TITLE_MAX) to rest.lines().map { it.squeezed() }.filter { it.isNotEmpty() }.joinToString(" ").take(PREVIEW_MAX)
 }
 

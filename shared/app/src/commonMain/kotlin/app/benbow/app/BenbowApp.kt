@@ -73,6 +73,7 @@ import androidx.navigation3.ui.NavDisplay
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.attach_failed
 import app.benbow.app.resources.audio_failed
+import app.benbow.app.resources.card_became_text
 import app.benbow.app.resources.category_trashed
 import app.benbow.app.resources.copied
 import app.benbow.app.resources.dictation_attach
@@ -88,6 +89,9 @@ import app.benbow.app.resources.media_mic_denied
 import app.benbow.app.resources.months_genitive
 import app.benbow.app.resources.postponed
 import app.benbow.app.resources.reminder_now
+import app.benbow.app.resources.removed_atom
+import app.benbow.app.resources.removed_card
+import app.benbow.app.resources.removed_link
 import app.benbow.app.resources.save_failed
 import app.benbow.app.resources.saved
 import app.benbow.app.resources.speech_failed
@@ -114,6 +118,7 @@ import app.benbow.client.restoreCategory
 import app.benbow.client.restoreTag
 import app.benbow.client.splitTag
 import app.benbow.client.tagRegistry
+import app.benbow.ui.editor.Removal
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -431,6 +436,17 @@ private fun AppRoot(services: AppServices) {
                     }
                 }
 
+                is AppMessage.TextRemoved -> {
+                    val text = when (message.removal.kind) {
+                        Removal.Kind.Atom -> Res.string.removed_atom
+                        Removal.Kind.Card -> Res.string.removed_card
+                        Removal.Kind.Link -> Res.string.removed_link
+                        Removal.Kind.CardToText -> Res.string.card_became_text
+                    }
+                    val result = snackbar.showSnackbar(getString(text), getString(Res.string.veil_undo), duration = SnackbarDuration.Long)
+                    if (result == SnackbarResult.ActionPerformed) services.removalBack.emit(message.removal)
+                }
+
                 is AppMessage.VoiceReplaced -> {
                     val result = snackbar.showSnackbar(
                         getString(Res.string.voice_replaced),
@@ -600,7 +616,7 @@ private fun AppNavigation(services: AppServices, backStack: SnapshotStateList<Ro
     val openEntry = (backStack.lastOrNull() as? Route.Editor)?.entryId?.takeIf { twoPane }
     val openTag = remember(nav) { { id: String -> nav.open(Route.Tag(id)) } }
     CompositionLocalProvider(LocalOpenEntry provides openEntry, LocalOpenTag provides openTag) {
-        Screens(services, backStack, nav, listNav, strategies)
+        ProvideLinks(services, nav) { Screens(services, backStack, nav, listNav, strategies) }
     }
 }
 

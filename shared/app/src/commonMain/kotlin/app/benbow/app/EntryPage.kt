@@ -17,6 +17,7 @@ import app.benbow.core.content.DocumentCodec
 import app.benbow.core.content.DocumentFormatException
 import app.benbow.core.content.HtmlExporter
 import app.benbow.core.content.HtmlExporter.Companion.escape
+import app.benbow.core.content.LinkCardBlock
 import app.benbow.core.content.STYLE_NORMAL
 import app.benbow.core.content.Span
 import app.benbow.core.content.TextBlock
@@ -70,6 +71,10 @@ internal suspend fun AppServices.entryPage(id: String): PrintPage? = withContext
             else -> null
         }?.uri()
     }
+    // Link cards show their page's picture too (ADR-038).
+    val cardPictures = document.blocks.filterIsInstance<LinkCardBlock>().mapNotNull {
+        it.image
+    }.distinct().associateWith { fileOf(it)?.uri() }
     val missing = getString(Res.string.not_on_device)
     val label = { a: AttachmentState -> a.caption ?: a.meta.name ?: a.meta.kind }
     val body = HtmlExporter(
@@ -77,6 +82,7 @@ internal suspend fun AppServices.entryPage(id: String): PrintPage? = withContext
         highlight = { BenbowPalette.highlight(it, dark = false)?.css() },
         tint = { BenbowPalette.tint(it, dark = false)?.css() },
         attachmentUrl = { ref -> pictures[ref].orEmpty() },
+        imageUrl = { cardPictures[it] },
     ).export(
         // A note's first line reads as its title on paper, as it does in the lists.
         document.copy(

@@ -13,10 +13,22 @@ data class EditResult(
 
 /**
  * Applies a keyboard/IME edit: replaces `[start, end)` with [inserted] and runs the editor rules
- * (atoms stay whole, list exit on Enter, unformat on Backspace, Markdown-style shortcuts).
+ * (atoms stay whole, list exit on Enter, unformat on Backspace, Markdown-style shortcuts, links: LinkEdits.kt).
+ * [overSelection]: the user had selected exactly `[start, end)` (an address pasted over it links the words).
  */
-fun RichText.applyUserEdit(start: Int, end: Int, inserted: String, typingMarks: Set<Mark>, keys: BlockKeys): EditResult =
-    atomEdit(start, end, inserted, typingMarks, keys) ?: ordinaryEdit(start, end, inserted, typingMarks, keys).keepAtoms(keys)
+fun RichText.applyUserEdit(
+    start: Int,
+    end: Int,
+    inserted: String,
+    typingMarks: Set<Mark>,
+    keys: BlockKeys,
+    overSelection: Boolean = false,
+): EditResult {
+    val base = autolinked(start, end, inserted)
+    return base.atomEdit(start, end, inserted, typingMarks, keys)
+        ?: base.linkPaste(start, end, inserted, typingMarks, keys, overSelection)?.keepAtoms(keys)
+        ?: base.ordinaryEdit(start, end, inserted, typingMarks, keys).keepAtoms(keys)
+}
 
 private fun RichText.ordinaryEdit(start: Int, end: Int, inserted: String, typingMarks: Set<Mark>, keys: BlockKeys): EditResult {
     if (inserted == "\n" && start == end) {
@@ -33,10 +45,11 @@ private fun RichText.ordinaryEdit(start: Int, end: Int, inserted: String, typing
             return EditResult(withParagraph(i, p.exitOneLevel()), end)
         }
     }
-    val edited = replace(start, end, inserted, typingMarks, keys)
+    val edited = replace(start, end, inserted, typingMarks, keys).linkified(start, inserted, typingMarks)
     val cursor = start + inserted.length
     return edited.blockShortcut(cursor, inserted, keys)
         ?: edited.inlineShortcut(cursor, inserted, keys)
+        ?: edited.markdownLink(cursor, inserted, keys)
         ?: EditResult(edited, cursor)
 }
 

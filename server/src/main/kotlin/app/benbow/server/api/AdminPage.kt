@@ -157,14 +157,18 @@ private fun statusPage(ctx: ServerContext, admin: Boolean): String = buildString
     append("</body></html>")
 }
 
-/** The one-time model download for voice transcription: the server's only request to the internet, on a click. */
+/**
+ * The one-time model download for voice transcription, on a click. Besides it the server goes to the internet only to
+ * read a page for a link card the web client asks about (ADR-038).
+ */
 private fun speechSection(model: SpeechModel): String = buildString {
     val mb = { bytes: Long -> "%.0f".format(bytes / 1_000_000.0) }
     append("<section><h2>Расшифровка голосовых</h2>")
     append(
         "<p>Телефоны расшифровывают голосовые сами, без интернета, моделью GigaAM v3 (лицензия MIT). Взять её они могут " +
             "только отсюда. Сервер скачивает её один раз по этой кнопке с официальной страницы sherpa-onnx на GitHub " +
-            "и сверяет каждый файл с отпечатком, записанным в программе. Других обращений в интернет у сервера нет.</p>",
+            "и сверяет каждый файл с отпечатком, записанным в программе. Кроме этого сервер ходит в интернет, только когда " +
+            "веб-версия просит прочитать страницу для карточки ссылки (заголовок и картинку); адреса домашней сети он не открывает.</p>",
     )
     when (val state = model.state) {
         SpeechModel.State.Ready -> append("<p>Модель на месте (${mb(SpeechModelSpec.totalSize)} МБ). Телефоны возьмут её отсюда.</p>")

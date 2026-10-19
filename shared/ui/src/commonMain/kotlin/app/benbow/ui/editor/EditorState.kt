@@ -15,12 +15,21 @@ import app.benbow.core.text.Align
 import app.benbow.core.text.Atom
 import app.benbow.core.text.BlockKeys
 import app.benbow.core.text.BlockStyle
+import app.benbow.core.text.EditResult
+import app.benbow.core.text.Links
 import app.benbow.core.text.ListKind
 import app.benbow.core.text.Mark
 import app.benbow.core.text.Paragraph
 import app.benbow.core.text.RichText
 import app.benbow.core.text.applyUserEdit
+import app.benbow.core.text.atomRemovedBy
+import app.benbow.core.text.cardToText
 import app.benbow.core.text.insertAtom
+import app.benbow.core.text.linkAt
+import app.benbow.core.text.removeAtom
+import app.benbow.core.text.setLink
+import app.benbow.core.text.unlink
+import app.benbow.core.text.withCard
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
@@ -51,6 +60,22 @@ class EditorState(initial: RichText, private val keys: BlockKeys = BlockKeys()) 
         private set
 
     internal var styles: EditorStyles? by mutableStateOf(null)
+
+    /** The link sheet is wanted for this (ADR-038); the app shows it and calls [applyLink] or clears this. */
+    var linkRequest: LinkRequest? by mutableStateOf(null)
+
+    /** The atom (by paragraph key) a tap or the first Backspace selected; the second Backspace removes it. */
+    var selectedAtom: String? by mutableStateOf(null)
+        internal set
+
+    /** What was just taken out in one tap or key; the app offers «Вернуть» ([undoRemoval]) while nothing else changed. */
+    var removal: Removal? by mutableStateOf(null)
+        private set
+
+    /** The cursor was put somewhere (a tap, arrows) rather than carried by typing: the link bubble may show. */
+    internal var cursorPlaced by mutableStateOf(false)
+
+    private var edits = 0
 
     private val undoStack = ArrayDeque<Snapshot>()
     private val redoStack = ArrayDeque<Snapshot>()
@@ -201,6 +226,125 @@ class EditorState(initial: RichText, private val keys: BlockKeys = BlockKeys()) 
         return true
     }
 
+    /** Asks for the link sheet over the link at the cursor, or the selected words, or words to add at the cursor. */
+    fun requestLink() {
+        val sel = selection
+        val m = model
+        val span = m.linkAt(sel.min)?.takeIf { sel.collapsed || (it.start <= sel.min && sel.max <= it.end) }
+        linkRequest = if (span != null) {
+            LinkRequest(span.start, span.end, span.mark, m.text.substring(span.start, span.end))
+        } else {
+            LinkRequest(sel.min, sel.max, null, m.text.substring(sel.min, sel.max))
+        }
+    }
+
+    /** Asks for the link sheet over card [key]: its address and title. */
+    fun requestCardEdit(key: String) {
+        val card = card(key)?.second ?: return
+        linkRequest = LinkRequest(0, 0, Mark.Link(card.href), card.title.orEmpty(), cardKey = key)
+    }
+
+    /**
+     * What the link sheet chose for [request]: [mark] over the words ([words] replace them when given and different), or
+     * no link at all (null: the words stay). Undoable; taking a link off offers «Вернуть».
+     */
+    fun applyLink(request: LinkRequest, mark: Mark?, words: String?) {
+        linkRequest = null
+        val before = model
+        if (request.cardKey != null) {
+            val i = cardIndex(request.cardKey) ?: return
+            val href = (mark as? Mark.Link)?.href
+            val title = words?.trim()?.ifEmpty { null }
+            val after = before.withCard(i) { card ->
+                // Another address is another page: what the old one said goes, and the new one is read.
+                if (href == null || href == card.href) card.copy(title = title) else Atom.LinkCard(href, title = title, large = card.large)
+            } ?: return
+            commit(before, EditResult(after, selection.min, selection.max))
+            return
+        }
+        val start = request.start.coerceIn(0, before.text.length)
+        val end = request.end.coerceIn(start, before.text.length)
+        if (mark == null) {
+            if (end > start && before.linkAt(start) != null) {
+                commit(before, EditResult(before.unlink(start, end), selection.min, selection.max))
+                removal = Removal(Removal.Kind.Link, edits)
+            }
+            return
+        }
+        val label =
+            words?.takeIf { it.isNotBlank() }?.replace('\n', ' ')
+                ?: (mark as? Mark.Link)?.href?.takeIf { end == start }?.let(Links::display)
+        if (end == start && label == null) return
+        commit(before, before.setLink(start, end, mark, label, keys))
+    }
+
+    /** Takes the link at [offset] off; its words stay. */
+    fun unlinkAt(offset: Int) {
+        val span = model.linkAt(offset) ?: return
+        val before = model
+        commit(before, EditResult(before.unlink(span.start, span.end), selection.min, selection.max))
+        removal = Removal(Removal.Kind.Link, edits)
+    }
+
+    /** Card [key] and its paragraph index, or null when it is gone. */
+    fun card(key: String): Pair<Int, Atom.LinkCard>? = cardIndex(key)?.let { i -> i to model.paragraphs[i].atom as Atom.LinkCard }
+
+    private fun cardIndex(key: String): Int? = model.paragraphs.indexOfFirst {
+        it.key == key && it.atom is Atom.LinkCard
+    }.takeIf { it >= 0 }
+
+    /** The big look or a row for card [key]; undoable. */
+    fun setCardLarge(key: String, large: Boolean) {
+        val i = cardIndex(key) ?: return
+        val before = model
+        commit(before, EditResult(before.withCard(i) { it.copy(large = large) } ?: return, selection.min, selection.max))
+    }
+
+    /** Card [key] goes down to a link in the text (its title as the words); «Вернуть» brings the card back. */
+    fun cardToText(key: String) {
+        val i = cardIndex(key) ?: return
+        val before = model
+        commit(before, before.cardToText(i, keys) ?: return, moveCursor = true)
+        selectedAtom = null
+        removal = Removal(Removal.Kind.CardToText, edits)
+    }
+
+    /** Atom [key] (a card, a picture, a divider) leaves the text with its line; «Вернуть» brings it back. */
+    fun removeAtom(key: String) {
+        val before = model
+        val i = before.paragraphs.indexOfFirst { it.key == key }.takeIf { it >= 0 } ?: return
+        val card = before.paragraphs[i].atom is Atom.LinkCard
+        commit(before, before.removeAtom(i, keys) ?: return, moveCursor = true)
+        selectedAtom = null
+        removal = Removal(if (card) Removal.Kind.Card else Removal.Kind.Atom, edits)
+    }
+
+    /**
+     * Writes what card [key]'s page said into it. Not an undo step: undoing past the paste takes the card away, and
+     * one that comes back without its words is filled again.
+     */
+    fun fillCard(key: String, change: (Atom.LinkCard) -> Atom.LinkCard): Boolean {
+        val i = cardIndex(key) ?: return false
+        model = model.withCard(i, change) ?: return false
+        return true
+    }
+
+    /** «Вернуть» for [removal]: undoes it if nothing was edited since. */
+    fun undoRemoval(removal: Removal): Boolean {
+        if (removal.edit != edits || undoStack.isEmpty()) return false
+        this.removal = null
+        undo()
+        return true
+    }
+
+    private fun commit(before: RichText, result: EditResult, moveCursor: Boolean = false) {
+        record(Snapshot(before, selection), typing = false)
+        model = result.text
+        typingMarks = result.typingMarks
+        val sel = if (moveCursor || result.text.text != before.text) TextRange(result.selectionStart, result.selectionEnd) else selection
+        textFieldState.edit { syncText(result.text.text, sel, forceSelection = moveCursor || result.text.text != before.text) }
+    }
+
     fun undo() {
         val snapshot = undoStack.removeLastOrNull() ?: return
         redoStack.addLast(Snapshot(model, selection))
@@ -222,11 +366,25 @@ class EditorState(initial: RichText, private val keys: BlockKeys = BlockKeys()) 
             model = RichText(text, List(text.count { it == '\n' } + 1) { Paragraph(keys.next()) })
             return
         }
-        val result = before.applyUserEdit(start, end, inserted, typingMarks ?: before.marksForInsertion(start, end), keys)
-        record(Snapshot(before, buffer.originalSelection), typing = inserted.length == 1 && inserted != "\n" && start == end)
+        // Backspace or Delete at an atom selects it first; the second press removes it, with «Вернуть» (ADR-038).
+        val atomAt = before.atomRemovedBy(start, end, inserted)
+        val atomKey = atomAt?.let { before.paragraphs[it].key }
+        if (atomKey != null && selectedAtom != atomKey) {
+            buffer.revertAllChanges()
+            selectedAtom = atomKey
+            return
+        }
+        val original = buffer.originalSelection
+        val overSelection = !original.collapsed && original.min == start && original.max == end
+        val result = before.applyUserEdit(start, end, inserted, typingMarks ?: before.marksForInsertion(start, end), keys, overSelection)
+        record(Snapshot(before, original), typing = inserted.length == 1 && inserted != "\n" && start == end)
         model = result.text
         typingMarks = result.typingMarks
         buffer.syncText(result.text.text, TextRange(result.selectionStart, result.selectionEnd), forceSelection = false)
+        selectedAtom = null
+        if (atomAt != null) {
+            removal = Removal(if (before.paragraphs[atomAt].atom is Atom.LinkCard) Removal.Kind.Card else Removal.Kind.Atom, edits)
+        }
     }
 
     private fun apply(transform: (RichText, TextRange) -> RichText) {
@@ -242,12 +400,14 @@ class EditorState(initial: RichText, private val keys: BlockKeys = BlockKeys()) 
     private fun restore(snapshot: Snapshot) {
         lastTyping = null
         typingMarks = null
+        selectedAtom = null
         model = snapshot.model
         textFieldState.edit { syncText(snapshot.model.text, snapshot.selection, forceSelection = true) }
         refreshFlags()
     }
 
     private fun record(before: Snapshot, typing: Boolean) {
+        edits++
         val merge = typing && lastTyping?.let { it.elapsedNow() < 1.seconds } == true
         if (!merge) {
             undoStack.addLast(before)
@@ -320,6 +480,17 @@ class EditorState(initial: RichText, private val keys: BlockKeys = BlockKeys()) 
     private companion object {
         const val MAX_UNDO = 500
     }
+}
+
+/**
+ * What the link sheet edits (ADR-038): the words `[start, end)` (empty: words to add at the cursor) with their [current]
+ * link, or card [cardKey]'s address and title ([words]).
+ */
+data class LinkRequest(val start: Int, val end: Int, val current: Mark?, val words: String, val cardKey: String? = null)
+
+/** Something taken out in one tap or key; [edit] is the editor's edit count right after it. */
+class Removal(val kind: Kind, internal val edit: Int) {
+    enum class Kind { Atom, Card, Link, CardToText }
 }
 
 /** The edit as one replace `[start, end)` of the original text with the returned string. */

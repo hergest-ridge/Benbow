@@ -13,7 +13,8 @@ fun sharedContent(context: Context, intent: Intent): SharedContent {
         val clip = intent.clipData
         if (clip != null) for (i in 0 until clip.itemCount) clip.getItemAt(i).uri?.let(::add)
     }.distinct()
-    val text = sharedNoteText(intent.getStringExtra(Intent.EXTRA_SUBJECT), intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString())
+    val subject = intent.getStringExtra(Intent.EXTRA_SUBJECT)
+    val text = sharedNoteText(subject, intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString())
     val resolver = context.contentResolver
     val files = uris.map { uri ->
         val mime = resolver.getType(uri) ?: intent.type?.takeIf { '*' !in it } ?: "application/octet-stream"
@@ -21,5 +22,5 @@ fun sharedContent(context: Context, intent: Intent): SharedContent {
             resolver.openInputStream(uri) ?: error("Can't read $uri")
         }, probe = { AndroidProbe.uri(context, uri) })
     }
-    return SharedContent(text, files)
+    return SharedContent(text, files, linkTitle = subject)
 }

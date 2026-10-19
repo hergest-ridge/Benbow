@@ -39,6 +39,8 @@ import app.benbow.app.resources.feed_cards_hint
 import app.benbow.app.resources.feed_scrubber
 import app.benbow.app.resources.feed_scrubber_hint
 import app.benbow.app.resources.feed_section
+import app.benbow.app.resources.link_previews
+import app.benbow.app.resources.link_previews_hint
 import app.benbow.app.resources.palette
 import app.benbow.app.resources.palette_names
 import app.benbow.app.resources.post_media
@@ -113,6 +115,17 @@ internal fun AppearanceScreen(services: AppServices, nav: Navigator) {
                         modifier = Modifier.hand(),
                     )
                 }
+            }
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f).padding(end = 16.dp)) {
+                    Text(stringResource(Res.string.link_previews), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        stringResource(Res.string.link_previews_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(current.linkPreviews, { services.setAppearance(current.copy(linkPreviews = it)) }, modifier = Modifier.hand())
             }
             Title(stringResource(Res.string.palette))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {

@@ -1,6 +1,7 @@
 package app.benbow.client
 
 import app.benbow.client.db.BenbowDb
+import app.benbow.core.api.LinkPreviewInfo
 import app.benbow.core.api.RevisionInfo
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -13,6 +14,12 @@ class ServerHistory(private val db: BenbowDb, private val apiFor: (Connection) -
     suspend fun body(revisionId: String): String = api().revision(revisionId).body
 
     private fun api() = apiFor(Settings(db).connection ?: throw PairingException("Not paired with a server"))
+}
+
+/** Pages read on the server for link cards (ADR-038): the web client's way, since its page reaches nothing else. */
+class ServerPages(private val db: BenbowDb, private val apiFor: (Connection) -> BenbowApi) {
+    suspend fun preview(url: String): LinkPreviewInfo =
+        apiFor(Settings(db).connection ?: throw PairingException("Not paired with a server")).linkPreview(url)
 }
 
 /** One HTTP client per connection: each client owns threads and a connection pool, so they are not created per call. */

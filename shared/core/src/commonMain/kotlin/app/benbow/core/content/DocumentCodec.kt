@@ -48,7 +48,16 @@ object DocumentCodec {
 
     private fun Block.canonical(): Block = when (this) {
         is TextBlock -> canonical()
+
         is AttachmentBlock -> copy(width = width?.let(::quantize))
+
+        is LinkCardBlock -> copy(
+            title = title?.takeIf { it.isNotBlank() },
+            description = description?.takeIf { it.isNotBlank() },
+            site = site?.takeIf { it.isNotBlank() },
+            view = view?.takeIf { it != "row" },
+        )
+
         is CodeBlock, is DividerBlock, is UnknownBlock -> this
     }
 
@@ -161,6 +170,17 @@ object DocumentCodec {
                 block.caption?.let { field("caption", q(it)) }
             }
 
+            is LinkCardBlock -> {
+                field("_type", q("linkCard"))
+                field("href", q(block.href))
+                block.title?.let { field("title", q(it)) }
+                block.description?.let { field("description", q(it)) }
+                block.site?.let { field("site", q(it)) }
+                block.image?.let { field("image", q(it)) }
+                block.view?.let { field("view", q(it)) }
+                block.fetched?.let { field("fetched", q(it)) }
+            }
+
             is UnknownBlock -> error("handled above")
         }
         append('}')
@@ -219,6 +239,7 @@ object DocumentCodec {
                 "code" -> decodeCode(key, obj)
                 "divider" -> decodeDivider(key, obj)
                 "attachment" -> decodeAttachment(key, obj)
+                "linkCard" -> decodeLinkCard(key, obj)
                 else -> UnknownBlock(key, obj)
             }
         } catch (_: Unrecognized) {
@@ -313,6 +334,21 @@ object DocumentCodec {
         obj.allow("_key", "_type", "ref", "width", "caption")
         val width = obj["width"]?.double()?.also { if (it !in 0.0..1.0) unrecognized() }
         return AttachmentBlock(key, (obj["ref"] ?: unrecognized()).str(), width, obj["caption"]?.str())
+    }
+
+    private fun decodeLinkCard(key: String, obj: JsonObject): LinkCardBlock {
+        obj.allow("_key", "_type", "href", "title", "description", "site", "image", "view", "fetched")
+        val href = (obj["href"] ?: unrecognized()).str().also { if (it.isBlank()) unrecognized() }
+        return LinkCardBlock(
+            key,
+            href,
+            title = obj["title"]?.str(),
+            description = obj["description"]?.str(),
+            site = obj["site"]?.str(),
+            image = obj["image"]?.str()?.also { if (!SHA256.matches(it)) unrecognized() },
+            view = obj["view"]?.str()?.also { if (it != "row" && it !in CARD_VIEWS) unrecognized() },
+            fetched = obj["fetched"]?.str()?.also { if (!DAY.matches(it)) unrecognized() },
+        )
     }
 
     private fun JsonObject.allow(vararg names: String) {

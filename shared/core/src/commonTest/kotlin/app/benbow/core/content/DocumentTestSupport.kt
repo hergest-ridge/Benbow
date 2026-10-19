@@ -22,7 +22,7 @@ internal fun randomDocument(rnd: Random): Document {
     repeat(rnd.nextInt(1, 9)) { i ->
         val key = "b$i"
         val previousCode = blocks.lastOrNull() as? CodeBlock
-        when (rnd.nextInt(12)) {
+        when (rnd.nextInt(13)) {
             in 0..6 -> blocks.add(randomText(rnd, key))
 
             7, 8 -> {
@@ -38,6 +38,19 @@ internal fun randomDocument(rnd: Random): Document {
             9 -> blocks.add(DividerBlock(key, listOf(null, "dots").random(rnd)))
 
             10 -> blocks.add(AttachmentBlock(key, "att-$i", listOf(null, 0.5, 0.3333).random(rnd), listOf(null, "фото").random(rnd)))
+
+            11 -> blocks.add(
+                LinkCardBlock(
+                    key,
+                    "https://example.com/$i?q=a b",
+                    title = listOf(null, randomString(rnd).ifBlank { "t" }).random(rnd),
+                    description = listOf(null, "о «маяках»").random(rnd),
+                    site = listOf(null, "Хабр").random(rnd),
+                    image = listOf(null, "a".repeat(64)).random(rnd),
+                    view = listOf(null, "large").random(rnd),
+                    fetched = listOf(null, "2026-10-19").random(rnd),
+                ),
+            )
 
             else -> blocks.add(
                 UnknownBlock(

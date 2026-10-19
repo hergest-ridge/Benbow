@@ -47,6 +47,7 @@ import app.benbow.ui.resources.tool_align_end
 import app.benbow.ui.resources.tool_align_start
 import app.benbow.ui.resources.tool_checklist
 import app.benbow.ui.resources.tool_highlight
+import app.benbow.ui.resources.tool_link
 import app.benbow.ui.resources.tool_redo
 import app.benbow.ui.resources.tool_undo
 import app.benbow.ui.theme.BenbowPalette
@@ -85,6 +86,13 @@ fun EditorToolbar(state: EditorState, modifier: Modifier = Modifier) {
                 Tool("S", active = Mark.Strike in marks) { state.toggleMark(Mark.Strike) }
                 Tool("</>", active = Mark.Code in marks) { state.toggleMark(Mark.Code) }
                 Tool("||", active = Mark.Spoiler in marks) { state.toggleMark(Mark.Spoiler) }
+                Tool(
+                    EditorIcons.Link,
+                    stringResource(Res.string.tool_link),
+                    active = marks.any {
+                        it.group == "link"
+                    },
+                ) { state.requestLink() }
                 Tool("A", active = marks.any { it is Mark.Color }) { picker = if (picker == Picker.Color) null else Picker.Color }
                 Tool(EditorIcons.Highlight, stringResource(Res.string.tool_highlight), active = marks.any { it is Mark.Highlight }) {
                     picker = if (picker ==

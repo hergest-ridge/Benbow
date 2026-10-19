@@ -67,17 +67,28 @@ internal fun fileModified(file: JsAny): Double = js("file.lastModified || 0")
 
 /**
  * While composed, files dragged over the page or pasted (a screenshot, an image copied from a page) go to [onFiles];
- * [onHover] tells while a drag with files is over the page. Pasted text is left to the editor. Returns what
+ * [onHover] tells while a drag with files is over the page; a link dragged from a tab goes to [onLink]. Pasted text is
+ * left to the editor. Returns what
  * [stopFileListeners] needs.
  */
-internal fun listenForFiles(onHover: (Boolean) -> Unit, onFiles: (JsAny) -> Unit): JsAny = js(
+internal fun listenForFiles(onHover: (Boolean) -> Unit, onFiles: (JsAny) -> Unit, onLink: (String) -> Unit): JsAny = js(
     """(() => {
         const hasFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+        const hasLink = e => e.dataTransfer && !hasFiles(e) && Array.from(e.dataTransfer.types || []).includes('text/uri-list');
         let depth = 0;
         const enter = e => { if (!hasFiles(e)) return; e.preventDefault(); if (depth++ === 0) onHover(true); };
-        const over = e => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; };
+        const over = e => {
+            if (hasLink(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'link'; return; }
+            if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy';
+        };
         const leave = e => { if (!hasFiles(e)) return; if (--depth <= 0) { depth = 0; onHover(false); } };
         const drop = e => {
+            if (hasLink(e)) {
+                e.preventDefault();
+                const url = (e.dataTransfer.getData('text/uri-list') || '').split(/\r?\n/).find(l => l && !l.startsWith('#'));
+                if (url) onLink(url);
+                return;
+            }
             if (!hasFiles(e)) return;
             e.preventDefault(); depth = 0; onHover(false);
             const files = Array.from(e.dataTransfer.files);

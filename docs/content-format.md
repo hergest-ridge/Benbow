@@ -44,6 +44,7 @@ Markdown, plain text, HTML and PDF are **exports** (lossy except HTML). This fil
 | `code` | `_key`, `language?`, `code` (string, may contain `\n`), `callout?` | monospace region with background. Plain text only (no marks). The editor merges directly adjacent code blocks with the same callout |
 | `divider` | `_key`, `variant?` (`line` · `dots` · `wave`) | atomic placeholder line |
 | `attachment` | `_key`, `ref` (attachment id), `width?` (0..1), `caption?` | inline media (7.2): a picture, video, sound or drawing placed in the text; the file stays an attachment of the entry (gallery). Markdown links it in place, HTML shows it in place |
+| `linkCard` | `_key`, `href`, `title?`, `description?`, `site?`, `image?` (SHA-256 of a JPEG blob), `view?` (`large`; default a row, `row` is dropped), `fetched?` (`YYYY-MM-DD`, the day the page was read) | a link as a card (7.15, ADR-038): what the page said when the link went in, kept for good. Atomic; a tap while writing selects it (bubble: open, look, down into the text, edit, remove). Older readers keep it verbatim as an unknown block, so `v` stays 1 |
 | any unknown | preserved verbatim | atomic read-only chip. Never dropped or altered |
 
 **Unknown-content rule:** a block with an unknown `_type`, an unknown field, an unknown mark/markDef or an invalid value is kept **verbatim as an unknown block** (read-only chip). The rest of the document stays editable. Structurally broken JSON (no `_key`/`_type`, not an object) fails decoding, and the revision history is the fallback.
@@ -71,6 +72,7 @@ Colors, highlights and callout tones are **token names**, never raw hex. The des
   - *rich* (default, Obsidian-friendly): `**`, `*`, `<u>`, `~~`, `` ` ``, spoiler → `<span class="spoiler">`, color/size → `<span style>`, highlight → `==x==` (default token) or `<mark style>`, align → HTML wrapper, callout → `> [!note] <icon>`, check → `- [ ]` / `- [x]`, entryLink → relative link to the exported file.
   - *clean*: drop all styling that CommonMark+GFM can't express.
   Entry metadata → YAML front matter.
+- **Link cards** (ADR-038): plain text is the title and the address (search finds the site, a copy keeps the link); list titles and previews take the title or the short address (`habr.com/ru/…`); Markdown `[Title](address)` with `description · site` on the next line (an address with spaces or brackets in `<…>`); HTML an `a.link-card` with the picture when the exporter knows where it is.
 - **HTML export:** lossless, CSS generated from the palette (light theme by default). As built (6.3): `HtmlExporter` in shared/core; every style, list, callout and mark has a tag or class (spoilers keep their text under `.spoiler`), colors come from the app palette as CSS values; `HtmlExporter.page` wraps it in a print-friendly page. Used for "PDF и печать".
 - **Import** (Markdown/HTML → Document): supported constructs map back. Anything else becomes a preserved unknown block (`_type: "raw"`, `format`, `source`).
 

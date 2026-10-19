@@ -61,30 +61,41 @@ internal val doneMessages = mapOf(
 
 internal class Flash(val text: String, val error: Boolean)
 
-/** One section of the page in the top bar's tabs. */
-internal class Tab(val id: String, val title: String, val icon: String)
+/** One section of the page: an item of the drawer; [alert] puts a red dot on it. */
+internal class Tab(val id: String, val title: String, val icon: String, val alert: Boolean = false)
 
-internal fun adminShell(tabs: List<Tab>, body: String, flash: Flash?, subtitle: String): String = buildString {
+/**
+ * The page: a navigation drawer on the left and one section at a time (`.page`, shown by `:target`, the first one when
+ * the address has no section), so it also works before its script runs. [extra] goes after the sections (dialogs).
+ */
+internal fun adminShell(tabs: List<Tab>, body: String, flash: Flash?, subtitle: String, extra: String = ""): String = buildString {
     append("<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\"><title>Benbow — сервер</title>")
     append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">")
     append("<link rel=\"stylesheet\" href=\"/admin/assets/admin.css\"><script src=\"/admin/assets/admin.js\" defer></script></head><body>")
-    append("<header class=\"top\"><div class=\"top-row\"><div class=\"logo\" aria-hidden=\"true\">⚓</div><div>")
-    append("<div class=\"title\">Адмирал Бенбоу</div><div class=\"subtitle\">${esc(subtitle)}</div></div><span class=\"spacer\"></span>")
-    append("<a class=\"btn tonal\" href=\"/app/\">${icon("open")}Открыть Benbow</a></div>")
-    if (tabs.isNotEmpty()) {
-        append("<nav class=\"tabs\">")
-        tabs.forEach { append("<a href=\"#${it.id}\">${icon(it.icon)}${esc(it.title)}</a>") }
-        append("</nav>")
+    append(
+        "<div class=\"layout\"><nav class=\"drawer\" aria-label=\"Разделы\"><div class=\"brand\">" +
+            "<div class=\"logo\" aria-hidden=\"true\">⚓</div>",
+    )
+    append("<div><div class=\"title\">Адмирал Бенбоу</div><div class=\"subtitle\">${esc(subtitle)}</div></div></div>")
+    append("<div class=\"nav\">")
+    tabs.forEach {
+        append("<a href=\"#${it.id}\">${icon(it.icon)}<span>${esc(it.title)}</span>")
+        if (it.alert) append("<span class=\"dot\" title=\"Требует внимания\"></span>")
+        append("</a>")
     }
-    append("</header><main>")
+    append("</div><div class=\"foot\"><a class=\"btn tonal\" href=\"/app/\" title=\"Открыть Benbow в браузере\">${icon("open")}")
+    append("<span class=\"btn-label\">Открыть Benbow</span></a></div></nav>")
+    append("<div class=\"content\"><main>")
     append(body)
-    append("</main>")
+    append("</main></div></div>")
+    append(extra)
     flash?.let { append("<div class=\"snackbar${if (it.error) " err" else ""}\" role=\"status\">${esc(it.text)}</div>") }
     append("</body></html>")
 }
 
-internal fun sectionTitle(id: String, title: String, iconName: String) =
-    "<h2 class=\"section-title\" id=\"$id-title\">${icon(iconName)}${esc(title)}</h2>"
+/** The heading of a section, with a line under it about what the section is for. */
+internal fun pageTitle(title: String, iconName: String, lead: String? = null) =
+    "<h1 class=\"page-title\">${icon(iconName, "big")}${esc(title)}</h1>" + lead?.let { "<p class=\"page-lead\">${esc(it)}</p>" }.orEmpty()
 
 internal fun chip(kind: String, iconName: String?, text: String) =
     "<span class=\"chip $kind\">${iconName?.let { icon(it) }.orEmpty()}${esc(text)}</span>"
@@ -109,6 +120,14 @@ internal fun icon(name: String, extra: String = ""): String =
     "<svg class=\"icon $extra\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"${iconPaths.getValue(name)}\"/></svg>"
 
 private val iconPaths = mapOf(
+    "chat" to "M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z",
+    "sync" to "M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 " +
+        "14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z",
+    "folder_open" to "M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z",
+    "up" to "M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z",
+    "close" to "M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z",
+    "disk" to "M2 20h20v-4H2v4zm2-3h2v2H4v-2zM2 4v4h20V4H2zm4 3H4V5h2v2zm-4 7h20v-4H2v4zm2-3h2v2H4v-2z",
+    "star" to "M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z",
     "check" to "M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z",
     "done_all" to "M18 7l-1.41-1.41-6.34 6.34 1.41 1.41L18 7zm4.24-1.41L11.66 16.17 7.48 12l-1.41 1.41L11.66 19l12-12-1.42-1.41zM.41 " +
         "13.41L6 19l1.41-1.41L1.83 12 .41 13.41z",

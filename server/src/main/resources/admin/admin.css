@@ -29,7 +29,7 @@
 }
 
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; scroll-padding-top: 128px; }
+html { scroll-padding-top: 0; }
 body {
   margin: 0; background: var(--md-surface); color: var(--md-on-surface);
   font: 400 14px/20px "Segoe UI Variable Text", "Segoe UI", system-ui, Roboto, sans-serif;
@@ -45,24 +45,53 @@ code { background: var(--md-surface-container-highest); padding: 1px 6px; border
 .icon.big { width: 24px; height: 24px; }
 :focus-visible { outline: 2px solid var(--md-primary); outline-offset: 2px; }
 
-/* Top app bar with the sections as tabs */
-.top { position: sticky; top: 0; z-index: 5; background: var(--md-surface-container); border-bottom: 1px solid var(--md-outline-variant); }
-.top-row { max-width: 960px; margin: 0 auto; padding: 14px 24px 6px; display: flex; align-items: center; gap: 14px; }
-.logo { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-size: 22px;
+/* A navigation drawer on the left (a rail on narrow windows); one section on screen at a time */
+.layout { display: flex; min-height: 100vh; }
+.drawer { position: sticky; top: 0; height: 100vh; width: 264px; flex: none; display: flex; flex-direction: column; gap: 4px;
+  padding: 16px 12px; background: var(--md-surface-container-low); border-right: 1px solid var(--md-outline-variant); }
+.brand { display: flex; align-items: center; gap: 12px; padding: 4px 12px 16px; }
+.logo { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-size: 22px; flex: none;
   background: var(--md-primary-container); color: var(--md-on-primary-container); }
-.title { font: 500 22px/28px "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif; }
+.title { font: 500 18px/24px "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif; }
 .subtitle { color: var(--md-on-surface-variant); font-size: 12px; line-height: 16px; }
 .spacer { flex: 1; }
-.tabs { max-width: 960px; margin: 0 auto; padding: 0 16px; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
-.tabs a { display: flex; align-items: center; gap: 8px; padding: 10px 14px 12px; color: var(--md-on-surface-variant);
-  font-weight: 500; white-space: nowrap; border-bottom: 3px solid transparent; border-radius: 8px 8px 0 0; }
-.tabs a:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); text-decoration: none; }
-.tabs a.on { color: var(--md-primary); border-bottom-color: var(--md-primary); }
+.nav a { position: relative; display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 16px; border-radius: 28px;
+  color: var(--md-on-surface-variant); font-weight: 500; text-decoration: none; }
+.nav a .icon { width: 24px; height: 24px; }
+.nav a:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); }
+.nav a.on { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.nav a .dot { position: absolute; left: 34px; top: 12px; width: 8px; height: 8px; border-radius: 4px; background: var(--md-error); }
+.drawer .foot { margin-top: auto; padding: 12px; display: grid; gap: 8px; }
+.content { flex: 1; min-width: 0; }
 
-main { max-width: 960px; margin: 0 auto; padding: 24px 24px 96px; }
-section { margin-bottom: 32px; }
-.section-title { display: flex; align-items: center; gap: 10px; font: 500 16px/24px inherit; margin: 0 4px 12px; color: var(--md-on-surface-variant); }
-.section-title .icon { color: var(--md-primary); }
+main { max-width: 920px; margin: 0 auto; padding: 32px 32px 96px; }
+.page { display: none; scroll-margin-top: 32px; }
+.page:target, main:not(:has(.page:target)) > .page:first-child { display: block; animation: show .18s ease-out; }
+@keyframes show { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.page-title { display: flex; align-items: center; gap: 12px; font: 400 28px/36px "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  margin: 0 0 20px; }
+.page-title .icon { width: 28px; height: 28px; color: var(--md-primary); }
+.page-lead { color: var(--md-on-surface-variant); margin: -12px 0 20px; max-width: 680px; }
+
+/* The folder picker */
+dialog.picker { border: none; padding: 0; width: min(640px, calc(100vw - 32px)); max-height: min(720px, calc(100vh - 48px)); border-radius: 28px;
+  background: var(--md-surface-container-high); color: var(--md-on-surface); box-shadow: 0 8px 24px rgb(0 0 0 / .3); }
+dialog.picker::backdrop { background: rgb(0 0 0 / .32); }
+dialog.picker[open] { display: flex; flex-direction: column; }
+.picker header { padding: 24px 24px 8px; }
+.picker h2 { margin: 0 0 8px; font: 400 24px/32px "Segoe UI Variable Display", "Segoe UI", sans-serif; }
+.picker .where { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+.picker .where .mono { flex: 1; min-width: 0; overflow-wrap: anywhere; color: var(--md-on-surface-variant); }
+.picker .folders { flex: 1; overflow-y: auto; padding: 0 12px; min-height: 200px; border-top: 1px solid var(--md-outline-variant);
+  border-bottom: 1px solid var(--md-outline-variant); }
+.picker .group { padding: 12px 12px 4px; font-size: 12px; font-weight: 600; color: var(--md-primary); }
+.picker .folder { display: flex; align-items: center; gap: 16px; width: 100%; padding: 10px 12px; border: none; border-radius: 12px;
+  background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.picker .folder:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); }
+.picker .folder .icon { color: var(--md-on-surface-variant); }
+.picker .folder .path { display: block; color: var(--md-on-surface-variant); font-size: 12px; overflow-wrap: anywhere; }
+.picker .none { padding: 24px 12px; color: var(--md-on-surface-variant); }
+.picker footer { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 24px 20px; }
 
 /* Cards */
 .card { background: var(--md-surface-container-low); border-radius: 16px; padding: 20px 24px; margin-bottom: 12px; border: 1px solid transparent; }
@@ -111,6 +140,9 @@ textarea { resize: vertical; }
 input:hover, textarea:hover { border-color: var(--md-on-surface); }
 input:focus, textarea:focus { outline: none; border: 2px solid var(--md-primary); padding: 9px 13px; }
 input::placeholder, textarea::placeholder { color: color-mix(in srgb, var(--md-on-surface-variant) 70%, transparent); }
+.path-row { display: flex; gap: 8px; align-items: flex-end; }
+.path-row .field { flex: 1; }
+.path-row .btn { height: 44px; }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
 .hint { color: var(--md-on-surface-variant); font-size: 12px; line-height: 16px; margin: 8px 4px 0; }
 
@@ -184,8 +216,19 @@ details.edit[open] > summary { margin-bottom: 12px; }
 .snackbar.err { background: var(--md-error); color: var(--md-on-error); }
 .snackbar.gone { opacity: 0; transform: translate(-50%, 16px); pointer-events: none; }
 
+@media (max-width: 900px) {
+  .drawer { width: 88px; padding: 16px 8px; align-items: center; }
+  .brand { padding: 4px 0 16px; }
+  .brand > div:not(.logo), .drawer .foot .btn-label { display: none; }
+  .nav { width: 100%; }
+  .nav a { flex-direction: column; justify-content: center; gap: 2px; height: 64px; padding: 0; border-radius: 16px; font-size: 12px; }
+  .nav a .dot { left: calc(50% + 6px); top: 8px; }
+  .drawer .foot { padding: 0; }
+  .drawer .foot .btn { padding: 0; width: 56px; }
+  .drawer .foot .btn .icon { margin: 0; }
+}
 @media (max-width: 600px) {
-  .top-row, main { padding-left: 16px; padding-right: 16px; }
+  main { padding: 20px 16px 96px; }
   .card { padding: 16px; }
   .code { font-size: 36px; letter-spacing: 6px; }
 }

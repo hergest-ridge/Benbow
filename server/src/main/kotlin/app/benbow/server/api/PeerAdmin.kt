@@ -97,43 +97,55 @@ private fun short(ms: Long): String {
     return (if (today) hourFormat else dayFormat).format(Instant.ofEpochMilli(ms))
 }
 
-internal fun peersSection(peers: PeerLink?): String {
-    if (peers == null) {
-        return "<section id=\"friends\">${sectionTitle("friends", "Друзья", "group")}<div class=\"card\"><div class=\"banner err\">" +
-            "${icon("error")}<div><b>Связь с друзьями не открылась</b> (дневник работает). Причина в журнале сервера.</div></div>" +
-            "</div></section>"
-    }
-    return "<section id=\"friends\" data-live=\"friends\">${peersInner(peers)}</section>"
+private fun unavailable(id: String, title: String, iconName: String) =
+    "<section id=\"$id\" class=\"page\">${pageTitle(title, iconName)}<div class=\"card\"><div class=\"banner err\">" +
+        "${icon("error")}<div><b>Связь с друзьями не открылась</b> (дневник работает). Причина в журнале сервера.</div></div>" +
+        "</div></section>"
+
+/** «Друзья»: a conversation per friend and adding one; refreshed by the page's script while it changes. */
+internal fun friendsSection(peers: PeerLink?): String = if (peers == null) {
+    unavailable("friends", "Друзья", "chat")
+} else {
+    "<section id=\"friends\" class=\"page\" data-live=\"friends\">" +
+        "${friendsInner(peers)}</section>"
 }
 
-/** The friends' section without its frame: also what the page's script fetches to refresh it. */
-internal fun peersInner(peers: PeerLink?): String = buildString {
+internal fun friendsInner(peers: PeerLink?): String = buildString {
     if (peers == null) return@buildString
-    append(sectionTitle("friends", "Друзья", "group"))
-    append(thisServer(peers))
-    append("<div class=\"grid2\">${mailCard(peers)}${driveCard(peers)}</div>")
+    val lead = "Переписка с серверами друзей: тестовые сообщения и файлы. Письма запечатаны, прочитать их может только сервер друга."
+    append(pageTitle("Друзья", "chat", lead))
     val drive = peers.files != null && peers.db.driveFolder() != null
-    peers.db.contacts().forEach { append(friendCard(peers, it, drive)) }
-    append(addFriend())
+    val contacts = peers.db.contacts()
+    if (contacts.isEmpty()) {
+        append("<div class=\"banner info\">${icon("person_add")}<div>Пока ни одного друга. Обменяйтесь карточками ниже: ")
+        append("пошлите свою и добавьте его.</div></div>")
+    }
+    contacts.forEach { append(friendCard(peers, it, drive)) }
+    append(addFriend(peers))
 }
 
-private fun thisServer(peers: PeerLink): String = buildString {
-    val card = peers.identity.card
-    append("<div class=\"card\"><h3>${icon("key")}Этот сервер</h3>")
-    append(
-        "<p class=\"lead\">Другу уходят запечатанные письма: прочитать их может только его сервер. Почтовый ящик и Google Диск, " +
-            "через которые они идут, видят лишь зашифрованное. Порты не открываются.</p>",
-    )
-    append("<div class=\"row\"><span class=\"muted\">Отпечаток</span><span class=\"fingerprint\">${card.fingerprint}</span></div>")
-    append(
-        "<p class=\"muted small\">Пошлите карточку другу как угодно и возьмите его. Отпечатки сверьте голосом, по телефону или при встрече: ",
-    )
-    append("так никто посередине не подменит карточку.</p>")
-    append("<div class=\"keybox\"><span class=\"mono\">${card.encode()}</span>")
-    append(
-        "<button class=\"icon-btn\" type=\"button\" title=\"Скопировать карточку\" data-copy=\"${card.encode()}\">" +
-            "${icon("copy")}</button></div></div>",
-    )
+/** «Связь»: the mailbox letters go through and the Drive folder files go through. */
+internal fun linkSection(peers: PeerLink?): String = if (peers == null) {
+    unavailable("link", "Связь", "sync")
+} else {
+    "<section id=\"link\" class=\"page\" data-live=\"link\">" +
+        "${linkInner(peers)}</section>"
+}
+
+internal fun linkInner(peers: PeerLink?): String = buildString {
+    if (peers == null) return@buildString
+    val lead = "Через что ходят письма и файлы. Порты не открываются: оба сервера сами заходят в ящик и в папку Диска."
+    append(pageTitle("Связь", "sync", lead))
+    append(mailCard(peers))
+    append(driveCard(peers))
+    append("<div class=\"row end\">${postButton("/admin/peers/check", "Проверить ящик сейчас", "text", "refresh")}</div>")
+}
+
+/** A red dot on «Связь»: the mailbox is failing, or the Drive folder is set but gone. */
+internal fun linkNeedsAttention(peers: PeerLink?): Boolean {
+    if (peers == null) return true
+    val folderGone = peers.db.driveFolder()?.let { !java.nio.file.Files.isDirectory(it) } ?: false
+    return peers.status is PeerLink.Status.Failed || folderGone
 }
 
 private fun mailCard(peers: PeerLink): String = buildString {
@@ -292,14 +304,25 @@ private fun fileBubble(side: String, name: String, size: Long, meta: String, whe
         (where?.let { "<div class=\"where mono\">${esc(it)}</div>" }.orEmpty()) + "<div class=\"meta\">$meta</div></div>"
 }
 
-private fun addFriend(): String = buildString {
-    append("<div class=\"card\"><h3>${icon("person_add")}Добавить друга</h3>")
-    append("<form method=\"post\" action=\"/admin/peers/contacts\" class=\"stack\">")
-    append(field("name", "Имя", "", "как вы его зовёте"))
+/** Exchanging cards: this server's card to send, and the friend's to add. Fingerprints are compared by voice. */
+private fun addFriend(peers: PeerLink): String = buildString {
+    val card = peers.identity.card
+    append("<div class=\"card\"><h3>${icon("person_add")}Обмен карточками</h3>")
+    append("<p class=\"lead\">Пошлите свою карточку другу как угодно и вставьте сюда его. Отпечатки сверьте голосом, по телефону ")
+    append("или при встрече: так никто посередине не подменит карточку.</p>")
+    append("<div class=\"grid2\"><div class=\"stack\"><div class=\"field\"><label>Карточка этого сервера</label>")
+    append("<div class=\"keybox\"><span class=\"mono\">${card.encode()}</span>")
     append(
-        "<div class=\"field\"><label for=\"card\">Его карточка</label>" +
-            "<textarea id=\"card\" name=\"card\" rows=\"3\" placeholder=\"benbow1.…\"></textarea></div>",
+        "<button class=\"icon-btn\" type=\"button\" title=\"Скопировать карточку\" data-copy=\"${card.encode()}\">" +
+            "${icon("copy")}</button>",
     )
-    append("<div class=\"row end\"><button class=\"btn\">${icon("person_add")}Добавить</button></div></form>")
-    append("<div class=\"row end\">${postButton("/admin/peers/check", "Проверить ящик сейчас", "text", "refresh")}</div></div>")
+    append(
+        "</div></div><div class=\"row\"><span class=\"muted\">Отпечаток</span><span class=\"fingerprint\">" +
+            "${card.fingerprint}</span></div></div>",
+    )
+    append("<form method=\"post\" action=\"/admin/peers/contacts\" class=\"stack\">")
+    append(field("name", "Имя друга", "", "как вы его зовёте"))
+    append("<div class=\"field\"><label for=\"card\">Его карточка</label>")
+    append("<textarea id=\"card\" name=\"card\" rows=\"3\" placeholder=\"benbow1.…\"></textarea></div>")
+    append("<div class=\"row end\"><button class=\"btn\">${icon("person_add")}Добавить</button></div></form></div></div>")
 }

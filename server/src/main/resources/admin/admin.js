@@ -43,19 +43,85 @@
     }
   });
 
-  // The tab of the section in view.
-  const tabs = [...document.querySelectorAll(".tabs a")];
-  const sections = tabs.map((a) => document.querySelector(a.getAttribute("href"))).filter(Boolean);
+  // The drawer's item of the section on screen (CSS shows it by :target; the first one without an address).
+  const items = [...document.querySelectorAll(".nav a")];
   const mark = () => {
-    let current = sections[0];
-    for (const s of sections) if (s.getBoundingClientRect().top < 160) current = s;
-    tabs.forEach((a) => a.classList.toggle("on", current && a.getAttribute("href") === "#" + current.id));
+    // By the address, not :target, which the browser may set only after this script ran on load.
+    const target = location.hash && document.getElementById(decodeURIComponent(location.hash.slice(1)));
+    const shown = target && target.classList.contains("page") ? location.hash : items[0] && items[0].getAttribute("href");
+    items.forEach((a) => a.classList.toggle("on", a.getAttribute("href") === shown));
+    // After the browser has shown the section and jumped to it: the page from its top, conversations at their end.
+    setTimeout(() => {
+      scrollTo(0, 0);
+      document.querySelectorAll(".page .chat").forEach((c) => (c.scrollTop = c.scrollHeight));
+    }, 30);
   };
-  addEventListener("scroll", mark, { passive: true });
+  addEventListener("hashchange", mark);
+  addEventListener("load", mark);
   mark();
 
+  // The folder picker: the server lists its own folders (a browser can't tell a page a folder's full path).
+  const picker = document.getElementById("folder-picker");
+  if (picker) {
+    let target = null;
+    let current = null;
+    let parent = null;
+    const list = picker.querySelector("[data-folder-list]");
+    const where = picker.querySelector("[data-folder-where]");
+    const choose = picker.querySelector("[data-folder-choose]");
+    const up = picker.querySelector("[data-folder-up]");
+    const row = (kind, name, path) => {
+      const button = document.getElementById("folder-" + kind).content.firstElementChild.cloneNode(true);
+      button.querySelector(".name").textContent = name;
+      button.querySelector(".path").textContent = kind === "drive" ? path : "";
+      button.addEventListener("click", () => load(path));
+      return button;
+    };
+    const group = (title) => Object.assign(document.createElement("div"), { className: "group", textContent: title });
+    const load = async (path) => {
+      let data;
+      try {
+        const response = await fetch("/admin/folders" + (path ? "?path=" + encodeURIComponent(path) : ""), { cache: "no-store" });
+        data = await response.json();
+      } catch (_) {
+        return snack("Не удалось прочитать папки", true);
+      }
+      current = data.path;
+      parent = data.parent;
+      where.textContent = current || "Этот компьютер";
+      choose.disabled = !current;
+      up.disabled = !current;
+      list.replaceChildren();
+      if (data.error) list.append(Object.assign(document.createElement("div"), { className: "none", textContent: data.error }));
+      if (data.drive.length) {
+        list.append(group("Похоже на Google Диск"));
+        data.drive.forEach((f) => list.append(row("drive", f.name, f.path)));
+      }
+      if (data.disks.length) {
+        list.append(group("Диски"));
+        data.disks.forEach((f) => list.append(row("disk", f.name, f.path)));
+      }
+      data.folders.forEach((f) => list.append(row("folder", f.name, f.path)));
+      if (current && !data.folders.length && !data.error) list.append(Object.assign(document.createElement("div"), { className: "none", textContent: "Здесь нет папок" }));
+      list.scrollTop = 0;
+    };
+    document.addEventListener("click", (e) => {
+      const open = e.target.closest("[data-pick-folder]");
+      if (!open) return;
+      target = document.getElementById(open.dataset.pickFolder);
+      picker.showModal();
+      load(target && target.value.trim() ? target.value.trim() : null);
+    });
+    up.addEventListener("click", () => load(parent));
+    picker.querySelector("[data-folder-cancel]").addEventListener("click", () => picker.close());
+    choose.addEventListener("click", () => {
+      if (target && current) target.value = current;
+      picker.close();
+      if (target) target.focus();
+    });
+  }
+
   const bottom = (root) => root.querySelectorAll(".chat").forEach((c) => (c.scrollTop = c.scrollHeight));
-  bottom(document);
 
   // Live parts: refreshed every few seconds, unless something is being typed or edited in them.
   // Busy: a form opened by hand, a field with focus, or something typed or picked and not sent yet.
@@ -69,9 +135,9 @@
       (i) => i === document.activeElement || (i.type === "file" ? i.files.length > 0 : i.value !== i.defaultValue),
     );
   setInterval(async () => {
-    if (document.hidden) return;
+    if (document.hidden || document.querySelector("dialog[open]")) return;
     for (const el of document.querySelectorAll("[data-live]")) {
-      if (busy(el)) continue;
+      if (el.offsetParent === null || busy(el)) continue; // another tab, or something is being edited here
       try {
         const response = await fetch("/?part=" + el.dataset.live, { cache: "no-store" });
         if (!response.ok) continue;

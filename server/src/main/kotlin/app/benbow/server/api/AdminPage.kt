@@ -29,7 +29,8 @@ internal fun Route.adminRoutes(ctx: ServerContext) {
         if (part != null) {
             if (!admin) return@get call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
             return@get when (part) {
-                "friends" -> call.respondAdmin(peersInner(ctx.peers))
+                "friends" -> call.respondAdmin(friendsInner(ctx.peers))
+                "link" -> call.respondAdmin(linkInner(ctx.peers))
                 "speech" -> call.respondAdmin(ctx.speech?.let(::speechInner).orEmpty())
                 else -> call.respondText("Not found", status = HttpStatusCode.NotFound)
             }
@@ -75,13 +76,22 @@ internal fun time(ms: Long?) = ms?.let { timeFormat.format(Instant.ofEpochMilli(
 
 internal fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
 
-private val adminTabs = listOf(
-    Tab("overview", "Сервер", "server"),
-    Tab("devices", "Устройства", "phone"),
-    Tab("backups", "Копии", "backup"),
-    Tab("speech", "Голос", "mic"),
-    Tab("friends", "Друзья", "group"),
-)
+private fun adminTabs(ctx: ServerContext): List<Tab> {
+    val backups = ctx.backupStatus()
+    val staleBackups = backups != null &&
+        (
+            backups.lastError != null || backups.lastSnapshotAt == null ||
+                System.currentTimeMillis() - backups.lastSnapshotAt > 48 * 3_600_000L
+            )
+    return listOfNotNull(
+        Tab("overview", "Сервер", "server"),
+        Tab("devices", "Устройства", "phone"),
+        Tab("backups", "Копии", "backup", alert = staleBackups),
+        ctx.speech?.let { Tab("speech", "Голос", "mic") },
+        Tab("friends", "Друзья", "chat"),
+        Tab("link", "Связь", "sync", alert = linkNeedsAttention(ctx.peers)),
+    )
+}
 
 /** The whole page; [flash] is what the last action has to say. */
 internal fun adminPage(ctx: ServerContext, admin: Boolean, flash: Flash? = null): String {
@@ -91,14 +101,17 @@ internal fun adminPage(ctx: ServerContext, admin: Boolean, flash: Flash? = null)
             append(devicesSection(ctx))
             append(backupsSection(ctx))
             ctx.speech?.let { append(speechSection(it)) }
-            append(peersSection(ctx.peers))
+            append(friendsSection(ctx.peers))
+            append(linkSection(ctx.peers))
         }
     }
-    return adminShell(if (admin) adminTabs else emptyList(), body, flash, "${versionLine()} · хранилище ${ctx.db.storeId.take(8)}")
+    val subtitle = "${versionLine()} · хранилище ${ctx.db.storeId.take(8)}"
+    return adminShell(if (admin) adminTabs(ctx) else emptyList(), body, flash, subtitle, extra = if (admin) folderDialog() else "")
 }
 
 private fun overview(ctx: ServerContext, admin: Boolean): String = buildString {
-    append("<section id=\"overview\">${sectionTitle("overview", "Сервер", "server")}<div class=\"card\">")
+    append("<section id=\"overview\" class=\"page\">${pageTitle("Сервер", "server", "Состояние сервера и как открыть Benbow в браузере.")}")
+    append("<div class=\"card\">")
     append("<div class=\"row\"><h3>Сервер работает</h3>${chip("ok", "ok", "в сети")}</div>")
     append("<dl class=\"kv\"><dt>Версия</dt><dd>$SERVER_VERSION</dd>")
     append("<dt>Хранилище</dt><dd class=\"mono\">${esc(ctx.db.storeId)}</dd>")
@@ -124,7 +137,8 @@ private fun overview(ctx: ServerContext, admin: Boolean): String = buildString {
 }
 
 private fun devicesSection(ctx: ServerContext): String = buildString {
-    append("<section id=\"devices\">${sectionTitle("devices", "Устройства", "phone")}")
+    append("<section id=\"devices\" class=\"page\">")
+    append(pageTitle("Устройства", "phone", "Телефоны, компьютеры и браузеры, которые синхронизируются с этим сервером."))
     append("<div class=\"card\"><h3>${icon("key")}Подключить устройство</h3>")
     val active = ctx.pairing.active()
     if (active != null) {
@@ -166,7 +180,9 @@ private fun devicesSection(ctx: ServerContext): String = buildString {
 }
 
 private fun backupsSection(ctx: ServerContext): String = buildString {
-    append("<section id=\"backups\">${sectionTitle("backups", "Резервные копии", "backup")}<div class=\"card\">")
+    append("<section id=\"backups\" class=\"page\">")
+    append(pageTitle("Резервные копии", "backup", "Проверенные снимки базы, копия на второй диск и медиафайлы."))
+    append("<div class=\"card\">")
     val status = ctx.backupStatus()
     val backups = ctx.db.backups?.history().orEmpty().takeLast(5).reversed()
     if (status != null) {
@@ -228,11 +244,8 @@ private fun backupsSection(ctx: ServerContext): String = buildString {
  */
 private fun speechSection(model: SpeechModel): String {
     val live = if (model.state is SpeechModel.State.Downloading) " data-live=\"speech\"" else ""
-    return "<section id=\"speech\">${sectionTitle(
-        "speech",
-        "Расшифровка голосовых",
-        "mic",
-    )}<div class=\"card\"$live>${speechInner(model)}</div></section>"
+    val title = pageTitle("Расшифровка голосовых", "mic", "Модель, которой телефоны превращают голосовые в текст без интернета.")
+    return "<section id=\"speech\" class=\"page\">$title<div class=\"card\"$live>${speechInner(model)}</div></section>"
 }
 
 internal fun speechInner(model: SpeechModel): String = buildString {

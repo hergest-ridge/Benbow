@@ -1,5 +1,7 @@
 package app.benbow.server.peer
 
+import app.benbow.server.api.FolderBrowser
+import app.benbow.server.api.FolderList
 import app.benbow.server.api.ServerContext
 import app.benbow.server.api.benbowModule
 import app.benbow.server.storage.Database
@@ -16,6 +18,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.parameters
 import io.ktor.server.testing.testApplication
+import kotlinx.serialization.json.Json
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -176,5 +179,40 @@ class PeerAdminTest {
     @Test
     fun theLanGetsNoLivePart() = withPage(loopback = false) { _, client ->
         assertEquals(HttpStatusCode.Forbidden, client.get("/?part=friends").status)
+        assertEquals(HttpStatusCode.Forbidden, client.get("/admin/folders").status, "the LAN sees no folders of this PC")
+    }
+
+    @Test
+    fun eachSectionIsATabAndTheLinkHasItsOwn() = withPage { _, client ->
+        val html = client.get("/").bodyAsText()
+        for (id in listOf("overview", "devices", "backups", "friends", "link")) {
+            assertTrue("<section id=\"$id\" class=\"page\"" in html && "href=\"#$id\"" in html, id)
+        }
+        assertTrue("id=\"folder-picker\"" in html && "data-pick-folder=\"path\"" in html)
+        val link = client.get("/?part=link").bodyAsText()
+        assertTrue("Почтовый ящик" in link && "Google Диск" in link && "<section" !in link)
+    }
+
+    @Test
+    fun theFolderPickerListsOnlyVisibleFoldersAndKnowsADriveMirror() = withPage { _, client ->
+        val root = Files.createDirectories(dir.resolve("pick"))
+        for (name in listOf("Бета", "альфа", ".tmp.drivedownload", "\$RECYCLE.BIN")) Files.createDirectories(root.resolve(name))
+        Files.createFile(root.resolve("file.txt"))
+        val list = Json.decodeFromString<FolderList>(
+            client.get("/admin/folders?path=${java.net.URLEncoder.encode(root.toString(), "UTF-8")}").bodyAsText(),
+        )
+        assertEquals(root.toString(), list.path)
+        assertEquals(listOf("альфа", "Бета"), list.folders.map { it.name }, "no files, no hidden or system folders")
+        assertEquals(root.parent.toString(), list.parent)
+        assertTrue(FolderBrowser.mirrored(root), "Drive keeps .tmp.drivedownload in the folder it mirrors")
+        assertTrue(
+            FolderBrowser.looksLikeDrive("Google Shared") && FolderBrowser.looksLikeDrive("Мой диск") &&
+                !FolderBrowser.looksLikeDrive("Documents"),
+        )
+        assertTrue(listOf("OneDrive", "PenTabletDriver").none(FolderBrowser::looksLikeDrive) && FolderBrowser.looksLikeDrive("My Drive"))
+        val computer = Json.decodeFromString<FolderList>(client.get("/admin/folders").bodyAsText())
+        assertTrue(computer.path == null && computer.disks.isNotEmpty())
+        val missing = Json.decodeFromString<FolderList>(client.get("/admin/folders?path=Z:%5Cnowhere").bodyAsText())
+        assertTrue(missing.error != null && missing.path == null)
     }
 }

@@ -3,12 +3,12 @@ package app.benbow.server.api
 import app.benbow.core.api.SpeechModelSpec
 import app.benbow.server.SERVER_VERSION
 import app.benbow.server.SpeechModel
-import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.RoutingContext
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import java.time.Instant
@@ -16,36 +16,49 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /**
- * Status page for everyone; pairing codes, devices and backups only for the server PC itself.
- * Admin POSTs also require a same-origin request, so a web page open in the PC browser can't
- * trigger them (CSRF).
+ * Status page for everyone; pairing codes, devices, backups and friends only for the server PC itself. Admin POSTs also
+ * require a same-origin request, so a web page open in the PC browser can't trigger them (CSRF). Live parts of the page
+ * (`?part=`) are refreshed by its script while they change.
  */
 internal fun Route.adminRoutes(ctx: ServerContext) {
-    get("/") { call.respondText(statusPage(ctx, admin = ctx.isLoopback(call)), ContentType.Text.Html) }
+    adminAssets()
+
+    get("/") {
+        val admin = ctx.isLoopback(call)
+        val part = call.request.queryParameters["part"]
+        if (part != null) {
+            if (!admin) return@get call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
+            return@get when (part) {
+                "friends" -> call.respondAdmin(peersInner(ctx.peers))
+                "speech" -> call.respondAdmin(ctx.speech?.let(::speechInner).orEmpty())
+                else -> call.respondText("Not found", status = HttpStatusCode.NotFound)
+            }
+        }
+        val flash = call.request.queryParameters["done"]?.let(doneMessages::get)?.let { Flash(it, error = false) }
+        call.respondAdmin(adminPage(ctx, admin, flash))
+    }
 
     post("/admin/pairing-code") {
-        if (!adminAllowed(call, ctx)) return@post call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
-        ctx.pairing.issue()
-        call.respondRedirect("/")
+        admin(ctx, "code#devices") { ctx.pairing.issue() }
     }
 
     post("/admin/backup") {
-        if (!adminAllowed(call, ctx)) return@post call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
-        ctx.backupNow()
-        call.respondRedirect("/")
+        admin(ctx, "backup#backups") { ctx.backupNow() }
     }
 
     post("/admin/speech-model") {
-        if (!adminAllowed(call, ctx)) return@post call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
-        ctx.speech?.download()
-        call.respondRedirect("/")
+        admin(ctx, "speech#speech") { ctx.speech?.download() }
     }
 
     post("/admin/devices/{id}/revoke") {
-        if (!adminAllowed(call, ctx)) return@post call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
-        ctx.devices.revoke(call.parameters["id"]!!)
-        call.respondRedirect("/")
+        admin(ctx, "revoked#devices") { ctx.devices.revoke(call.parameters["id"]!!) }
     }
+}
+
+private suspend fun RoutingContext.admin(ctx: ServerContext, done: String, action: suspend () -> Unit) {
+    if (!adminAllowed(call, ctx)) return call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
+    action()
+    call.respondRedirect("/?done=$done")
 }
 
 internal fun adminAllowed(call: ApplicationCall, ctx: ServerContext): Boolean {
@@ -62,130 +75,192 @@ internal fun time(ms: Long?) = ms?.let { timeFormat.format(Instant.ofEpochMilli(
 
 internal fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
 
-private fun statusPage(ctx: ServerContext, admin: Boolean): String = buildString {
-    append(
-        """
-        <!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Benbow</title>${
-            if (admin && ctx.speech?.state is SpeechModel.State.Downloading) "<meta http-equiv=\"refresh\" content=\"3\">" else ""
+private val adminTabs = listOf(
+    Tab("overview", "Сервер", "server"),
+    Tab("devices", "Устройства", "phone"),
+    Tab("backups", "Копии", "backup"),
+    Tab("speech", "Голос", "mic"),
+    Tab("friends", "Друзья", "group"),
+)
+
+/** The whole page; [flash] is what the last action has to say. */
+internal fun adminPage(ctx: ServerContext, admin: Boolean, flash: Flash? = null): String {
+    val body = buildString {
+        append(overview(ctx, admin))
+        if (admin) {
+            append(devicesSection(ctx))
+            append(backupsSection(ctx))
+            ctx.speech?.let { append(speechSection(it)) }
+            append(peersSection(ctx.peers))
         }
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>body{font-family:system-ui,sans-serif;max-width:44rem;margin:2.5rem auto;padding:0 1rem;background:#fbf6ee;color:#1f1b16}
-        code{background:#f0e0cf;padding:.1rem .3rem;border-radius:.3rem;word-break:break-all}
-        .code{font-size:2.4rem;letter-spacing:.4rem;font-weight:700} table{border-collapse:collapse;width:100%}
-        td,th{padding:.35rem .5rem;border-bottom:1px solid #e3d3c2;text-align:left} button{font:inherit;padding:.35rem .8rem;border-radius:.5rem;border:1px solid #8a5100;background:#ffdcbe;cursor:pointer}
-        section{margin:1.8rem 0}</style></head><body>
-        <h1>⚓ Адмирал Бенбоу</h1>
-        <p>Сервер работает. Версия <code>$SERVER_VERSION</code>, хранилище <code>${ctx.db.storeId}</code>.</p>
-        <p>Отпечаток сертификата (SHA-256):<br><code>${ctx.tlsFingerprint}</code></p>
-        <p><a href="/app/"><b>Открыть Benbow в браузере</b></a> — на любом компьютере домашней сети: этот адрес, порт <code>${ctx.port}</code>, <code>/app/</code>.
-        Браузер один раз предупредит о самоподписанном сертификате; отпечаток выше.</p>
-        <p><a href="/api/docs">Документация API</a></p>
-        """.trimIndent(),
-    )
-    if (!admin) {
-        append("<p><i>Управление доступно только на этом компьютере: https://localhost:${ctx.port}</i></p></body></html>")
-        return@buildString
     }
-    append("<section><h2>Подключить устройство</h2>")
+    return adminShell(if (admin) adminTabs else emptyList(), body, flash, "${versionLine()} · хранилище ${ctx.db.storeId.take(8)}")
+}
+
+private fun overview(ctx: ServerContext, admin: Boolean): String = buildString {
+    append("<section id=\"overview\">${sectionTitle("overview", "Сервер", "server")}<div class=\"card\">")
+    append("<div class=\"row\"><h3>Сервер работает</h3>${chip("ok", "ok", "в сети")}</div>")
+    append("<dl class=\"kv\"><dt>Версия</dt><dd>$SERVER_VERSION</dd>")
+    append("<dt>Хранилище</dt><dd class=\"mono\">${esc(ctx.db.storeId)}</dd>")
+    append("<dt>Сертификат</dt><dd><span class=\"mono\">${esc(ctx.tlsFingerprint)}</span> ")
+    append(
+        "<button class=\"icon-btn\" type=\"button\" title=\"Скопировать отпечаток\" data-copy=\"${esc(
+            ctx.tlsFingerprint,
+        )}\">${icon("copy")}</button></dd>",
+    )
+    if (admin) ctx.dataDir?.let { append("<dt>Данные</dt><dd class=\"mono\">${esc(it.toString())}</dd>") }
+    append("</dl>")
+    append(
+        "<p class=\"muted\">Benbow в браузере открывается на любом компьютере домашней сети: адрес этого компьютера, порт " +
+            "<code>${ctx.port}</code>, <code>/app/</code>. Браузер один раз предупредит о самоподписанном сертификате; " +
+            "сверьте его отпечаток с тем, что выше.</p>",
+    )
+    append("<div class=\"row\"><a class=\"btn text\" href=\"/api/docs\">Документация API</a></div>")
+    if (!admin) {
+        append("<div class=\"banner info\">${icon("key")}<div>Управление сервером открыто только на этом компьютере: ")
+        append("<code>https://localhost:${ctx.port}</code></div></div>")
+    }
+    append("</div></section>")
+}
+
+private fun devicesSection(ctx: ServerContext): String = buildString {
+    append("<section id=\"devices\">${sectionTitle("devices", "Устройства", "phone")}")
+    append("<div class=\"card\"><h3>${icon("key")}Подключить устройство</h3>")
     val active = ctx.pairing.active()
     if (active != null) {
-        append("<p>Введите на телефоне адрес этого компьютера, порт <code>${ctx.port}</code> и код (в браузере — только код):</p>")
-        append("<p class=\"code\">${active.first}</p><p>Код действует до ${time(active.second)} и сработает один раз.</p>")
-    }
-    append(
-        "<form method=\"post\" action=\"/admin/pairing-code\"><button>${if (active == null) "Получить код" else "Новый код"}</button></form></section>",
-    )
-
-    append("<section><h2>Устройства</h2>")
-    val devices = ctx.devices.list()
-    if (devices.isEmpty()) {
-        append("<p>Пока нет подключённых устройств.</p>")
+        append("<p class=\"lead\">Введите на телефоне адрес этого компьютера, порт <code>${ctx.port}</code> и этот код ")
+        append("(в браузере — только код):</p><div class=\"code\">${esc(active.first)}</div>")
+        append("<p class=\"muted\">Действует до ${time(active.second)} и сработает один раз.</p>")
+        append(postButton("/admin/pairing-code", "Новый код", "tonal", "refresh"))
     } else {
-        append("<table><tr><th>Устройство</th><th>Подключено</th><th>Последний раз</th><th></th></tr>")
-        for (d in devices) {
-            val action = if (d.revokedAt == null) {
-                "<form method=\"post\" action=\"/admin/devices/${esc(d.id)}/revoke\"><button>Отключить</button></form>"
-            } else {
-                "отключено ${time(d.revokedAt)}"
-            }
+        append(
+            "<p class=\"lead\">Код из шести цифр связывает новое устройство с этим сервером. Он живёт пять минут и срабатывает один раз.</p>",
+        )
+        append(postButton("/admin/pairing-code", "Получить код", "", "key"))
+    }
+    append("</div><div class=\"card\"><h3>Подключённые</h3>")
+    val devices = ctx.devices.list()
+    if (devices.isEmpty()) append("<p class=\"muted\">Пока нет подключённых устройств.</p>")
+    append("<div class=\"list\">")
+    for (d in devices) {
+        val revoked = d.revokedAt != null
+        append("<div class=\"item${if (revoked) " off" else ""}\"><div class=\"avatar\">")
+        append(icon(if (d.platform.contains("android", ignoreCase = true)) "phone" else "computer"))
+        append("</div><div class=\"body\"><div class=\"headline\">${esc(d.name)}</div><div class=\"support\">${esc(d.platform)} · ")
+        append("подключено ${time(d.createdAt)} · последний раз ${time(d.lastSeenAt)}</div></div>")
+        if (revoked) {
+            append(chip("", null, "отключено ${time(d.revokedAt)}"))
+        } else {
             append(
-                "<tr><td>${esc(
-                    d.name,
-                )} <small>(${esc(
-                    d.platform,
-                )})</small></td><td>${time(d.createdAt)}</td><td>${time(d.lastSeenAt)}</td><td>$action</td></tr>",
+                postButton(
+                    "/admin/devices/${d.id}/revoke",
+                    "Отключить",
+                    "outlined danger",
+                    confirm = "Отключить «${d.name}»? Устройство перестанет синхронизироваться, пока его не подключат заново.",
+                ),
             )
         }
-        append("</table>")
+        append("</div>")
     }
-    append("</section><section><h2>Резервные копии</h2>")
+    append("</div></div></section>")
+}
+
+private fun backupsSection(ctx: ServerContext): String = buildString {
+    append("<section id=\"backups\">${sectionTitle("backups", "Резервные копии", "backup")}<div class=\"card\">")
     val status = ctx.backupStatus()
+    val backups = ctx.db.backups?.history().orEmpty().takeLast(5).reversed()
     if (status != null) {
         val stale = status.lastSnapshotAt == null || System.currentTimeMillis() - status.lastSnapshotAt > 48 * 3_600_000L
-        if (stale) append("<p style=\"color:#b3261e\"><b>Внимание:</b> свежей проверенной копии нет больше 48 часов.</p>")
-        status.lastError?.let { append("<p style=\"color:#b3261e\"><b>Ошибка последнего запуска:</b> ${esc(it)}</p>") }
-        append(
-            "<p>Копия на второй диск: ${status.lastMirrorAt?.let {
-                "последняя ${time(it)}"
-            } ?: "не настроена или ещё не выполнялась (backup.mirror в benbow.properties)"}</p>",
-        )
-        if (ctx.calendar == null) {
-            append("<p style=\"color:#b3261e\"><b>Календарь не открылся</b> (дневник работает). Причина в журнале сервера.</p>")
+        if (stale) {
+            append("<div class=\"banner err\">${icon("error")}<div><b>Свежей проверенной копии нет больше 48 часов.</b></div></div>")
         } else {
-            append("<p>Календарь (отдельный файл): последняя копия ${status.calendarSnapshotAt?.let { time(it) } ?: "ещё не делалась"}</p>")
+            append("<div class=\"banner ok\">${icon("ok")}<div>Последняя проверенная копия ${time(status.lastSnapshotAt)}</div></div>")
         }
-        status.calendarError?.let { append("<p style=\"color:#b3261e\"><b>Ошибка копии календаря:</b> ${esc(it)}</p>") }
+        status.lastError?.let { append("<div class=\"banner err\">${icon("error")}<div>Ошибка последнего запуска: ${esc(it)}</div></div>") }
+        append(
+            "<dl class=\"kv\"><dt>Второй диск</dt><dd>${status.lastMirrorAt?.let {
+                "копия ${time(it)}"
+            } ?: "не настроен или ещё не копировал (<code>backup.mirror</code> в <code>benbow.properties</code>)"}</dd>",
+        )
+        append("<dt>Календарь</dt><dd>")
+        append(
+            if (ctx.calendar == null) {
+                "<b>не открылся</b> (дневник работает; причина в журнале сервера)"
+            } else {
+                "отдельный файл, последняя копия ${status.calendarSnapshotAt?.let { time(it) } ?: "ещё не делалась"}"
+            },
+        )
+        status.calendarError?.let { append(" · ошибка: ${esc(it)}") }
+        append("</dd>")
+        ctx.blobs?.let { store ->
+            val (count, bytes) = store.stats()
+            append(
+                "<dt>Медиафайлы</dt><dd>$count, ${"%.1f".format(
+                    bytes / 1_073_741_824.0,
+                )} ГБ в <code>${esc(store.root.toString())}</code></dd>",
+            )
+        }
+        append("</dl>")
     }
-    val backups = ctx.db.backups?.history().orEmpty().takeLast(5).reversed()
     if (backups.isEmpty()) {
-        append("<p>Резервных копий пока нет.</p>")
+        append("<p class=\"muted\">Резервных копий пока нет.</p>")
     } else {
-        append("<table><tr><th>Когда</th><th>Причина</th><th>Проверена</th></tr>")
-        backups.forEach {
-            append("<tr><td>${time(it.createdAt)}</td><td>${esc(it.reason)}</td><td>${if (it.verified) "да" else "НЕТ"}</td></tr>")
+        append("<div class=\"list\">")
+        for (b in backups) {
+            append(
+                "<div class=\"item\"><div class=\"avatar\">${icon(
+                    "backup",
+                )}</div><div class=\"body\"><div class=\"headline\">${time(b.createdAt)}</div>",
+            )
+            append("<div class=\"support\">${esc(b.reason)}</div></div>")
+            append(if (b.verified) chip("ok", "check", "проверена") else chip("err", "error", "НЕ проверена"))
+            append("</div>")
         }
-        append("</table>")
+        append("</div>")
     }
-    if (admin) append("<form method=\"post\" action=\"/admin/backup\"><button>Сделать копию сейчас</button></form>")
-    ctx.blobs?.let { store ->
-        val (count, bytes) = store.stats()
-        append("<p>Медиафайлы: $count, ${"%.1f".format(bytes / 1_073_741_824.0)} ГБ в <code>${esc(store.root.toString())}</code></p>")
-    }
-    ctx.dataDir?.let { append("<p>Данные: <code>${esc(it.toString())}</code></p>") }
-    append("</section>")
-    ctx.speech?.let { append(speechSection(it)) }
-    append(peersSection(ctx.peers))
-    append("</body></html>")
+    append("<div class=\"row end\">${postButton("/admin/backup", "Сделать копию сейчас", "tonal", "backup", busy = "Делается…")}</div>")
+    append("</div></section>")
 }
 
 /**
  * The one-time model download for voice transcription, on a click. Besides it the server goes to the internet only to
- * read a page for a link card the web client asks about (ADR-038).
+ * read a page for a link card the web client asks about (ADR-038) and to reach the friends' mailbox (ADR-039).
  */
-private fun speechSection(model: SpeechModel): String = buildString {
+private fun speechSection(model: SpeechModel): String {
+    val live = if (model.state is SpeechModel.State.Downloading) " data-live=\"speech\"" else ""
+    return "<section id=\"speech\">${sectionTitle(
+        "speech",
+        "Расшифровка голосовых",
+        "mic",
+    )}<div class=\"card\"$live>${speechInner(model)}</div></section>"
+}
+
+internal fun speechInner(model: SpeechModel): String = buildString {
     val mb = { bytes: Long -> "%.0f".format(bytes / 1_000_000.0) }
-    append("<section><h2>Расшифровка голосовых</h2>")
     append(
-        "<p>Телефоны расшифровывают голосовые сами, без интернета, моделью GigaAM v3 (лицензия MIT). Взять её они могут " +
-            "только отсюда. Сервер скачивает её один раз по этой кнопке с официальной страницы sherpa-onnx на GitHub " +
-            "и сверяет каждый файл с отпечатком, записанным в программе. Кроме этого сервер ходит в интернет, только когда " +
-            "веб-версия просит прочитать страницу для карточки ссылки (заголовок и картинку); адреса домашней сети он не открывает.</p>",
+        "<p class=\"lead\">Телефоны расшифровывают голосовые сами, без интернета, моделью GigaAM v3 (лицензия MIT). Взять её они " +
+            "могут только отсюда. Сервер скачивает её один раз по этой кнопке с официальной страницы sherpa-onnx на GitHub и " +
+            "сверяет каждый файл с отпечатком, записанным в программе.</p>",
     )
     when (val state = model.state) {
-        SpeechModel.State.Ready -> append("<p>Модель на месте (${mb(SpeechModelSpec.totalSize)} МБ). Телефоны возьмут её отсюда.</p>")
+        SpeechModel.State.Ready -> append(chip("ok", "ok", "Модель на месте (${mb(SpeechModelSpec.totalSize)} МБ)"))
 
-        is SpeechModel.State.Downloading -> append("<p>Скачивается: ${mb(state.done)} из ${mb(state.total)} МБ…</p>")
+        is SpeechModel.State.Downloading -> {
+            val share = if (state.total > 0) (state.done * 10 / state.total).coerceIn(0, 10) * 10 else 0
+            append(
+                "<div class=\"progress w$share\"><span></span></div><p class=\"muted\">Скачивается: ${mb(
+                    state.done,
+                )} из ${mb(state.total)} МБ…</p>",
+            )
+        }
 
         SpeechModel.State.Missing -> append(
-            "<form method=\"post\" action=\"/admin/speech-model\"><button>Скачать модель (${mb(
-                SpeechModelSpec.archive.size,
-            )} МБ)</button></form>",
+            postButton("/admin/speech-model", "Скачать модель (${mb(SpeechModelSpec.archive.size)} МБ)", "", "download"),
         )
 
-        is SpeechModel.State.Failed -> append(
-            "<p style=\"color:#b3261e\">Не получилось: ${esc(state.message)}</p>" +
-                "<form method=\"post\" action=\"/admin/speech-model\"><button>Попробовать ещё раз</button></form>",
-        )
+        is SpeechModel.State.Failed -> {
+            append("<div class=\"banner err\">${icon("error")}<div>Не получилось: ${esc(state.message)}</div></div>")
+            append(postButton("/admin/speech-model", "Попробовать ещё раз", "tonal", "refresh"))
+        }
     }
-    append("</section>")
 }

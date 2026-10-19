@@ -20,6 +20,9 @@ interface Mailbox : AutoCloseable {
 
     /** Returns when something may have arrived in [folder] or [timeoutMs] passed. [close] ends it at once. */
     fun await(folder: String, timeoutMs: Long)
+
+    /** Ends an [await] in progress (or the next one, if it comes first). */
+    fun wake() {}
 }
 
 /** The mailbox refused the login: retrying with the same password could get the mailbox locked, so nobody retries. */
@@ -33,7 +36,10 @@ data class Round(
     val resent: Int = 0,
     val refused: Int = 0,
     val waiting: Int = 0,
-)
+) {
+    /** Letters went one way or the other: a conversation may be going on. */
+    val moved get() = received + acknowledged + sent + resent > 0
+}
 
 /**
  * Carries letters between this server and its contacts through a [Mailbox] (ADR-039). Each round takes in what came
@@ -53,19 +59,27 @@ class Courier(
 
     /** Takes in what came, then sends what waits. Rounds and sends never overlap. */
     @Synchronized
-    fun round(): Round {
+    fun round(): Round = logged("round") {
         val contacts = db.contacts().associateBy { it.id }
         mailbox.ensureFolder(inbox)
         val taken = take(contacts)
         val (sent, resent) = send(contacts)
-        return taken.copy(sent = sent, resent = resent)
+        taken.copy(sent = sent, resent = resent)
     }
 
     /** Sends what waits without looking at the inbox: right after a letter is queued. */
     @Synchronized
-    fun sendDue(): Round {
+    fun sendDue(): Round = logged("send") {
         val (sent, resent) = send(db.contacts().associateBy { it.id })
-        return Round(sent = sent, resent = resent)
+        Round(sent = sent, resent = resent)
+    }
+
+    /** One line per pass that moved letters, so the log tells how long they took. */
+    private inline fun logged(what: String, block: () -> Round): Round {
+        val start = System.nanoTime()
+        return block().also {
+            if (it != Round()) log.info("Letters {}: {} in {} ms", what, it, (System.nanoTime() - start) / 1_000_000)
+        }
     }
 
     private fun send(contacts: Map<String, Contact>): Pair<Int, Int> {

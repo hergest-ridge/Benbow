@@ -2,6 +2,7 @@ package app.benbow.server.peer
 
 import org.slf4j.LoggerFactory
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * Keeps the link with friends' servers going (ADR-039): one worker thread that connects to the shared mailbox, runs a
@@ -41,7 +42,7 @@ class PeerLink(
     @Volatile
     private var courier: Courier? = null
     private var worker: Thread? = null
-    private val sender = Executors.newSingleThreadExecutor { Thread(it, "benbow-peers-send").apply { isDaemon = true } }
+    private val sender = Executors.newSingleThreadScheduledExecutor { Thread(it, "benbow-peers-send").apply { isDaemon = true } }
 
     @Synchronized
     fun start() {
@@ -63,8 +64,32 @@ class PeerLink(
     /** Queues a test note to [contact] and sends it right away if the mailbox is reachable. */
     fun sendNote(contact: String, text: String) {
         db.enqueue(contact, Letter.NOTE, text, clock())
+        hotUntil = clock() + HOT_MS
+        sendSoon(attempt = 0)
+    }
+
+    /**
+     * Until then the worker asks the mailbox every few seconds instead of waiting in IDLE: some providers (Gmail) tell
+     * of a new message in a label half a minute late, too slow for a conversation in progress.
+     */
+    @Volatile
+    private var hotUntil = 0L
+
+    /**
+     * Sends what waits on the sending thread. A failed try is repeated a few times within a minute, since the worker may
+     * sit in IDLE for minutes before its own round would send it.
+     */
+    private fun sendSoon(attempt: Int) {
         sender.execute {
-            courier?.let { runCatching { it.sendDue() }.onFailure { e -> log.warn("Sending failed; the next round retries", e) } }
+            val c = courier ?: return@execute
+            runCatching { c.sendDue() }
+                .onSuccess { mailbox?.wake() } // the worker leaves IDLE and watches closely for the answer
+                .onFailure { e ->
+                    val delay = RETRY_DELAYS_MS.getOrNull(attempt)
+                    val next = if (delay == null) "the next round retries" else "again in $delay ms"
+                    log.warn("Sending failed (try {}); {}", attempt + 1, next, e)
+                    if (delay != null) sender.schedule({ sendSoon(attempt + 1) }, delay, TimeUnit.MILLISECONDS)
+                }
         }
     }
 
@@ -85,8 +110,9 @@ class PeerLink(
                 pause = FIRST_PAUSE_MS
                 while (running) {
                     val round = c.round()
+                    if (round.moved) hotUntil = clock() + HOT_MS
                     status = Status.Online(since, round, clock())
-                    box.await(c.inbox, idleMs)
+                    if (clock() < hotUntil) Thread.sleep(HOT_POLL_MS) else box.await(c.inbox, idleMs)
                 }
             } catch (e: LoginRefused) {
                 log.warn("The mailbox refused the login ({}); not retrying until the settings change", e.message)
@@ -132,5 +158,8 @@ class PeerLink(
         const val IDLE_MS = 9 * 60_000L
         private const val FIRST_PAUSE_MS = 5_000L
         private const val LAST_PAUSE_MS = 5 * 60_000L
+        private val RETRY_DELAYS_MS = listOf(3_000L, 10_000L, 30_000L)
+        private const val HOT_MS = 2 * 60_000L
+        private const val HOT_POLL_MS = 3_000L
     }
 }

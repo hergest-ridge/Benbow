@@ -51,7 +51,7 @@ P0 = MVP (Phases 2–3), P1 = soon after, P2 = later, P3 = maybe. Numbers refer 
 - **Day One** (extra reference): On this day, rich metadata, journaling UX.
 
 ## Non-goals
-- Multi-user, sharing, public publishing, cloud SaaS.
+- Multi-user servers, public publishing, cloud SaaS. Sharing with a few friends goes letter by letter between their own servers (ADR-039).
 - iOS (Compose Multiplatform keeps the door open, but it isn't planned).
 - Our own document format, or block-database semantics à la Notion.
 - Internet-facing server hardening in v1. LAN only. Remote access via VPN (e.g. Tailscale) if ever needed.

@@ -4,6 +4,12 @@ import app.benbow.server.api.ServerContext
 import app.benbow.server.api.benbowModule
 import app.benbow.server.backup.BackupJobs
 import app.benbow.server.calendar.CalendarDatabase
+import app.benbow.server.peer.Letter
+import app.benbow.server.peer.Letters
+import app.benbow.server.peer.Opened
+import app.benbow.server.peer.PeerDatabase
+import app.benbow.server.peer.PeerIdentity
+import app.benbow.server.peer.PeerLink
 import app.benbow.server.storage.BlobStore
 import app.benbow.server.storage.CALENDAR_HIGH_WATER
 import app.benbow.server.storage.Database
@@ -23,7 +29,7 @@ import java.nio.file.StandardOpenOption
 import kotlin.io.path.createDirectories
 import kotlin.system.exitProcess
 
-const val SERVER_VERSION = "0.9.0"
+const val SERVER_VERSION = "0.10.0"
 const val DEFAULT_PORT = 8765
 
 fun main(args: Array<String>) {
@@ -80,6 +86,13 @@ fun main(args: Array<String>) {
         log.error("The calendar store didn't open; the journal works without it. Restore it with restore-calendar.cmd", e)
         null
     }
+    // The link with friends' servers (ADR-039) is a store of its own too, and off until a mailbox is set.
+    val peers = try {
+        PeerLink(PeerDatabase.open(dataDir), PeerIdentity.ensure(dataDir.resolve("peer"))).also { it.start() }
+    } catch (e: Exception) {
+        log.error("The link with friends' servers didn't open; the journal works without it", e)
+        null
+    }
     val tls = TlsMaterial.ensure(dataDir, config.tlsPassword)
     log.info("Benbow server {} | data {} | store {} epoch {}", SERVER_VERSION, dataDir, db.storeId, db.epoch)
     log.info("HTTPS on {}:{} | certificate SHA-256 {}", config.host, config.port, tls.fingerprint)
@@ -103,6 +116,7 @@ fun main(args: Array<String>) {
             calendar = calendar,
             calendarHighWater = calendarHighWater,
             webRoot = webRoot(),
+            peers = peers,
         )
     val server = embeddedServer(
         factory = Netty,
@@ -125,6 +139,7 @@ fun main(args: Array<String>) {
             log.info("Stopping")
             server.stop(gracePeriodMillis = 1_000, timeoutMillis = 5_000)
             backupJobs.stop()
+            peers?.close()
             highWater.record(db)
             db.close()
             calendar?.let {
@@ -157,6 +172,11 @@ private fun selfCheck() {
     java.net.http.HttpClient.newHttpClient()
     Database.inMemory().close()
     CalendarDatabase.inMemory().close()
+    PeerDatabase.inMemory().close()
+    val (a, b) = PeerIdentity.generate() to PeerIdentity.generate()
+    val letter = Letter("self-check", 1, Letter.NOTE, "ok", sentAt = 0)
+    check(Letters.open(b, Letters.seal(a, b.card, letter)) { a.card } == Opened.Ok(a.card, letter)) { "sealed letters" }
+    jakarta.mail.Session.getInstance(java.util.Properties()).getStore("imaps")
     org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream::class.java.name
     javax.net.ssl.SSLContext.getDefault()
     println("self-check ok")

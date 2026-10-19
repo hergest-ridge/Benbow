@@ -26,6 +26,9 @@ kotlinx-coroutines = "1.11.0"
 kotlinx-serialization = "1.11.0"
 logback = "1.6.5"
 commons-compress = "1.28.0"
+tink = "1.23.0"
+angus-mail = "2.0.5"
+greenmail = "2.1.14"
 sqldelight = "2.4.1"
 sqlite-jdbc = "3.53.4.0"
 sqljs = "1.14.2"
@@ -98,6 +101,10 @@ sqldelight-sqlite-driver = { module = "app.cash.sqldelight:sqlite-driver", versi
 sqldelight-dialect = { module = "app.cash.sqldelight:sqlite-3-38-dialect", version.ref = "sqldelight" }
 sqldelight-json-module = { module = "app.cash.sqldelight:sqlite-json-module", version.ref = "sqldelight" }
 commons-compress = { module = "org.apache.commons:commons-compress", version.ref = "commons-compress" }
+# Letters between the owners' servers (ADR-039): HPKE and Ed25519, and the mailbox they travel through (IMAP).
+tink = { module = "com.google.crypto.tink:tink", version.ref = "tink" }
+angus-mail = { module = "org.eclipse.angus:jakarta.mail", version.ref = "angus-mail" }
+greenmail = { module = "com.icegreen:greenmail", version.ref = "greenmail" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotest-property = { module = "io.kotest:kotest-property", version.ref = "kotest" }

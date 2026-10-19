@@ -48,7 +48,7 @@ internal fun Route.adminRoutes(ctx: ServerContext) {
     }
 }
 
-private fun adminAllowed(call: ApplicationCall, ctx: ServerContext): Boolean {
+internal fun adminAllowed(call: ApplicationCall, ctx: ServerContext): Boolean {
     if (!ctx.isLoopback(call)) return false
     val fetchSite = call.request.headers["Sec-Fetch-Site"]
     if (fetchSite != null && fetchSite != "same-origin" && fetchSite != "none") return false
@@ -58,9 +58,9 @@ private fun adminAllowed(call: ApplicationCall, ctx: ServerContext): Boolean {
 
 private val timeFormat = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm").withZone(ZoneId.systemDefault())
 
-private fun time(ms: Long?) = ms?.let { timeFormat.format(Instant.ofEpochMilli(it)) } ?: "—"
+internal fun time(ms: Long?) = ms?.let { timeFormat.format(Instant.ofEpochMilli(it)) } ?: "—"
 
-private fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+internal fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
 
 private fun statusPage(ctx: ServerContext, admin: Boolean): String = buildString {
     append(
@@ -154,6 +154,7 @@ private fun statusPage(ctx: ServerContext, admin: Boolean): String = buildString
     ctx.dataDir?.let { append("<p>Данные: <code>${esc(it.toString())}</code></p>") }
     append("</section>")
     ctx.speech?.let { append(speechSection(it)) }
+    append(peersSection(ctx.peers))
     append("</body></html>")
 }
 

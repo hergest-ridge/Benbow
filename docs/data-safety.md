@@ -25,6 +25,8 @@ Losing or corrupting data is unacceptable from v1. Every storage, sync, migratio
   db/benbow.sqlite(-wal,-shm)
   db/calendar.sqlite(-wal,-shm)   calendar store (ADR-027, 7.3a), never mixed with the journal
   db/calendar-high-water.properties   the calendar's own high-water mark
+  db/peers.sqlite(-wal,-shm)      the link with friends' servers (ADR-039): contacts, letters, the mailbox settings; never mixed with the journal, not backed up while it holds only test notes (F1)
+  peer/identity.json         the server's keys towards friends (losing it means exchanging cards again)
   tmp/uploads/               in-progress resumable uploads
   thumbs/                    derived previews (regenerable, not backed up)
   backups/db/                verified DB snapshots

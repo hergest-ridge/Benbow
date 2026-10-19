@@ -24,6 +24,7 @@ import app.benbow.server.SpeechModel
 import app.benbow.server.backup.BackupStatus
 import app.benbow.server.calendar.CalendarDatabase
 import app.benbow.server.calendar.SqliteCalendarStore
+import app.benbow.server.peer.PeerLink
 import app.benbow.server.storage.BlobStore
 import app.benbow.server.storage.Database
 import app.benbow.server.storage.Devices
@@ -88,6 +89,8 @@ class ServerContext(
     val calendarHighWater: HighWater? = null,
     /** The web client's files (ADR-029); null when this package has none. */
     val webRoot: Path? = null,
+    /** The link with friends' servers (ADR-039); null when its store didn't open (or in tests that don't need it). */
+    val peers: PeerLink? = null,
 )
 
 data class DevicePrincipal(val deviceId: String)
@@ -111,6 +114,7 @@ fun Application.benbowModule(ctx: ServerContext) {
     val linkPreviews = LinkPreviews(ctx.blobs)
     routing {
         adminRoutes(ctx)
+        peerAdminRoutes(ctx)
         webApp(ctx.webRoot)
         route("/api/v1") {
             /**

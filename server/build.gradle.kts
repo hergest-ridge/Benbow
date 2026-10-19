@@ -40,6 +40,8 @@ dependencies {
     implementation(libs.sqlite.jdbc)
     implementation(libs.logback.classic)
     implementation(libs.commons.compress) // unpacks the speech model archive (.tar.bz2)
+    implementation(libs.tink) // sealed letters to friends' servers (ADR-039)
+    implementation(libs.angus.mail) // the shared mailbox the letters travel through (IMAP)
 
     testImplementation(libs.kotlin.test)
     testImplementation(libs.ktor.server.test.host)
@@ -50,6 +52,7 @@ dependencies {
     testImplementation(libs.sqldelight.sqlite.driver)
     testImplementation(libs.kotest.property)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.greenmail) // an IMAP server in the test process (PeerMailTest)
 }
 
 // ---- Packaging (docs/architecture.md#packaging-and-deployment-windows) ----
@@ -59,9 +62,11 @@ val packagingJdk = javaToolchains.compilerFor {
     vendor = JvmVendorSpec.ADOPTIUM
 }
 // From `jdeps --print-module-deps` over the server classpath, plus jdk.charsets for Windows console code pages and
-// java.net.http for the speech model download. `packageServer` runs the packaged server's --self-check against it.
+// java.net.http for the speech model download, java.security.sasl for IMAP logins (ADR-039). `packageServer` runs the
+// packaged server's --self-check against it.
 val runtimeModules =
-    "java.base,java.desktop,java.instrument,java.management,java.naming,java.net.http,java.sql,jdk.charsets,jdk.jfr,jdk.unsupported"
+    "java.base,java.desktop,java.instrument,java.management,java.naming,java.net.http,java.security.sasl,java.sql," +
+        "jdk.charsets,jdk.jfr,jdk.unsupported"
 val windows = System.getProperty("os.name").startsWith("Windows")
 
 val jlinkRuntime = tasks.register<Exec>("jlinkRuntime") {

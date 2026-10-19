@@ -163,6 +163,9 @@ class PeerAdminTest {
         assertFalse(Regex("""<script>""").containsMatchIn(html), "no inline scripts")
         assertTrue("data-live=\"friends\"" in html)
         assertEquals(HttpStatusCode.OK, client.get("/admin/assets/admin.js").status)
+        val icon = client.get("/admin/assets/icon.svg")
+        assertTrue(icon.status == HttpStatusCode.OK && "<svg" in icon.bodyAsText(), "the app's icon")
+        assertTrue("rel=\"icon\" href=\"/admin/assets/icon.svg\"" in html && "class=\"logo\" src=\"/admin/assets/icon.svg\"" in html)
         assertEquals(HttpStatusCode.NotFound, client.get("/admin/assets/secret.txt").status)
 
         // A friend's note can't become markup on this page.

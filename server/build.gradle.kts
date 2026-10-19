@@ -120,6 +120,14 @@ val webApp = tasks.register<Sync>("webApp") {
     }
 }
 
+// The admin page wears the app's icon: one source, the web client's favicon (itself the app_icon drawing).
+tasks.named<ProcessResources>("processResources") {
+    from(rootProject.file("apps/web/src/wasmJsMain/resources/favicon.svg")) {
+        into("admin")
+        rename { "icon.svg" }
+    }
+}
+
 // `./gradlew :server:webApp` once, then `:server:run` serves it at /app/ too.
 tasks.named<JavaExec>("run") {
     systemProperty("benbow.web", layout.buildDirectory.dir("web").get().asFile.absolutePath)

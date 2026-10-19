@@ -22,6 +22,7 @@ internal const val ADMIN_CSP =
 private val assets = mapOf(
     "admin.css" to ContentType.Text.CSS,
     "admin.js" to ContentType.Application.JavaScript,
+    "icon.svg" to ContentType.Image.SVG,
 )
 
 internal fun Route.adminAssets() {
@@ -71,10 +72,11 @@ internal class Tab(val id: String, val title: String, val icon: String, val aler
 internal fun adminShell(tabs: List<Tab>, body: String, flash: Flash?, subtitle: String, extra: String = ""): String = buildString {
     append("<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\"><title>Benbow — сервер</title>")
     append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">")
+    append("<link rel=\"icon\" href=\"/admin/assets/icon.svg\" type=\"image/svg+xml\">")
     append("<link rel=\"stylesheet\" href=\"/admin/assets/admin.css\"><script src=\"/admin/assets/admin.js\" defer></script></head><body>")
     append(
         "<div class=\"layout\"><nav class=\"drawer\" aria-label=\"Разделы\"><div class=\"brand\">" +
-            "<div class=\"logo\" aria-hidden=\"true\">⚓</div>",
+            "<img class=\"logo\" src=\"/admin/assets/icon.svg\" alt=\"\">",
     )
     append("<div><div class=\"title\">Адмирал Бенбоу</div><div class=\"subtitle\">${esc(subtitle)}</div></div></div>")
     append("<div class=\"nav\">")

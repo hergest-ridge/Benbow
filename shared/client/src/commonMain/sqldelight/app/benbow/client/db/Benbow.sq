@@ -221,6 +221,12 @@ SELECT day, fields FROM entry
 WHERE (day BETWEEN :fromDay AND :toDay) AND json_extract(fields, '$.deleted') IS NOT 'true'
   AND kind NOT IN ('comment', 'system', 'event', 'reminder');
 
+-- Every day the calendar grid has a dot for (dayEntries' kinds), newest first: the calendar's overview (7.14).
+entryDays:
+SELECT DISTINCT day FROM entry
+WHERE json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system', 'event', 'reminder')
+ORDER BY day DESC;
+
 -- Events made before 7.3a (kind "event", the text is the title): moved once to the calendar's own file (ADR-027).
 journalEvents:
 SELECT id, day, body, fields FROM entry

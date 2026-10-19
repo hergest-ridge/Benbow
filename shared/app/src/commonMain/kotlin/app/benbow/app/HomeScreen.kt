@@ -281,7 +281,8 @@ internal fun HomeScreen(services: AppServices, nav: Navigator) {
             val home = state ?: return@SyncPull
             val write = { template: String -> nav.open(Route.Editor(null, services.today(), opened = services.now(), template = template)) }
             val actions = HomeActions(
-                open = { entry -> nav.open(Route.Editor(entry.id, entry.day)) },
+                open = { entry -> nav.open(Route.Editor(entry.id, entry.day, readOnly = true)) },
+                edit = { entry -> nav.open(Route.Editor(entry.id, entry.day)) },
                 write = write,
                 newEntry = newEntry,
                 checkin = vm::checkin,

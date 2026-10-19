@@ -50,7 +50,7 @@ internal fun CommentsScreen(services: AppServices, nav: Navigator, route: Route.
             parent?.let { entry ->
                 item(key = "parent") {
                     Surface(
-                        onClick = { nav.open(Route.Editor(entry.id, entry.day)) },
+                        onClick = { nav.open(Route.Editor(entry.id, entry.day, readOnly = true)) },
                         color = MaterialTheme.colorScheme.secondaryContainer,
                         shape = RoundedCornerShape(16.dp),
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).hand(),

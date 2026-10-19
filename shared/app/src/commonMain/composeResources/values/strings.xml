@@ -494,6 +494,9 @@
     <string name="import_finish">Готово</string>
     <string name="calendar_more">ещё %1$d</string>
     <string name="calendar_until">до %1$s</string>
+    <string name="calendar_overview">Обзор</string>
+    <string name="calendar_nearest">Ближайшие записи</string>
+    <string name="calendar_first_entry">Первая запись — %1$s</string>
     <string name="trash_calendar">Календарь</string>
     <string name="trash_calendar_item">Календарь «%1$s»</string>
     <string name="trash_tags">Теги и категории</string>

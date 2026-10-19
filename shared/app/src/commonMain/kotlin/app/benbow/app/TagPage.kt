@@ -157,7 +157,9 @@ internal fun TagPage(services: AppServices, nav: Navigator, route: Route.Tag) {
                 }
             }
             items(current.entries, key = { it.id }) { entry ->
-                EntryCard(entry, onClick = { nav.open(Route.Editor(entry.id, entry.day)) }, media = services.media, showDay = true)
+                EntryCard(entry, onClick = {
+                    nav.open(Route.Editor(entry.id, entry.day, readOnly = true))
+                }, media = services.media, showDay = true)
             }
         }
     }

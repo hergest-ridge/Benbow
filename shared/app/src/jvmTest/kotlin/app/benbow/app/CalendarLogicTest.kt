@@ -2,14 +2,44 @@ package app.benbow.app
 
 import app.benbow.client.calendar.CalendarEvent
 import app.benbow.core.calendar.EventField
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.plus
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CalendarLogicTest {
+    @Test
+    fun pagesAreMonthsAndAGridIsAsTallAsItsWeeks() {
+        val october = LocalDate(2026, 10, 1)
+        assertEquals(october, monthOfPage(pageOf(october)))
+        assertEquals(pageOf(october) + 3, pageOf(LocalDate(2027, 1, 15)))
+        generateSequence(LocalDate(2020, 1, 1)) { it.plus(1, DateTimeUnit.MONTH) }.take(120).forEach {
+            assertEquals(monthGrid(it).size, weeksIn(it), "$it")
+        }
+        assertEquals(4, weeksIn(LocalDate(2027, 2, 1))) // from a Monday, 28 days
+        assertEquals(6, weeksIn(LocalDate(2026, 8, 1))) // from a Saturday, 31 days
+    }
+
+    @Test
+    fun writtenDaysKnowTheYearsAndTheNearestOnes() {
+        val written = WrittenDays(listOf("2026-10-05", "2026-10-01", "2025-03-14"))
+        assertEquals(listOf(2027, 2026, 2025), written.years(2026, 2027))
+        assertEquals(setOf(1, 5), written.months["2026-10"])
+        assertEquals(LocalDate(2025, 3, 14), written.first)
+        val june = LocalDate(2026, 6, 1)
+        assertTrue(written.isEmpty(june))
+        assertFalse(written.isEmpty(LocalDate(2026, 10, 20)))
+        assertEquals(LocalDate(2025, 3, 14), written.before(june))
+        assertEquals(LocalDate(2026, 10, 1), written.after(june))
+        assertNull(written.before(LocalDate(2025, 3, 1)))
+        assertNull(written.after(LocalDate(2026, 10, 1)))
+    }
+
     @Test
     fun monthGridStartsOnMondayAndCoversWholeWeeks() {
         val weeks = monthGrid(LocalDate(2026, 10, 1)) // October 2026 starts on a Thursday

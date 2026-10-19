@@ -520,6 +520,9 @@ class JournalRepository(
             }
         }
 
+    /** Every day [monthDays] would have, newest first ("YYYY-MM-DD"); no fields read, so the whole journal is cheap. */
+    fun entryDays(): Flow<List<String>> = q.entryDays().asFlow().mapToList(context)
+
     // Mood check-ins (5.4)
 
     /**

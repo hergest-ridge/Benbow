@@ -455,7 +455,9 @@ internal fun GentleEntriesScreen(services: AppServices, nav: Navigator, route: R
         CompositionLocalProvider(LocalGentle provides false) {
             LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(vertical = 8.dp)) {
                 items(current.entries, key = { it.id }) { entry ->
-                    EntryCard(entry, onClick = { nav.open(Route.Editor(entry.id, entry.day)) }, media = services.media, showDay = true)
+                    EntryCard(entry, onClick = {
+                        nav.open(Route.Editor(entry.id, entry.day, readOnly = true))
+                    }, media = services.media, showDay = true)
                 }
             }
         }

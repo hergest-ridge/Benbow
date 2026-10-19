@@ -1,11 +1,17 @@
 package app.benbow.app
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -17,31 +23,46 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
@@ -56,11 +77,12 @@ import app.benbow.app.resources.calendar_entry
 import app.benbow.app.resources.calendar_event
 import app.benbow.app.resources.calendar_more
 import app.benbow.app.resources.calendar_my_events
+import app.benbow.app.resources.calendar_overview
 import app.benbow.app.resources.calendar_until
 import app.benbow.app.resources.months_genitive
-import app.benbow.app.resources.months_nominative
 import app.benbow.app.resources.next
 import app.benbow.app.resources.previous
+import app.benbow.app.resources.today
 import app.benbow.app.resources.weekdays_short
 import app.benbow.client.ByteSink
 import app.benbow.client.DayInfo
@@ -74,10 +96,16 @@ import app.benbow.core.calendar.CalendarKind
 import app.benbow.core.calendar.MY_CALENDAR
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DateTimeUnit
@@ -90,6 +118,7 @@ import kotlinx.datetime.plus
 import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.absoluteValue
+import kotlin.math.roundToInt
 
 internal fun LocalDate.monthStart() = LocalDate(year, month, 1)
 
@@ -103,6 +132,18 @@ internal fun monthGrid(month: LocalDate): List<List<LocalDate>> {
     val end = last.plus(7 - last.dayOfWeek.isoDayNumber, DateTimeUnit.DAY)
     return generateSequence(start) { it.plus(1, DateTimeUnit.DAY) }.takeWhile { it <= end }.toList().chunked(7)
 }
+
+/** How many weeks [monthGrid] has for [month]: 4 to 6. */
+internal fun weeksIn(month: LocalDate): Int = (month.monthStart().dayOfWeek.isoDayNumber - 1 + month.monthEnd().day + 6) / 7
+
+private const val FIRST_YEAR = 1900
+
+/** The grid's pages: January 1900 to December 2199, far past any journal either way, so a swipe never runs out. */
+internal const val MONTH_PAGES = 12 * 300
+
+internal fun pageOf(month: LocalDate): Int = ((month.year - FIRST_YEAR) * 12 + month.month.number - 1).coerceIn(0, MONTH_PAGES - 1)
+
+internal fun monthOfPage(page: Int): LocalDate = LocalDate(FIRST_YEAR + page / 12, page % 12 + 1, 1)
 
 /** "9:30" → "09:30"; null when it isn't a time. */
 internal fun parseTime(text: String): String? = Regex("""^\s*([01]?\d|2[0-3])[:.]([0-5]\d)\s*$""").find(text)?.let { m ->
@@ -136,19 +177,39 @@ internal fun dayMarks(days: List<LocalDate>, events: List<CalendarEvent>, colorO
 private const val MAX_DOTS = 3
 private const val FOLDED_EVENTS = 3
 
+/** How many months keep their last marks for a quick return (the pager composes three at a time). */
+private const val KEPT_MONTHS = 12
+
+/** One month page of the grid: its days with entries and the events of its weeks. */
+internal data class MonthMarks(val days: Map<String, DayInfo>, val events: List<CalendarEvent>)
+
 internal class CalendarViewModel(private val services: AppServices) : ViewModel() {
     val selected = MutableStateFlow(LocalDate.parse(services.today()))
     val month = MutableStateFlow(selected.value.monthStart())
 
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val days: StateFlow<Map<String, DayInfo>> = month.flatMapLatest { services.repo.monthDays(it.toString(), it.monthEnd().toString()) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+    /** The last marks of the months shown, so a month back in view (or the screen coming back) has them at once. */
+    private val lastMarks = LinkedHashMap<LocalDate, MonthMarks>()
 
-    /** From the calendar's own file (ADR-027), never from the journal; the grid's weeks plus the days around them. */
+    fun kept(month: LocalDate): MonthMarks? = lastMarks[month]
+
+    /** [month]'s days with entries and, from the calendar's own file (ADR-027, never the journal), its grid's events. */
+    fun marks(month: LocalDate): Flow<MonthMarks> = combine(
+        services.repo.monthDays(month.toString(), month.monthEnd().toString()),
+        services.calendar.events(month.minus(7, DateTimeUnit.DAY).toString(), month.monthEnd().plus(7, DateTimeUnit.DAY).toString()),
+        ::MonthMarks,
+    ).onEach {
+        lastMarks.remove(month)
+        lastMarks[month] = it
+        if (lastMarks.size > KEPT_MONTHS) lastMarks.remove(lastMarks.keys.first())
+    }
+
+    /** The overview's and an empty month's map of the journal (7.14). */
+    val written: StateFlow<WrittenDays?> = services.repo.entryDays().map(::WrittenDays)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     @OptIn(ExperimentalCoroutinesApi::class)
-    val events: StateFlow<List<CalendarEvent>> = month.flatMapLatest {
-        services.calendar.events(it.minus(7, DateTimeUnit.DAY).toString(), it.monthEnd().plus(7, DateTimeUnit.DAY).toString())
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val dayEvents: StateFlow<List<CalendarEvent>> = selected.flatMapLatest { services.calendar.events(it.toString(), it.toString()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val calendars: StateFlow<List<CalendarItem>> = services.calendar.calendars()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -157,13 +218,33 @@ internal class CalendarViewModel(private val services: AppServices) : ViewModel(
     val entries: StateFlow<List<EntrySummary>> = selected.flatMapLatest { services.repo.entriesForDay(it.toString()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /** A month settling in the grid picks its day a moment later; a day chosen meanwhile wins. */
+    private var settling: Job? = null
+
     fun select(day: LocalDate) {
+        settling?.cancel()
         selected.value = day
         month.value = day.monthStart()
     }
 
-    fun shiftMonth(by: Int) {
-        month.value = month.value.plus(by, DateTimeUnit.MONTH)
+    /**
+     * The grid settled on [month] (a swipe, an arrow, the overview). Unless the chosen day is in it already, the day
+     * becomes today in this month, else the month's first day with entries (so something written shows under the
+     * grid), else the 1st.
+     */
+    fun show(month: LocalDate) {
+        this.month.value = month
+        if (selected.value.monthStart() == month) return
+        settling?.cancel()
+        settling = viewModelScope.launch {
+            val today = LocalDate.parse(services.today())
+            selected.value = if (today.monthStart() == month) {
+                today
+            } else {
+                services.repo.monthDays(month.toString(), month.monthEnd().toString()).first().keys.minOrNull()?.let(LocalDate::parse)
+                    ?: month
+            }
+        }
     }
 
     /** A new event, or the changed fields of [event] (its series when it repeats). */
@@ -212,7 +293,8 @@ internal class CalendarViewModel(private val services: AppServices) : ViewModel(
 
 /**
  * Month at a glance: the journal first (entries as dots, the day's mood as a tint), events quieter under it (ADR-027,
- * ux.md "Calendar layer"); the chosen day below, its events as a compact strip before the entries. Swipe for days.
+ * ux.md "Calendar layer"); the chosen day below, its events as a compact strip before the entries. The grid swipes
+ * for months, the day below for days; the title opens the overview of every year (7.14).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -220,13 +302,14 @@ internal fun CalendarScreen(services: AppServices, nav: Navigator) {
     val vm = viewModel { CalendarViewModel(services) }
     val month by vm.month.collectAsStateWithLifecycle()
     val selected by vm.selected.collectAsStateWithLifecycle()
-    val days by vm.days.collectAsStateWithLifecycle()
-    val events by vm.events.collectAsStateWithLifecycle()
+    val dayEvents by vm.dayEvents.collectAsStateWithLifecycle()
     val calendars by vm.calendars.collectAsStateWithLifecycle()
     val entries by vm.entries.collectAsStateWithLifecycle()
+    val written by vm.written.collectAsStateWithLifecycle()
     val today = remember { LocalDate.parse(services.today()) }
     var sheet by remember { mutableStateOf<EventSheetRequest?>(null) }
     var showCalendars by remember { mutableStateOf(false) }
+    var overview by remember { mutableStateOf(false) }
     var exporting by remember { mutableStateOf<CalendarItem?>(null) }
     val defaultName = stringResource(Res.string.calendar_my_events)
     val openFile = rememberOpenFile(listOf("*/*")) { file ->
@@ -243,31 +326,67 @@ internal fun CalendarScreen(services: AppServices, nav: Navigator) {
     var unfolded by remember(selected) { mutableStateOf(false) }
     val colors = remember(calendars) { calendars.associate { it.id to it.color } }
     val colorOf = { event: CalendarEvent -> colors[event.calendar] ?: defaultCalendarColor(event.calendar) }
-    val grid = remember(month) { monthGrid(month) }
-    val marks = remember(grid, events, colors) { dayMarks(grid.flatten(), events, colorOf) }
+    val pager = rememberPagerState(initialPage = pageOf(month)) { MONTH_PAGES }
+    val scope = rememberCoroutineScope()
+    // The grid follows the chosen month (a day of the next month tapped, the day below swiped across, the overview)...
+    LaunchedEffect(pager, month) { pageOf(month).let { if (it != pager.currentPage) pager.animateScrollToPage(it) } }
+    // ...and the chosen month follows the grid once it settles.
+    LaunchedEffect(pager) { snapshotFlow { pager.settledPage }.collect { vm.show(monthOfPage(it)) } }
+    val shownMonth = monthOfPage(pager.currentPage)
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("${stringArrayResource(Res.array.months_nominative)[month.month.number - 1]} ${month.year}") },
+                title = { MonthTitle(shownMonth) { overview = true } },
                 actions = {
+                    if (selected != today || shownMonth != today.monthStart()) {
+                        IconButton({ vm.select(today) }, modifier = Modifier.hand()) {
+                            TodayIcon(today.day, stringResource(Res.string.today))
+                        }
+                    }
                     IconButton({
                         showCalendars = true
                     }, modifier = Modifier.hand()) { Icon(Icons.Layers, stringResource(Res.string.calendar_calendars)) }
-                    IconButton({
-                        vm.shiftMonth(-1)
-                    }, modifier = Modifier.hand()) { Icon(Icons.ChevronLeft, stringResource(Res.string.previous)) }
-                    IconButton({
-                        vm.shiftMonth(1)
-                    }, modifier = Modifier.hand()) { Icon(Icons.ChevronRight, stringResource(Res.string.next)) }
+                    // A mouse can't swipe (desktop, web); a phone swipes the grid.
+                    if (LocalPagerArrows.current) {
+                        IconButton({
+                            scope.launch { pager.animateScrollToPage(pager.currentPage - 1) }
+                        }, modifier = Modifier.hand()) { Icon(Icons.ChevronLeft, stringResource(Res.string.previous)) }
+                        IconButton({
+                            scope.launch { pager.animateScrollToPage(pager.currentPage + 1) }
+                        }, modifier = Modifier.hand()) { Icon(Icons.ChevronRight, stringResource(Res.string.next)) }
+                    }
                 },
             )
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
-            MonthGrid(grid, month, selected, today, days, marks, onSelect = vm::select)
+            WeekdayRow()
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val cell = (maxWidth - GRID_PADDING * 2) / 7
+                HorizontalPager(
+                    pager,
+                    beyondViewportPageCount = 1,
+                    modifier = Modifier.fillMaxWidth().clipToBounds().gridHeight(pager, cell),
+                ) { page ->
+                    val pageMonth = monthOfPage(page)
+                    val marks by remember(pageMonth) { vm.marks(pageMonth) }.collectAsStateWithLifecycle(vm.kept(pageMonth))
+                    val grid = remember(pageMonth) { monthGrid(pageMonth) }
+                    val events = marks?.events.orEmpty()
+                    val dayMarks = remember(grid, events, colors) { dayMarks(grid.flatten(), events, colorOf) }
+                    MonthGrid(
+                        grid,
+                        pageMonth,
+                        selected,
+                        today,
+                        marks?.days.orEmpty(),
+                        dayMarks,
+                        onSelect = vm::select,
+                        modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true),
+                    )
+                }
+            }
             HorizontalDivider(Modifier.padding(top = 4.dp))
             var drag by remember { mutableStateOf(0f) }
-            val dayEvents = events.filter { it.covers(selected.toString()) }
             LazyColumn(
                 Modifier.fillMaxSize().pointerInput(selected) {
                     detectHorizontalDragGestures(onDragEnd = {
@@ -308,9 +427,10 @@ internal fun CalendarScreen(services: AppServices, nav: Navigator) {
                     }
                 }
                 if (dayEvents.isNotEmpty() && entries.isNotEmpty()) item(key = "gap") { Spacer(Modifier.height(8.dp)) }
+                // Read as in the feed, with its comments; the menu switches to editing.
                 items(entries, key = {
                     it.id
-                }) { EntryCard(it, onClick = { nav.open(Route.Editor(it.id, it.day)) }, media = services.media) }
+                }) { EntryCard(it, onClick = { nav.open(Route.Editor(it.id, it.day, readOnly = true)) }, media = services.media) }
                 if (dayEvents.isEmpty() && entries.isEmpty()) {
                     item(key = "empty") {
                         Text(
@@ -319,9 +439,22 @@ internal fun CalendarScreen(services: AppServices, nav: Navigator) {
                             modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
                         )
                     }
+                    written?.takeIf { it.isEmpty(month) }?.let { map ->
+                        item(key = "nearest") { NearestEntries(map, month, onDay = vm::select) }
+                    }
                 }
             }
         }
+    }
+    if (overview) {
+        CalendarOverviewSheet(
+            written ?: WrittenDays(emptyList()),
+            inView = month,
+            today = today,
+            onMonth = vm::show,
+            onDay = vm::select,
+            onDismiss = { overview = false },
+        )
     }
     sheet?.let { request ->
         val close = { sheet = null }
@@ -367,6 +500,57 @@ internal fun CalendarScreen(services: AppServices, nav: Navigator) {
 /** The sheet's subject: an event as it is (null = a new one) and what the form starts from. */
 private data class EventSheetRequest(val event: CalendarEvent?, val draft: EventDraft)
 
+private val GRID_PADDING = 8.dp
+
+/** «🍂 Октябрь 2026 ▾», the feed's month sign included; it follows the swipe and opens the overview. */
+@Composable
+private fun MonthTitle(month: LocalDate, onClick: () -> Unit) {
+    Row(
+        Modifier.clip(RoundedCornerShape(8.dp)).hand().clickable(onClick = onClick).padding(start = 4.dp, end = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AnimatedContent(
+            month,
+            transitionSpec = { fadeIn(tween(TITLE_FADE_MILLIS)) togetherWith fadeOut(tween(TITLE_FADE_MILLIS)) },
+            modifier = Modifier.weight(1f, fill = false),
+        ) {
+            // A long month beside the mouse's arrows (a 400 dp list) gives up a little size, never its year.
+            Text(
+                monthTitle(it.toString().take(7), withYear = true).orEmpty(),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                autoSize = TextAutoSize.StepBased(minFontSize = 16.sp, maxFontSize = MaterialTheme.typography.titleLarge.fontSize),
+            )
+        }
+        Icon(Icons.ArrowDropDown, stringResource(Res.string.calendar_overview)) // drawn: "▾" would need a web font
+    }
+}
+
+private const val TITLE_FADE_MILLIS = 150
+
+/** «Сегодня»: a calendar page with today's number, as calendar apps draw it; shown once away from today. */
+@Composable
+private fun TodayIcon(day: Int, label: String) {
+    val color = LocalContentColor.current
+    Box(
+        Modifier.size(22.dp).border(1.5.dp, color, RoundedCornerShape(5.dp)).clearAndSetSemantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text("$day", fontSize = 11.sp, lineHeight = 11.sp, fontWeight = FontWeight.SemiBold, color = color)
+    }
+}
+
+/** As tall as the month in view, gliding between 4, 5 and 6 weeks with the swipe, so the day below moves, not jumps. */
+private fun Modifier.gridHeight(pager: PagerState, cell: Dp) = layout { measurable, constraints ->
+    val page = pager.currentPage
+    val fraction = pager.currentPageOffsetFraction
+    val from = weeksIn(monthOfPage(page))
+    val to = weeksIn(monthOfPage((page + if (fraction > 0) 1 else -1).coerceIn(0, MONTH_PAGES - 1)))
+    val height = ((from + (to - from) * fraction.absoluteValue) * cell.toPx()).roundToInt()
+    val placeable = measurable.measure(constraints.copy(minHeight = height, maxHeight = height))
+    layout(placeable.width, height) { placeable.place(0, 0) }
+}
+
 /** One line of the day's strip: the calendar's color, when, and the title; no card, so entries stay the main thing. */
 @Composable
 private fun EventRow(event: CalendarEvent, day: String, color: String, onClick: () -> Unit) {
@@ -407,6 +591,22 @@ private fun eventWhen(event: CalendarEvent, day: String): String {
     }
 }
 
+/** Пн … Вс over the grid; it stays while the months swipe under it. */
+@Composable
+private fun WeekdayRow() {
+    Row(Modifier.padding(horizontal = GRID_PADDING)) {
+        stringArrayResource(Res.array.weekdays_short).forEach {
+            Text(
+                it,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f).padding(vertical = 4.dp),
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
 @Composable
 private fun MonthGrid(
     grid: List<List<LocalDate>>,
@@ -416,21 +616,11 @@ private fun MonthGrid(
     days: Map<String, DayInfo>,
     marks: Map<String, DayMarks>,
     onSelect: (LocalDate) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
     val gentle = LocalGentle.current
-    Column(Modifier.padding(horizontal = 8.dp)) {
-        Row {
-            stringArrayResource(Res.array.weekdays_short).forEach {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colors.onSurfaceVariant,
-                    modifier = Modifier.weight(1f).padding(vertical = 4.dp),
-                    textAlign = TextAlign.Center,
-                )
-            }
-        }
+    Column(modifier.padding(horizontal = GRID_PADDING)) {
         grid.forEach { week ->
             Row {
                 week.forEach { date ->

@@ -59,7 +59,10 @@ import org.jetbrains.compose.resources.stringResource
 
 /** What Home's blocks do when tapped. */
 internal class HomeActions(
+    /** Reads an entry as in the feed, with its comments. */
     val open: (EntrySummary) -> Unit,
+    /** Goes on writing a draft. */
+    val edit: (EntrySummary) -> Unit,
     val write: (template: String) -> Unit,
     val newEntry: () -> Unit,
     val checkin: (mood: Int, emotions: List<String>, text: String) -> Unit,
@@ -224,7 +227,7 @@ private fun LazyListScope.listBlock(block: HomeBlock, home: HomeState, actions: 
     when (block.kind) {
         HomeBlockType.Pinned -> section(block, Res.string.home_pinned, home.pinned, actions, services)
 
-        HomeBlockType.Drafts -> section(block, Res.string.home_drafts, home.drafts, actions, services)
+        HomeBlockType.Drafts -> section(block, Res.string.home_drafts, home.drafts, actions, services, open = actions.edit)
 
         HomeBlockType.Today -> {
             held(block, actions, "$key/title") { SectionTitle(stringResource(Res.string.home_today)) }
@@ -266,13 +269,14 @@ private fun LazyListScope.section(
     entries: List<EntrySummary>,
     actions: HomeActions,
     services: AppServices,
+    open: (EntrySummary) -> Unit = actions.open,
 ) {
     if (entries.isEmpty()) return
     val key = block.id
     held(block, actions, "$key/title") { SectionTitle(stringResource(title)) }
     heldItems(block, actions, entries, key = {
         "$key/${it.id}"
-    }) { EntryCard(it, onClick = { actions.open(it) }, media = services.media, showDay = true) }
+    }) { EntryCard(it, onClick = { open(it) }, media = services.media, showDay = true) }
 }
 
 /** A list block's pieces are lazy items, each with the block's long-press menu. */

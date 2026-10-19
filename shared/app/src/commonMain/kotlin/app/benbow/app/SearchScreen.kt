@@ -197,7 +197,7 @@ internal fun SearchScreen(services: AppServices, nav: Navigator) {
                 ) {
                     items(found, key = { it.id }) { entry ->
                         EntryTile(entry, services.media, Modifier.aspectRatio(1f), onClick = {
-                            nav.open(Route.Editor(entry.id, entry.day))
+                            nav.open(Route.Editor(entry.id, entry.day, readOnly = true))
                         })
                     }
                 }
@@ -215,7 +215,9 @@ internal fun SearchScreen(services: AppServices, nav: Navigator) {
                     contentPadding = PaddingValues(vertical = 8.dp),
                 ) {
                     items(found, key = { it.id }) { entry ->
-                        EntryCard(entry, onClick = { nav.open(Route.Editor(entry.id, entry.day)) }, media = services.media, showDay = true)
+                        EntryCard(entry, onClick = {
+                            nav.open(Route.Editor(entry.id, entry.day, readOnly = true))
+                        }, media = services.media, showDay = true)
                     }
                 }
             }

@@ -123,6 +123,7 @@ class AppSmokeTest {
         screenshot("02-note")
 
         onNodeWithText("Купить хлеб").performClick()
+        startEditing() // an entry tapped on Home reads first
         waitUntilExactlyOneExists(hasText("Сегодня", substring = true) and hasClickAction()) // the editor title: day, time, tap to move
         onNode(hasSetTextAction()).performTextInput(" и сыр")
         screenshot("03-editor")
@@ -197,6 +198,14 @@ class AppSmokeTest {
     /** On screen: laid out inside the window (a list keeps some items composed just out of view). */
     private fun SemanticsNode.isShown() = boundsInRoot.let { it.bottom > 0f && it.top < 860f && it.height > 0f }
 
+    /** An entry tapped in a list opens as a post to read (ADR-037); its menu switches to writing. */
+    private fun ComposeUiTest.startEditing() {
+        waitUntilExactlyOneExists(hasContentDescription("Меню"), 5_000)
+        onNodeWithContentDescription("Меню").click()
+        waitUntilExactlyOneExists(hasText("Редактировать"), 5_000)
+        onNodeWithText("Редактировать").click()
+    }
+
     @Test
     fun favoriteMoodTagsAndSearch() = runDesktopComposeUiTest(width = 412, height = 860) {
         services.repo.createNote(services.today(), "Планы на неделю\nдописать поиск")
@@ -204,6 +213,7 @@ class AppSmokeTest {
         setContent { BenbowApp(services) }
         waitUntilExactlyOneExists(hasText("Планы на неделю"), 5_000)
         onNodeWithText("Планы на неделю").performClick()
+        startEditing() // an entry tapped on Home reads first
         waitUntilExactlyOneExists(hasText("Настроение"), 5_000)
         onNodeWithContentDescription("В избранное").click()
         onNodeWithText("Настроение").click()
@@ -254,6 +264,7 @@ class AppSmokeTest {
         setContent { BenbowApp(services) }
         waitUntilExactlyOneExists(hasText("Планы"), 5_000)
         onNodeWithText("Планы").performClick()
+        startEditing() // an entry tapped on Home reads first
         waitUntilExactlyOneExists(hasText("+ Тег"), 5_000)
         onNodeWithText("+ Тег").click()
         val field = hasSetTextAction() and hasText("Найти", substring = true)
@@ -564,6 +575,7 @@ class AppSmokeTest {
         setContent { BenbowApp(services) }
         waitUntilExactlyOneExists(hasText("Обед с Машей"), 5_000)
         onNodeWithText("Обед с Машей").click()
+        startEditing() // an entry tapped on Home reads first
         waitUntilExactlyOneExists(hasText("Маша"), 5_000)
         onNodeWithContentDescription("Меню").click()
         onNodeWithText("Комментарии").click()
@@ -1155,6 +1167,7 @@ class AppSmokeTest {
         setContent { BenbowApp(services) }
         waitUntilExactlyOneExists(hasText("Планы"), 5_000)
         onNodeWithText("Планы").performClick()
+        startEditing() // an entry tapped on Home reads first
         waitUntilExactlyOneExists(hasText("+ Тег"), 5_000)
         onNodeWithText("+ Тег").click()
         val field = hasSetTextAction() and hasText("Найти", substring = true)
@@ -1279,6 +1292,7 @@ class AppSmokeTest {
         setContent { BenbowApp(services) }
         waitUntilExactlyOneExists(hasText("Прогулка у моря"), 5_000)
         onNodeWithText("Прогулка у моря").click()
+        startEditing() // an entry tapped on Home reads first
         waitUntilExactlyOneExists(hasText("Настроение"), 5_000)
         val bytes = picture()
         val image = ImageIO.read(bytes.inputStream())
@@ -1397,6 +1411,7 @@ class AppSmokeTest {
         setContent { BenbowApp(services) }
         waitUntilExactlyOneExists(hasText("Три снимка"), 5_000)
         onNodeWithText("Три снимка").click()
+        startEditing() // an entry tapped on Home reads first
         waitUntilExactlyOneExists(hasContentDescription("A.jpg"), 5_000)
         onNodeWithContentDescription("A.jpg").performTouchInput {
             down(center)

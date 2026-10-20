@@ -1,6 +1,7 @@
 package app.benbow.core.content
 
 import app.benbow.core.audio.TrackTags
+import app.benbow.core.board.Board
 import app.benbow.core.sync.AttachmentState
 import app.benbow.core.sync.EntryState
 import kotlinx.serialization.json.Json
@@ -17,8 +18,23 @@ import kotlinx.serialization.json.buildJsonObject
 object EntryExport {
     private val json = Json { prettyPrint = true }
 
-    /** "YYYY/MM" of the entry's day. */
-    fun folder(entry: EntryState): String = entry.day.split("-").let { "${it.getOrElse(0) { "0000" }}/${it.getOrElse(1) { "00" }}" }
+    /**
+     * "YYYY/MM" of the entry's day; a note on the board (ADR-040) has no date in its path: [NOTES], or [NOTES_ARCHIVE]
+     * while it is in the board's archive.
+     */
+    fun folder(entry: EntryState): String = when {
+        entry.fields[Board.SPACE]?.value != Board.BOARD -> dayFolder(entry)
+        entry.fields[Board.ARCHIVED]?.value == "true" -> NOTES_ARCHIVE
+        else -> NOTES
+    }
+
+    /** Every folder the entry's files may be in: after a move between them, the others' copies are removed. */
+    fun folders(entry: EntryState): List<String> = listOf(dayFolder(entry), NOTES, NOTES_ARCHIVE)
+
+    const val NOTES = "notes"
+    const val NOTES_ARCHIVE = "notes/archive"
+
+    private fun dayFolder(entry: EntryState) = entry.day.split("-").let { "${it.getOrElse(0) { "0000" }}/${it.getOrElse(1) { "00" }}" }
 
     /** "2026-10-13_<last 12 of the id>", without the extension. */
     fun baseName(entry: EntryState): String = "${entry.day}_${entry.id.takeLast(12).replace(Regex("[^A-Za-z0-9-]"), "_")}"

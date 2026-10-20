@@ -6,10 +6,14 @@ import kotlinx.serialization.Serializable
 
 /** Sync protocol range this build speaks (docs/sync.md#api-versioning-and-docs). */
 object Protocol {
-    const val MIN = 1
+    /**
+     * An app before 3 would show notes on the board in its journal (ADR-040), so it may no longer sync: it asks to be
+     * updated and keeps its outbox until then.
+     */
+    const val MIN = 3
 
-    /** 2: `entry.attachment.put` and attachments in entry state. */
-    const val MAX = 2
+    /** 2: `entry.attachment.put` and attachments in entry state. 3: notes on the board (the `space` field, ADR-040). */
+    const val MAX = 3
 }
 
 /** Response of `GET /api/v1/info`; store identity per docs/sync.md#store-identity. */

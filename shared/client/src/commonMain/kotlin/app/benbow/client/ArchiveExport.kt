@@ -90,8 +90,9 @@ class ArchiveExport(
                 }
                 for ((entry, body) in entries) {
                     val dir = "entries/${EntryExport.folder(entry)}/"
+                    val up = "../".repeat(dir.count { it == '/' }) // entries/2026/10/ and entries/notes/archive/ are three deep, notes two
                     val markdown = EntryExport.markdown(entry, body, missing = why, tags = tags) { a ->
-                        placed[a.meta.sha256]?.let { "../../../$it" }
+                        placed[a.meta.sha256]?.let { up + it }
                     }
                     zip.text(dir + EntryExport.baseName(entry) + ".md", markdown)
                     zip.text(dir + EntryExport.baseName(entry) + ".json", EntryExport.sidecar(entry, body, tags))

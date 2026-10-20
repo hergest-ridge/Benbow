@@ -1,0 +1,6 @@
+-- v6 -> v7 (7.17 K1, ADR-040): notes on the board. The journal's places read journal_entry from now on.
+ALTER TABLE entry ADD COLUMN space TEXT;
+CREATE INDEX entry_by_space ON entry(space);
+UPDATE entry SET space = json_extract(fields, '$.space');
+CREATE VIEW journal_entry AS SELECT * FROM entry WHERE space IS NULL;
+CREATE VIEW board_entry AS SELECT * FROM entry WHERE space = 'board';

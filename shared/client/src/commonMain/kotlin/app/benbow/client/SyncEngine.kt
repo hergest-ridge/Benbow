@@ -4,6 +4,7 @@ import app.benbow.client.db.BenbowDb
 import app.benbow.core.api.KnownEntry
 import app.benbow.core.api.Protocol
 import app.benbow.core.api.ServerInfo
+import app.benbow.core.board.Board
 import app.benbow.core.content.TagNames
 import app.benbow.core.sync.CreateEntry
 import app.benbow.core.sync.EntrySnapshot
@@ -189,6 +190,7 @@ class SyncEngine(private val db: BenbowDb, private val apiFor: (Connection) -> B
             media.second,
         )
         q.updateParent(entry.fields[PARENT_FIELD]?.value, entry.id)
+        q.updateSpace(entry.fields[Board.SPACE]?.value, entry.id)
         Moments.apply(db, entry.id, entry.fields.mapValues { it.value.value })
         SearchIndex.update(db, entry.id)
         SearchIndex.retag(db, renamed)

@@ -8,6 +8,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import kotlin.io.path.createDirectories
+import kotlin.io.path.deleteIfExists
 import kotlin.io.path.writeText
 
 /**
@@ -20,7 +21,8 @@ class MarkdownMirror(private val root: Path, private val media: (String) -> Path
     /** [tags]: the tag registry (`TagNames.of`), so the note lists its tags as the app shows them. */
     fun write(entry: EntryState, body: String?, tags: TagNames = TagNames()) {
         if (entry.kind == "system") return // registries (e.g. tag categories) are app data, not notes
-        val dir = root.resolve(EntryExport.folder(entry)).createDirectories()
+        val folder = EntryExport.folder(entry)
+        val dir = root.resolve(folder).createDirectories()
         val base = EntryExport.baseName(entry)
         val markdown = EntryExport.markdown(entry, body, missing = "not uploaded yet", tags = tags) { a ->
             media(a.meta.sha256)?.let { file ->
@@ -29,6 +31,12 @@ class MarkdownMirror(private val root: Path, private val media: (String) -> Path
         }
         atomicWrite(dir.resolve("$base.md"), markdown)
         atomicWrite(dir.resolve("$base.json"), EntryExport.sidecar(entry, body, tags))
+        // A note moved between the journal and the board (or the board's archive): its copy there goes, once this one
+        // is written, so the mirror holds every entry exactly once.
+        EntryExport.folders(entry).filter { it != folder }.forEach { other ->
+            root.resolve(other).resolve("$base.md").deleteIfExists()
+            root.resolve(other).resolve("$base.json").deleteIfExists()
+        }
     }
 
     /** `tags.json` and `tags.md` beside the notes (7.9 T5): every tag and category, to read without the app. */

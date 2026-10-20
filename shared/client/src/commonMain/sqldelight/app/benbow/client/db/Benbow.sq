@@ -21,10 +21,20 @@ CREATE TABLE entry (
     media_count INTEGER NOT NULL DEFAULT 0,
     cover TEXT,
     -- A comment's entry (the "parent" field), kept as a column so threads and counts use an index.
-    parent_id TEXT
+    parent_id TEXT,
+    -- Where the entry lives (the "space" field, ADR-040): null for the journal, 'board' for a note on the board.
+    space TEXT
 );
 
 CREATE INDEX entry_by_parent ON entry(parent_id);
+
+CREATE INDEX entry_by_space ON entry(space);
+
+-- Every place of the journal (feed, days, calendar, Home, look-backs, stats, tags, search) reads this view, never
+-- `entry`, so a note on the board (or in a space a later app knows) can't show there (ADR-040).
+CREATE VIEW journal_entry AS SELECT * FROM entry WHERE space IS NULL;
+
+CREATE VIEW board_entry AS SELECT * FROM entry WHERE space = 'board';
 
 -- Media files on this device, by SHA-256. A captured file stays until the server confirmed it;
 -- downloaded ones are a cache (docs/data-safety.md#client-side-safety).
@@ -76,12 +86,12 @@ SELECT * FROM entry WHERE id = ?;
 
 -- Trash is the LWW field "deleted" (JournalRepository.TRASH_FIELD).
 journal:
-SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM journal_entry
 WHERE json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system', 'event', 'reminder')
 ORDER BY day DESC, created_at;
 
 entriesForDay:
-SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM journal_entry
 WHERE day = ? AND json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system', 'event', 'reminder')
 ORDER BY created_at;
 
@@ -121,7 +131,7 @@ WHERE kind != 'system' ORDER BY day, created_at;
 -- input. One MATCH per word keeps OR unambiguous in both FTS query syntaxes. Null filters are off. A tag filter
 -- (:tagged = 1) takes the tag's key and the keys of the tags merged into it (ADR-032).
 search:
-SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM journal_entry
 WHERE json_extract(fields, '$.deleted') IS NOT 'true' AND kind != 'system'
   AND (:m1 IS NULL OR id IN (SELECT entry_id FROM entry_search WHERE entry_search MATCH :m1))
   AND (:m2 IS NULL OR id IN (SELECT entry_id FROM entry_search WHERE entry_search MATCH :m2))
@@ -137,48 +147,48 @@ LIMIT 300;
 -- Home (4.2) -------------------------------------------------------------------------------
 
 pinned:
-SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM journal_entry
 WHERE json_extract(fields, '$.pinned') = 'true' AND json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system', 'event', 'reminder')
 ORDER BY updated_at DESC;
 
 withDrafts:
-SELECT e.id, e.day, e.created_at, e.title, e.preview, e.conflict_heads, e.media_count, e.cover, e.fields FROM entry e
+SELECT e.id, e.day, e.created_at, e.title, e.preview, e.conflict_heads, e.media_count, e.cover, e.fields FROM journal_entry e
 JOIN draft d ON d.entry_id = e.id
 WHERE json_extract(e.fields, '$.deleted') IS NOT 'true'
 ORDER BY d.updated_at DESC;
 
 -- Same month and day in earlier years (:monthDay = "-10-13").
 onThisDay:
-SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM journal_entry
 WHERE substr(day, 5) = :monthDay AND day < :today AND json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system', 'event', 'reminder')
 ORDER BY day DESC, created_at;
 
 favoritesUpTo:
-SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM journal_entry
 WHERE json_extract(fields, '$.favorite') = 'true' AND day <= :lastDay AND json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system', 'event', 'reminder')
 ORDER BY day;
 
 -- Days with writing: reminders (and pre-7.3a events) aren't writing.
 daysWritten:
-SELECT COUNT(DISTINCT day) FROM entry
+SELECT COUNT(DISTINCT day) FROM journal_entry
 WHERE (day BETWEEN :fromDay AND :toDay) AND json_extract(fields, '$.deleted') IS NOT 'true'
   AND kind NOT IN ('system', 'event', 'reminder');
 
 -- Home's stats (7.11 H4): each entry of the days with its fields and attachments, and the journal's first day.
 statsEntries:
-SELECT day, fields, attachments FROM entry
+SELECT day, fields, attachments FROM journal_entry
 WHERE (day BETWEEN :fromDay AND :toDay) AND json_extract(fields, '$.deleted') IS NOT 'true'
   AND kind NOT IN ('comment', 'system', 'event', 'reminder');
 
 firstDay:
-SELECT MIN(day) AS first FROM entry
+SELECT MIN(day) AS first FROM journal_entry
 WHERE json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system', 'event', 'reminder');
 
 -- Feed (ADR-036): every post's place, newest first, without its text. `marks` holds only what Бережно goes by:
 -- the fields veil, veil_until and tag:<id> (VEIL_FIELD, VEIL_UNTIL_FIELD, TAG_PREFIX); {"":null} when there are none.
 feedIndex:
 SELECT e.id, e.day, e.created_at, e.media_count, json_group_object(coalesce(f.key, ''), f.value) AS marks
-FROM entry AS e LEFT JOIN json_each(e.fields) AS f
+FROM journal_entry AS e LEFT JOIN json_each(e.fields) AS f
     ON f.value IS NOT NULL AND (f.key IN ('veil', 'veil_until') OR substr(f.key, 1, 4) = 'tag:')
 WHERE json_extract(e.fields, '$.deleted') IS NOT 'true' AND e.kind NOT IN ('comment', 'system', 'event', 'reminder')
 GROUP BY e.id
@@ -207,23 +217,31 @@ UPDATE entry SET day = ?, created_at = ? WHERE id = ?;
 updateParent:
 UPDATE entry SET parent_id = ? WHERE id = ?;
 
+updateSpace:
+UPDATE entry SET space = ? WHERE id = ?;
+
+-- The board (ADR-040): its notes, the archive included, in no order (BoardRank sorts them in code).
+boardNotes:
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM board_entry
+WHERE json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system', 'event', 'reminder');
+
 -- Calendar (5.1) ---------------------------------------------------------------------------
 
 -- Бережно (ADR-031): entries put off until a day that has come, not answered yet; oldest first (the Home card).
 returned:
-SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM journal_entry
 WHERE json_extract(fields, '$.veil_until') <= :today AND json_extract(fields, '$.deleted') IS NOT 'true' AND kind != 'system'
 ORDER BY json_extract(fields, '$.veil_until'), day;
 
 -- A calendar span's entries (moods and Бережно's marks are read in code, where the rules apply).
 dayEntries:
-SELECT day, fields FROM entry
+SELECT day, fields FROM journal_entry
 WHERE (day BETWEEN :fromDay AND :toDay) AND json_extract(fields, '$.deleted') IS NOT 'true'
   AND kind NOT IN ('comment', 'system', 'event', 'reminder');
 
 -- Every day the calendar grid has a dot for (dayEntries' kinds), newest first: the calendar's overview (7.14).
 entryDays:
-SELECT DISTINCT day FROM entry
+SELECT DISTINCT day FROM journal_entry
 WHERE json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system', 'event', 'reminder')
 ORDER BY day DESC;
 
@@ -242,7 +260,7 @@ ORDER BY at;
 -- Tags in use by key (`tag:<id>`, ADR-032) and the name entries hold, which may differ in case between entries.
 tagCounts:
 SELECT json_each.key AS key, json_each.value AS name, COUNT(*) AS uses
-FROM entry, json_each(entry.fields)
+FROM journal_entry AS entry, json_each(entry.fields)
 WHERE json_each.key LIKE 'tag:%' AND json_each.value IS NOT NULL AND json_extract(entry.fields, '$.deleted') IS NOT 'true' AND entry.kind != 'system'
 GROUP BY json_each.key, json_each.value;
 

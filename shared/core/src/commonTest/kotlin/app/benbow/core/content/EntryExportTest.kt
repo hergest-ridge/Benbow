@@ -1,5 +1,6 @@
 package app.benbow.core.content
 
+import app.benbow.core.board.Board
 import app.benbow.core.sync.AttachmentMeta
 import app.benbow.core.sync.AttachmentState
 import app.benbow.core.sync.EntryState
@@ -12,6 +13,17 @@ import kotlin.test.assertTrue
 class EntryExportTest {
     private fun attachment(id: String, name: String, position: Double) =
         AttachmentState(AttachmentMeta(id, "sha-$id", 10, "image/jpeg", "image", name), position, hlc = Hlc.ZERO)
+
+    @Test
+    fun aNoteOnTheBoardIsExportedWithoutADateInItsPath() {
+        fun entry(vararg fields: Pair<String, String>) =
+            EntryState("entry-1", "note", "2026-10-14", 0, fields = fields.associate { (k, v) -> k to LwwValue(v, Hlc.ZERO) })
+        assertEquals("2026/10", EntryExport.folder(entry()))
+        assertEquals("notes", EntryExport.folder(entry(Board.SPACE to Board.BOARD)))
+        assertEquals("notes/archive", EntryExport.folder(entry(Board.SPACE to Board.BOARD, Board.ARCHIVED to "true")))
+        assertEquals("2026/10", EntryExport.folder(entry(Board.ARCHIVED to "true")), "board fields wait while it is in the journal")
+        assertEquals(listOf("2026/10", "notes", "notes/archive"), EntryExport.folders(entry()))
+    }
 
     @Test
     fun aPictureInTheTextLinksInPlaceAndIsNotListedTwice() {

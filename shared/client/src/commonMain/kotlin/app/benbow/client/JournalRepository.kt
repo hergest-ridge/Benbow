@@ -2,6 +2,7 @@ package app.benbow.client
 
 import app.benbow.client.db.BenbowDb
 import app.benbow.core.audio.TrackTags
+import app.benbow.core.board.Board
 import app.benbow.core.content.Block
 import app.benbow.core.content.Document
 import app.benbow.core.content.DocumentCodec
@@ -356,6 +357,7 @@ class JournalRepository(
                 SearchIndex.retag(db, TagNames.changed(TagNames.of(before), TagNames.of(before + (field to value))))
             }
             if (field == PARENT_FIELD) q.updateParent(value, id)
+            if (field == Board.SPACE) q.updateSpace(value, id)
             if (field == Moments.FIELD) Moments.apply(db, id, mapOf(field to value))
         }
     }
@@ -809,7 +811,7 @@ class JournalRepository(
 }
 
 @Suppress("UNUSED_PARAMETER")
-private fun summaryOf(
+internal fun summaryOf(
     id: String,
     day: String,
     createdAt: Long,

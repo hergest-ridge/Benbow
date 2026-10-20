@@ -24,6 +24,10 @@ Soft delete via `deleted_at`. Metadata fields carry `hlc` for LWW. The server is
 
 Why one entity: posts, notes, journal entries and comments share editing, revisions, attachments, tags and search. The feed, day and calendar views are queries over `kind`/`day`. A quick note can later be "promoted" by changing `kind`.
 
+## Board (7.17, ADR-040)
+Notes on the board are entries with the LWW field `space` = `board` (no field: the journal; any other value is a later space and never the journal's). Board fields, dormant while a note is in the journal: `board_rank` (its place, a `BoardRank` key: rocicorp's fractional indexing, base 62; the board shows keys ascending, then ids; notes without a valid key on top, newest id first), `board_pin` ("true": pinned), `board_archived` ("true": in the board's archive). Moving between the journal and the board is the `space` field alone: the same id, revisions, media, tags, comments and day; into the board a note goes on top of its part (pinned or not) and out of the archive. A move on the board writes the moved note's key only (`BoardRank.place`), plus keys for neighbours without one or with an equal key left by two devices.
+As built (K1): the client mirrors `space` into an indexed `space` column (like `parent_id`, migration 6.sqm); every journal place reads the view `journal_entry` (`space IS NULL`), the board reads `board_entry`; trash, sync, export and the tag registry read every entry. Code: `Board`, `BoardRank` (shared/core), `JournalBoard.kt` (shared/client).
+
 ## revision — immutable
 `id, entry_id, parents (JSON, 1 normally, 2 for merges), title, body (canonical Document JSON, see content-format.md), body_v (format version), body_sha256, created_at, device_id, origin (edit|merge|restore|import)`.
 The server denormalizes the head into `entry_text(entry_id, title, plain_text)` for FTS5.

@@ -19,5 +19,15 @@ object Board {
     /** "true": in the board's archive, out of sight. */
     const val ARCHIVED = "board_archived"
 
+    /** [JOURNAL]: the note came from the journal (its card says so, deleting it asks first). */
+    const val FROM = "board_from"
+    const val JOURNAL = "journal"
+
     fun onBoard(fields: Map<String, String?>): Boolean = fields[SPACE] == BOARD
+
+    /** A note on the board that was a journal entry. */
+    fun fromJournal(fields: Map<String, String?>): Boolean = onBoard(fields) && fields[FROM] == JOURNAL
+
+    /** A journal entry that has been on the board: its `space` was set and is now gone (an LWW field set to none). */
+    fun fromBoard(fields: Map<String, String?>): Boolean = SPACE in fields && fields[SPACE] == null
 }

@@ -7,6 +7,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -19,6 +20,7 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.test.waitUntilAtLeastOneExists
 import androidx.compose.ui.test.waitUntilDoesNotExist
+import app.benbow.client.HomeBlock
 import app.benbow.client.JournalRepository
 import app.benbow.client.Settings
 import app.benbow.client.archiveOnBoard
@@ -27,7 +29,10 @@ import app.benbow.client.boardTrash
 import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.createBoardNote
 import app.benbow.client.db.BenbowDb
+import app.benbow.client.editHomeLayout
+import app.benbow.client.moveToBoard
 import app.benbow.client.pinOnBoard
+import app.benbow.client.plusBlock
 import app.benbow.core.content.Document
 import app.benbow.core.content.DocumentCodec
 import app.benbow.core.content.Span
@@ -160,9 +165,9 @@ class BoardScreenTest {
             advanceEventTime(800)
             up()
         }
-        waitUntilAtLeastOneExists(hasText("Выбрано: 1"), 5_000)
+        waitUntilAtLeastOneExists(hasContentDescription("Выбрано: 1"), 5_000)
         onNodeWithTag(b).performClick()
-        waitUntilAtLeastOneExists(hasText("Выбрано: 2"), 5_000)
+        waitUntilAtLeastOneExists(hasContentDescription("Выбрано: 2"), 5_000)
         screenshot("board-09-chosen")
         onNodeWithContentDescription("Закрепить").performClick()
         waitUntil(timeoutMillis = 5_000) { notes().pinned.map { it.id }.toSet() == setOf(b, c) }
@@ -173,7 +178,7 @@ class BoardScreenTest {
             advanceEventTime(800)
             up()
         }
-        waitUntilAtLeastOneExists(hasText("Выбрано: 1"), 5_000)
+        waitUntilAtLeastOneExists(hasContentDescription("Выбрано: 1"), 5_000)
         onNodeWithContentDescription("В архив").performClick()
         waitUntil(timeoutMillis = 5_000) { notes().others.isEmpty() }
         waitUntilAtLeastOneExists(hasText("Записка в архиве"), 5_000)
@@ -185,7 +190,7 @@ class BoardScreenTest {
             advanceEventTime(800)
             up()
         }
-        waitUntilAtLeastOneExists(hasText("Выбрано: 1"), 5_000)
+        waitUntilAtLeastOneExists(hasContentDescription("Выбрано: 1"), 5_000)
         onNodeWithContentDescription("В корзину").performClick()
         waitUntil(timeoutMillis = 5_000) { notes().others.isEmpty() }
         waitUntilAtLeastOneExists(hasText("Записка в корзине"), 5_000)
@@ -224,7 +229,7 @@ class BoardScreenTest {
         onNodeWithTag(c).performMouseInput { moveTo(center) }
         waitUntilAtLeastOneExists(hasContentDescription("Выбрать"), 5_000)
         onNodeWithContentDescription("Выбрать").performClick()
-        waitUntilAtLeastOneExists(hasText("Выбрано: 1"), 5_000)
+        waitUntilAtLeastOneExists(hasContentDescription("Выбрано: 1"), 5_000)
         onNodeWithTag(c).performKeyInput {
             keyDown(Key.CtrlLeft)
             pressKey(Key.DirectionRight)
@@ -307,7 +312,7 @@ class BoardScreenTest {
             advanceEventTime(800)
             up()
         }
-        waitUntilAtLeastOneExists(hasText("Выбрано: 1"), 5_000)
+        waitUntilAtLeastOneExists(hasContentDescription("Выбрано: 1"), 5_000)
         onNodeWithContentDescription("Из архива").performClick()
         waitUntil(timeoutMillis = 5_000) { notes().others.map { it.id }.toSet() == setOf(a, b) }
         waitUntilAtLeastOneExists(hasText("В архиве пусто"), 5_000)
@@ -351,6 +356,75 @@ class BoardScreenTest {
         waitUntilAtLeastOneExists(hasText("Дневник"), 5_000)
         assertTrue(onAllNodes(hasText("Записки")).fetchSemanticsNodes().isNotEmpty())
         screenshot("board-14-trash")
+    }
+
+    @Test
+    fun anEntryGoesOntoTheBoardAndBackAndEachMoveShowsWhereItWent() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val id = repo.createNote(services.today(), "Идея для подарка")
+        setContent { BenbowApp(services) }
+        onNodeWithText("Лента").click()
+        waitUntilAtLeastOneExists(hasText("Идея для подарка"), 5_000)
+        onNodeWithText("Идея для подарка").performTouchInput { longClick() }
+        waitUntilAtLeastOneExists(hasText("В записки"), 5_000)
+        onNodeWithText("В записки").performClick()
+        waitUntilAtLeastOneExists(hasText("Перенесено в записки"), 5_000)
+        assertEquals(emptyList(), runBlocking { repo.journal().first() })
+        onNodeWithText("Открыть").performClick()
+        waitUntilAtLeastOneExists(hasText("из дневника", substring = true), 5_000)
+        screenshot("board-15-from-journal")
+
+        // And back: on the day it was made, with a way to it in the feed.
+        onNodeWithTag(id).performClick()
+        waitUntilAtLeastOneExists(hasContentDescription("Меню"), 5_000)
+        onNodeWithContentDescription("Меню").performClick()
+        onNodeWithText("В дневник").performClick()
+        waitUntilAtLeastOneExists(hasText("Перенесено в дневник", substring = true), 5_000)
+        assertEquals(listOf(id), runBlocking { repo.journal().first() }.map { it.id })
+        onNodeWithText("Открыть").performClick()
+        waitUntilAtLeastOneExists(hasText("из записок", substring = true), 5_000)
+    }
+
+    @Test
+    fun deletingANoteThatWasAJournalEntryOffersTheJournalBack() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val id = repo.createNote(services.today(), "Старая мысль")
+        repo.moveToBoard(id)
+        openBoard()
+        waitUntilAtLeastOneExists(hasText("Старая мысль"), 5_000)
+        onNodeWithTag(id).performTouchInput {
+            down(center)
+            advanceEventTime(800)
+            up()
+        }
+        waitUntilAtLeastOneExists(hasContentDescription("Выбрано: 1"), 5_000)
+        onNodeWithContentDescription("В корзину").performClick()
+        waitUntilAtLeastOneExists(hasText("Это была запись дневника"), 5_000)
+        screenshot("board-16-former")
+        onNodeWithText("Вернуть в дневник").performClick()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { repo.journal().first() }.map { it.id } == listOf(id) }
+        assertEquals(emptyList(), runBlocking { repo.boardTrash().first() }, "nothing went to the trash")
+    }
+
+    @Test
+    fun homeShowsTheBoardsPinnedNotesAndQuickCaptureCanPutANoteThere() = runDesktopComposeUiTest(width = 412, height = 860) {
+        repo.pinOnBoard(repo.createBoardNote(services.today(), JournalRepository.textBody("Код от домофона 4512")), true)
+        repo.editHomeLayout { it.plusBlock(HomeBlock("notes", "notes", "m"), 0) }
+        setContent { BenbowApp(services) }
+        waitUntilAtLeastOneExists(hasText("Код от домофона 4512"), 5_000)
+        screenshot("board-17-home")
+        onNodeWithText("Код от домофона 4512").performClick()
+        waitUntilAtLeastOneExists(hasSetTextAction(), 5_000)
+    }
+
+    @Test
+    fun quickCaptureRemembersWhereItPutsThings() = runDesktopComposeUiTest(width = 412, height = 860) {
+        var closed = false
+        setContent { QuickCapture(services, SharedContent("Купить батарейки", emptyList()), onClose = { closed = true }) }
+        onNodeWithText("В записки").performClick()
+        onNodeWithText("Сохранить").performClick()
+        waitUntil(timeoutMillis = 5_000) { closed }
+        assertEquals(listOf("Купить батарейки"), notes().others.map { it.card.lines.single().text })
+        assertEquals(emptyList(), runBlocking { repo.journal().first() })
+        assertEquals("board", Settings(BenbowDb(driver)).get("capture.target"))
     }
 
     private fun ComposeUiTest.center(tag: String): Offset = onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.center

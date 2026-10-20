@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -48,11 +49,15 @@ import app.benbow.app.resources.capture_hint
 import app.benbow.app.resources.capture_save
 import app.benbow.app.resources.capture_saving
 import app.benbow.app.resources.capture_title
+import app.benbow.app.resources.capture_to_board
+import app.benbow.app.resources.capture_to_journal
 import app.benbow.app.resources.dictation_kept
 import app.benbow.app.resources.dictation_needs_model
 import app.benbow.app.resources.media_mic_denied
 import app.benbow.client.ByteSource
 import app.benbow.client.IoDispatcher
+import app.benbow.client.JournalRepository
+import app.benbow.client.createBoardNote
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.joinAll
@@ -107,6 +112,8 @@ fun sharedNoteText(subject: String?, text: String?): String {
 fun QuickCapture(services: AppServices, shared: SharedContent, onClose: () -> Unit) {
     AppTheme(services) {
         var text by rememberSaveable { mutableStateOf(shared.text) }
+        // Into the journal or onto the board (ADR-040, where the board shows): the last choice on this device stays.
+        var toBoard by remember { mutableStateOf(services.labs && services.settings.get(CAPTURE_TARGET) == BOARD_TARGET) }
         var saving by remember { mutableStateOf(false) }
         var error by remember { mutableStateOf<String?>(null) }
         val scope = rememberCoroutineScope()
@@ -132,7 +139,11 @@ fun QuickCapture(services: AppServices, shared: SharedContent, onClose: () -> Un
                     val listener = launch(start = CoroutineStart.UNDISPATCHED) {
                         services.messages.collect { if (it is AppMessage.AttachFailed) failures += it.reason }
                     }
-                    val id = services.repo.createNote(services.today(), text.trim(), shared.linkTitle)
+                    val id = if (toBoard) {
+                        services.repo.createBoardNote(services.today(), JournalRepository.noteBody(text.trim(), shared.linkTitle))
+                    } else {
+                        services.repo.createNote(services.today(), text.trim(), shared.linkTitle)
+                    }
                     services.readCardsOf(id)
                     shared.files.map { file -> services.attach({ id }, { file.open() }, probe = { file.probe() }) }.joinAll()
                     listener.cancel()
@@ -156,7 +167,17 @@ fun QuickCapture(services: AppServices, shared: SharedContent, onClose: () -> Un
                     Modifier.navigationBarsPadding().imePadding().padding(horizontal = 20.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Text(stringResource(Res.string.capture_title), style = MaterialTheme.typography.titleMedium)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(stringResource(Res.string.capture_title), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                        if (services.labs) {
+                            listOf(false to Res.string.capture_to_journal, true to Res.string.capture_to_board).forEach { (board, label) ->
+                                FilterChip(toBoard == board, {
+                                    toBoard = board
+                                    services.settings.put(CAPTURE_TARGET, if (board) BOARD_TARGET else "journal")
+                                }, { Text(stringResource(label)) }, Modifier.hand())
+                            }
+                        }
+                    }
                     if (shared.files.isNotEmpty()) SharedFiles(shared.files)
                     val focus = remember { FocusRequester() }
                     LaunchedEffect(Unit) { focus.requestFocus() }
@@ -225,3 +246,6 @@ private fun SharedFiles(files: List<SharedFile>) {
         )
     }
 }
+
+private const val CAPTURE_TARGET = "capture.target"
+private const val BOARD_TARGET = "board"

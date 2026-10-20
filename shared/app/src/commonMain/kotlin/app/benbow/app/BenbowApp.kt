@@ -91,6 +91,11 @@ import app.benbow.app.resources.gentle_turned_on
 import app.benbow.app.resources.home_removed
 import app.benbow.app.resources.media_mic_denied
 import app.benbow.app.resources.months_genitive
+import app.benbow.app.resources.moved_open
+import app.benbow.app.resources.moved_to_board
+import app.benbow.app.resources.moved_to_board_many
+import app.benbow.app.resources.moved_to_journal
+import app.benbow.app.resources.moved_to_journal_many
 import app.benbow.app.resources.postponed
 import app.benbow.app.resources.reminder_now
 import app.benbow.app.resources.removed_atom
@@ -462,6 +467,29 @@ private fun AppRoot(services: AppServices) {
                     }
                     val result = snackbar.showSnackbar(getString(text), getString(Res.string.veil_undo), duration = SnackbarDuration.Long)
                     if (result == SnackbarResult.ActionPerformed) services.removalBack.emit(message.removal)
+                }
+
+                is AppMessage.MovedToBoard -> {
+                    val text = message.ids.singleOrNull()?.let { getString(Res.string.moved_to_board) }
+                        ?: getString(Res.string.moved_to_board_many, message.ids.size)
+                    // «Открыть» only where the board shows (ADR-040 labs builds); the move is said either way.
+                    val action = if (services.labs) getString(Res.string.moved_open) else null
+                    val result = snackbar.showSnackbar(text, action, duration = SnackbarDuration.Long)
+                    if (result == SnackbarResult.ActionPerformed) {
+                        services.showOnBoard.value = message.ids.first()
+                        nav.selectTab(Route.Board)
+                    }
+                }
+
+                is AppMessage.MovedToJournal -> {
+                    val text = message.ids.singleOrNull()?.let {
+                        getString(Res.string.moved_to_journal, dateLabel(message.day, getStringArray(Res.array.months_genitive)))
+                    } ?: getString(Res.string.moved_to_journal_many, message.ids.size)
+                    val result = snackbar.showSnackbar(text, getString(Res.string.moved_open), duration = SnackbarDuration.Long)
+                    if (result == SnackbarResult.ActionPerformed) {
+                        services.showInFeed.value = message.ids.first()
+                        nav.selectTab(Route.Feed)
+                    }
                 }
 
                 is AppMessage.BoardArchived -> {

@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.back
 import app.benbow.app.resources.conflict_badge
+import app.benbow.app.resources.entry_from_board
 import app.benbow.app.resources.filter_favorites
 import app.benbow.app.resources.sync_attention
 import app.benbow.app.resources.sync_done
@@ -101,6 +102,13 @@ internal fun EntryCard(
                     Text(time, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
                     if (entry.favorite) FavoriteMark(Modifier.padding(start = 6.dp))
                     moodEmoji(entry.mood)?.let { Text("  $it", style = MaterialTheme.typography.labelMedium) }
+                    if (entry.fromBoard) {
+                        Text(
+                            " · " + stringResource(Res.string.entry_from_board),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = colors.onSurfaceVariant,
+                        )
+                    }
                     if (entry.conflict) {
                         Spacer(Modifier.width(8.dp))
                         Text(stringResource(Res.string.conflict_badge), style = MaterialTheme.typography.labelMedium, color = colors.error)

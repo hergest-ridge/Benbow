@@ -74,6 +74,8 @@ data class EntrySummary(
     val ruleVeil: Veil? = null,
     /** "Отложить до…": quiet until this day ("YYYY-MM-DD"), then back with a card on Home until the owner answers it. */
     val until: String? = null,
+    /** It has been on the board (ADR-040): «из записок». */
+    val fromBoard: Boolean = false,
 )
 
 /** A tag: [uses] entries outside the trash (merged tags' too); [category] is the category's id. */
@@ -844,6 +846,7 @@ internal fun summaryOf(
         veil = effectiveVeil(Veil.of(f[VEIL_FIELD]), null),
         ownVeil = Veil.of(f[VEIL_FIELD]),
         until = f[VEIL_UNTIL_FIELD],
+        fromBoard = Board.fromBoard(f),
     )
 }
 

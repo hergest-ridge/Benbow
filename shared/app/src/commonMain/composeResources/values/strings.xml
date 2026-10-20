@@ -777,6 +777,26 @@
     <string name="board_kind_drawings">Рисунки</string>
     <string name="board_kind_sounds">Звуки</string>
     <string name="trash_board">Записки</string>
+    <string name="entry_to_board">В записки</string>
+    <string name="board_to_journal">В дневник</string>
+    <string name="board_to_journal_day">В дневник на другой день…</string>
+    <string name="moved_to_board">Перенесено в записки</string>
+    <string name="moved_to_board_many">В записки: %1$d</string>
+    <string name="moved_to_journal">Перенесено в дневник · %1$s</string>
+    <string name="moved_to_journal_many">В дневник: %1$d</string>
+    <string name="moved_open">Открыть</string>
+    <string name="board_from_journal">из дневника · %1$s</string>
+    <string name="entry_from_board">из записок</string>
+    <string name="former_title">Это была запись дневника</string>
+    <string name="former_one">Записка была записью дневника от %1$s. Вернуть её в дневник или удалить?</string>
+    <string name="former_many">Среди выбранных — записи дневника: %1$d. Вернуть их в дневник, а остальное удалить?</string>
+    <string name="former_back">Вернуть в дневник</string>
+    <string name="former_delete">Удалить</string>
+    <string name="block_notes">Записки</string>
+    <string name="block_notes_about">Закреплённые записки, под рукой</string>
+    <string name="block_notes_empty">Появится, когда в записках будут закреплённые</string>
+    <string name="capture_to_journal">В дневник</string>
+    <string name="capture_to_board">В записки</string>
     <string name="trash_journal">Дневник</string>
     <string name="more_search">Записи, теги, вложения</string>
 </resources>

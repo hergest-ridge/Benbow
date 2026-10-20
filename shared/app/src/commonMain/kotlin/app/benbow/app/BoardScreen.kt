@@ -5,7 +5,9 @@ import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope.OverlayClip
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VisibilityThreshold
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,6 +39,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridS
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -60,9 +63,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.Key
@@ -76,6 +82,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -112,10 +120,18 @@ import app.benbow.app.resources.board_pin
 import app.benbow.app.resources.board_pinned
 import app.benbow.app.resources.board_search_clear
 import app.benbow.app.resources.board_search_hint
+import app.benbow.app.resources.board_to_journal
 import app.benbow.app.resources.board_trash
 import app.benbow.app.resources.board_unarchive
 import app.benbow.app.resources.board_unchoose
 import app.benbow.app.resources.board_unpin
+import app.benbow.app.resources.cancel
+import app.benbow.app.resources.former_back
+import app.benbow.app.resources.former_delete
+import app.benbow.app.resources.former_many
+import app.benbow.app.resources.former_one
+import app.benbow.app.resources.former_title
+import app.benbow.app.resources.months_genitive
 import app.benbow.app.resources.tab_board
 import app.benbow.client.BoardNote
 import app.benbow.client.BoardNotes
@@ -135,6 +151,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.max
 
@@ -234,10 +251,53 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
         if (into) services.messages.tryEmit(AppMessage.BoardArchived(ids))
         unchoose()
     }
-    val trash: (List<String>) -> Unit = { ids ->
+    val trashNow: (List<String>) -> Unit = { ids ->
         services.scope.launch { ids.forEach { services.repo.moveToTrash(it) } }
         services.messages.tryEmit(AppMessage.BoardTrashed(ids))
         unchoose()
+    }
+    // Notes that were journal entries ask first: back into the journal, or into the trash anyway (ADR-040).
+    var guarding by remember { mutableStateOf<List<String>?>(null) }
+    val trash: (List<String>) -> Unit = { ids ->
+        if (shown.any { it.id in ids && it.fromJournal }) guarding = ids else trashNow(ids)
+    }
+    val toJournal: (List<String>) -> Unit = { ids ->
+        val notes = shown.filter { it.id in ids }
+        notes.firstOrNull()?.let { first -> services.toJournal(notes.map { it.id }, first.entry.day) }
+        unchoose()
+    }
+    guarding?.let { ids ->
+        val former = shown.filter { it.id in ids && it.fromJournal }
+        FormerEntryDialog(
+            count = former.size,
+            day = former.singleOrNull()?.takeIf { ids.size == 1 }?.entry?.day,
+            onBack = {
+                guarding = null
+                toJournal(former.map { it.id })
+                (ids - former.map { it.id }.toSet()).takeIf { it.isNotEmpty() }?.let(trashNow)
+            },
+            onDelete = {
+                guarding = null
+                trashNow(ids)
+            },
+            onDismiss = { guarding = null },
+        )
+    }
+    // «Открыть» after a move onto the board: the board scrolls to the note and it glows a moment.
+    var glowing by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        services.showOnBoard.filterNotNull().collect { id ->
+            mode = BOARD
+            glowing = id
+            services.showOnBoard.value = null
+        }
+    }
+    val glowAt = glowing?.let { id -> gridIndex(sections, id) }
+    LaunchedEffect(glowing, glowAt) {
+        val at = glowAt ?: return@LaunchedEffect
+        runCatching { boardGrid.animateScrollToItem(at) }
+        delay(1600)
+        glowing = null
     }
     val pin: () -> Unit = {
         val notes = chosenNotes()
@@ -295,7 +355,7 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
         stage?.opening(null, null)
         nav.open(Route.Editor(null, services.today(), opened = services.now(), board = true, checklist = list))
     }
-    val toJournal = {
+    val toJournalSearch = {
         services.searchFor.value = SearchQuery(words)
         nav.open(Route.Search)
     }
@@ -318,6 +378,7 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
                             pinned = notes.isNotEmpty() && notes.all { it.pinned },
                             archived = inArchive,
                             onClear = unchoose,
+                            onJournal = { toJournal(chosen.map { it as String }) },
                             onPin = pin,
                             onColor = { coloring = !coloring },
                             onArchive = { archive(chosen.map { it as String }, !inArchive) },
@@ -383,7 +444,7 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
                             if (mode == SEARCH &&
                                 inJournal > 0
                             ) {
-                                ElsewhereHint(stringResource(Res.string.board_more_in_journal, inJournal), toJournal)
+                                ElsewhereHint(stringResource(Res.string.board_more_in_journal, inJournal), toJournalSearch)
                             }
                         }
                     } else {
@@ -413,13 +474,13 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
                                         open,
                                         choose,
                                         tick,
-                                        Modifier.animateItem(placementSpec = GLIDE),
+                                        Modifier.animateItem(placementSpec = GLIDE).glow(note.id == glowing),
                                     )
                                 }
                             }
                             if (mode == SEARCH && inJournal > 0) {
                                 item("h-journal", span = StaggeredGridItemSpan.FullLine) {
-                                    ElsewhereHint(stringResource(Res.string.board_more_in_journal, inJournal), toJournal)
+                                    ElsewhereHint(stringResource(Res.string.board_more_in_journal, inJournal), toJournalSearch)
                                 }
                             }
                         }
@@ -430,6 +491,57 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
             }
         }
     }
+}
+
+/** Where a note sits among the grid's items (headers included), for scrolling to it. */
+private fun gridIndex(sections: List<Section>, id: String): Int? {
+    var at = 0
+    sections.forEach { section ->
+        if (section.label != null) at++
+        val i = section.notes.indexOfFirst { it.id == id }
+        if (i >= 0) return at + i
+        at += section.notes.size
+    }
+    return null
+}
+
+/** A ring that shows a card a moment and fades (after «Открыть»). */
+@Composable
+private fun Modifier.glow(on: Boolean): Modifier {
+    val glow by animateFloatAsState(if (on) 1f else 0f, tween(if (on) 200 else 900))
+    val color = MaterialTheme.colorScheme.primary
+    return drawWithContent {
+        drawContent()
+        if (glow > 0f) {
+            drawRoundRect(color.copy(alpha = glow), cornerRadius = CornerRadius(12.dp.toPx()), style = Stroke(3.dp.toPx()))
+        }
+    }
+}
+
+/** Deleting notes that were journal entries: the journal back first (ADR-040), or the trash anyway. */
+@Composable
+internal fun FormerEntryDialog(count: Int, day: String?, onBack: () -> Unit, onDelete: () -> Unit, onDismiss: () -> Unit) {
+    val months = stringArrayResource(Res.array.months_genitive)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(Res.string.former_title)) },
+        text = {
+            Text(
+                if (day != null) {
+                    stringResource(Res.string.former_one, dateLabel(day, months))
+                } else {
+                    stringResource(Res.string.former_many, count)
+                },
+            )
+        },
+        confirmButton = { TextButton(onBack, Modifier.hand()) { Text(stringResource(Res.string.former_back)) } },
+        dismissButton = {
+            Row {
+                TextButton(onDismiss, Modifier.hand()) { Text(stringResource(Res.string.cancel)) }
+                TextButton(onDelete, Modifier.hand()) { Text(stringResource(Res.string.former_delete)) }
+            }
+        },
+    )
 }
 
 private const val BOARD = "board"
@@ -644,6 +756,7 @@ private fun ChoiceBar(
     pinned: Boolean,
     archived: Boolean,
     onClear: () -> Unit,
+    onJournal: () -> Unit,
     onPin: () -> Unit,
     onColor: () -> Unit,
     onArchive: () -> Unit,
@@ -654,12 +767,15 @@ private fun ChoiceBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(onClear, Modifier.hand()) { Icon(Icons.Close, stringResource(Res.string.board_unchoose)) }
-        Text(stringResource(Res.string.board_chosen, count), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+        // Keep's way: the number alone, so the actions fit a phone; read out in full.
+        val said = stringResource(Res.string.board_chosen, count)
+        Text("$count", Modifier.weight(1f).semantics { contentDescription = said }, style = MaterialTheme.typography.titleLarge)
         if (!archived) {
             IconButton(onPin, Modifier.hand()) {
                 Icon(Icons.Pin, stringResource(if (pinned) Res.string.board_unpin else Res.string.board_pin))
             }
         }
+        IconButton(onJournal, Modifier.hand()) { Icon(Icons.Feed, stringResource(Res.string.board_to_journal)) }
         IconButton(onColor, Modifier.hand()) { Icon(Icons.Palette, stringResource(Res.string.board_color)) }
         IconButton(onArchive, Modifier.hand()) {
             if (archived) {

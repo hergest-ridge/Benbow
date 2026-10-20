@@ -31,6 +31,8 @@ import app.benbow.client.calendar.CalendarSyncResult
 import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.calendar.moveJournalEvents
 import app.benbow.client.db.BenbowDb
+import app.benbow.client.moveToBoard
+import app.benbow.client.moveToJournal
 import app.benbow.client.upcoming
 import app.benbow.ui.editor.Removal
 import app.cash.sqldelight.db.SqlDriver
@@ -131,6 +133,12 @@ sealed interface AppMessage {
 
     /** The microphone isn't allowed. */
     data object MicDenied : AppMessage
+
+    /** Entries went onto the board (ADR-040); «Открыть» shows the first there. */
+    data class MovedToBoard(val ids: List<String>) : AppMessage
+
+    /** Notes went into the journal, the first on [day] (the day it was made); «Открыть» shows it in the feed. */
+    data class MovedToJournal(val ids: List<String>, val day: String) : AppMessage
 
     /** Notes on the board went to its archive (ADR-040); "Вернуть" brings them back to their places. */
     data class BoardArchived(val ids: List<String>) : AppMessage
@@ -287,6 +295,23 @@ class AppServices(
 
     /** Words for the board's search (ADR-040), asked from the journal's search: «Ещё N в записках». */
     val boardSearchFor = MutableStateFlow<String?>(null)
+
+    /** A note to show on the board («Открыть» after a move): the board scrolls to it and it glows a moment. */
+    val showOnBoard = MutableStateFlow<String?>(null)
+
+    /** Journal entries onto the board (ADR-040): the same entries, one field each; a snackbar says where they went. */
+    fun toBoard(ids: List<String>) {
+        if (ids.isEmpty()) return
+        scope.launch { ids.forEach { repo.moveToBoard(it) } }
+        messages.tryEmit(AppMessage.MovedToBoard(ids))
+    }
+
+    /** Notes into the journal, on the days they were made (owner); [day] is the first one's, for the snackbar. */
+    fun toJournal(ids: List<String>, day: String) {
+        if (ids.isEmpty()) return
+        scope.launch { ids.forEach { repo.moveToJournal(it) } }
+        messages.tryEmit(AppMessage.MovedToJournal(ids, day))
+    }
 
     /** Set by the platform when it is opened for something; the app takes it and clears it. */
     val launch = MutableStateFlow<AppLaunch?>(null)

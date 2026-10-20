@@ -60,6 +60,8 @@ import app.benbow.app.resources.background
 import app.benbow.app.resources.background_none
 import app.benbow.app.resources.board_hide_boxes
 import app.benbow.app.resources.board_show_boxes
+import app.benbow.app.resources.board_to_journal
+import app.benbow.app.resources.board_to_journal_day
 import app.benbow.app.resources.comment_hint
 import app.benbow.app.resources.comments
 import app.benbow.app.resources.comments_count
@@ -70,6 +72,7 @@ import app.benbow.app.resources.drawing_add
 import app.benbow.app.resources.drop_to_attach
 import app.benbow.app.resources.edit
 import app.benbow.app.resources.entry_broken
+import app.benbow.app.resources.entry_to_board
 import app.benbow.app.resources.favorite_add
 import app.benbow.app.resources.favorite_remove
 import app.benbow.app.resources.history
@@ -94,6 +97,7 @@ import app.benbow.client.createBoardNote
 import app.benbow.client.createTag
 import app.benbow.client.effectiveVeil
 import app.benbow.client.removeTag
+import app.benbow.core.board.Board
 import app.benbow.core.content.Checklists
 import app.benbow.core.content.Document
 import app.benbow.core.content.DocumentCodec
@@ -368,6 +372,9 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     var pickingBackground by remember { mutableStateOf(false) }
     var postponing by remember { mutableStateOf(false) }
     var moving by remember { mutableStateOf(false) }
+    // «В дневник на другой день…» (ADR-040): the moment picked, then the note goes into the journal there.
+    var toJournalOn by remember { mutableStateOf(false) }
+    var guarding by remember { mutableStateOf(false) }
     if (moving) {
         val at = detail?.createdAt?.let { Instant.fromEpochMilliseconds(it).toLocalDateTime(TimeZone.currentSystemDefault()).time }
             ?: LocalTime(12, 0)
@@ -376,8 +383,17 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
             onPick = {
                 moving = false
                 vm.moveTo(it)
+                if (toJournalOn) {
+                    toJournalOn = false
+                    vm.commit()
+                    vm.entryId?.let { id -> services.toJournal(listOf(id), it.date.toString()) }
+                    nav.back()
+                }
             },
-            onDismiss = { moving = false },
+            onDismiss = {
+                moving = false
+                toJournalOn = false
+            },
         )
     }
     var dropping by remember { mutableStateOf(false) }
@@ -494,6 +510,24 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
             }
         }
     }
+    if (guarding && detail != null) {
+        FormerEntryDialog(
+            count = 1,
+            day = detail.day,
+            onBack = {
+                guarding = false
+                vm.commit()
+                services.toJournal(listOf(detail.id), detail.day)
+                nav.back()
+            },
+            onDelete = {
+                guarding = false
+                vm.moveToTrash()
+                nav.back()
+            },
+            onDismiss = { guarding = false },
+        )
+    }
     // The whole page takes the note's color, as in Keep; the toolbars keep theirs.
     val noteColor = swatch(detail?.background)
     // Opened on the board (ADR-040): the board's sheet needs the note's id once it has one, and its color.
@@ -563,6 +597,30 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                         Box {
                             IconButton({ menu = true }, modifier = Modifier.hand()) { Icon(Icons.More, stringResource(Res.string.menu)) }
                             DropdownMenu(menu, { menu = false }) {
+                                // Between the journal and the board (ADR-040): the same entry, one field; a note goes to
+                                // the journal on the day it was made, or on another day picked for it.
+                                if (services.labs && detail != null && !detail.inTrash && !vm.reading) {
+                                    if (Board.onBoard(detail.fields)) {
+                                        DropdownMenuItem(text = { Text(stringResource(Res.string.board_to_journal)) }, onClick = {
+                                            menu = false
+                                            vm.commit()
+                                            services.toJournal(listOf(detail.id), detail.day)
+                                            nav.back()
+                                        }, modifier = Modifier.hand())
+                                        DropdownMenuItem(text = { Text(stringResource(Res.string.board_to_journal_day)) }, onClick = {
+                                            menu = false
+                                            toJournalOn = true
+                                            moving = true
+                                        }, modifier = Modifier.hand())
+                                    } else if (detail.kind !in NOT_IN_FEED) {
+                                        DropdownMenuItem(text = { Text(stringResource(Res.string.entry_to_board)) }, onClick = {
+                                            menu = false
+                                            vm.commit()
+                                            services.toBoard(listOf(detail.id))
+                                            nav.back()
+                                        }, modifier = Modifier.hand())
+                                    }
+                                }
                                 // A note on the board: its lines as boxes and back, as Keep's «Показать флажки».
                                 if (route.board && !vm.reading) {
                                     val list = vm.listDocument != null
@@ -663,8 +721,13 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                 if (detail?.inTrash != true) {
                                     DropdownMenuItem(text = { Text(stringResource(Res.string.move_to_trash)) }, onClick = {
                                         menu = false
-                                        vm.moveToTrash()
-                                        nav.back()
+                                        // A note that was a journal entry: the journal back first (ADR-040).
+                                        if (detail != null && Board.fromJournal(detail.fields)) {
+                                            guarding = true
+                                        } else {
+                                            vm.moveToTrash()
+                                            nav.back()
+                                        }
                                     }, modifier = Modifier.hand())
                                 }
                             }

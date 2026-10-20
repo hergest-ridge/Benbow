@@ -52,6 +52,9 @@ import app.benbow.app.resources.block_drafts_empty
 import app.benbow.app.resources.block_favorite
 import app.benbow.app.resources.block_favorite_about
 import app.benbow.app.resources.block_favorite_empty
+import app.benbow.app.resources.block_notes
+import app.benbow.app.resources.block_notes_about
+import app.benbow.app.resources.block_notes_empty
 import app.benbow.app.resources.block_on_this_day
 import app.benbow.app.resources.block_on_this_day_about
 import app.benbow.app.resources.block_on_this_day_empty
@@ -125,6 +128,7 @@ internal val HomeBlockType.title: StringResource get() = when (this) {
     HomeBlockType.OnThisDay -> Res.string.block_on_this_day
     HomeBlockType.Favorite -> Res.string.block_favorite
     HomeBlockType.Stats -> Res.string.block_stats
+    HomeBlockType.Notes -> Res.string.block_notes
     HomeBlockType.Tag -> Res.string.block_tag
 }
 
@@ -137,6 +141,7 @@ private val HomeBlockType.about: StringResource get() = when (this) {
     HomeBlockType.OnThisDay -> Res.string.block_on_this_day_about
     HomeBlockType.Favorite -> Res.string.block_favorite_about
     HomeBlockType.Stats -> Res.string.block_stats_about
+    HomeBlockType.Notes -> Res.string.block_notes_about
     HomeBlockType.Tag -> Res.string.block_tag_about
 }
 
@@ -147,6 +152,7 @@ private val HomeBlockType.whenEmpty: StringResource get() = when (this) {
     HomeBlockType.OnThisDay -> Res.string.block_on_this_day_empty
     HomeBlockType.Favorite -> Res.string.block_favorite_empty
     HomeBlockType.Stats -> Res.string.block_stats_empty
+    HomeBlockType.Notes -> Res.string.block_notes_empty
     HomeBlockType.Tag -> Res.string.block_tag_empty
     else -> about
 }
@@ -243,7 +249,8 @@ internal fun HomeEditor(services: AppServices, start: HomeLayout, home: HomeStat
                         },
                     )
                 }
-                val addable = layout.addable()
+                // The board's block only where the board shows (ADR-040, labs builds for now).
+                val addable = layout.addable().filter { it != HomeBlockType.Notes || services.labs }
                 if (adding && addable.isNotEmpty()) {
                     Catalog(addable, onPick = { kind ->
                         if (kind == HomeBlockType.Tag) {

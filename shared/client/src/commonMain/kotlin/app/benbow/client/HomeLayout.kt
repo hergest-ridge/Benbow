@@ -45,6 +45,9 @@ enum class HomeBlockType(val value: String, val sizes: List<BlockSize>, val once
     Favorite("favorite", listOf(BlockSize.M, BlockSize.S)),
     Stats("stats", listOf(BlockSize.M, BlockSize.S)),
 
+    /** The board's pinned notes (ADR-040): a strip of cards, or a few in two columns. */
+    Notes("notes", listOf(BlockSize.M, BlockSize.L)),
+
     /** A tag's entries as a small gallery (config [HomeBlock.TAG], [HomeBlock.ORDER]). */
     Tag("tag", listOf(BlockSize.M, BlockSize.S, BlockSize.L), once = false),
     ;

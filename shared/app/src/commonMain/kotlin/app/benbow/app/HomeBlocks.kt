@@ -45,6 +45,7 @@ import app.benbow.app.resources.home_today_empty
 import app.benbow.app.resources.home_write
 import app.benbow.app.resources.years_ago
 import app.benbow.client.BlockSize
+import app.benbow.client.BoardNote
 import app.benbow.client.EntrySummary
 import app.benbow.client.HomeBlock
 import app.benbow.client.HomeBlockType
@@ -71,6 +72,9 @@ internal class HomeActions(
     val customize: (HomeBlock?) -> Unit,
     /** Search with a block's selection (a tag block's chip). */
     val search: (SearchQuery) -> Unit,
+    /** The board's block (ADR-040): a note opened, the board itself. */
+    val openNote: (BoardNote) -> Unit = {},
+    val board: () -> Unit = {},
 )
 
 /** A block (or a piece of a list block): a long press anywhere on it opens its menu and no click follows. */
@@ -106,6 +110,7 @@ internal fun HomeState.shows(block: HomeBlock): Boolean = when (block.kind) {
     HomeBlockType.Favorite -> resurfaced != null
     HomeBlockType.Stats -> stats != null && block.figures.any(stats::has)
     HomeBlockType.Tag -> galleries[block.id]?.picks?.isNotEmpty() == true
+    HomeBlockType.Notes -> notes.isNotEmpty()
     else -> true
 }
 
@@ -152,7 +157,8 @@ internal fun LazyListScope.homeBlocks(
 @Composable
 private fun TileRow(row: List<HomeBlock>, home: HomeState, actions: HomeActions, services: AppServices, columns: Int, modifier: Modifier) {
     val alone = row.size == 1
-    val even = !alone && row.none { it.kind == HomeBlockType.OnThisDay }
+    // A lazy strip or pager can't be measured ahead: rows with one keep their own heights.
+    val even = !alone && row.none { it.kind == HomeBlockType.OnThisDay || it.kind == HomeBlockType.Notes }
     val sides = Modifier.padding(horizontal = if (alone) 0.dp else 8.dp)
     Row(modifier.fillMaxWidth().then(sides).then(if (even) Modifier.height(IntrinsicSize.Max) else Modifier)) {
         row.forEach { block ->
@@ -206,6 +212,15 @@ private fun TileBlock(block: HomeBlock, home: HomeState, actions: HomeActions, s
                 OnThisDayStrip(items, services.media, actions.open)
             }
         }
+
+        HomeBlockType.Notes -> NotesBlock(
+            home.notes,
+            block.blockSize ?: BlockSize.M,
+            services.media,
+            actions.openNote,
+            actions.board,
+            edges,
+        )
 
         HomeBlockType.Tag -> home.galleries[block.id]?.let { gallery ->
             TagBlock(

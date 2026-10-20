@@ -87,6 +87,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.comments
+import app.benbow.app.resources.entry_from_board
+import app.benbow.app.resources.entry_to_board
 import app.benbow.app.resources.feed_empty
 import app.benbow.app.resources.feed_filter
 import app.benbow.app.resources.feed_filter_empty
@@ -672,6 +674,12 @@ private fun FeedPost(
                 picking = false
                 if (choose) postponing = true else services.postpone(entry.id, null, entry.until)
             }
+            if (services.labs) {
+                DropdownMenuItem(text = { Text(stringResource(Res.string.entry_to_board)) }, onClick = {
+                    picking = false
+                    services.toBoard(listOf(entry.id))
+                }, modifier = Modifier.hand())
+            }
             Row(Modifier.padding(horizontal = 8.dp)) {
                 REACTIONS.forEach { emoji ->
                     val on = emoji in item.reactions
@@ -765,6 +773,13 @@ private fun PostBody(
         Box(Modifier.weight(1f))
         if (entry.favorite) FavoriteMark()
         moodEmoji(entry.mood)?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
+        if (entry.fromBoard) {
+            Text(
+                stringResource(Res.string.entry_from_board) + " · ",
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.onSurfaceVariant,
+            )
+        }
         Text(timeLabel(entry.createdAt), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
     }
 }

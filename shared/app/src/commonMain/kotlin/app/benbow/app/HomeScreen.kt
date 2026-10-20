@@ -39,6 +39,7 @@ import app.benbow.app.resources.review_month
 import app.benbow.app.resources.review_summary
 import app.benbow.app.resources.review_week
 import app.benbow.client.BlockSize
+import app.benbow.client.BoardNote
 import app.benbow.client.DayInfo
 import app.benbow.client.EntrySummary
 import app.benbow.client.HomeBlock
@@ -49,6 +50,7 @@ import app.benbow.client.Prompts
 import app.benbow.client.SearchQuery
 import app.benbow.client.SyncStatus
 import app.benbow.client.Templates
+import app.benbow.client.board
 import app.benbow.client.editHomeLayout
 import app.benbow.client.homeLayout
 import app.benbow.client.homeStats
@@ -96,6 +98,8 @@ internal data class HomeState(
     val stats: HomeStats?,
     /** Each tag block's gallery by the block's id (none while its tag is gone). */
     val galleries: Map<String, TagGallery> = emptyMap(),
+    /** The board's pinned notes, for its block (ADR-040). */
+    val notes: List<BoardNote> = emptyList(),
     /** Days with entries and their average mood over the last 7 and 30 days, for the review cards. */
     val week: Pair<Int, Double?> = 0 to null,
     val month: Pair<Int, Double?> = 0 to null,
@@ -152,7 +156,8 @@ internal class HomeViewModel(private val services: AppServices) : ViewModel() {
             ),
             tagGalleries(layout.blocks.filter { it.kind == HomeBlockType.Tag && it.blockSize != null }),
             services.gentle.on,
-        ) { (todays, pinned, drafts), (allOnThisDay, allFavorites, stats), found, gentle ->
+            ifShown(HomeBlockType.Notes, emptyList()) { repo.board().map { it.pinned } },
+        ) { (todays, pinned, drafts), (allOnThisDay, allFavorites, stats), found, gentle, notes ->
             // Бережно (ADR-031): quiet entries stay out of Home; what comes back unasked (On this day, the resurfaced
             // favorite) leaves out curtained ones too.
             val onThisDay = if (gentle) allOnThisDay.filter { it.entry.veil == null } else allOnThisDay
@@ -168,6 +173,7 @@ internal class HomeViewModel(private val services: AppServices) : ViewModel() {
                 favorites.takeIf { it.isNotEmpty() }?.let { it[today.hashCode().absoluteValue % it.size] },
                 stats,
                 galleries(found, gentle),
+                notes,
             )
             home.copy(blocks = home.blocks.filter { it.blockSize != null && home.shows(it) })
         }
@@ -296,6 +302,8 @@ internal fun HomeScreen(services: AppServices, nav: Navigator) {
                     services.searchFor.value = query
                     nav.selectTab(Route.Search)
                 },
+                openNote = { note -> nav.open(Route.Editor(note.id, note.entry.day, board = true)) },
+                board = { nav.selectTab(Route.Board) },
             )
             postponing?.let { entry ->
                 PostponeDialog(onPick = { day ->

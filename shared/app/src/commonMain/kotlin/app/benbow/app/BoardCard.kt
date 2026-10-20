@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.board_checked
 import app.benbow.app.resources.board_files
+import app.benbow.app.resources.board_from_journal
 import app.benbow.app.resources.board_tick
 import app.benbow.client.BoardNote
 import app.benbow.client.CardLine
@@ -84,7 +85,7 @@ private fun CardWords(note: BoardNote, media: Media?, onTick: ((String) -> Unit)
     val card = note.card
     val files = note.entry.mediaCount - if (picture != null) 1 else 0
     val tags = note.entry.tags
-    if (card.title.isEmpty() && card.lines.isEmpty() && card.ticked == 0 && files <= 0 && tags.isEmpty()) return
+    if (card.title.isEmpty() && card.lines.isEmpty() && card.ticked == 0 && files <= 0 && tags.isEmpty() && !note.fromJournal) return
     Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (card.title.isNotEmpty()) {
             Text(card.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -112,6 +113,13 @@ private fun CardWords(note: BoardNote, media: Media?, onTick: ((String) -> Unit)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 tags.take(3).forEach { TagChip(it) }
             }
+        }
+        if (note.fromJournal) {
+            Text(
+                stringResource(Res.string.board_from_journal, dayLabel(note.entry.day)),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

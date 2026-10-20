@@ -98,6 +98,7 @@ class BoardTest {
         desktop.engine.sync()
         assertEquals(emptyList(), desktop.repo.journal().first())
         assertEquals(listOf(id), desktop.repo.board().first().others.map { it.id })
+        assertTrue(desktop.repo.board().first().others.single().fromJournal, "its card says it was a journal entry")
 
         // Back to the journal, on the day it was made; then the desktop follows.
         desktop.repo.moveToJournal(id)
@@ -109,6 +110,7 @@ class BoardTest {
         assertEquals(before.headRevision, back.headRevision)
         assertEquals(before.attachments, back.attachments)
         assertEquals(listOf(id), phone.repo.journal().first().map { it.id })
+        assertTrue(phone.repo.journal().first().single().fromBoard, "«из записок»")
         assertTrue(back.fields[Board.RANK] != null, "its place on the board waits for it")
     }
 

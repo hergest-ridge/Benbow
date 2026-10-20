@@ -26,6 +26,8 @@ data class BoardNote(
     val picture: CardPicture? = null,
     /** The kinds of its attachments (image, video, drawing, voice, audio, file): the board search's filters. */
     val kinds: Set<String> = emptySet(),
+    /** It was a journal entry («из дневника»): deleting it offers the journal back first. */
+    val fromJournal: Boolean = false,
 ) {
     val id get() = entry.id
 }
@@ -59,6 +61,7 @@ fun JournalRepository.moveToBoard(id: String) = db.transaction {
     val fields = decodeFields(q.selectEntry(id).executeAsOneOrNull()?.fields ?: return@transaction)
     if (Board.onBoard(fields)) return@transaction
     setField(id, Board.SPACE, Board.BOARD)
+    setField(id, Board.FROM, Board.JOURNAL)
     if (fields[Board.ARCHIVED] == "true") setField(id, Board.ARCHIVED, null)
     placeOnBoard(id, 0)
 }
@@ -151,6 +154,7 @@ private fun boardNote(
             ?: CardPreview(),
         picture = cover?.let { sha -> CardPicture(sha, coverRatio(decodeAttachments(attachments), sha)) },
         kinds = decodeAttachments(attachments).values.filter { it.present }.mapTo(HashSet()) { it.meta.kind },
+        fromJournal = Board.fromJournal(f),
     )
 }
 

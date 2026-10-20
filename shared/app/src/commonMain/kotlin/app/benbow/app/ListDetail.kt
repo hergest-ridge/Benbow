@@ -94,7 +94,7 @@ internal class ListDetailStrategy(private val pane: ListPane, private val empty:
         val top = entries.last()
         if (top.metadata["benbow.full"] == true) return null
         val listAt = entries.indexOfLast { it.metadata["benbow.tab"] == true }
-        if (listAt < 0) return null
+        if (listAt < 0 || entries[listAt].metadata["benbow.full"] == true) return null // the board is no list
         val detail = top.takeIf { listAt < entries.lastIndex }
         return ListDetailScene(entries[listAt], detail, entries.subList(0, if (detail == null) listAt else entries.lastIndex), pane, empty)
     }

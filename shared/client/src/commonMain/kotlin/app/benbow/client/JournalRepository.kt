@@ -280,9 +280,9 @@ class JournalRepository(
         val time = now()
         val id = newId()
         val revision = newId()
-        val (title, preview) = summarize(body)
+        val (title, preview, card) = summarize(body)
         db.transaction {
-            q.upsertEntry(id, kind, day, time, revision, body, title, preview, "[]", "{}", time, "{}", "{}", 0, null)
+            q.upsertEntry(id, kind, day, time, revision, body, title, preview, card, "[]", "{}", time, "{}", "{}", 0, null)
             SearchIndex.update(db, id)
             enqueue(CreateEntry(newId(), id, kind, day, time))
             enqueue(PutRevision(newId(), id, revision, emptyList(), body))
@@ -678,8 +678,8 @@ class JournalRepository(
         db.transaction {
             q.allEntryIds().executeAsList().forEach { id ->
                 val entry = q.selectEntry(id).executeAsOneOrNull() ?: return@forEach
-                val (title, preview) = summarize(entry.body)
-                if (title != entry.title || preview != entry.preview) q.updateSummary(title, preview, id)
+                val (title, preview, card) = summarize(entry.body)
+                if (title != entry.title || preview != entry.preview || card != entry.card) q.updateSummary(title, preview, card, id)
             }
             settings.put(SUMMARIES_KEY, SUMMARIES_VERSION)
         }
@@ -719,7 +719,7 @@ class JournalRepository(
                     emptyBody(
                         random,
                     ),
-                    "", "", "[]", "{}", time, "{}", "{}", 0, null,
+                    "", "", "", "[]", "{}", time, "{}", "{}", 0, null,
                 )
                 enqueue(CreateEntry(newId(), registry, "system", "1970-01-01", time))
             }
@@ -771,8 +771,8 @@ class JournalRepository(
     }
 
     private fun putHead(id: String, revision: String, body: String) {
-        val (title, preview) = summarize(body)
-        q.updateHead(revision, body, title, preview, now(), id)
+        val (title, preview, card) = summarize(body)
+        q.updateHead(revision, body, title, preview, card, now(), id)
         SearchIndex.update(db, id)
     }
 
@@ -806,6 +806,11 @@ class JournalRepository(
 
         fun textBody(text: String, random: Random = Random.Default): String = DocumentCodec.encode(
             Document(text.trim().lines().map { TextBlock(uuidV7(0, random).takeLast(8), children = listOf(Span(it))) }),
+        )
+
+        /** A new list (a note on the board started with ☑): one open box to write in. */
+        fun checklistBody(random: Random = Random.Default): String = DocumentCodec.encode(
+            Document(listOf(TextBlock(uuidV7(0, random).takeLast(8), listItem = "check", checked = false))),
         )
     }
 }
@@ -855,12 +860,15 @@ internal fun mediaSummary(attachments: Map<String, AttachmentState>): Pair<Int, 
     return visible.size to cover
 }
 
-/** Title = the first paragraph, preview = the rest as one line (spoilers hidden). */
-internal fun summarize(body: String): Pair<String, String> {
+/** What lists show of an entry without parsing it: its title, its preview and its board card ([CardPreview], JSON). */
+internal data class Summary(val title: String, val preview: String, val card: String)
+
+/** Title = the first paragraph, preview = the rest as one line (spoilers hidden); the board's card beside them. */
+internal fun summarize(body: String): Summary {
     val document = try {
         DocumentCodec.decode(body)
     } catch (_: DocumentFormatException) {
-        return "" to ""
+        return Summary("", "", "")
     }
     // Spoilers stay out of both (ADR-031): lists, Home and search show them, and they show the words openly.
     // A link card reads as its title or its short address there, not as the whole address (ADR-038).
@@ -870,12 +878,16 @@ internal fun summarize(body: String): Pair<String, String> {
     val first = blocks.firstOrNull() as? TextBlock
     val title = first?.children?.filter { SPOILER !in it.marks }?.joinToString("") { it.text }.orEmpty().squeezed()
     val rest = document.copy(blocks = if (first != null) blocks.drop(1) else blocks).toPlainText(includeSpoilers = false)
-    return title.take(TITLE_MAX) to rest.lines().map { it.squeezed() }.filter { it.isNotEmpty() }.joinToString(" ").take(PREVIEW_MAX)
+    return Summary(
+        title.take(TITLE_MAX),
+        rest.lines().map { it.squeezed() }.filter { it.isNotEmpty() }.joinToString(" ").take(PREVIEW_MAX),
+        ClientJson.encodeToString(CardPreview.serializer(), cardOf(document)),
+    )
 }
 
 private const val SPOILER = "spoiler"
 private const val SUMMARIES_KEY = "summaries.version"
-private const val SUMMARIES_VERSION = "2"
+private const val SUMMARIES_VERSION = "3" // 3: board cards (ADR-040)
 
 /** Runs of spaces as one (a hidden spoiler leaves two behind), trimmed. */
 private fun String.squeezed(): String = replace(Regex(" {2,}"), " ").trim()

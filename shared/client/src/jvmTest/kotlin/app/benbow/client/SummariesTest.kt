@@ -38,7 +38,7 @@ class SummariesTest {
     fun titlesMadeTheOldWayAreMadeAgainOnce() = runTest {
         val id = repo.createEntry("2026-10-16", kind = "note", body = body)
         repo.prepareSummaries() // a fresh journal: made the new way already, now marked as such
-        db.benbowQueries.updateSummary("The doctor said it is serious today", "The doctor said today We walked by the sea", id)
+        db.benbowQueries.updateSummary("The doctor said it is serious today", "The doctor said today We walked by the sea", "", id)
         repo.prepareSummaries()
         assertEquals("The doctor said it is serious today", repo.journal().first().single().title, "only once per version")
 

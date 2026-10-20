@@ -86,6 +86,7 @@ import app.benbow.client.TagRef
 import app.benbow.client.TemplateContext
 import app.benbow.client.Templates
 import app.benbow.client.addTag
+import app.benbow.client.createBoardNote
 import app.benbow.client.createTag
 import app.benbow.client.effectiveVeil
 import app.benbow.client.removeTag
@@ -124,7 +125,13 @@ import kotlin.coroutines.CoroutineContext
  */
 internal class EditorViewModel(private val services: AppServices, route: Route.Editor) : ViewModel() {
     private val repo = services.repo
-    private val session = DraftSession(repo, services.scope, route.entryId, route.day).also { services.openDrafts += it }
+    private val session = DraftSession(
+        repo,
+        services.scope,
+        route.entryId,
+        route.day,
+        create = if (route.board) { day, body -> repo.createBoardNote(day, body) } else { day, body -> repo.createEntry(day, body = body) },
+    ).also { services.openDrafts += it }
 
     var editor by mutableStateOf<EditorState?>(null)
         private set
@@ -133,6 +140,7 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
     var broken by mutableStateOf(false)
         private set
     val entryId: String? get() = session.entryId
+    val entryIdFlow get() = session.entryIdFlow
 
     /** Reading a post (from the feed): nothing is editable until the menu says so. */
     var reading by mutableStateOf(route.readOnly && route.entryId != null)
@@ -168,6 +176,9 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
 
     /** Starts a new, still empty entry with [text] as its heading ("Написать об этом" from an event). */
     fun applyHeading(text: String) = start(Templates.heading(text))
+
+    /** Starts a new note on the board as a list: one open box to write in (☑ on the quick bar). */
+    fun applyChecklist() = start(JournalRepository.checklistBody())
 
     private fun start(body: String) {
         val text = DocumentCodec.decode(body).toRichText()
@@ -439,6 +450,13 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     }
     // The whole page takes the note's color, as in Keep; the toolbars keep theirs.
     val noteColor = swatch(detail?.background)
+    // Opened on the board (ADR-040): the board's sheet needs the note's id once it has one, and its color.
+    val boardStage = LocalBoardStage.current
+    if (boardStage != null) {
+        val id by vm.entryIdFlow.collectAsStateWithLifecycle()
+        LaunchedEffect(id) { id?.let { boardStage.entryId = it } }
+        LaunchedEffect(detail?.background, detail != null) { if (detail != null) boardStage.color = detail.background }
+    }
     val comments by vm.commentCount.collectAsStateWithLifecycle()
     val copy = rememberCopy()
     val share = rememberShare()
@@ -461,7 +479,8 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                 navigationIcon = {
                     BackButton {
                         vm.commit()
-                        nav.back()
+                        // On the board the note's sheet shrinks back into its card first (ADR-040).
+                        boardStage?.close() ?: nav.back()
                     }
                 },
                 title = {
@@ -676,7 +695,10 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                 )
                 return@Column
             }
-            if (editor != null && vm.isBlankNew) {
+            if (editor != null && vm.isBlankNew && route.board) {
+                LaunchedEffect(route.checklist) { if (route.checklist) vm.applyChecklist() }
+            }
+            if (editor != null && vm.isBlankNew && !route.board) {
                 val context = templateContext(route.day)
                 LaunchedEffect(route.template) { route.template?.let { vm.applyTemplate(it, context) } }
                 LaunchedEffect(route.heading) { route.heading?.let(vm::applyHeading) }
@@ -691,6 +713,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                     onAddTag = vm::addTag,
                     onCreateTag = vm::createTag,
                     onRemoveTag = vm::removeTag,
+                    withMood = !route.board,
                 )
             }
             if (ribbon && detail != null) {

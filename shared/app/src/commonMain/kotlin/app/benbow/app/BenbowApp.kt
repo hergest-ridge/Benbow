@@ -136,7 +136,8 @@ internal sealed interface Route {
     /**
      * [entryId] = null opens a new entry ([template] fills it, or [heading] starts it, e.g. an event's title);
      * [opened] keeps two new-entry screens apart. [readOnly] opens it as a post with its comments (from the feed);
-     * the menu switches to editing.
+     * the menu switches to editing. [board]: a note opened on the board (ADR-040), a new one made there; [checklist]
+     * starts a new one as a list.
      */
     data class Editor(
         val entryId: String?,
@@ -145,6 +146,8 @@ internal sealed interface Route {
         val template: String? = null,
         val readOnly: Boolean = false,
         val heading: String? = null,
+        val board: Boolean = false,
+        val checklist: Boolean = false,
     ) : Route
 
     data class History(val entryId: String) : Route
@@ -641,7 +644,7 @@ private fun Screens(
     NavDisplay(
         backStack = backStack,
         onBack = nav::back,
-        sceneStrategies = strategies + SinglePaneSceneStrategy(),
+        sceneStrategies = listOf(BoardSceneStrategy(nav::back)) + strategies + SinglePaneSceneStrategy(),
         transitionSpec = {
             if (betweenTabs()) still else fadeIn(tween(FADE_MILLIS)) togetherWith ExitTransition.KeepUntilTransitionsFinished
         },
@@ -651,14 +654,17 @@ private fun Screens(
         entryProvider = entryProvider {
             entry<Route.Home>(metadata = TAB) { HomeScreen(services, listNav) }
             entry<Route.Feed>(metadata = TAB) { FeedScreen(services, listNav) }
-            entry<Route.Editor> { EditorScreen(services, nav, it) }
+            entry<Route.Editor>(metadata = { if (it.board) mapOf(BOARD_NOTE to (it.entryId ?: "")) else emptyMap() }) {
+                EditorScreen(services, nav, it)
+            }
             entry<Route.History> { HistoryScreen(services, nav, it) }
             entry<Route.Revision> { RevisionScreen(services, nav, it) }
             entry<Route.Media>(metadata = FULL_WINDOW) { MediaScreen(services, nav, it) }
             entry<Route.Drawing>(metadata = FULL_WINDOW) { DrawingScreen(services, nav, it) }
             entry<Route.Search>(metadata = TAB) { SearchScreen(services, listNav) }
             entry<Route.Calendar>(metadata = TAB) { CalendarScreen(services, listNav) }
-            entry<Route.Board>(metadata = TAB + FULL_WINDOW) { BoardScreen() } // a grid wants the window, not a list's pane
+            // A grid wants the window, not a list's pane; a note opens on it in the board's own scene (ADR-040).
+            entry<Route.Board>(metadata = TAB + FULL_WINDOW + mapOf(BOARD_ENTRY to true)) { BoardScreen(services, listNav) }
             entry<Route.More>(metadata = TAB) { MoreScreen(services, listNav) }
             entry<Route.Comments> { CommentsScreen(services, nav, it) }
             entry<Route.Tags> { TagsScreen(services, nav) }

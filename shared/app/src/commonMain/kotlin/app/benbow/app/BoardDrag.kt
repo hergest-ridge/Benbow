@@ -167,6 +167,7 @@ internal class BoardDrag(
  * The board's gestures, taken before the grid sees them (it scrolls only when they let it): a finger held still on a
  * card lifts it (no move before letting go: [onChoose]); a finger that moves first scrolls; two fingers pinch for
  * fewer or more columns ([onPinch] with -1 or +1). A mouse drags a card at once and clicks it open as usual.
+ * The callbacks are read once (the gestures live as long as [drag]): they should reach the state they change.
  */
 internal fun Modifier.boardGestures(
     drag: BoardDrag,
@@ -176,6 +177,8 @@ internal fun Modifier.boardGestures(
     fastest: Float,
     onChoose: (Any) -> Unit,
     onPinch: (Int) -> Unit,
+    /** A carried card was let go where it now is (its place is to be kept). */
+    onDrop: (Any) -> Unit,
 ): Modifier = pointerInput(drag) {
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
@@ -188,6 +191,7 @@ internal fun Modifier.boardGestures(
             scope.launch { drag.scrollNearEdges(edge, fastest, haptic) }
             drag.follow(start.position, haptic)
             carry(drag, haptic)
+            onDrop(card.key)
             scope.launch { drag.land() }
             return@awaitEachGesture
         }
@@ -201,8 +205,8 @@ internal fun Modifier.boardGestures(
                 scope.launch { drag.lift.animateTo(1f, tween(120)) }
                 scope.launch { drag.scrollNearEdges(edge, fastest, haptic) }
                 val moved = carry(drag, haptic, slopFrom = down.position)
+                if (moved) onDrop(card.key) else onChoose(card.key)
                 scope.launch { drag.land() }
-                if (!moved) onChoose(card.key)
             }
 
             still != Press.Up -> watchForPinch(onPinch) // a scroll, or a long press beside the cards

@@ -11,6 +11,8 @@ CREATE TABLE entry (
     -- Derived from body on every write, so lists never parse documents.
     title TEXT NOT NULL DEFAULT '',
     preview TEXT NOT NULL DEFAULT '',
+    -- A note's card on the board (CardPreview as JSON, ADR-040); '' until made.
+    card TEXT NOT NULL DEFAULT '',
     conflict_heads TEXT NOT NULL DEFAULT '[]',
     fields TEXT NOT NULL DEFAULT '{}',
     updated_at INTEGER NOT NULL,
@@ -101,8 +103,8 @@ WHERE json_extract(fields, '$.deleted') IS 'true'
 ORDER BY updated_at DESC;
 
 upsertEntry:
-INSERT INTO entry(id, kind, day, created_at, head_rev, body, title, preview, conflict_heads, fields, updated_at, field_clocks, attachments, media_count, cover)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO entry(id, kind, day, created_at, head_rev, body, title, preview, card, conflict_heads, fields, updated_at, field_clocks, attachments, media_count, cover)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
     kind = excluded.kind,
     day = excluded.day,
@@ -110,6 +112,7 @@ ON CONFLICT(id) DO UPDATE SET
     body = excluded.body,
     title = excluded.title,
     preview = excluded.preview,
+    card = excluded.card,
     conflict_heads = excluded.conflict_heads,
     fields = excluded.fields,
     updated_at = excluded.updated_at,
@@ -222,7 +225,7 @@ UPDATE entry SET space = ? WHERE id = ?;
 
 -- The board (ADR-040): its notes, the archive included, in no order (BoardRank sorts them in code).
 boardNotes:
-SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM board_entry
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields, card, attachments FROM board_entry
 WHERE json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system', 'event', 'reminder');
 
 -- Calendar (5.1) ---------------------------------------------------------------------------
@@ -329,11 +332,11 @@ recheckUploads:
 UPDATE media SET uploaded = 0 WHERE origin = 'captured';
 
 updateHead:
-UPDATE entry SET head_rev = ?, body = ?, title = ?, preview = ?, updated_at = ? WHERE id = ?;
+UPDATE entry SET head_rev = ?, body = ?, title = ?, preview = ?, card = ?, updated_at = ? WHERE id = ?;
 
 -- The local title and preview made again from the body (JournalRepository.prepareSummaries); nothing else changes.
 updateSummary:
-UPDATE entry SET title = ?, preview = ? WHERE id = ?;
+UPDATE entry SET title = ?, preview = ?, card = ? WHERE id = ?;
 
 clearConflicts:
 UPDATE entry SET conflict_heads = '[]' WHERE id = ?;

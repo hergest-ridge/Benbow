@@ -165,7 +165,7 @@ class SyncEngine(private val db: BenbowDb, private val apiFor: (Connection) -> B
             emptySet()
         }
         val body = snapshot.headBody ?: existing?.body ?: JournalRepository.emptyBody()
-        val (title, preview) = summarize(body)
+        val (title, preview, card) = summarize(body)
         val media = mediaSummary(entry.attachments)
         q.upsertEntry(
             entry.id,
@@ -176,6 +176,7 @@ class SyncEngine(private val db: BenbowDb, private val apiFor: (Connection) -> B
             body,
             title,
             preview,
+            card,
             ClientJson.encodeToString(ListSerializer(String.serializer()), entry.conflictHeads),
             ClientJson.encodeToString(
                 MapSerializer(String.serializer(), String.serializer().nullable),

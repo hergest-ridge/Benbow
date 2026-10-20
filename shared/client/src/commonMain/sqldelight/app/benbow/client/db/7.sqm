@@ -1,0 +1,7 @@
+-- v7 -> v8 (7.17 K2, ADR-040): board cards, made from every body as titles and previews are (prepareSummaries fills
+-- the ones already here once). The views are made again so they list the new column wherever SQLite expands them.
+ALTER TABLE entry ADD COLUMN card TEXT NOT NULL DEFAULT '';
+DROP VIEW journal_entry;
+DROP VIEW board_entry;
+CREATE VIEW journal_entry AS SELECT * FROM entry WHERE space IS NULL;
+CREATE VIEW board_entry AS SELECT * FROM entry WHERE space = 'board';

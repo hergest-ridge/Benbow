@@ -37,6 +37,8 @@ class DraftSession(
     entryId: String?,
     private val day: String,
     private val timeSource: TimeSource = TimeSource.Monotonic,
+    /** Makes the new entry from its first text: a journal entry, or a note on the board (ADR-040). */
+    private val create: (day: String, body: String) -> String = { d, b -> repo.createEntry(d, body = b) },
 ) {
     private val id = MutableStateFlow(entryId)
 
@@ -87,7 +89,7 @@ class DraftSession(
         entryId ?: run {
             val text = unsaved.exchange(null)
             val body = text?.let { DocumentCodec.encode(it.toDocument()) } ?: JournalRepository.emptyBody()
-            repo.createEntry(day, body = body).also { id.value = it }
+            create(day, body).also { id.value = it }
         }
     }
 
@@ -97,7 +99,7 @@ class DraftSession(
         val id = entryId
         when {
             id != null -> repo.saveDraft(id, body)
-            text.text.isNotBlank() -> this.id.value = repo.createEntry(day, body = body)
+            text.text.isNotBlank() -> this.id.value = create(day, body)
         }
     }
 

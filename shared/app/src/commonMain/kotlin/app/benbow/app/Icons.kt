@@ -239,6 +239,11 @@ internal object Icons {
 
     /** Home's blocks ("Dashboard"). */
     val Blocks = icon("Blocks", "M3,13h8V3H3v10zM3,21h8v-6H3v6zM13,21h8V11h-8v10zM13,3v6h8V3h-8z")
+    val ViewAgenda = icon(
+        "ViewAgenda",
+        "M19,13H5c-1.1,0 -2,0.9 -2,2v4c0,1.1 0.9,2 2,2h14c1.1,0 2,-0.9 2,-2v-4c0,-1.1 -0.9,-2 -2,-2z" +
+            "M19,3H5C3.9,3 3,3.9 3,5v4c0,1.1 0.9,2 2,2h14c1.1,0 2,-0.9 2,-2V5c0,-1.1 -0.9,-2 -2,-2z",
+    )
     val Board = icon(
         "Board",
         "M19,3H4.99C3.89,3 3,3.9 3,5l0.01,14c0,1.1 0.89,2 1.99,2h10l6,-6V5c0,-1.1 -0.9,-2 -2,-2zM7,8h10v2H7V8z" +

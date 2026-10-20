@@ -57,14 +57,18 @@ internal fun MetadataRow(
     onAddTag: (id: String, name: String) -> Unit,
     onCreateTag: (name: String, category: String?) -> Unit,
     onRemoveTag: (TagRef) -> Unit,
+    /** A note on the board has no mood (ADR-040): only its tags. */
+    withMood: Boolean = true,
 ) {
     var picking by remember { mutableStateOf(false) }
     var adding by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            AssistChip(onClick = {
-                picking = !picking
-            }, label = { Text(moodEmoji(mood) ?: stringResource(Res.string.mood)) }, modifier = Modifier.hand())
+            if (withMood) {
+                AssistChip(onClick = {
+                    picking = !picking
+                }, label = { Text(moodEmoji(mood) ?: stringResource(Res.string.mood)) }, modifier = Modifier.hand())
+            }
             tags.forEach { tag ->
                 val name = LocalTags.current.name(tag)
                 val remove = stringResource(Res.string.tag_remove, name)

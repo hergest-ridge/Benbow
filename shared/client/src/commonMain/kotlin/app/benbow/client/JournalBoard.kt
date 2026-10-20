@@ -2,9 +2,11 @@ package app.benbow.client
 
 import app.benbow.core.board.Board
 import app.benbow.core.board.BoardRank
+import app.benbow.core.sync.AttachmentState
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 
 // Notes on the board (ADR-040): entries with the field `space` = board, so they keep everything an entry has
@@ -12,15 +14,25 @@ import kotlinx.coroutines.flow.map
 // Moving between the journal and the board is that one field: the same id, history, media, tags and day; the board's
 // own fields (place, pin, archive) lie dormant in the journal. Every change here is an LWW field of one note.
 
-/** A note on the board, as its card needs it. */
-data class BoardNote(val entry: EntrySummary, val rank: String?, val pinned: Boolean, val archived: Boolean) {
+/** A note on the board, as its card needs it: its [card] made on write and the [picture] on top of it. */
+data class BoardNote(
+    val entry: EntrySummary,
+    val rank: String?,
+    val pinned: Boolean,
+    val archived: Boolean,
+    val card: CardPreview = CardPreview(),
+    val picture: CardPicture? = null,
+) {
     val id get() = entry.id
 }
+
+/** The picture a card shows (the entry's cover) and its width to height, so the card has its height before it loads. */
+data class CardPicture(val sha256: String, val ratio: Float?)
 
 /** The board as it shows: the pinned notes, then the others, each in board order ([BoardRank.sort]). */
 data class BoardNotes(val pinned: List<BoardNote> = emptyList(), val others: List<BoardNote> = emptyList())
 
-/** The board outside its archive. */
+/** The board outside its archive, its tags as they read. */
 fun JournalRepository.board(): Flow<BoardNotes> = boardRows().map { notes ->
     val shown = notes.filter { !it.archived }
     BoardNotes(sorted(shown.filter { it.pinned }), sorted(shown.filter { !it.pinned }))
@@ -78,7 +90,10 @@ fun JournalRepository.archiveOnBoard(id: String, archived: Boolean) = db.transac
     placeOnBoard(id, 0)
 }
 
-private fun JournalRepository.boardRows(): Flow<List<BoardNote>> = q.boardNotes(::boardNote).asFlow().mapToList(context)
+private fun JournalRepository.boardRows(): Flow<List<BoardNote>> =
+    combine(q.boardNotes(::boardNote).asFlow().mapToList(context), gentleRules()) { notes, rules ->
+        notes.map { it.copy(entry = rules.apply(it.entry)) }
+    }
 
 private fun sorted(notes: List<BoardNote>) = BoardRank.sort(notes, { it.id }, { it.rank })
 
@@ -92,11 +107,22 @@ private fun boardNote(
     mediaCount: Long,
     cover: String?,
     fields: String,
+    card: String,
+    attachments: String,
 ) = decodeFields(fields).let { f ->
     BoardNote(
         summaryOf(id, day, createdAt, title, preview, conflictHeads, mediaCount, cover, fields),
         rank = f[Board.RANK],
         pinned = f[Board.PIN] == "true",
         archived = f[Board.ARCHIVED] == "true",
+        card =
+        card.takeIf { it.isNotEmpty() }?.let { runCatching { ClientJson.decodeFromString(CardPreview.serializer(), it) }.getOrNull() }
+            ?: CardPreview(),
+        picture = cover?.let { sha -> CardPicture(sha, coverRatio(decodeAttachments(attachments), sha)) },
     )
 }
+
+/** The cover's proportions from its attachment (a video's preview has the video's). */
+private fun coverRatio(attachments: Map<String, AttachmentState>, cover: String): Float? = attachments.values
+    .firstOrNull { it.present && (it.meta.previewSha256 == cover || it.meta.sha256 == cover) }?.meta
+    ?.let { meta -> if ((meta.width ?: 0) > 0 && (meta.height ?: 0) > 0) meta.width!!.toFloat() / meta.height!! else null }

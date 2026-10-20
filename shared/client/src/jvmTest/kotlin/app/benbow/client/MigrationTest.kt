@@ -38,7 +38,13 @@ class MigrationTest {
         val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         BenbowDb.Schema.create(driver)
         // A v6 file: no space column, no views (as the app before 7.17 K1 left it), one note marked by a newer device.
-        listOf("DROP VIEW journal_entry", "DROP VIEW board_entry", "DROP INDEX entry_by_space", "ALTER TABLE entry DROP COLUMN space")
+        listOf(
+            "DROP VIEW journal_entry",
+            "DROP VIEW board_entry",
+            "DROP INDEX entry_by_space",
+            "ALTER TABLE entry DROP COLUMN space",
+            "ALTER TABLE entry DROP COLUMN card",
+        )
             .forEach { driver.execute(null, it, 0) }
         driver.execute(
             null,

@@ -744,5 +744,17 @@
     <string name="board_as_list">Списком</string>
     <string name="board_as_grid">Сеткой</string>
     <string name="board_files">Вложений: %1$d</string>
+    <string name="board_archived">Записка в архиве</string>
+    <string name="board_archived_many">В архиве: %1$d</string>
+    <string name="board_trashed">Записка в корзине</string>
+    <string name="board_trashed_many">В корзине: %1$d</string>
+    <string name="board_chosen">Выбрано: %1$d</string>
+    <string name="board_unchoose">Снять выбор</string>
+    <string name="board_pin">Закрепить</string>
+    <string name="board_unpin">Открепить</string>
+    <string name="board_color">Цвет</string>
+    <string name="board_archive">В архив</string>
+    <string name="board_trash">В корзину</string>
+    <string name="board_choose">Выбрать</string>
     <string name="more_search">Записи, теги, вложения</string>
 </resources>

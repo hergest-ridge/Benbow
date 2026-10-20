@@ -132,6 +132,12 @@ sealed interface AppMessage {
     /** The microphone isn't allowed. */
     data object MicDenied : AppMessage
 
+    /** Notes on the board went to its archive (ADR-040); "Вернуть" brings them back to their places. */
+    data class BoardArchived(val ids: List<String>) : AppMessage
+
+    /** Notes on the board went to the trash; "Вернуть" brings them back. */
+    data class BoardTrashed(val ids: List<String>) : AppMessage
+
     /** A sound's transcript was let go; "Вернуть" puts [text] back. */
     data class TranscriptRemoved(val entryId: String, val attachmentId: String, val text: String) : AppMessage
 

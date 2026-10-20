@@ -1,6 +1,8 @@
 package app.benbow.app
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -10,6 +12,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridLayoutInf
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -24,8 +27,10 @@ import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.coroutineScope
@@ -33,6 +38,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.min
+import kotlin.math.sign
 
 /**
  * Carrying a card to another place in a staggered grid (ADR-040; the K0 spike, meant for K3). A finger lifts a card
@@ -164,6 +170,52 @@ internal class BoardDrag(
 }
 
 /**
+ * A card swiped sideways by a finger (Keep's way to the archive): it follows the finger and fades; let go past
+ * [AWAY] of its width (or flung that way) it leaves, else it springs back.
+ */
+@Stable
+internal class BoardSwipe {
+    /** The swiped card; null while none is. */
+    var key: Any? by mutableStateOf(null)
+        private set
+    var dx by mutableFloatStateOf(0f)
+        private set
+    private var width = 1f
+
+    val alpha: Float get() = 1f - (abs(dx) / width).coerceIn(0f, 1f)
+
+    fun start(key: Any, width: Float) {
+        this.key = key
+        this.width = width.coerceAtLeast(1f)
+        dx = 0f
+    }
+
+    fun follow(dx: Float) {
+        this.dx = dx
+    }
+
+    fun past() = abs(dx) > width * AWAY
+
+    /** Let go: true when the card leaves (it stays out of sight until the board lets it go, [gone]). */
+    suspend fun settle(velocity: Float, fling: Float): Boolean {
+        val away = past() || (abs(velocity) > fling && velocity * dx > 0f)
+        val target = if (away) sign(if (dx != 0f) dx else velocity) * width * 1.3f else 0f
+        animate(dx, target, velocity, if (away) tween(160) else spring()) { value, _ -> dx = value }
+        if (!away) gone()
+        return away
+    }
+
+    fun gone() {
+        key = null
+        dx = 0f
+    }
+
+    private companion object {
+        const val AWAY = 0.4f
+    }
+}
+
+/**
  * The board's gestures, taken before the grid sees them (it scrolls only when they let it): a finger held still on a
  * card lifts it (no move before letting go: [onChoose]); a finger that moves first scrolls; two fingers pinch for
  * fewer or more columns ([onPinch] with -1 or +1). A mouse drags a card at once and clicks it open as usual.
@@ -179,6 +231,9 @@ internal fun Modifier.boardGestures(
     onPinch: (Int) -> Unit,
     /** A carried card was let go where it now is (its place is to be kept). */
     onDrop: (Any) -> Unit,
+    /** A finger swiping cards sideways (null: no swiping), and what happens to one that left. */
+    swipe: BoardSwipe? = null,
+    onSwiped: (Any) -> Unit = {},
 ): Modifier = pointerInput(drag) {
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
@@ -192,6 +247,7 @@ internal fun Modifier.boardGestures(
             drag.follow(start.position, haptic)
             carry(drag, haptic)
             onDrop(card.key)
+            haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
             scope.launch { drag.land() }
             return@awaitEachGesture
         }
@@ -199,22 +255,33 @@ internal fun Modifier.boardGestures(
         when {
             still == Press.Pinch -> pinch(onPinch)
 
+            still == Press.Swipe && card != null && swipe != null -> {
+                swipe.start(card.key, card.size.width.toFloat())
+                val velocity = swipeAlong(down, swipe, haptic)
+                scope.launch { if (swipe.settle(velocity, 1200.dp.toPx())) onSwiped(card.key) }
+            }
+
             still == null && card != null -> {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 drag.pickUp(card, down.position)
                 scope.launch { drag.lift.animateTo(1f, tween(120)) }
                 scope.launch { drag.scrollNearEdges(edge, fastest, haptic) }
                 val moved = carry(drag, haptic, slopFrom = down.position)
-                if (moved) onDrop(card.key) else onChoose(card.key)
+                if (moved) {
+                    onDrop(card.key)
+                    haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                } else {
+                    onChoose(card.key)
+                }
                 scope.launch { drag.land() }
             }
 
-            still != Press.Up -> watchForPinch(onPinch) // a scroll, or a long press beside the cards
+            still != Press.Up -> watchForPinch(onPinch) // a scroll, a long press beside the cards, a swipe beside them
         }
     }
 }
 
-private enum class Press { Moved, Up, Pinch }
+private enum class Press { Moved, Swipe, Up, Pinch }
 
 /** Waits while the finger stays put; returns how that ended (never, if it outlasts the caller's timeout). */
 private suspend fun AwaitPointerEventScope.awaitMoveOrUp(down: PointerInputChange): Press {
@@ -223,8 +290,30 @@ private suspend fun AwaitPointerEventScope.awaitMoveOrUp(down: PointerInputChang
         if (event.changes.count { it.pressed } > 1) return Press.Pinch
         val change = event.changes.firstOrNull { it.id == down.id } ?: return Press.Up
         if (!change.pressed) return Press.Up
-        if (change.isConsumed || (change.position - down.position).getDistance() > viewConfiguration.touchSlop) return Press.Moved
+        if (change.isConsumed) return Press.Moved
+        val delta = change.position - down.position
+        // Past the slop: mostly sideways is a swipe (the grid only scrolls up and down), else the grid's scroll.
+        if (delta.getDistance() > viewConfiguration.touchSlop) return if (abs(delta.x) > abs(delta.y) * 1.5f) Press.Swipe else Press.Moved
     }
+}
+
+/** Follows a sideways finger until it is let go, keeping it from the grid; returns its speed then (px/s). */
+private suspend fun AwaitPointerEventScope.swipeAlong(down: PointerInputChange, swipe: BoardSwipe, haptic: HapticFeedback): Float {
+    val tracker = VelocityTracker()
+    var past = false
+    while (true) {
+        val event = awaitPointerEvent(PointerEventPass.Initial)
+        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+        event.changes.forEach { it.consume() }
+        tracker.addPosition(change.uptimeMillis, change.position)
+        if (!change.pressed) break
+        swipe.follow(change.position.x - down.position.x)
+        if (swipe.past() != past) {
+            past = swipe.past()
+            if (past) haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+        }
+    }
+    return tracker.calculateVelocity().x
 }
 
 /** A mouse: the change that went past the slop, or null when the button came up first. */

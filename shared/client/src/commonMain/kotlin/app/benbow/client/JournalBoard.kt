@@ -84,11 +84,8 @@ fun JournalRepository.pinOnBoard(id: String, pinned: Boolean) = db.transaction {
     placeOnBoard(id, 0)
 }
 
-/** Into the board's archive (out of sight), or back from it on top of its part of the board. */
-fun JournalRepository.archiveOnBoard(id: String, archived: Boolean) = db.transaction {
-    setField(id, Board.ARCHIVED, if (archived) "true" else null)
-    placeOnBoard(id, 0)
-}
+/** Into the board's archive (out of sight), or back from it: it keeps its place, so «Вернуть» puts it where it was. */
+fun JournalRepository.archiveOnBoard(id: String, archived: Boolean) = setField(id, Board.ARCHIVED, if (archived) "true" else null)
 
 private fun JournalRepository.boardRows(): Flow<List<BoardNote>> =
     combine(q.boardNotes(::boardNote).asFlow().mapToList(context), gentleRules()) { notes, rules ->

@@ -128,7 +128,12 @@ class BoardTest {
         assertEquals(listOf("C"), titles(repo.board().first().others))
         assertEquals(listOf("A"), titles(repo.boardArchive().first()))
         repo.archiveOnBoard(a, false)
-        assertEquals(listOf("A", "C"), titles(repo.board().first().others), "back on top")
+        assertEquals(listOf("A", "C"), titles(repo.board().first().others), "back in its place")
+        repo.placeOnBoard(a, 1)
+        repo.archiveOnBoard(a, true)
+        repo.archiveOnBoard(a, false)
+        assertEquals(listOf("C", "A"), titles(repo.board().first().others), "back in its place, not on top")
+        repo.placeOnBoard(a, 0)
 
         // In the journal and back again: on top, out of the archive.
         repo.archiveOnBoard(c, true)

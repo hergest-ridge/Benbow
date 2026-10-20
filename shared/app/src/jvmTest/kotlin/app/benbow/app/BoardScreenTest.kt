@@ -1,6 +1,7 @@
 package app.benbow.app
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasContentDescription
@@ -10,8 +11,11 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.test.waitUntilAtLeastOneExists
 import androidx.compose.ui.test.waitUntilDoesNotExist
@@ -140,6 +144,92 @@ class BoardScreenTest {
         waitUntilAtLeastOneExists(hasContentDescription("Сеткой"), 5_000)
         assertEquals("list", Settings(BenbowDb(driver)).get("board.view"))
         screenshot("board-08-wide-list")
+    }
+
+    @Test
+    fun chosenNotesArePinnedArchivedAndTrashedFromTheBarWithAWayBack() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val (a, b, c) = listOf("Альфа", "Бета", "Гамма").map { repo.createBoardNote(services.today(), JournalRepository.textBody(it)) }
+        openBoard()
+        waitUntilAtLeastOneExists(hasText("Гамма"), 5_000)
+
+        // A long press without a move chooses; then a tap chooses too.
+        onNodeWithTag(c).performTouchInput {
+            down(center)
+            advanceEventTime(800)
+            up()
+        }
+        waitUntilAtLeastOneExists(hasText("Выбрано: 1"), 5_000)
+        onNodeWithTag(b).performClick()
+        waitUntilAtLeastOneExists(hasText("Выбрано: 2"), 5_000)
+        screenshot("board-09-chosen")
+        onNodeWithContentDescription("Закрепить").performClick()
+        waitUntil(timeoutMillis = 5_000) { notes().pinned.map { it.id }.toSet() == setOf(b, c) }
+        waitUntilAtLeastOneExists(hasText("Записки"), 5_000) // the bar gave way to the title
+
+        onNodeWithTag(a).performTouchInput {
+            down(center)
+            advanceEventTime(800)
+            up()
+        }
+        waitUntilAtLeastOneExists(hasText("Выбрано: 1"), 5_000)
+        onNodeWithContentDescription("В архив").performClick()
+        waitUntil(timeoutMillis = 5_000) { notes().others.isEmpty() }
+        waitUntilAtLeastOneExists(hasText("Записка в архиве"), 5_000)
+        onNodeWithText("Вернуть").performClick()
+        waitUntil(timeoutMillis = 5_000) { notes().others.map { it.id } == listOf(a) }
+
+        onNodeWithTag(a).performTouchInput {
+            down(center)
+            advanceEventTime(800)
+            up()
+        }
+        waitUntilAtLeastOneExists(hasText("Выбрано: 1"), 5_000)
+        onNodeWithContentDescription("В корзину").performClick()
+        waitUntil(timeoutMillis = 5_000) { notes().others.isEmpty() }
+        waitUntilAtLeastOneExists(hasText("Записка в корзине"), 5_000)
+        assertEquals(listOf(a), runBlocking { repo.trash().first() }.map { it.id })
+    }
+
+    @Test
+    fun aCardSwipedAsideGoesToTheArchive() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val (a, b) = listOf("Альфа", "Бета").map { repo.createBoardNote(services.today(), JournalRepository.textBody(it)) }
+        openBoard()
+        waitUntilAtLeastOneExists(hasText("Бета"), 5_000)
+        // A short sideways move springs back.
+        onNodeWithTag(b).performTouchInput {
+            down(center)
+            (1..4).forEach { moveTo(center + Offset(-10f * it, 0f)) }
+            up()
+        }
+        waitForIdle()
+        assertEquals(listOf(b, a), notes().others.map { it.id })
+        onNodeWithTag(b).performTouchInput {
+            down(center)
+            (1..10).forEach { moveTo(center + Offset(-24f * it, 0f)) }
+            up()
+        }
+        waitUntil(timeoutMillis = 5_000) { notes().others.map { it.id } == listOf(a) }
+        waitUntilAtLeastOneExists(hasText("Записка в архиве"), 5_000)
+    }
+
+    @Test
+    fun keysMoveAChosenCardAndEscLetsItGo() = runDesktopComposeUiTest(width = 1280, height = 800) {
+        val (a, b, c) = listOf("Альфа", "Бета", "Гамма").map { repo.createBoardNote(services.today(), JournalRepository.textBody(it)) }
+        openBoard()
+        waitUntilAtLeastOneExists(hasText("Гамма"), 5_000)
+        // With a mouse a card's mark shows on hover; a click on it chooses the card.
+        onNodeWithTag(c).performMouseInput { moveTo(center) }
+        waitUntilAtLeastOneExists(hasContentDescription("Выбрать"), 5_000)
+        onNodeWithContentDescription("Выбрать").performClick()
+        waitUntilAtLeastOneExists(hasText("Выбрано: 1"), 5_000)
+        onNodeWithTag(c).performKeyInput {
+            keyDown(Key.CtrlLeft)
+            pressKey(Key.DirectionRight)
+            keyUp(Key.CtrlLeft)
+        }
+        waitUntil(timeoutMillis = 5_000) { notes().others.map { it.id } == listOf(b, c, a) }
+        onNodeWithTag(c).performKeyInput { pressKey(Key.Escape) }
+        waitUntilAtLeastOneExists(hasText("Записки"), 5_000)
     }
 
     private fun ComposeUiTest.center(tag: String): Offset = onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.center

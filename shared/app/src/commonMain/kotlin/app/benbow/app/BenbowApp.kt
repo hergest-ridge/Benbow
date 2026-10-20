@@ -73,6 +73,10 @@ import androidx.navigation3.ui.NavDisplay
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.attach_failed
 import app.benbow.app.resources.audio_failed
+import app.benbow.app.resources.board_archived
+import app.benbow.app.resources.board_archived_many
+import app.benbow.app.resources.board_trashed
+import app.benbow.app.resources.board_trashed_many
 import app.benbow.app.resources.card_became_text
 import app.benbow.app.resources.category_trashed
 import app.benbow.app.resources.copied
@@ -113,6 +117,7 @@ import app.benbow.app.resources.voice_replaced
 import app.benbow.client.TagRegistry
 import app.benbow.client.Templates
 import app.benbow.client.Veil
+import app.benbow.client.archiveOnBoard
 import app.benbow.client.editHomeLayout
 import app.benbow.client.plusBlock
 import app.benbow.client.restoreCategory
@@ -457,6 +462,20 @@ private fun AppRoot(services: AppServices) {
                     }
                     val result = snackbar.showSnackbar(getString(text), getString(Res.string.veil_undo), duration = SnackbarDuration.Long)
                     if (result == SnackbarResult.ActionPerformed) services.removalBack.emit(message.removal)
+                }
+
+                is AppMessage.BoardArchived -> {
+                    val text = message.ids.singleOrNull()?.let { getString(Res.string.board_archived) }
+                        ?: getString(Res.string.board_archived_many, message.ids.size)
+                    val result = snackbar.showSnackbar(text, getString(Res.string.veil_undo), duration = SnackbarDuration.Long)
+                    if (result == SnackbarResult.ActionPerformed) message.ids.forEach { services.repo.archiveOnBoard(it, false) }
+                }
+
+                is AppMessage.BoardTrashed -> {
+                    val text = message.ids.singleOrNull()?.let { getString(Res.string.board_trashed) }
+                        ?: getString(Res.string.board_trashed_many, message.ids.size)
+                    val result = snackbar.showSnackbar(text, getString(Res.string.veil_undo), duration = SnackbarDuration.Long)
+                    if (result == SnackbarResult.ActionPerformed) message.ids.forEach { services.repo.restore(it) }
                 }
 
                 is AppMessage.VoiceReplaced -> {

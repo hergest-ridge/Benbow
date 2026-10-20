@@ -6,7 +6,13 @@ import androidx.compose.animation.SharedTransitionScope.OverlayClip
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -19,6 +25,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
@@ -26,6 +33,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -45,7 +53,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -56,25 +73,37 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import app.benbow.app.resources.Res
+import app.benbow.app.resources.background_none
+import app.benbow.app.resources.board_archive
 import app.benbow.app.resources.board_as_grid
 import app.benbow.app.resources.board_as_list
+import app.benbow.app.resources.board_choose
+import app.benbow.app.resources.board_chosen
+import app.benbow.app.resources.board_color
 import app.benbow.app.resources.board_empty
 import app.benbow.app.resources.board_empty_hint
 import app.benbow.app.resources.board_hint
 import app.benbow.app.resources.board_new_list
 import app.benbow.app.resources.board_others
+import app.benbow.app.resources.board_pin
 import app.benbow.app.resources.board_pinned
+import app.benbow.app.resources.board_trash
+import app.benbow.app.resources.board_unchoose
+import app.benbow.app.resources.board_unpin
 import app.benbow.app.resources.tab_board
 import app.benbow.client.BoardNote
 import app.benbow.client.BoardNotes
 import app.benbow.client.Media
 import app.benbow.client.Settings
+import app.benbow.client.archiveOnBoard
 import app.benbow.client.board
+import app.benbow.client.pinOnBoard
 import app.benbow.client.placeOnBoard
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -95,13 +124,80 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
     data?.let { order.stored = it }
     val grid = rememberLazyStaggeredGridState()
     val drag = remember(grid, order) { BoardDrag(grid, isCard = ::isNoteKey, canSwap = order::sameKind, move = order::move) }
+    val swipe = remember { BoardSwipe() }
+    // A card swiped away stays out of sight until it has left the board.
+    LaunchedEffect(data) {
+        swipe.key?.let { key ->
+            if (data?.let { (it.pinned + it.others).none { n -> n.id == key } } ==
+                true
+            ) {
+                swipe.gone()
+            }
+        }
+    }
     val stage = LocalBoardStage.current
+    val haptic = LocalHapticFeedback.current
     var chosen by remember { mutableStateOf(setOf<Any>()) }
-    val choose = remember { { key: Any -> chosen = if (key in chosen) chosen - key else chosen + key } }
+    var coloring by remember { mutableStateOf(false) }
+    val choose = remember {
+        { key: Any ->
+            haptic.performHapticFeedback(if (key in chosen) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn)
+            chosen = if (key in chosen) chosen - key else chosen + key
+            if (chosen.isEmpty()) coloring = false
+        }
+    }
+    val unchoose = {
+        chosen = emptySet()
+        coloring = false
+    }
     NavigationBackHandler(
         rememberNavigationEventState(NavigationEventInfo.None),
         isBackEnabled = chosen.isNotEmpty() && stage?.open != true,
-    ) { chosen = emptySet() }
+    ) { unchoose() }
+    val chosenNotes = { order.parts().let { (pinned, others) -> (pinned + others).filter { it.id in chosen } } }
+    val archive: (List<String>) -> Unit = { ids ->
+        services.scope.launch { ids.forEach { services.repo.archiveOnBoard(it, true) } }
+        services.messages.tryEmit(AppMessage.BoardArchived(ids))
+        unchoose()
+    }
+    val trash: (List<String>) -> Unit = { ids ->
+        services.scope.launch { ids.forEach { services.repo.moveToTrash(it) } }
+        services.messages.tryEmit(AppMessage.BoardTrashed(ids))
+        unchoose()
+    }
+    val pin: () -> Unit = {
+        val notes = chosenNotes()
+        val pinned = notes.all { it.pinned }
+        services.scope.launch { notes.forEach { services.repo.pinOnBoard(it.id, !pinned) } }
+        unchoose()
+    }
+    // One card chosen moves a place back or on with Ctrl and the arrows (desktop and web).
+    val step: (String, Int) -> Unit = { id, by ->
+        val (pinned, others) = order.parts()
+        val part = if (pinned.any { it.id == id }) pinned else others
+        val at = part.indexOfFirst { it.id == id }
+        val to = (at + by).coerceIn(0, part.lastIndex)
+        if (at >= 0 && to != at) {
+            haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
+            services.scope.launch { services.repo.placeOnBoard(id, to) }
+        }
+    }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(chosen.isNotEmpty()) { if (chosen.isNotEmpty()) runCatching { focus.requestFocus() } }
+    val keys = Modifier.onKeyEvent { event ->
+        val ids = chosen.map { it as String }
+        if (event.type != KeyEventType.KeyDown || ids.isEmpty()) return@onKeyEvent false
+        when {
+            event.key == Key.Escape -> unchoose()
+            event.key == Key.Delete || event.key == Key.Backspace -> trash(ids)
+            event.key == Key.E && !event.isCtrlPressed -> archive(ids)
+            event.key == Key.F && !event.isCtrlPressed -> pin()
+            event.isCtrlPressed && ids.size == 1 && (event.key == Key.DirectionUp || event.key == Key.DirectionLeft) -> step(ids[0], -1)
+            event.isCtrlPressed && ids.size == 1 && (event.key == Key.DirectionDown || event.key == Key.DirectionRight) -> step(ids[0], 1)
+            else -> return@onKeyEvent false
+        }
+        true
+    }
     // The carried order stays until the stored one has caught up (or, after a change from elsewhere, a moment later).
     LaunchedEffect(order.carried, data, order.pending, drag.key) {
         if (order.carried == null || order.pending || drag.key != null) return@LaunchedEffect
@@ -120,7 +216,6 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
         stage?.opening(null, null)
         nav.open(Route.Editor(null, services.today(), opened = services.now(), board = true, checklist = list))
     }
-    val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val wide = LocalWide.current
@@ -130,8 +225,29 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
             val lanes = if (view.list) 1 else autoLanes(maxWidth - side * 2, if (wide) 240.dp else 160.dp).coerceAtMost(if (wide) 6 else 2)
             // A list in a wide window is a readable column in the middle.
             val inset = if (view.list) max(side.value, (maxWidth.value - LIST_WIDTH) / 2).dp else side
-            Column(Modifier.fillMaxSize()) {
-                BoardTop(view.list) { view.change(!view.list) }
+            Column(Modifier.fillMaxSize().then(keys).focusRequester(focus).focusable()) {
+                if (chosen.isEmpty()) {
+                    BoardTop(view.list) { view.change(!view.list) }
+                } else {
+                    val notes = chosenNotes()
+                    ChoiceBar(
+                        chosen.size,
+                        pinned = notes.isNotEmpty() && notes.all { it.pinned },
+                        onClear = unchoose,
+                        onPin = pin,
+                        onColor = { coloring = !coloring },
+                        onArchive = { archive(chosen.map { it as String }) },
+                        onTrash = { trash(chosen.map { it as String }) },
+                    )
+                    if (coloring) {
+                        SwatchPicker(
+                            selected = notes.map { it.entry.background }.distinct().singleOrNull(),
+                            noneLabel = stringResource(Res.string.background_none),
+                            onPick = { color -> services.scope.launch { notes.forEach { services.repo.setBackground(it.id, color) } } },
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                    }
+                }
                 if (wide) QuickBar(create, Modifier.widthIn(max = 640.dp).align(Alignment.CenterHorizontally))
                 Box(
                     Modifier.weight(1f).fillMaxWidth()
@@ -144,6 +260,8 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
                             fastest = with(density) { 1600.dp.toPx() },
                             onChoose = choose,
                             onPinch = { step -> view.change(step < 0) },
+                            swipe = swipe,
+                            onSwiped = { key -> archive(listOf(key as String)) },
                             onDrop = { key ->
                                 order.placeOf(key as String)?.let { at ->
                                     order.pending = true
@@ -168,7 +286,8 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
                                 drag.board?.let { drag.gridBounds = it.localBoundingBoxOf(grid, clipBounds = false) }
                             },
                             state = grid,
-                            contentPadding = PaddingValues(start = inset, end = inset, top = 4.dp, bottom = 16.dp),
+                            // Room above the first row for a card's corner mark.
+                            contentPadding = PaddingValues(start = inset, end = inset, top = 10.dp, bottom = 16.dp),
                             verticalItemSpacing = 8.dp,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
@@ -178,9 +297,12 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
                                     NoteSlot(
                                         note,
                                         drag,
+                                        swipe,
                                         services.media,
                                         note.id in chosen,
+                                        chosen.isNotEmpty(),
                                         open,
+                                        choose,
                                         Modifier.animateItem(placementSpec = GLIDE),
                                     )
                                 }
@@ -191,7 +313,17 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
                                 }
                             }
                             items(others, key = { it.id }, contentType = { "note" }) { note ->
-                                NoteSlot(note, drag, services.media, note.id in chosen, open, Modifier.animateItem(placementSpec = GLIDE))
+                                NoteSlot(
+                                    note,
+                                    drag,
+                                    swipe,
+                                    services.media,
+                                    note.id in chosen,
+                                    chosen.isNotEmpty(),
+                                    open,
+                                    choose,
+                                    Modifier.animateItem(placementSpec = GLIDE),
+                                )
                             }
                         }
                     }
@@ -281,6 +413,32 @@ private fun BoardTop(list: Boolean, onToggle: () -> Unit) {
     }
 }
 
+/** What is chosen and what can be done with it, in place of the title (Keep's bar). */
+@Composable
+private fun ChoiceBar(
+    count: Int,
+    pinned: Boolean,
+    onClear: () -> Unit,
+    onPin: () -> Unit,
+    onColor: () -> Unit,
+    onArchive: () -> Unit,
+    onTrash: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().statusBarsPadding().padding(start = 8.dp, end = 8.dp, top = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClear, Modifier.hand()) { Icon(Icons.Close, stringResource(Res.string.board_unchoose)) }
+        Text(stringResource(Res.string.board_chosen, count), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+        IconButton(onPin, Modifier.hand()) {
+            Icon(Icons.Pin, stringResource(if (pinned) Res.string.board_unpin else Res.string.board_pin))
+        }
+        IconButton(onColor, Modifier.hand()) { Icon(Icons.Palette, stringResource(Res.string.board_color)) }
+        IconButton(onArchive, Modifier.hand()) { Icon(Icons.Archive, stringResource(Res.string.board_archive)) }
+        IconButton(onTrash, Modifier.hand()) { Icon(Icons.Delete, stringResource(Res.string.board_trash)) }
+    }
+}
+
 @Composable
 private fun Header(text: String) {
     Text(
@@ -308,8 +466,21 @@ private fun EmptyBoard(modifier: Modifier) {
 /** A card's place in the grid: blank while it is carried, held at its height while it is open as the editor. */
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-private fun NoteSlot(note: BoardNote, drag: BoardDrag, media: Media, chosen: Boolean, onOpen: (BoardNote) -> Unit, modifier: Modifier) {
+private fun NoteSlot(
+    note: BoardNote,
+    drag: BoardDrag,
+    swipe: BoardSwipe,
+    media: Media,
+    chosen: Boolean,
+    choosing: Boolean,
+    onOpen: (BoardNote) -> Unit,
+    onChoose: (Any) -> Unit,
+    modifier: Modifier,
+) {
     val stage = LocalBoardStage.current
+    val hover = remember { MutableInteractionSource() }
+    val hovered by hover.collectIsHoveredAsState()
+    val swiped = swipe.key == note.id
     val shared = LocalBoardShared.current
     val open = stage?.open == true && stage.key == sheetKey(note.id)
     var height by remember { mutableIntStateOf(0) }
@@ -320,6 +491,14 @@ private fun NoteSlot(note: BoardNote, drag: BoardDrag, media: Media, chosen: Boo
             .onSizeChanged { if (!open) height = it.height }
             .onGloballyPositioned { if (drag.key == note.id) drag.slot = drag.board?.localBoundingBoxOf(it, clipBounds = false) }
             .alpha(if (drag.key == note.id) 0f else 1f)
+            .zIndex(if (swiped) 1f else 0f)
+            .graphicsLayer {
+                if (swiped) {
+                    translationX = swipe.dx
+                    alpha = swipe.alpha
+                }
+            }
+            .hoverable(hover)
             .testTag(note.id),
     ) {
         val click = Modifier.clip(CARD_SHAPE).hand().clickable { onOpen(note) }
@@ -346,6 +525,29 @@ private fun NoteSlot(note: BoardNote, drag: BoardDrag, media: Media, chosen: Boo
                 }
             }
         }
+        // A chosen card wears its frame (Keep on a phone); with a mouse a mark on its corner chooses it, shown on hover,
+        // on every card while choosing, checked on the chosen ones.
+        if (!open && LocalPagerArrows.current && (chosen || hovered || choosing)) {
+            ChooseMark(chosen, { onChoose(note.id) }, Modifier.align(Alignment.TopStart).offset((-8).dp, (-8).dp))
+        }
+    }
+}
+
+@Composable
+private fun ChooseMark(chosen: Boolean, onClick: () -> Unit, modifier: Modifier) {
+    val colors = MaterialTheme.colorScheme
+    Box(
+        modifier.size(26.dp).clip(CircleShape).background(if (chosen) colors.primary else colors.surface.copy(alpha = 0.9f))
+            .border(1.dp, if (chosen) colors.primary else colors.outline, CircleShape)
+            .hand().clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            Icons.Check,
+            stringResource(Res.string.board_choose),
+            Modifier.size(18.dp),
+            tint = if (chosen) colors.onPrimary else colors.onSurfaceVariant,
+        )
     }
 }
 

@@ -13,7 +13,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -89,8 +88,21 @@ internal class BoardStage {
     /** The open note's color (its card's, then the editor's as it changes). */
     var color by mutableStateOf<String?>(null)
 
-    /** A note is out (or coming out): its card or the quick bar give their sheet to it. */
+    /**
+     * The open note's sheet: its card's from the start, the + button's for a new note until it closes into its new
+     * card. It never changes while the note is out, so nothing plays twice when a new note gets its id.
+     */
+    var sheet by mutableStateOf(sheetKey(null))
+        internal set
+
+    /** A new note from the + button: it comes out quicker. */
+    val fresh: Boolean get() = sheet == sheetKey(null)
+
+    /** A note is out (or coming out): its card or the + button give their sheet to it. */
     val open: Boolean get() = visibility?.targetState == true
+
+    /** The card of [id] stands for the open note (it waits blank in its place). */
+    fun holds(id: String): Boolean = open && entryId == id
 
     internal var visibility: MutableTransitionState<Boolean>? = null
 
@@ -98,12 +110,11 @@ internal class BoardStage {
     var close: () -> Unit = {}
         internal set
 
-    val key get() = sheetKey(entryId)
-
-    /** Before a card (or the quick bar, with null) opens its note. */
+    /** Before a card (or the + button, with null) opens its note. */
     fun opening(id: String?, color: String?) {
         entryId = id
         this.color = color
+        sheet = sheetKey(id)
     }
 }
 
@@ -121,7 +132,7 @@ private fun BoardStageContent(board: NavEntry<Route>, note: NavEntry<Route>?, ba
     val focus = LocalFocusManager.current
     // A note opened from elsewhere (an address, a restored screen) names itself; a new one has no id yet.
     LaunchedEffect(note) {
-        (note?.metadata?.get(BOARD_NOTE) as? String)?.takeIf { it.isNotEmpty() }?.let { stage.entryId = it }
+        (note?.metadata?.get(BOARD_NOTE) as? String)?.takeIf { it.isNotEmpty() && it != stage.entryId }?.let { stage.opening(it, null) }
     }
     var closing by remember { mutableStateOf(false) }
     val visible = remember { MutableTransitionState(false) }
@@ -129,6 +140,8 @@ private fun BoardStageContent(board: NavEntry<Route>, note: NavEntry<Route>?, ba
     stage.visibility = visible
     stage.close = {
         focus.clearFocus(force = true)
+        // A new note that got its words shrinks into its new card; an empty one back into the + button.
+        stage.sheet = sheetKey(stage.entryId)
         closing = true
     }
     // Once the sheet is back in its place the note's entry goes; one popped from elsewhere just goes.
@@ -147,16 +160,15 @@ private fun BoardStageContent(board: NavEntry<Route>, note: NavEntry<Route>?, ba
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val wide = LocalWide.current
                 val tallest = maxHeight * 0.88f
-                AnimatedVisibility(visible, enter = HOLD_IN, exit = HOLD_OUT) {
+                val fresh = stage.fresh
+                AnimatedVisibility(visible, enter = if (fresh) QUICK_HOLD_IN else HOLD_IN, exit = HOLD_OUT) {
                     // During a pop from elsewhere (the browser's Back) the entry is already gone: nothing to show.
                     val entry = note ?: return@AnimatedVisibility
                     // Opening, the note's sheet lies above its card's; closing, below, so the card's words come back.
                     val opening = transition.targetState == EnterExitState.Visible
                     val shape = if (wide) CARD_SHAPE else RoundedCornerShape(0.dp)
-                    val noteColor = swatch(stage.color)
-                    // A note without a color of its own has the page's: its card's thin line shows the sheet growing.
-                    val sheetColor = noteColor ?: MaterialTheme.colorScheme.background
-                    val line = if (noteColor == null) MaterialTheme.colorScheme.outlineVariant else Color.Transparent
+                    // The card's own color all the way (owner: no lines moving with it).
+                    val sheetColor = swatch(stage.color) ?: boardCardColor()
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         if (wide) {
                             Box(
@@ -177,18 +189,22 @@ private fun BoardStageContent(board: NavEntry<Route>, note: NavEntry<Route>?, ba
                             Box(
                                 Modifier.matchParentSize()
                                     .sharedBounds(
-                                        rememberSharedContentState(stage.key),
+                                        rememberSharedContentState(stage.sheet),
                                         this@AnimatedVisibility,
-                                        enter = HOLD_IN,
+                                        enter = if (fresh) QUICK_HOLD_IN else HOLD_IN,
                                         exit = HOLD_OUT,
-                                        boundsTransform = SHEET,
+                                        boundsTransform = if (fresh) QUICK_SHEET else SHEET,
                                         zIndexInOverlay = if (opening) 1f else 0f,
                                         clipInOverlayDuringTransition = OverlayClip(CARD_SHAPE),
                                     )
-                                    .background(sheetColor, shape)
-                                    .border(1.dp, line, shape),
+                                    .background(sheetColor, shape),
                             )
-                            Box(Modifier.matchParentSize().animateEnterExit(enter = EDITOR_IN, exit = EDITOR_OUT)) { entry.Content() }
+                            Box(
+                                Modifier.matchParentSize().animateEnterExit(
+                                    enter = if (fresh) QUICK_EDITOR_IN else EDITOR_IN,
+                                    exit = EDITOR_OUT,
+                                ),
+                            ) { entry.Content() }
                         }
                     }
                 }
@@ -215,3 +231,12 @@ internal val WORDS_OUT = fadeOut(tween(60))
 /** The editor: in as the sheet nearly fills its place, out before it shrinks. */
 private val EDITOR_IN = fadeIn(tween(160, delayMillis = 180))
 private val EDITOR_OUT = fadeOut(tween(90))
+
+/** A new note from the + button (owner: the first take was too slow): the same, quicker. */
+internal const val QUICK_MILLIS = 180
+
+@OptIn(ExperimentalSharedTransitionApi::class)
+internal val QUICK_SHEET = BoundsTransform { _, _ -> tween(QUICK_MILLIS, easing = FastOutSlowInEasing) }
+internal val QUICK_HOLD_IN = fadeIn(tween(QUICK_MILLIS), initialAlpha = 1f)
+internal val QUICK_HOLD_OUT = fadeOut(tween(QUICK_MILLIS), targetAlpha = 1f)
+private val QUICK_EDITOR_IN = fadeIn(tween(110, delayMillis = 80))

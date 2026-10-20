@@ -22,11 +22,17 @@ class CardPreviewTest {
         )
 
     @Test
-    fun aLoneLineIsTheNoteAndALineWithMoreUnderItItsTitle() {
+    fun theTitleIsTheNotesOwnHeadingAndPlainLinesAreItsWords() {
         assertEquals(CardPreview(lines = listOf(CardLine("Купить ниток"))), cardOf(Document(listOf(text("Купить ниток")))))
-        val titled = cardOf(Document(listOf(text("Ремонт"), text("Ниша 62 см\nрозетка слева"), text(""), text("Позвонить мастеру"))))
+        val plain = cardOf(Document(listOf(text("Ремонт"), text("Ниша 62 см"))))
+        assertEquals("", plain.title, "a first line is no title unless it is the note's title (a heading)")
+        assertEquals(listOf("Ремонт", "Ниша 62 см"), plain.lines.map { it.text })
+        val titled = cardOf(
+            Document(listOf(text("Ремонт", style = "h3"), text("Ниша 62 см\nрозетка слева"), text(""), text("Позвонить мастеру"))),
+        )
         assertEquals("Ремонт", titled.title)
         assertEquals(listOf("Ниша 62 см", "розетка слева", "", "Позвонить мастеру"), titled.lines.map { it.text })
+        assertEquals("Только название", cardOf(Document(listOf(text("Только название", style = "h3")))).title)
     }
 
     @Test
@@ -34,7 +40,7 @@ class CardPreviewTest {
         val card = cardOf(
             Document(
                 listOf(
-                    text("Продукты"),
+                    text("Продукты", style = "h3"),
                     text("молоко", "check", false),
                     text("хлеб", "check", true),
                     text("яйца", "check", false),
@@ -54,7 +60,7 @@ class CardPreviewTest {
         val card = cardOf(
             Document(
                 listOf(
-                    text("Планы"),
+                    text("Планы", style = "h3"),
                     text("Глава", style = "h2"),
                     text("первое", "number"),
                     text("второе", "number"),

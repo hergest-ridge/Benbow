@@ -146,8 +146,7 @@ internal sealed interface Route {
     /**
      * [entryId] = null opens a new entry ([template] fills it, or [heading] starts it, e.g. an event's title);
      * [opened] keeps two new-entry screens apart. [readOnly] opens it as a post with its comments (from the feed);
-     * the menu switches to editing. [board]: a note opened on the board (ADR-040), a new one made there; [checklist]
-     * starts a new one as a list.
+     * the menu switches to editing. [board]: a note opened on the board (ADR-040), a new one made there.
      */
     data class Editor(
         val entryId: String?,
@@ -157,7 +156,6 @@ internal sealed interface Route {
         val readOnly: Boolean = false,
         val heading: String? = null,
         val board: Boolean = false,
-        val checklist: Boolean = false,
     ) : Route
 
     data class History(val entryId: String) : Route
@@ -349,7 +347,7 @@ private fun AppRoot(services: AppServices) {
         }
     }
     LaunchedEffect(Unit) {
-        services.messages.collect { message ->
+        suspend fun show(message: AppMessage) {
             when (message) {
                 is AppMessage.AttachFailed -> snackbar.showSnackbar(getString(Res.string.attach_failed, message.reason))
 
@@ -363,7 +361,9 @@ private fun AppRoot(services: AppServices) {
 
                 is AppMessage.SaveFailed -> snackbar.showSnackbar(getString(Res.string.save_failed, message.reason))
 
-                is AppMessage.Reminder -> snackbar.showSnackbar(getString(Res.string.reminder_now, message.text), withDismissAction = true)
+                is AppMessage.Reminder -> {
+                    snackbar.showSnackbar(getString(Res.string.reminder_now, message.text), withDismissAction = true)
+                }
 
                 is AppMessage.Veiled -> {
                     val text = when (message.veil) {
@@ -439,6 +439,7 @@ private fun AppRoot(services: AppServices) {
                     val result = snackbar.showSnackbar(
                         getString(Res.string.dictation_needs_model),
                         getString(Res.string.dictation_open_model),
+                        duration = SnackbarDuration.Long, // with an action the default never ends
                     )
                     if (result == SnackbarResult.ActionPerformed) nav.open(Route.Speech)
                 }
@@ -515,6 +516,12 @@ private fun AppRoot(services: AppServices) {
                     if (result == SnackbarResult.ActionPerformed) services.restoreVoice(message.entryId, message.attachmentId)
                 }
             }
+        }
+        // The newest message takes the place of the one on screen (none waits behind another), each in its own
+        // coroutine so a snackbar's wait never holds up the next message.
+        services.messages.collect { message ->
+            snackbar.currentSnackbarData?.dismiss()
+            launch { show(message) }
         }
     }
     // The lock covers everything, hides it from accessibility and takes focus away, so a keyboard can't type behind it.

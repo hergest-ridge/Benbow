@@ -80,7 +80,7 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * A note on the board that is a list, Keep's way (ADR-040, K4): its title, the open boxes in their order, each with a
+ * A note on the board that is a list, Keep's way (ADR-040, K4): under its title (the note's own field), the open boxes in their order, each with a
  * handle to move it, «Пункт списка» under them, then the ticked ones folded under «Отмечено: N». Each box is a line of
  * its own: Enter starts the next (splitting the words at the cursor, a pasted text one box a line), Backspace at a box's
  * start joins it to the one above, × takes it away. The document keeps its order whatever the boxes show as: ticking
@@ -101,7 +101,6 @@ internal fun ChecklistEditor(document: Document, onChange: (Document) -> Unit, m
         if (at == null) model.indexOf(key)?.let { list.scrollToItem(it) }
     }
     LazyColumn(modifier, state = list, contentPadding = PaddingValues(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 32.dp)) {
-        item("title") { TitleRow(model) }
         items(model.open, key = { it }) { key -> BoxRow(model, key, drag, Modifier.animateItem()) }
         item("add") { AddRow(model) }
         if (model.ticked.isNotEmpty()) {
@@ -134,11 +133,8 @@ private class BoxLine(val key: String, words: String, checked: Boolean, private 
 @Stable
 private class ListModel(document: Document, private val scope: CoroutineScope, private val onChange: (Document) -> Unit) {
     private val keys = BlockKeys()
-    private val titleBlock = (document.blocks.firstOrNull() as? TextBlock)?.takeIf { it.listItem == null }
-    private val titleKey = titleBlock?.key ?: keys.next()
-    val title = TextFieldState(titleBlock?.let(Checklists::words).orEmpty())
 
-    /** Every block but the title, in the document's order; pictures keep their places among the boxes. */
+    /** Every block in the document's order; pictures (and a title from an older note) keep their places. */
     private val order = mutableStateListOf<String>()
     val rows = mutableStateMapOf<String, BoxLine>()
     private val others = HashMap<String, Block>()
@@ -148,8 +144,7 @@ private class ListModel(document: Document, private val scope: CoroutineScope, p
     var focusing by mutableStateOf<Pair<String, Int>?>(null)
 
     init {
-        document.blocks.forEachIndexed { i, block ->
-            if (i == 0 && block === titleBlock) return@forEachIndexed
+        document.blocks.forEach { block ->
             order += block.key
             if (block is TextBlock && Checklists.isBox(block)) rows[block.key] = BoxLine(block) else others[block.key] = block
         }
@@ -158,22 +153,13 @@ private class ListModel(document: Document, private val scope: CoroutineScope, p
     val open: List<String> get() = order.filter { rows[it]?.checked == false }
     val ticked: List<String> get() = order.filter { rows[it]?.checked == true }
 
-    /** The box's place in the editor's list: the title, the open boxes, «Пункт списка», the header, the ticked ones. */
+    /** The box's place in the editor's list: the open boxes, «Пункт списка», the header, the ticked ones. */
     fun indexOf(key: String): Int? {
-        open.indexOf(key).takeIf { it >= 0 }?.let { return 1 + it }
-        return ticked.indexOf(key).takeIf { it >= 0 && !folded }?.let { open.size + 3 + it }
+        open.indexOf(key).takeIf { it >= 0 }?.let { return it }
+        return ticked.indexOf(key).takeIf { it >= 0 && !folded }?.let { open.size + 2 + it }
     }
 
-    fun document(): Document {
-        val words = title.text.toString()
-        val head = when {
-            titleBlock != null && words == Checklists.words(titleBlock) -> titleBlock
-            titleBlock != null -> titleBlock.copy(children = listOf(Span(words)), markDefs = emptyList())
-            words.isNotEmpty() -> TextBlock(titleKey, children = listOf(Span(words)))
-            else -> null
-        }
-        return Document(listOfNotNull(head) + order.mapNotNull { rows[it]?.block() ?: others[it] })
-    }
+    fun document(): Document = Document(order.mapNotNull { rows[it]?.block() ?: others[it] })
 
     fun changed() = onChange(document())
 
@@ -240,12 +226,6 @@ private class ListModel(document: Document, private val scope: CoroutineScope, p
         order.removeAt(fromAt)
         order.add(toAt, from)
     }
-
-    /** Enter in the title goes to the first box (a new one if there is none). */
-    fun leaveTitle() {
-        val first = open.firstOrNull()
-        if (first == null) add() else focusing = first to 0
-    }
 }
 
 /** A box carried by its handle: it follows the finger or the mouse over the others, which make way. */
@@ -287,35 +267,6 @@ private class RowDrag(private val list: LazyListState, private val model: ListMo
         key = null
         model.changed()
     }
-}
-
-@Composable
-private fun TitleRow(model: ListModel) {
-    val leave = remember(model) {
-        InputTransformation {
-            if ('\n' in asCharSequence()) {
-                replace(0, length, asCharSequence().toString().replace("\n", ""))
-                model.later(model::leaveTitle)
-            }
-        }
-    }
-    LaunchedEffect(model) { snapshotFlow { model.title.text.toString() }.drop(1).collect { model.changed() } }
-    val hint = stringResource(Res.string.board_title_hint)
-    BasicTextField(
-        model.title,
-        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
-        inputTransformation = leave,
-        textStyle = MaterialTheme.typography.titleLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-        decorator = TextFieldDecorator { field ->
-            Box {
-                if (model.title.text.isEmpty()) {
-                    Text(hint, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                field()
-            }
-        },
-    )
 }
 
 @Composable

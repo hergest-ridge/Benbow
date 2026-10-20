@@ -9,8 +9,8 @@ import kotlinx.serialization.Serializable
 
 /**
  * What a note's card on the board shows (ADR-040), made on every write beside the title and preview, so the board
- * never parses a document. Keep-like: a title only when more follows it (a lone line is the note itself), the lines
- * as written, a checklist's open boxes in their order and its ticked ones only counted.
+ * never parses a document. Keep-like: the title is the note's title (its first block when it is a heading, the
+ * editor's «Название»), then the lines as written, a checklist's open boxes in their order, the ticked ones counted.
  */
 @Serializable
 data class CardPreview(
@@ -39,8 +39,7 @@ data class CardLine(
 internal fun cardOf(document: Document): CardPreview {
     val blocks = document.blocks.filter { it is TextBlock || it is LinkCardBlock || it is CodeBlock }
     val first = blocks.firstOrNull() as? TextBlock
-    val titled =
-        first != null && first.listItem == null && blocks.drop(1).any { text(it).isNotBlank() || (it as? TextBlock)?.listItem != null }
+    val titled = first != null && first.listItem == null && first.style.startsWith("h")
     val lines = ArrayList<CardLine>()
     var ticked = 0
     var more = false

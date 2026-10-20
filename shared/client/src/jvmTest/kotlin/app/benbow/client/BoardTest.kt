@@ -155,7 +155,7 @@ class BoardTest {
         val phone = Device(server, "phone")
         val body = DocumentCodec.encode(
             Document(
-                listOf(TextBlock("t", children = listOf(Span("Продукты")))) +
+                listOf(TextBlock("t", style = "h3", children = listOf(Span("Продукты")))) +
                     listOf("молоко", "хлеб", "сыр").mapIndexed { i, item ->
                         TextBlock("b$i", listItem = "check", level = 1, checked = false, children = listOf(Span(item)))
                     },

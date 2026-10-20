@@ -40,6 +40,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -59,6 +61,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -107,14 +110,13 @@ import app.benbow.app.resources.board_color
 import app.benbow.app.resources.board_empty
 import app.benbow.app.resources.board_empty_hint
 import app.benbow.app.resources.board_found_none
-import app.benbow.app.resources.board_hint
 import app.benbow.app.resources.board_in_archive
 import app.benbow.app.resources.board_kind_drawings
 import app.benbow.app.resources.board_kind_lists
 import app.benbow.app.resources.board_kind_pictures
 import app.benbow.app.resources.board_kind_sounds
 import app.benbow.app.resources.board_more_in_journal
-import app.benbow.app.resources.board_new_list
+import app.benbow.app.resources.board_new_note
 import app.benbow.app.resources.board_others
 import app.benbow.app.resources.board_pin
 import app.benbow.app.resources.board_pinned
@@ -131,6 +133,7 @@ import app.benbow.app.resources.former_delete
 import app.benbow.app.resources.former_many
 import app.benbow.app.resources.former_one
 import app.benbow.app.resources.former_title
+import app.benbow.app.resources.menu
 import app.benbow.app.resources.months_genitive
 import app.benbow.app.resources.tab_board
 import app.benbow.client.BoardNote
@@ -199,6 +202,13 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
         BoardDrag(grid, isCard = ::isNoteKey, canSwap = { a, b -> mode == BOARD && order.sameKind(a, b) }, move = order::move)
     }
     val swipe = remember { BoardSwipe() }
+    // A board at its top stays there as notes come and go: a new note shows on top and the columns start level
+    // (owner: a staggered grid kept its old first note in place, a new one above it, and the columns out of step).
+    var atTop by remember { mutableStateOf(true) }
+    LaunchedEffect(boardGrid) {
+        snapshotFlow { boardGrid.isScrollInProgress }.collect { scrolling -> if (!scrolling) atTop = !boardGrid.canScrollBackward }
+    }
+    LaunchedEffect(data) { if (atTop && drag.key == null && mode == BOARD) boardGrid.requestScrollToItem(0) }
     // A card swiped away stays out of sight until it has left the board.
     LaunchedEffect(data) {
         val key = swipe.key ?: return@LaunchedEffect
@@ -351,9 +361,9 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
             nav.open(Route.Editor(note.id, note.entry.day, board = true))
         }
     }
-    val create: (Boolean) -> Unit = { list ->
+    val create: () -> Unit = {
         stage?.opening(null, null)
-        nav.open(Route.Editor(null, services.today(), opened = services.now(), board = true, checklist = list))
+        nav.open(Route.Editor(null, services.today(), opened = services.now(), board = true))
     }
     val toJournalSearch = {
         services.searchFor.value = SearchQuery(words)
@@ -405,7 +415,6 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
 
                     else -> BoardTop(view.list, onSearch = { mode = SEARCH }, onArchive = { mode = ARCHIVE }) { view.change(!view.list) }
                 }
-                if (wide && mode == BOARD) QuickBar(create, Modifier.widthIn(max = 640.dp).align(Alignment.CenterHorizontally))
                 Box(
                     Modifier.weight(1f).fillMaxWidth()
                         .onGloballyPositioned { drag.board = it }
@@ -455,7 +464,8 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
                             },
                             state = grid,
                             // Room above the first row for a card's corner mark.
-                            contentPadding = PaddingValues(start = inset, end = inset, top = 10.dp, bottom = 16.dp),
+                            // Room under the last row for the + button.
+                            contentPadding = PaddingValues(start = inset, end = inset, top = 10.dp, bottom = 96.dp),
                             verticalItemSpacing = 8.dp,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
@@ -486,8 +496,8 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
                         }
                     }
                     drag.key?.let { key -> shown.firstOrNull { it.id == key }?.let { LiftedCard(it, drag, services.media) } }
+                    if (mode == BOARD) NewNoteButton(create, Modifier.align(Alignment.BottomEnd).padding(16.dp))
                 }
-                if (!wide && mode == BOARD) QuickBar(create)
             }
         }
     }
@@ -770,13 +780,7 @@ private fun ChoiceBar(
         // Keep's way: the number alone, so the actions fit a phone; read out in full.
         val said = stringResource(Res.string.board_chosen, count)
         Text("$count", Modifier.weight(1f).semantics { contentDescription = said }, style = MaterialTheme.typography.titleLarge)
-        if (!archived) {
-            IconButton(onPin, Modifier.hand()) {
-                Icon(Icons.Pin, stringResource(if (pinned) Res.string.board_unpin else Res.string.board_pin))
-            }
-        }
-        IconButton(onJournal, Modifier.hand()) { Icon(Icons.Feed, stringResource(Res.string.board_to_journal)) }
-        IconButton(onColor, Modifier.hand()) { Icon(Icons.Palette, stringResource(Res.string.board_color)) }
+
         IconButton(onArchive, Modifier.hand()) {
             if (archived) {
                 Icon(Icons.Unarchive, stringResource(Res.string.board_unarchive))
@@ -785,6 +789,31 @@ private fun ChoiceBar(
             }
         }
         IconButton(onTrash, Modifier.hand()) { Icon(Icons.Delete, stringResource(Res.string.board_trash)) }
+        // What is needed less (owner): under ⋮.
+        var more by remember { mutableStateOf(false) }
+        Box {
+            IconButton({ more = true }, Modifier.hand()) { Icon(Icons.More, stringResource(Res.string.menu)) }
+            DropdownMenu(more, { more = false }) {
+                if (!archived) {
+                    DropdownMenuItem(
+                        { Text(stringResource(if (pinned) Res.string.board_unpin else Res.string.board_pin)) },
+                        {
+                            more = false
+                            onPin()
+                        },
+                        Modifier.hand(),
+                    )
+                }
+                DropdownMenuItem({ Text(stringResource(Res.string.board_color)) }, {
+                    more = false
+                    onColor()
+                }, Modifier.hand())
+                DropdownMenuItem({ Text(stringResource(Res.string.board_to_journal)) }, {
+                    more = false
+                    onJournal()
+                }, Modifier.hand())
+            }
+        }
     }
 }
 
@@ -833,7 +862,7 @@ private fun NoteSlot(
     val hovered by hover.collectIsHoveredAsState()
     val swiped = swipe.key == note.id
     val shared = LocalBoardShared.current
-    val open = stage?.open == true && stage.key == sheetKey(note.id)
+    val open = stage?.holds(note.id) == true
     var height by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
     Box(
@@ -873,6 +902,7 @@ private fun NoteSlot(
                         ).then(click),
                         Modifier.animateEnterExit(enter = WORDS_IN, exit = WORDS_OUT),
                         tick,
+                        lined = !transition.isRunning,
                     )
                 }
             }
@@ -924,29 +954,29 @@ private fun LiftedCard(note: BoardNote, drag: BoardDrag, media: Media) {
     )
 }
 
-/** «Заметка…» and ☑: a new note or a new list, growing out of the bar as its sheet. */
+/** Keep's + button: a new note, its sheet growing out of the button (quicker than a card's). */
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-private fun QuickBar(create: (list: Boolean) -> Unit, modifier: Modifier = Modifier) {
+private fun NewNoteButton(onClick: () -> Unit, modifier: Modifier) {
     val stage = LocalBoardStage.current
     val shared = LocalBoardShared.current
-    val open = stage?.open == true && stage.key == sheetKey(null)
-    Box(modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp).height(52.dp)) {
+    val open = stage?.open == true && stage.fresh
+    Box(modifier.size(FAB_SIZE)) {
         if (shared == null) {
-            Bar(create, Modifier)
+            Fab(onClick, Modifier)
         } else {
             with(shared) {
-                AnimatedVisibility(!open, enter = HOLD_IN, exit = HOLD_OUT) {
-                    Bar(
-                        create,
+                AnimatedVisibility(!open, enter = QUICK_HOLD_IN, exit = QUICK_HOLD_OUT) {
+                    Fab(
+                        onClick,
                         Modifier.sharedBounds(
                             rememberSharedContentState(sheetKey(null)),
                             this,
-                            enter = HOLD_IN,
-                            exit = HOLD_OUT,
-                            boundsTransform = SHEET,
+                            enter = QUICK_HOLD_IN,
+                            exit = QUICK_HOLD_OUT,
+                            boundsTransform = QUICK_SHEET,
                             zIndexInOverlay = 0.5f,
-                            clipInOverlayDuringTransition = OverlayClip(BAR_SHAPE),
+                            clipInOverlayDuringTransition = OverlayClip(FAB_SHAPE),
                         ),
                         Modifier.animateEnterExit(enter = WORDS_IN, exit = WORDS_OUT),
                     )
@@ -956,23 +986,19 @@ private fun QuickBar(create: (list: Boolean) -> Unit, modifier: Modifier = Modif
     }
 }
 
-private val BAR_SHAPE = RoundedCornerShape(26.dp)
+private val FAB_SIZE = 56.dp
+private val FAB_SHAPE = RoundedCornerShape(16.dp)
 
 @Composable
-private fun Bar(create: (list: Boolean) -> Unit, modifier: Modifier, words: Modifier = Modifier) {
-    Surface(modifier.fillMaxSize(), shape = BAR_SHAPE, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-        Row(words.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.weight(1f).fillMaxSize().clip(BAR_SHAPE).hand().clickable { create(false) }.padding(start = 20.dp),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                Text(
-                    stringResource(Res.string.board_hint),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            IconButton({ create(true) }, Modifier.hand()) { Icon(Icons.CheckBox, stringResource(Res.string.board_new_list)) }
-        }
+private fun Fab(onClick: () -> Unit, modifier: Modifier, icon: Modifier = Modifier) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.size(FAB_SIZE).hand(),
+        shape = FAB_SHAPE,
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        shadowElevation = 6.dp,
+    ) {
+        Box(contentAlignment = Alignment.Center) { Icon(Icons.Add, stringResource(Res.string.board_new_note), icon.size(28.dp)) }
     }
 }

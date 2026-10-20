@@ -26,9 +26,9 @@ object Checklists {
      * Every line a box (Keep's «Показать флажки»): the first paragraph stays the title when more words follow it,
      * blank lines go, a line's marks stay unless it was split off a paragraph of several lines.
      */
-    fun toList(document: Document, keys: BlockKeys = BlockKeys()): Document {
+    fun toList(document: Document, keys: BlockKeys = BlockKeys(), titled: Boolean = true): Document {
         val texts = document.blocks.filterIsInstance<TextBlock>()
-        val titled =
+        val titled = titled &&
             document.blocks.firstOrNull().let { it is TextBlock && it.listItem == null } && texts.drop(1).any { words(it).isNotBlank() }
         val blocks = ArrayList<Block>()
         document.blocks.forEachIndexed { i, block ->

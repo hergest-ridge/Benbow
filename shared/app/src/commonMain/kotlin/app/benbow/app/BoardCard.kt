@@ -26,6 +26,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -55,19 +57,31 @@ internal fun BoardCard(
     words: Modifier = Modifier,
     /** Ticks an open box right on the card (its block's key); null: the boxes only show. */
     onTick: ((String) -> Unit)? = null,
+    /** The card's thin line; none while its sheet moves (owner: lines moving with it look wrong). */
+    lined: Boolean = true,
 ) {
     val color = swatch(note.entry.background)
     val outline = when {
         chosen -> MaterialTheme.colorScheme.primary
-        color == null -> MaterialTheme.colorScheme.outlineVariant
+        color == null && lined -> MaterialTheme.colorScheme.outlineVariant
         else -> Color.Transparent
     }
     Column(
-        modifier.fillMaxWidth().clip(CARD_SHAPE).background(color ?: MaterialTheme.colorScheme.surface)
+        modifier.fillMaxWidth().clip(CARD_SHAPE).background(color ?: boardCardColor())
             .border(if (chosen) 2.dp else 1.dp, outline, CARD_SHAPE),
     ) {
         Column(words.fillMaxWidth()) { CardWords(note, media, onTick) }
     }
+}
+
+/**
+ * A card without a color of its own, apart from the page (owner): darker on a dark page, white on a light one. Its
+ * open note's page and the sheet between them take it too.
+ */
+@Composable
+internal fun boardCardColor(): Color {
+    val colors = MaterialTheme.colorScheme
+    return if (colors.background.luminance() < 0.5f) lerp(colors.background, Color.Black, 0.35f) else colors.surfaceContainerLowest
 }
 
 @Composable

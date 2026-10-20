@@ -64,7 +64,7 @@ class BoardScreenTest {
     private fun ComposeUiTest.openBoard() {
         setContent { BenbowApp(services) }
         onNodeWithText("Записки").click()
-        waitUntilAtLeastOneExists(hasText("Заметка…"), 5_000)
+        waitUntilAtLeastOneExists(hasContentDescription("Новая записка"), 5_000)
     }
 
     @Test
@@ -72,9 +72,12 @@ class BoardScreenTest {
         openBoard()
         waitUntilAtLeastOneExists(hasText("Здесь будут записки"), 5_000)
         screenshot("board-01-empty")
-        onNodeWithText("Заметка…").performClick()
-        waitUntilAtLeastOneExists(hasSetTextAction(), 5_000)
-        onNode(hasSetTextAction()).performTextInput("Купить ниток\nи пуговиц")
+        onNodeWithContentDescription("Новая записка").performClick()
+        // Keep's way: «Название» on top, «Заметка» under it.
+        waitUntilAtLeastOneExists(hasText("Название"), 5_000)
+        waitUntilAtLeastOneExists(hasText("Заметка"), 5_000)
+        onAllNodes(hasSetTextAction())[0].performTextInput("Купить ниток")
+        onAllNodes(hasSetTextAction())[1].performTextInput("и пуговиц")
         onNodeWithContentDescription("Назад").performClick()
         waitUntilDoesNotExist(hasSetTextAction(), 5_000)
         waitUntil(timeoutMillis = 5_000) { notes().others.singleOrNull()?.card?.title == "Купить ниток" }
@@ -169,7 +172,8 @@ class BoardScreenTest {
         onNodeWithTag(b).performClick()
         waitUntilAtLeastOneExists(hasContentDescription("Выбрано: 2"), 5_000)
         screenshot("board-09-chosen")
-        onNodeWithContentDescription("Закрепить").performClick()
+        onNodeWithContentDescription("Меню").performClick()
+        onNodeWithText("Закрепить").performClick()
         waitUntil(timeoutMillis = 5_000) { notes().pinned.map { it.id }.toSet() == setOf(b, c) }
         waitUntilAtLeastOneExists(hasText("Записки"), 5_000) // the bar gave way to the title
 
@@ -243,12 +247,16 @@ class BoardScreenTest {
     @Test
     fun aNewListIsWrittenBoxByBoxAndTickedOnItsCard() = runDesktopComposeUiTest(width = 412, height = 860) {
         openBoard()
-        onNodeWithContentDescription("Новый список").performClick()
+        onNodeWithContentDescription("Новая записка").performClick()
+        waitUntilAtLeastOneExists(hasText("Название"), 5_000)
+        onAllNodes(hasSetTextAction())[0].performTextInput("Продукты")
+        waitUntilAtLeastOneExists(hasContentDescription("Меню"), 5_000)
+        onNodeWithContentDescription("Меню").performClick()
+        onNodeWithText("Показать флажки").performClick()
         waitUntilAtLeastOneExists(hasText("Пункт списка"), 5_000)
         // The title's field, then the box's: a line break starts the next box.
         onAllNodes(hasSetTextAction())[1].performTextInput("молоко\nхлеб")
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasSetTextAction()).fetchSemanticsNodes().size == 3 }
-        onAllNodes(hasSetTextAction())[0].performTextInput("Продукты")
         waitForIdle()
         screenshot("board-10-list")
         onNodeWithContentDescription("Назад").performClick()
@@ -285,7 +293,7 @@ class BoardScreenTest {
         waitUntilAtLeastOneExists(hasText("Пункт списка"), 5_000)
         onNodeWithContentDescription("Назад").performClick()
         waitUntil(timeoutMillis = 5_000) {
-            notes().others.single().card.let { it.title == "Дела" && it.lines.size == 2 && it.lines.all { l -> l.box } }
+            notes().others.single().card.let { it.title == "" && it.lines.size == 3 && it.lines.all { l -> l.box } }
         }
 
         onNodeWithTag(id).performClick()
@@ -425,6 +433,22 @@ class BoardScreenTest {
         assertEquals(listOf("Купить батарейки"), notes().others.map { it.card.lines.single().text })
         assertEquals(emptyList(), runBlocking { repo.journal().first() })
         assertEquals("board", Settings(BenbowDb(driver)).get("capture.target"))
+    }
+
+    @Test
+    fun aNewNoteOnTopKeepsTheColumnsLevel() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val (a, b) = listOf("Первая\nс хвостом\nи ещё", "Вторая").map {
+            repo.createBoardNote(services.today(), JournalRepository.textBody(it))
+        }
+        openBoard()
+        waitUntilAtLeastOneExists(hasText("Вторая"), 5_000)
+        // A note made elsewhere (another device, the capture sheet) lands on top while the board is at its top.
+        val c = repo.createBoardNote(services.today(), JournalRepository.textBody("Третья"))
+        waitUntilAtLeastOneExists(hasText("Третья"), 5_000)
+        waitForIdle()
+        val tops = listOf(c, b).map { onNodeWithTag(it).fetchSemanticsNode().boundsInRoot.top }
+        assertEquals(tops[0], tops[1], "the first row starts level: $tops")
+        assertTrue(onNodeWithTag(a).fetchSemanticsNode().boundsInRoot.top > tops[0])
     }
 
     private fun ComposeUiTest.center(tag: String): Offset = onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.center

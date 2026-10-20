@@ -737,8 +737,6 @@
     <string name="board_pinned">Закреплённые</string>
     <string name="board_others">Другие</string>
     <string name="board_checked">Отмечено: %1$d</string>
-    <string name="board_hint">Заметка…</string>
-    <string name="board_new_list">Новый список</string>
     <string name="board_empty">Здесь будут записки</string>
     <string name="board_empty_hint">Списки, идеи, всё, что нужно под рукой. В дневник они не попадут, пока вы сами их туда не перенесёте.</string>
     <string name="board_as_list">Списком</string>
@@ -761,7 +759,9 @@
     <string name="board_add_item">Пункт списка</string>
     <string name="board_move_item">Перетащить пункт</string>
     <string name="board_remove_item">Убрать пункт</string>
-    <string name="board_title_hint">Заголовок</string>
+    <string name="board_title_hint">Название</string>
+    <string name="board_text_hint">Заметка</string>
+    <string name="board_new_note">Новая записка</string>
     <string name="board_tick">Отметить</string>
     <string name="board_archive_title">Архив</string>
     <string name="board_archive_empty">В архиве пусто</string>

@@ -12,6 +12,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.input.InputTransformation
+import androidx.compose.foundation.text.input.TextFieldDecorator
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -41,10 +46,13 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
@@ -60,6 +68,8 @@ import app.benbow.app.resources.background
 import app.benbow.app.resources.background_none
 import app.benbow.app.resources.board_hide_boxes
 import app.benbow.app.resources.board_show_boxes
+import app.benbow.app.resources.board_text_hint
+import app.benbow.app.resources.board_title_hint
 import app.benbow.app.resources.board_to_journal
 import app.benbow.app.resources.board_to_journal_day
 import app.benbow.app.resources.comment_hint
@@ -103,10 +113,13 @@ import app.benbow.core.content.Document
 import app.benbow.core.content.DocumentCodec
 import app.benbow.core.content.DocumentFormatException
 import app.benbow.core.content.MarkdownExporter
+import app.benbow.core.content.Span
+import app.benbow.core.content.TextBlock
 import app.benbow.core.content.toDocument
 import app.benbow.core.content.toPlainText
 import app.benbow.core.content.toRichText
 import app.benbow.core.text.Atom
+import app.benbow.core.text.BlockKeys
 import app.benbow.core.text.RichText
 import app.benbow.ui.editor.BenbowEditor
 import app.benbow.ui.editor.EditorState
@@ -136,6 +149,16 @@ import kotlin.coroutines.CoroutineContext
 internal class EditorViewModel(private val services: AppServices, route: Route.Editor) : ViewModel() {
     private val repo = services.repo
     private val board = route.board
+
+    /**
+     * A note on the board has its title apart, Keep's «Название» (owner): the document's first block when it is a
+     * heading, shown in a field of its own; the editors hold the rest, and every save puts it back on top.
+     */
+    val title: TextFieldState? = if (board) TextFieldState() else null
+    private var titleBlock: TextBlock? = null
+    private var titleKey = BlockKeys().next()
+    private var titleShown = ""
+    private var titleEdited = false
 
     /** A note on the board that is a list shows in the list editor (ADR-040, K4); this is its document then. */
     var listDocument by mutableStateOf<Document?>(null)
@@ -185,31 +208,54 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
 
     fun onEdited(text: RichText) {
         // While a list shows, the rich editor is out of sight: only the list's own changes count.
-        if (!reading && listDocument == null) session.onChange(text)
+        if (!reading && listDocument == null) session.onChange(withTitle(text.toDocument()).toRichText())
     }
 
     fun listChanged(document: Document) {
         listDocument = document
-        session.onChange(document.toRichText())
+        session.onChange(withTitle(document).toRichText())
     }
 
-    /** «Показать флажки»: each line a box. */
+    /** The title's field changed: by the owner (saved), or by a load showing it (nothing to save). */
+    fun titleChanged() {
+        val words = title?.text?.toString() ?: return
+        if (!titleEdited && words == titleShown) return
+        titleEdited = true
+        val body = body() ?: return
+        session.onChange(withTitle(body).toRichText())
+    }
+
+    /** «Показать флажки»: each line a box (a note's title stays its title). */
     fun showBoxes() {
-        val document = currentDocument() ?: return
-        val list = Checklists.toList(document)
+        val body = body() ?: return
+        val list = Checklists.toList(body, titled = !board)
         listDocument = list
         listVersion++
-        session.onChange(list.toRichText())
+        session.onChange(withTitle(list).toRichText())
     }
 
     /** «Скрыть флажки»: the boxes back to lines, in the rich editor. */
     fun hideBoxes() {
         val list = listDocument ?: return
         listDocument = null
-        start(DocumentCodec.encode(Checklists.toText(list)))
+        start(DocumentCodec.encode(withTitle(Checklists.toText(list))))
     }
 
-    fun currentDocument(): Document? = listDocument ?: editor?.model?.toDocument()
+    /** The whole document as it stands, title included. */
+    fun currentDocument(): Document? = body()?.let(::withTitle)
+
+    private fun body(): Document? = listDocument ?: editor?.model?.toDocument()
+
+    /** [body] with the note's title on top again: its block as it came while its words stay, a new heading else. */
+    private fun withTitle(body: Document): Document {
+        val words = title?.text?.toString() ?: return body
+        val head = when {
+            words.isBlank() -> null
+            titleBlock?.let(Checklists::words) == words -> titleBlock
+            else -> TextBlock(titleKey, style = TITLE_STYLE, children = listOf(Span(words)))
+        }
+        return Document(listOfNotNull(head) + body.blocks)
+    }
 
     /** Fills a new, still empty entry with a template; the draft starts right away. */
     fun applyTemplate(id: String, context: TemplateContext) {
@@ -220,16 +266,13 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
     /** Starts a new, still empty entry with [text] as its heading ("Написать об этом" from an event). */
     fun applyHeading(text: String) = start(Templates.heading(text))
 
-    /** Starts a new note on the board as a list: one open box to write in (☑ on the quick bar). */
-    fun applyChecklist() = start(JournalRepository.checklistBody())
-
     private fun start(body: String) {
         val text = DocumentCodec.decode(body).toRichText()
         show(text, head = shownHead)
         session.onChange(text)
     }
 
-    val isBlankNew: Boolean get() = entryId == null && editor?.model?.text?.isBlank() != false
+    val isBlankNew: Boolean get() = entryId == null && editor?.model?.text?.isBlank() != false && title?.text?.isBlank() != false
 
     /** For attachments and metadata: a new entry is created on the first one. */
     suspend fun ensureEntryId(): String = session.ensureEntry()
@@ -349,11 +392,20 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
     }
 
     private fun show(text: RichText, head: String?) {
-        val state = EditorState(text)
+        val document = text.toDocument()
+        // A note's title goes to its own field (board notes): the first block when it is a heading.
+        val first = (document.blocks.firstOrNull() as? TextBlock)?.takeIf { board && it.listItem == null && it.style in TITLE_STYLES }
+        val body = if (first != null) Document(document.blocks.drop(1)) else document
+        titleBlock = first
+        first?.let { titleKey = it.key }
+        titleShown = first?.let(Checklists::words).orEmpty()
+        titleEdited = false
+        title?.setTextAndPlaceCursorAtEnd(titleShown)
+        val state = EditorState(if (first != null) body.toRichText() else text)
         editor = state
         shownHead = head
-        clean = encode(state.model)
-        listDocument = text.toDocument().takeIf { board && Checklists.isList(it) }
+        clean = DocumentCodec.encode(document)
+        listDocument = body.takeIf { board && Checklists.isList(it) }
         listVersion++
     }
 
@@ -552,10 +604,15 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
         modifier = Modifier.attachOnDrop(services, vm::ensureEntryId, onHover = { dropping = it }, onLink = { href ->
             vm.editor?.takeIf { !vm.reading }?.insertAtom(Atom.LinkCard(href), atEnd = !editorFocused)
         }),
-        containerColor = noteColor ?: MaterialTheme.colorScheme.background,
+        // A note on the board: its card's color, the sheet it grew from (ADR-040).
+        containerColor = noteColor ?: if (route.board) boardCardColor() else MaterialTheme.colorScheme.background,
+        // A color outside the scheme has no content color of its own: the page's words and icons, as on the card.
+        contentColor = MaterialTheme.colorScheme.onSurface,
         topBar = {
             TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = noteColor ?: MaterialTheme.colorScheme.surface),
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = noteColor ?: if (route.board) boardCardColor() else MaterialTheme.colorScheme.surface,
+                ),
                 navigationIcon = {
                     BackButton {
                         vm.commit()
@@ -816,16 +873,13 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                 )
                 return@Column
             }
-            if (editor != null && vm.isBlankNew && route.board) {
-                LaunchedEffect(route.checklist) { if (route.checklist) vm.applyChecklist() }
-            }
             if (editor != null && vm.isBlankNew && !route.board) {
                 val context = templateContext(route.day)
                 LaunchedEffect(route.template) { route.template?.let { vm.applyTemplate(it, context) } }
                 LaunchedEffect(route.heading) { route.heading?.let(vm::applyHeading) }
                 TemplateRow { vm.applyTemplate(it, context) }
             }
-            if (editor != null && !vm.broken) {
+            if (editor != null && !vm.broken && !route.board) {
                 MetadataRow(
                     services,
                     mood = detail?.mood,
@@ -846,6 +900,13 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                     onMove = vm::moveAttachment,
                 )
             }
+            // A note's title on top (Keep's «Название»), then its words; its tags at the foot.
+            val title = vm.title
+            if (title != null && editor != null && !vm.broken && !vm.reading) {
+                LaunchedEffect(title) { snapshotFlow { title.text.toString() }.drop(1).collect { vm.titleChanged() } }
+                NoteTitle(title)
+            }
+            val fill = if (route.board) Modifier.weight(1f).fillMaxWidth() else Modifier.fillMaxSize()
             when {
                 vm.broken -> Text(
                     stringResource(Res.string.entry_broken),
@@ -854,25 +915,48 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                 )
 
                 editor != null && vm.listDocument != null -> key(vm.listVersion) {
-                    ChecklistEditor(vm.listDocument!!, vm::listChanged, Modifier.fillMaxSize(), focusFirst = route.entryId == null)
+                    ChecklistEditor(vm.listDocument!!, vm::listChanged, fill, focusFirst = route.entryId == null)
                 }
 
                 editor != null -> {
                     val focus = remember { FocusRequester() }
                     LaunchedEffect(editor) { snapshotFlow { editor.model }.drop(1).collect(vm::onEdited) }
                     LaunchedEffect(Unit) { if (route.entryId == null) focus.requestFocus() }
-                    BenbowEditor(
-                        state = editor,
-                        atoms = pictures,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .onFocusChanged { editorFocused = it.hasFocus }
-                            .focusRequester(focus)
-                            .verticalScroll(rememberScrollState())
-                            .padding(horizontal = 20.dp, vertical = 12.dp)
-                            .fillMaxWidth(),
-                    )
+                    Box(fill) {
+                        // A note's empty words say what goes there, as Keep's «Заметка».
+                        if (route.board && editor.model.text.isEmpty()) {
+                            Text(
+                                stringResource(Res.string.board_text_hint),
+                                Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        BenbowEditor(
+                            state = editor,
+                            atoms = pictures,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .onFocusChanged { editorFocused = it.hasFocus }
+                                .focusRequester(focus)
+                                .verticalScroll(rememberScrollState())
+                                .padding(horizontal = 20.dp, vertical = 12.dp)
+                                .fillMaxWidth(),
+                        )
+                    }
                 }
+            }
+            if (route.board && editor != null && !vm.broken) {
+                MetadataRow(
+                    services,
+                    mood = null,
+                    tags = detail?.tags.orEmpty(),
+                    onMood = vm::setMood,
+                    onAddTag = vm::addTag,
+                    onCreateTag = vm::createTag,
+                    onRemoveTag = vm::removeTag,
+                    withMood = false,
+                )
             }
         }
     }
@@ -913,3 +997,37 @@ private val INLINE_KINDS = setOf("image", "video", "voice", "audio")
 
 /** Kinds the feed never shows: «Показать в ленте» isn't offered for them (ADR-036 N6). */
 private val NOT_IN_FEED = setOf("comment", "system", "event", "reminder")
+
+/** A note's title is a heading of this level; one of any level read from elsewhere shows as its title too. */
+private const val TITLE_STYLE = "h3"
+private val TITLE_STYLES = setOf("h1", "h2", "h3")
+
+/** Keep's «Название»: a field of its own, a heading's size; Enter goes on to the words under it. */
+@Composable
+private fun NoteTitle(state: TextFieldState) {
+    val focus = LocalFocusManager.current
+    val onward = remember(state) {
+        InputTransformation {
+            if ('\n' in asCharSequence()) {
+                replace(0, length, asCharSequence().toString().replace("\n", ""))
+                focus.moveFocus(FocusDirection.Down)
+            }
+        }
+    }
+    val hint = stringResource(Res.string.board_title_hint)
+    BasicTextField(
+        state,
+        Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 8.dp),
+        inputTransformation = onward,
+        textStyle = MaterialTheme.typography.titleLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+        decorator = TextFieldDecorator { field ->
+            Box {
+                if (state.text.isEmpty()) {
+                    Text(hint, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                field()
+            }
+        },
+    )
+}

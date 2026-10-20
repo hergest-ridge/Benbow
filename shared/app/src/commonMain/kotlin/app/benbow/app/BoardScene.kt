@@ -98,6 +98,9 @@ internal class BoardStage {
     /** A new note from the + button: it comes out quicker. */
     val fresh: Boolean get() = sheet == sheetKey(null)
 
+    /** A new note closed empty: its sheet fades where it is (the + button stays as it is, as Keep's). */
+    val away: Boolean get() = sheet == SHEET_AWAY
+
     /** A note is out (or coming out): its card or the + button give their sheet to it. */
     val open: Boolean get() = visibility?.targetState == true
 
@@ -120,6 +123,9 @@ internal class BoardStage {
 
 internal fun sheetKey(id: String?) = "sheet-" + (id ?: "new")
 
+/** No card and no button: the sheet of a new note closed empty. */
+private const val SHEET_AWAY = "sheet-away"
+
 internal val LocalBoardStage = compositionLocalOf<BoardStage?> { null }
 
 @OptIn(ExperimentalSharedTransitionApi::class)
@@ -140,8 +146,9 @@ private fun BoardStageContent(board: NavEntry<Route>, note: NavEntry<Route>?, ba
     stage.visibility = visible
     stage.close = {
         focus.clearFocus(force = true)
-        // A new note that got its words shrinks into its new card; an empty one back into the + button.
-        stage.sheet = sheetKey(stage.entryId)
+        // A new note that got its words shrinks into its new card; an empty one fades (owner: never back into the + button,
+        // which stretched over the screen).
+        stage.sheet = stage.entryId?.let(::sheetKey) ?: SHEET_AWAY
         closing = true
     }
     // Once the sheet is back in its place the note's entry goes; one popped from elsewhere just goes.
@@ -161,7 +168,8 @@ private fun BoardStageContent(board: NavEntry<Route>, note: NavEntry<Route>?, ba
                 val wide = LocalWide.current
                 val tallest = maxHeight * 0.88f
                 val fresh = stage.fresh
-                AnimatedVisibility(visible, enter = if (fresh) QUICK_HOLD_IN else HOLD_IN, exit = HOLD_OUT) {
+                val exit = if (stage.away) AWAY_OUT else HOLD_OUT
+                AnimatedVisibility(visible, enter = if (fresh) QUICK_HOLD_IN else HOLD_IN, exit = exit) {
                     // During a pop from elsewhere (the browser's Back) the entry is already gone: nothing to show.
                     val entry = note ?: return@AnimatedVisibility
                     // Opening, the note's sheet lies above its card's; closing, below, so the card's words come back.
@@ -192,7 +200,7 @@ private fun BoardStageContent(board: NavEntry<Route>, note: NavEntry<Route>?, ba
                                         rememberSharedContentState(stage.sheet),
                                         this@AnimatedVisibility,
                                         enter = if (fresh) QUICK_HOLD_IN else HOLD_IN,
-                                        exit = HOLD_OUT,
+                                        exit = exit,
                                         boundsTransform = if (fresh) QUICK_SHEET else SHEET,
                                         zIndexInOverlay = if (opening) 1f else 0f,
                                         clipInOverlayDuringTransition = OverlayClip(CARD_SHAPE),
@@ -240,3 +248,4 @@ internal val QUICK_SHEET = BoundsTransform { _, _ -> tween(QUICK_MILLIS, easing 
 internal val QUICK_HOLD_IN = fadeIn(tween(QUICK_MILLIS), initialAlpha = 1f)
 internal val QUICK_HOLD_OUT = fadeOut(tween(QUICK_MILLIS), targetAlpha = 1f)
 private val QUICK_EDITOR_IN = fadeIn(tween(110, delayMillis = 80))
+private val AWAY_OUT = fadeOut(tween(QUICK_MILLIS))

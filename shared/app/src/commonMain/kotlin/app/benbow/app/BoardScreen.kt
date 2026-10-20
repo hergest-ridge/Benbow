@@ -1,6 +1,8 @@
 package app.benbow.app
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope.OverlayClip
 import androidx.compose.animation.core.Spring
@@ -8,6 +10,10 @@ import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -71,8 +77,10 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -107,6 +115,7 @@ import app.benbow.app.resources.board_as_list
 import app.benbow.app.resources.board_choose
 import app.benbow.app.resources.board_chosen
 import app.benbow.app.resources.board_color
+import app.benbow.app.resources.board_dial_close
 import app.benbow.app.resources.board_empty
 import app.benbow.app.resources.board_empty_hint
 import app.benbow.app.resources.board_found_none
@@ -116,7 +125,9 @@ import app.benbow.app.resources.board_kind_lists
 import app.benbow.app.resources.board_kind_pictures
 import app.benbow.app.resources.board_kind_sounds
 import app.benbow.app.resources.board_more_in_journal
+import app.benbow.app.resources.board_new_list
 import app.benbow.app.resources.board_new_note
+import app.benbow.app.resources.board_new_text
 import app.benbow.app.resources.board_others
 import app.benbow.app.resources.board_pin
 import app.benbow.app.resources.board_pinned
@@ -202,6 +213,10 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
         BoardDrag(grid, isCard = ::isNoteKey, canSwap = { a, b -> mode == BOARD && order.sameKind(a, b) }, move = order::move)
     }
     val swipe = remember { BoardSwipe() }
+    // Cards glide to new places while one is carried and for a moment after the board changed, never while it only
+    // scrolls (owner: a short card beside a long one flew down the screen). A card that has just scrolled out of a
+    // staggered grid in the shared transition's lookahead "moves away" to the grid's end, and a glide showed it going.
+    var changing by remember { mutableStateOf(true) }
     // A board at its top stays there as notes come and go: a new note shows on top and the columns start level
     // (owner: a staggered grid kept its old first note in place, a new one above it, and the columns out of step).
     var atTop by remember { mutableStateOf(true) }
@@ -218,6 +233,8 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
     val haptic = LocalHapticFeedback.current
     var chosen by remember { mutableStateOf(setOf<Any>()) }
     var coloring by remember { mutableStateOf(false) }
+    // The + button's choice (Keep's): words or a list.
+    var dial by remember { mutableStateOf(false) }
     val choose = remember {
         { key: Any ->
             haptic.performHapticFeedback(if (key in chosen) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn)
@@ -232,8 +249,14 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
     LaunchedEffect(mode) { unchoose() }
     NavigationBackHandler(
         rememberNavigationEventState(NavigationEventInfo.None),
-        isBackEnabled = (chosen.isNotEmpty() || mode != BOARD) && stage?.open != true,
-    ) { if (chosen.isNotEmpty()) unchoose() else mode = BOARD }
+        isBackEnabled = (chosen.isNotEmpty() || mode != BOARD || dial) && stage?.open != true,
+    ) {
+        when {
+            dial -> dial = false
+            chosen.isNotEmpty() -> unchoose()
+            else -> mode = BOARD
+        }
+    }
     val pinnedLabel = stringResource(Res.string.board_pinned)
     val othersLabel = stringResource(Res.string.board_others)
     val archivedLabel = stringResource(Res.string.board_in_archive)
@@ -361,9 +384,10 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
             nav.open(Route.Editor(note.id, note.entry.day, board = true))
         }
     }
-    val create: () -> Unit = {
+    val create: (Boolean) -> Unit = { list ->
+        dial = false
         stage?.opening(null, null)
-        nav.open(Route.Editor(null, services.today(), opened = services.now(), board = true))
+        nav.open(Route.Editor(null, services.today(), opened = services.now(), board = true, list = list))
     }
     val toJournalSearch = {
         services.searchFor.value = SearchQuery(words)
@@ -376,6 +400,12 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val side = if (wide) 16.dp else 8.dp
             val lanes = if (view.list) 1 else autoLanes(maxWidth - side * 2, if (wide) 240.dp else 160.dp).coerceAtMost(if (wide) 6 else 2)
+            remember(data, lanes) { changing = true }
+            LaunchedEffect(data, lanes) {
+                delay(1_000)
+                changing = false
+            }
+            val glide = GLIDE.takeIf { changing || drag.key != null || order.carried != null }
             // A list in a wide window is a readable column in the middle.
             val inset = if (view.list) max(side.value, (maxWidth.value - LIST_WIDTH) / 2).dp else side
             Column(Modifier.fillMaxSize().then(keys).focusRequester(focus).focusable()) {
@@ -425,6 +455,7 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
                             edge = with(density) { 64.dp.toPx() },
                             fastest = with(density) { 1600.dp.toPx() },
                             onChoose = choose,
+                            choosing = { chosen.isNotEmpty() },
                             onPinch = { step -> view.change(step < 0) },
                             swipe = swipe.takeIf { mode == BOARD },
                             onSwiped = { key -> archive(listOf(key as String), true) },
@@ -484,7 +515,7 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
                                         open,
                                         choose,
                                         tick,
-                                        Modifier.animateItem(placementSpec = GLIDE).glow(note.id == glowing),
+                                        Modifier.animateItem(placementSpec = glide).glow(note.id == glowing),
                                     )
                                 }
                             }
@@ -496,7 +527,7 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
                         }
                     }
                     drag.key?.let { key -> shown.firstOrNull { it.id == key }?.let { LiftedCard(it, drag, services.media) } }
-                    if (mode == BOARD) NewNoteButton(create, Modifier.align(Alignment.BottomEnd).padding(16.dp))
+                    if (mode == BOARD) NewNoteDial(dial, onDial = { dial = it }, onNew = create, Modifier.matchParentSize())
                 }
             }
         }
@@ -933,7 +964,7 @@ private fun ChooseMark(chosen: Boolean, onClick: () -> Unit, modifier: Modifier)
     }
 }
 
-/** The carried card above the grid: a little larger, with a shadow. */
+/** The carried card above the grid, with a shadow (owner: no growing). */
 @Composable
 private fun LiftedCard(note: BoardNote, drag: BoardDrag, media: Media) {
     val density = LocalDensity.current
@@ -944,9 +975,6 @@ private fun LiftedCard(note: BoardNote, drag: BoardDrag, media: Media) {
         Modifier.offset { drag.offset.round() }
             .requiredSize(with(density) { drag.size.width.toDp() }, with(density) { drag.size.height.toDp() })
             .graphicsLayer {
-                val scale = 1f + 0.04f * drag.lift.value
-                scaleX = scale
-                scaleY = scale
                 shadowElevation = 10.dp.toPx() * drag.lift.value
                 shape = CARD_SHAPE
                 clip = true
@@ -954,31 +982,94 @@ private fun LiftedCard(note: BoardNote, drag: BoardDrag, media: Media) {
     )
 }
 
-/** Keep's + button: a new note, its sheet growing out of the button (quicker than a card's). */
+/**
+ * Keep's + button: a tap shows what to start above it, «Текст» or «Список» (the + turns into ×; a tap beside or Back
+ * puts them away). The new note's sheet grows out of the button, quicker than a card's.
+ */
+@Composable
+private fun NewNoteDial(open: Boolean, onDial: (Boolean) -> Unit, onNew: (list: Boolean) -> Unit, modifier: Modifier) {
+    Box(modifier) {
+        AnimatedVisibility(open, enter = fadeIn(tween(DIAL_MILLIS)), exit = fadeOut(tween(DIAL_MILLIS))) {
+            Box(
+                Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.32f))
+                    .clickable(remember { MutableInteractionSource() }, indication = null) { onDial(false) },
+            )
+        }
+        Column(
+            Modifier.align(Alignment.BottomEnd).padding(16.dp),
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            val from = TransformOrigin(1f, 1f)
+            listOf(true to Res.string.board_new_list, false to Res.string.board_new_text).forEach { (list, label) ->
+                AnimatedVisibility(
+                    open,
+                    enter = fadeIn(tween(DIAL_MILLIS)) + scaleIn(tween(DIAL_MILLIS), initialScale = 0.8f, transformOrigin = from),
+                    exit = fadeOut(tween(90)) + scaleOut(tween(90), targetScale = 0.8f, transformOrigin = from),
+                ) {
+                    DialOption(if (list) Icons.CheckBox else Icons.TextFields, stringResource(label)) { onNew(list) }
+                }
+            }
+            NewNoteButton(open) { onDial(!open) }
+        }
+    }
+}
+
+@Composable
+private fun DialOption(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.height(48.dp).hand(),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        shadowElevation = 3.dp,
+    ) {
+        Row(Modifier.padding(start = 16.dp, end = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, Modifier.size(22.dp))
+            Text(label, Modifier.padding(start = 12.dp), style = MaterialTheme.typography.titleMedium)
+        }
+    }
+}
+
+/**
+ * The + button. A new note's sheet grows out of it; the button comes back at once, as it was (owner: as Keep's, no
+ * animation of it on the way back; growing back into it, it stretched over the screen), so it takes part in the move
+ * only at rest or leaving.
+ */
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-private fun NewNoteButton(onClick: () -> Unit, modifier: Modifier) {
+private fun NewNoteButton(dial: Boolean, onClick: () -> Unit) {
     val stage = LocalBoardStage.current
     val shared = LocalBoardShared.current
-    val open = stage?.open == true && stage.fresh
-    Box(modifier.size(FAB_SIZE)) {
+    val out = stage?.open == true && stage.fresh
+    val turn by animateFloatAsState(if (dial) 45f else 0f, tween(DIAL_MILLIS))
+    val label = stringResource(if (dial) Res.string.board_dial_close else Res.string.board_new_note)
+    val icon = Modifier.graphicsLayer { rotationZ = turn }
+    Box(Modifier.size(FAB_SIZE)) {
         if (shared == null) {
-            Fab(onClick, Modifier)
+            Fab(onClick, Modifier, label, icon)
         } else {
             with(shared) {
-                AnimatedVisibility(!open, enter = QUICK_HOLD_IN, exit = QUICK_HOLD_OUT) {
+                AnimatedVisibility(!out, enter = EnterTransition.None, exit = QUICK_HOLD_OUT) {
+                    val moving = transition.isRunning && transition.targetState != EnterExitState.PostExit
                     Fab(
                         onClick,
-                        Modifier.sharedBounds(
-                            rememberSharedContentState(sheetKey(null)),
-                            this,
-                            enter = QUICK_HOLD_IN,
-                            exit = QUICK_HOLD_OUT,
-                            boundsTransform = QUICK_SHEET,
-                            zIndexInOverlay = 0.5f,
-                            clipInOverlayDuringTransition = OverlayClip(FAB_SHAPE),
-                        ),
-                        Modifier.animateEnterExit(enter = WORDS_IN, exit = WORDS_OUT),
+                        if (moving) {
+                            Modifier
+                        } else {
+                            Modifier.sharedBounds(
+                                rememberSharedContentState(sheetKey(null)),
+                                this,
+                                enter = EnterTransition.None,
+                                exit = QUICK_HOLD_OUT,
+                                boundsTransform = QUICK_SHEET,
+                                zIndexInOverlay = 0.5f,
+                                clipInOverlayDuringTransition = OverlayClip(FAB_SHAPE),
+                            )
+                        },
+                        label,
+                        Modifier.animateEnterExit(enter = EnterTransition.None, exit = WORDS_OUT).then(icon),
                     )
                 }
             }
@@ -986,11 +1077,13 @@ private fun NewNoteButton(onClick: () -> Unit, modifier: Modifier) {
     }
 }
 
+private const val DIAL_MILLIS = 150
+
 private val FAB_SIZE = 56.dp
 private val FAB_SHAPE = RoundedCornerShape(16.dp)
 
 @Composable
-private fun Fab(onClick: () -> Unit, modifier: Modifier, icon: Modifier = Modifier) {
+private fun Fab(onClick: () -> Unit, modifier: Modifier, label: String, icon: Modifier = Modifier) {
     Surface(
         onClick = onClick,
         modifier = modifier.size(FAB_SIZE).hand(),
@@ -999,6 +1092,6 @@ private fun Fab(onClick: () -> Unit, modifier: Modifier, icon: Modifier = Modifi
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
         shadowElevation = 6.dp,
     ) {
-        Box(contentAlignment = Alignment.Center) { Icon(Icons.Add, stringResource(Res.string.board_new_note), icon.size(28.dp)) }
+        Box(contentAlignment = Alignment.Center) { Icon(Icons.Add, label, icon.size(28.dp)) }
     }
 }

@@ -244,6 +244,16 @@ internal object Icons {
         "M16,9V4l1,0c0.55,0 1,-0.45 1,-1v0c0,-0.55 -0.45,-1 -1,-1H7C6.45,2 6,2.45 6,3v0c0,0.55 0.45,1 1,1l1,0v5" +
             "c0,1.66 -1.34,3 -3,3h0v2h5.97v7l1,1l1,-1v-7H19v-2h0C17.34,12 16,10.66 16,9z",
     )
+
+    /** A note not pinned on the board ("PushPin", outlined). */
+    val PinOutline = icon(
+        "PinOutline",
+        "M14,4v5c0,1.12 0.37,2.16 1,3H9c0.65,-0.86 1,-1.9 1,-3V4h4m3,-2H7c-0.55,0 -1,0.45 -1,1s0.45,1 1,1h1v5" +
+            "c0,1.66 -1.34,3 -3,3v2h5.97v7l1,1 1,-1v-7H19v-2c-1.66,0 -3,-1.34 -3,-3V4h1c0.55,0 1,-0.45 1,-1s-0.45,-1 -1,-1z",
+    )
+
+    /** A new note of words on the board ("TextFields"). */
+    val TextFields = icon("TextFields", "M2.5,4v3h5v12h3V7h5V4H2.5zM21.5,9h-9v3h3v7h3v-7h3V9z")
     val Unarchive = icon(
         "Unarchive",
         "M20.55,5.22l-1.39,-1.68C18.88,3.21 18.47,3 18,3H6c-0.47,0 -0.88,0.21 -1.15,0.55L3.46,5.22C3.17,5.57 3,6.01 3,6.5V19" +

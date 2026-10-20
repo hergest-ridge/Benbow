@@ -146,7 +146,8 @@ internal sealed interface Route {
     /**
      * [entryId] = null opens a new entry ([template] fills it, or [heading] starts it, e.g. an event's title);
      * [opened] keeps two new-entry screens apart. [readOnly] opens it as a post with its comments (from the feed);
-     * the menu switches to editing. [board]: a note opened on the board (ADR-040), a new one made there.
+     * the menu switches to editing. [board]: a note opened on the board (ADR-040), a new one made there; [list]: a new
+     * one that starts as a list (the + button's «Список»).
      */
     data class Editor(
         val entryId: String?,
@@ -156,6 +157,7 @@ internal sealed interface Route {
         val readOnly: Boolean = false,
         val heading: String? = null,
         val board: Boolean = false,
+        val list: Boolean = false,
     ) : Route
 
     data class History(val entryId: String) : Route

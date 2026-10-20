@@ -55,9 +55,12 @@ import org.jetbrains.compose.resources.stringResource
 
 private enum class Picker { Color, Highlight, Callout }
 
-/** Formatting bar shown above the keyboard. Buttons never take focus, so the selection survives taps. */
+/**
+ * Formatting bar shown above the keyboard. Buttons never take focus, so the selection survives taps. [onChecklist]
+ * takes the checklist button's place where a checklist is something else (a note on the board turns into its list).
+ */
 @Composable
-fun EditorToolbar(state: EditorState, modifier: Modifier = Modifier) {
+fun EditorToolbar(state: EditorState, modifier: Modifier = Modifier, onChecklist: (() -> Unit)? = null) {
     var picker by remember { mutableStateOf<Picker?>(null) }
     val marks = state.activeMarks
     val paragraph = state.currentParagraph
@@ -117,7 +120,7 @@ fun EditorToolbar(state: EditorState, modifier: Modifier = Modifier) {
                 Tool("•", active = paragraph.list == ListKind.Bullet) { state.toggleList(ListKind.Bullet) }
                 Tool("1.", active = paragraph.list == ListKind.Number) { state.toggleList(ListKind.Number) }
                 Tool(EditorIcons.Checklist, stringResource(Res.string.tool_checklist), active = paragraph.list == ListKind.Check) {
-                    state.toggleList(ListKind.Check)
+                    onChecklist?.invoke() ?: state.toggleList(ListKind.Check)
                 }
                 Tool("«", enabled = paragraph.list != null) { state.indent(-1) }
                 Tool("»", enabled = paragraph.list != null) { state.indent(1) }

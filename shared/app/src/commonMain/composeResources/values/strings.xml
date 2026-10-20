@@ -762,6 +762,9 @@
     <string name="board_title_hint">Название</string>
     <string name="board_text_hint">Заметка</string>
     <string name="board_new_note">Новая записка</string>
+    <string name="board_new_text">Текст</string>
+    <string name="board_new_list">Список</string>
+    <string name="board_dial_close">Закрыть</string>
     <string name="board_tick">Отметить</string>
     <string name="board_archive_title">Архив</string>
     <string name="board_archive_empty">В архиве пусто</string>

@@ -67,11 +67,14 @@ import app.benbow.app.resources.attachments
 import app.benbow.app.resources.background
 import app.benbow.app.resources.background_none
 import app.benbow.app.resources.board_hide_boxes
+import app.benbow.app.resources.board_pin
 import app.benbow.app.resources.board_show_boxes
 import app.benbow.app.resources.board_text_hint
 import app.benbow.app.resources.board_title_hint
 import app.benbow.app.resources.board_to_journal
 import app.benbow.app.resources.board_to_journal_day
+import app.benbow.app.resources.board_unarchive
+import app.benbow.app.resources.board_unpin
 import app.benbow.app.resources.comment_hint
 import app.benbow.app.resources.comments
 import app.benbow.app.resources.comments_count
@@ -103,9 +106,11 @@ import app.benbow.client.TagRef
 import app.benbow.client.TemplateContext
 import app.benbow.client.Templates
 import app.benbow.client.addTag
+import app.benbow.client.archiveOnBoard
 import app.benbow.client.createBoardNote
 import app.benbow.client.createTag
 import app.benbow.client.effectiveVeil
+import app.benbow.client.pinOnBoard
 import app.benbow.client.removeTag
 import app.benbow.core.board.Board
 import app.benbow.core.content.Checklists
@@ -120,6 +125,7 @@ import app.benbow.core.content.toPlainText
 import app.benbow.core.content.toRichText
 import app.benbow.core.text.Atom
 import app.benbow.core.text.BlockKeys
+import app.benbow.core.text.BlockStyle
 import app.benbow.core.text.RichText
 import app.benbow.ui.editor.BenbowEditor
 import app.benbow.ui.editor.EditorState
@@ -200,6 +206,11 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
 
     init {
         if (route.entryId == null) show(DocumentCodec.decode(JournalRepository.emptyBody()).toRichText(), head = null)
+        // «Список» from the + button: a list from the start, made on its first words.
+        if (route.entryId == null && board && route.list) {
+            listDocument = Checklists.toList(Document(emptyList()), titled = false)
+            listVersion++
+        }
         @OptIn(ExperimentalCoroutinesApi::class)
         viewModelScope.launch {
             session.entryIdFlow.filterNotNull().flatMapLatest { repo.entry(it) }.filterNotNull().collect(::onEntry)
@@ -284,6 +295,12 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
     fun toggleFavorite() = withEntry { repo.setFavorite(it, detail?.favorite != true) }
 
     fun togglePinned() = withEntry { repo.setPinned(it, detail?.pinned != true) }
+
+    /** A note on the board: pinned among the first ones, or not (ADR-040). */
+    fun togglePinnedOnBoard() = withEntry { repo.pinOnBoard(it, detail?.fields?.get(Board.PIN) != "true") }
+
+    /** A note in the board's archive back on the board, in its place. */
+    fun unarchive() = withEntry { repo.archiveOnBoard(it, false) }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val commentCount = session.entryIdFlow.filterNotNull().flatMapLatest { repo.commentCount(it) }
@@ -642,6 +659,23 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                             Text(" ${attachments.size}", color = tint, style = MaterialTheme.typography.labelLarge)
                         }
                     }
+                    // A note on the board, Keep's way: its pin beside the star, or the way out of the archive (ADR-040).
+                    val boardNote = route.board || detail?.let { Board.onBoard(it.fields) } == true
+                    if (boardNote && !vm.reading && detail?.inTrash != true) {
+                        if (detail?.fields?.get(Board.ARCHIVED) == "true") {
+                            IconButton(vm::unarchive, modifier = Modifier.hand()) {
+                                Icon(Icons.Unarchive, stringResource(Res.string.board_unarchive))
+                            }
+                        } else {
+                            val pinned = detail?.fields?.get(Board.PIN) == "true"
+                            IconButton(vm::togglePinnedOnBoard, modifier = Modifier.hand()) {
+                                Icon(
+                                    if (pinned) Icons.Pin else Icons.PinOutline,
+                                    stringResource(if (pinned) Res.string.board_unpin else Res.string.board_pin),
+                                )
+                            }
+                        }
+                    }
                     val favorite = detail?.favorite == true
                     IconButton(vm::toggleFavorite, modifier = Modifier.hand()) {
                         Icon(
@@ -696,22 +730,14 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                         vm.startEditing()
                                     }, modifier = Modifier.hand())
                                 }
-                                DropdownMenuItem(text = {
-                                    Text(
-                                        stringResource(
-                                            if (detail?.pinned ==
-                                                true
-                                            ) {
-                                                Res.string.unpin
-                                            } else {
-                                                Res.string.pin
-                                            },
-                                        ),
-                                    )
-                                }, onClick = {
-                                    menu = false
-                                    vm.togglePinned()
-                                }, modifier = Modifier.hand())
+                                if (!route.board) {
+                                    DropdownMenuItem(text = {
+                                        Text(stringResource(if (detail?.pinned == true) Res.string.unpin else Res.string.pin))
+                                    }, onClick = {
+                                        menu = false
+                                        vm.togglePinned()
+                                    }, modifier = Modifier.hand())
+                                }
                                 if (!vm.reading) {
                                     DropdownMenuItem(
                                         text = {
@@ -809,7 +835,8 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                             services.scope.launch { vm.ensureEntryId().let { id -> nav.open(Route.Drawing(id, null)) } }
                         }, modifier = Modifier.hand()) { Icon(Icons.Brush, stringResource(Res.string.drawing_add)) }
                     }
-                    if (vm.listDocument == null) EditorToolbar(editor)
+                    // On the board a checklist is the note's own list (Keep's «Показать флажки»), never boxes in its text.
+                    if (vm.listDocument == null) EditorToolbar(editor, onChecklist = vm::showBoxes.takeIf { route.board })
                 }
             }
         },
@@ -923,8 +950,12 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                     LaunchedEffect(editor) { snapshotFlow { editor.model }.drop(1).collect(vm::onEdited) }
                     LaunchedEffect(Unit) { if (route.entryId == null) focus.requestFocus() }
                     Box(fill) {
-                        // A note's empty words say what goes there, as Keep's «Заметка».
-                        if (route.board && editor.model.text.isEmpty()) {
+                        // A note's empty words say what goes there, as Keep's «Заметка»: over a plain empty line only
+                        // (a list's marker or a heading there would show through it).
+                        val plain = editor.model.paragraphs.singleOrNull()?.let {
+                            it.list == null && it.style == BlockStyle.Normal && it.callout == null && it.atom == null
+                        } == true
+                        if (route.board && plain && editor.model.text.isEmpty()) {
                             Text(
                                 stringResource(Res.string.board_text_hint),
                                 Modifier.padding(horizontal = 20.dp, vertical = 12.dp),

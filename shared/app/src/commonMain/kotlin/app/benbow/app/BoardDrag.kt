@@ -41,8 +41,8 @@ import kotlin.math.min
 import kotlin.math.sign
 
 /**
- * Carrying a card to another place in a staggered grid (ADR-040; the K0 spike, meant for K3). A finger lifts a card
- * after a long press, a mouse after a few pixels of dragging. The lifted card follows the pointer above the grid while
+ * Carrying a card to another place in a staggered grid (ADR-040). A finger lifts a card that moves after a long press,
+ * a mouse after a few pixels of dragging. The lifted card follows the pointer above the grid while
  * its own place, left blank, moves to the card under the pointer and the others glide aside (`animateItem`); near the
  * grid's top and bottom the grid scrolls by itself. Let go, the card lands in its place.
  *
@@ -68,7 +68,7 @@ internal class BoardDrag(
     var size by mutableStateOf(IntSize.Zero)
         private set
 
-    /** 0 resting, 1 lifted: the card's scale and shadow. */
+    /** 0 resting, 1 lifted: the card's shadow. */
     val lift = Animatable(0f)
 
     /** The board's layout, the grid's place in it and the blank place's bounds as drawn (gliding included). */
@@ -217,8 +217,10 @@ internal class BoardSwipe {
 
 /**
  * The board's gestures, taken before the grid sees them (it scrolls only when they let it): a finger held still on a
- * card lifts it (no move before letting go: [onChoose]); a finger that moves first scrolls; two fingers pinch for
- * fewer or more columns ([onPinch] with -1 or +1). A mouse drags a card at once and clicks it open as usual.
+ * card, then moved, carries it; let go without a move it chooses the card ([onChoose]); a finger that moves first
+ * scrolls; two fingers pinch for fewer or more columns ([onPinch] with -1 or +1). A mouse drags a card at once and
+ * clicks it open as usual. While cards are chosen ([choosing]) a long press chooses at once and nothing is carried
+ * (owner: once choosing has begun, a gesture never turns into a move).
  * The callbacks are read once (the gestures live as long as [drag]): they should reach the state they change.
  */
 internal fun Modifier.boardGestures(
@@ -228,6 +230,7 @@ internal fun Modifier.boardGestures(
     edge: Float,
     fastest: Float,
     onChoose: (Any) -> Unit,
+    choosing: () -> Boolean,
     onPinch: (Int) -> Unit,
     /** A carried card was let go where it now is (its place is to be kept). */
     onDrop: (Any) -> Unit,
@@ -238,17 +241,22 @@ internal fun Modifier.boardGestures(
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
         val card = drag.cardAt(down.position).takeIf { drag.key == null }
-        if (down.type == PointerType.Mouse) {
-            if (card == null || !currentEvent.buttons.isPrimaryPressed) return@awaitEachGesture
-            val start = awaitSlop(down) ?: return@awaitEachGesture // a click: the card opens
+
+        // Lifts the card where it was pressed and carries it until it is let go; it lands where it then is.
+        suspend fun AwaitPointerEventScope.carryCard(card: LazyStaggeredGridItemInfo, now: Offset) {
             drag.pickUp(card, down.position)
             scope.launch { drag.lift.animateTo(1f, tween(120)) }
             scope.launch { drag.scrollNearEdges(edge, fastest, haptic) }
-            drag.follow(start.position, haptic)
+            drag.follow(now, haptic)
             carry(drag, haptic)
             onDrop(card.key)
             haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
             scope.launch { drag.land() }
+        }
+        if (down.type == PointerType.Mouse) {
+            if (card == null || !currentEvent.buttons.isPrimaryPressed || choosing()) return@awaitEachGesture
+            val start = awaitSlop(down) ?: return@awaitEachGesture // a click: the card opens
+            carryCard(card, start.position)
             return@awaitEachGesture
         }
         val still = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) { awaitMoveOrUp(down) }
@@ -261,19 +269,16 @@ internal fun Modifier.boardGestures(
                 scope.launch { if (swipe.settle(velocity, 1200.dp.toPx())) onSwiped(card.key) }
             }
 
+            still == null && card != null && choosing() -> {
+                onChoose(card.key)
+                swallow()
+            }
+
+            // Nothing shows until the finger moves (owner: no card growing as it is chosen); let go first, it is chosen.
             still == null && card != null -> {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                drag.pickUp(card, down.position)
-                scope.launch { drag.lift.animateTo(1f, tween(120)) }
-                scope.launch { drag.scrollNearEdges(edge, fastest, haptic) }
-                val moved = carry(drag, haptic, slopFrom = down.position)
-                if (moved) {
-                    onDrop(card.key)
-                    haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
-                } else {
-                    onChoose(card.key)
-                }
-                scope.launch { drag.land() }
+                val start = awaitHeldSlop(down)
+                if (start == null) onChoose(card.key) else carryCard(card, start.position)
             }
 
             still != Press.Up -> watchForPinch(onPinch) // a scroll, a long press beside the cards, a swipe beside them
@@ -328,16 +333,37 @@ private suspend fun AwaitPointerEventScope.awaitSlop(down: PointerInputChange): 
     }
 }
 
-/** Follows the pointer until it is let go, keeping every change from the grid and the card; returns whether it moved. */
-private suspend fun AwaitPointerEventScope.carry(drag: BoardDrag, haptic: HapticFeedback, slopFrom: Offset? = null): Boolean {
-    var moved = slopFrom == null
+/**
+ * A finger held after a long press: the change that went past the slop, or null when it was let go first. Every change
+ * meanwhile is kept from the grid and the card (no scroll, no click).
+ */
+private suspend fun AwaitPointerEventScope.awaitHeldSlop(down: PointerInputChange): PointerInputChange? {
     while (true) {
         val event = awaitPointerEvent(PointerEventPass.Initial)
-        val change = event.changes.firstOrNull() ?: return moved
+        val change = event.changes.firstOrNull { it.id == down.id } ?: return null
         event.changes.forEach { it.consume() }
-        if (!change.pressed) return moved
-        if (!moved && (change.position - slopFrom!!).getDistance() > viewConfiguration.touchSlop) moved = true
-        if (moved) drag.follow(change.position, haptic)
+        if (!change.pressed) return null
+        if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) return change
+    }
+}
+
+/** Keeps the rest of a gesture from the grid and the cards until every finger is up. */
+private suspend fun AwaitPointerEventScope.swallow() {
+    while (true) {
+        val event = awaitPointerEvent(PointerEventPass.Initial)
+        event.changes.forEach { it.consume() }
+        if (event.changes.none { it.pressed }) return
+    }
+}
+
+/** Follows the pointer until it is let go, keeping every change from the grid and the card. */
+private suspend fun AwaitPointerEventScope.carry(drag: BoardDrag, haptic: HapticFeedback) {
+    while (true) {
+        val event = awaitPointerEvent(PointerEventPass.Initial)
+        val change = event.changes.firstOrNull() ?: return
+        event.changes.forEach { it.consume() }
+        if (!change.pressed) return
+        drag.follow(change.position, haptic)
     }
 }
 

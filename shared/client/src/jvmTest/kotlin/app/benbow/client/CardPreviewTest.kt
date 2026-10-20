@@ -81,8 +81,12 @@ class CardPreviewTest {
             ),
             card.lines,
         )
-        val long = cardOf(Document(List(30) { text("строка $it") }))
-        assertEquals(12, long.lines.size)
+        val long = cardOf(Document(List(40) { text("строка $it") }))
+        assertEquals(30, long.lines.size)
         assertTrue(long.more)
+        // A long paragraph: enough for a card of some 26 rows, the rest left to the note.
+        val essay = cardOf(Document(listOf(text("слово ".repeat(500)))))
+        assertTrue(essay.more)
+        assertTrue(essay.lines.single().text.length in 500..600, "${essay.lines.single().text.length}")
     }
 }

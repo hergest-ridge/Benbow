@@ -35,7 +35,10 @@ data class CardLine(
     val key: String? = null,
 )
 
-/** The card of [document]: at most [CARD_LINES] lines of up to [CARD_LINE] characters, spoilers left out (ADR-031). */
+/**
+ * The card of [document]: at most [CARD_LINES] lines of up to [CARD_LINE] characters, [CARD_CHARS] in all, spoilers
+ * left out (ADR-031). Enough for Keep's card of some 26 rows of text; the card itself cuts what doesn't fit.
+ */
 internal fun cardOf(document: Document): CardPreview {
     val blocks = document.blocks.filter { it is TextBlock || it is LinkCardBlock || it is CodeBlock }
     val first = blocks.firstOrNull() as? TextBlock
@@ -44,6 +47,7 @@ internal fun cardOf(document: Document): CardPreview {
     var ticked = 0
     var more = false
     var number = 0
+    var chars = 0
     for (block in if (titled) blocks.drop(1) else blocks) {
         val item = (block as? TextBlock)?.listItem
         number = if (item == "number") number + 1 else 0
@@ -59,13 +63,15 @@ internal fun cardOf(document: Document): CardPreview {
         val heading = (block as? TextBlock)?.style?.startsWith("h") == true
         text(block).split('\n').forEachIndexed { i, line ->
             val box = item == "check" && i == 0
-            if (lines.size == CARD_LINES) {
+            if (lines.size == CARD_LINES || chars >= CARD_CHARS) {
                 more = more || line.isNotBlank()
                 return@forEachIndexed
             }
-            more = more || line.length > CARD_LINE
+            val room = minOf(CARD_LINE, CARD_CHARS - chars)
+            more = more || line.length > room
+            chars += minOf(line.length, room)
             lines += CardLine(
-                line.take(CARD_LINE).trimEnd(),
+                line.take(room).trimEnd(),
                 box = box,
                 bullet = bullet.takeIf { i == 0 },
                 heading = heading,
@@ -87,5 +93,6 @@ private fun text(block: Any): String = when (block) {
 }
 
 private const val SPOILER = "spoiler"
-private const val CARD_LINES = 12
-private const val CARD_LINE = 200
+private const val CARD_LINES = 30
+private const val CARD_LINE = 600
+private const val CARD_CHARS = 1500

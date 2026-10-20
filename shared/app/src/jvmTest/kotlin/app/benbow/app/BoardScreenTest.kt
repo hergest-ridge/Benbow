@@ -6,6 +6,7 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -71,7 +72,11 @@ class BoardScreenTest {
         openBoard()
         waitUntilAtLeastOneExists(hasText("Здесь будут записки"), 5_000)
         screenshot("board-01-empty")
+        // The + button offers words or a list (Keep's).
         onNodeWithContentDescription("Новая записка").performClick()
+        waitUntilAtLeastOneExists(hasText("Список"), 5_000)
+        screenshot("board-01b-dial")
+        onNodeWithText("Текст").performClick()
         // Keep's way: «Название» on top, «Заметка» under it.
         waitUntilAtLeastOneExists(hasText("Название"), 5_000)
         waitUntilAtLeastOneExists(hasText("Заметка"), 5_000)
@@ -247,12 +252,9 @@ class BoardScreenTest {
     fun aNewListIsWrittenBoxByBoxAndTickedOnItsCard() = runDesktopComposeUiTest(width = 412, height = 860) {
         openBoard()
         onNodeWithContentDescription("Новая записка").performClick()
-        waitUntilAtLeastOneExists(hasText("Название"), 5_000)
-        onAllNodes(hasSetTextAction())[0].performTextInput("Продукты")
-        waitUntilAtLeastOneExists(hasContentDescription("Меню"), 5_000)
-        onNodeWithContentDescription("Меню").performClick()
-        onNodeWithText("Показать флажки").performClick()
+        onNodeWithText("Список").performClick()
         waitUntilAtLeastOneExists(hasText("Пункт списка"), 5_000)
+        onAllNodes(hasSetTextAction())[0].performTextInput("Продукты")
         // The title's field, then the box's: a line break starts the next box.
         onAllNodes(hasSetTextAction())[1].performTextInput("молоко\nхлеб")
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasSetTextAction()).fetchSemanticsNodes().size == 3 }
@@ -448,6 +450,146 @@ class BoardScreenTest {
         val tops = listOf(c, b).map { onNodeWithTag(it).fetchSemanticsNode().boundsInRoot.top }
         assertEquals(tops[0], tops[1], "the first row starts level: $tops")
         assertTrue(onNodeWithTag(a).fetchSemanticsNode().boundsInRoot.top > tops[0])
+    }
+
+    @Test
+    fun aShortCardBesideALongOneLeavesWithTheScrollNeverDownTheScreen() = runDesktopComposeUiTest(width = 412, height = 600) {
+        val short = repo.createBoardNote(
+            services.today(),
+            JournalRepository.textBody(listOf("Раз, два, три.", "четыре", "пять").joinToString(Char(10).toString())),
+        )
+        val long = repo.createBoardNote(
+            services.today(),
+            JournalRepository.textBody(
+                List(40) {
+                    "Строка $it, в которой довольно много слов, чтобы она переносилась"
+                }.joinToString(Char(10).toString()),
+            ),
+        )
+        openBoard()
+        waitUntilAtLeastOneExists(hasText("Раз, два, три.", substring = true), 5_000)
+        fun node(tag: String) = onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().firstOrNull()
+        mainClock.advanceTimeBy(1_500) // the board settled: no glide from its first load
+        mainClock.autoAdvance = false
+        val seen = ArrayList<Pair<Float, Float>>()
+        val astray = ArrayList<Pair<Float, Float>>()
+        repeat(40) {
+            onNodeWithTag(long).performMouseInput {
+                moveTo(center)
+                scroll(0.5f)
+            }
+            repeat(12) {
+                mainClock.advanceTimeByFrame()
+                val l = node(long)?.positionInRoot?.y ?: return@repeat
+                val s = node(short) ?: return@repeat
+                seen += l to s.positionInRoot.y
+                // In sight (its clipped bounds not empty) it is beside the long card's top, as the grid keeps it.
+                if (s.boundsInRoot.height > 0f && s.positionInRoot.y != l) astray += l to s.positionInRoot.y
+            }
+        }
+        mainClock.autoAdvance = true
+        assertTrue(seen.first().first > seen.last().first, "the board scrolled: $seen")
+        assertEquals(emptyList(), astray, "a short card went its own way")
+    }
+
+    @Test
+    fun aLongNoteEndsItsCardInAnEllipsis() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val long = repo.createBoardNote(
+            services.today(),
+            JournalRepository.textBody(
+                List(40) {
+                    "строка $it"
+                }.joinToString(Char(10).toString()),
+            ),
+        )
+        openBoard()
+        waitUntilAtLeastOneExists(hasText("строка 0"), 5_000)
+        // Some 26 rows of text, the last one ending in an ellipsis; the rest stays in the note.
+        waitUntilAtLeastOneExists(hasText("строка 25…"), 5_000)
+        assertTrue(onAllNodes(hasText("строка 26", substring = true)).fetchSemanticsNodes().isEmpty())
+        assertTrue(onNodeWithTag(long).fetchSemanticsNode().boundsInRoot.height < 860f)
+        screenshot("board-14-long-card")
+    }
+
+    @Test
+    fun whileChoosingALongPressChoosesAndNeverCarries() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val (a, b) = listOf("Альфа", "Бета").map { repo.createBoardNote(services.today(), JournalRepository.textBody(it)) }
+        openBoard()
+        waitUntilAtLeastOneExists(hasText("Бета"), 5_000)
+        onNodeWithTag(b).performTouchInput {
+            down(center)
+            advanceEventTime(800)
+            up()
+        }
+        waitUntilAtLeastOneExists(hasContentDescription("Выбрано: 1"), 5_000)
+        // A long press on another card, then a move over the first one: it is chosen, and nothing moves.
+        val to = center(b)
+        onNodeWithTag(a).performTouchInput {
+            down(center)
+            advanceEventTime(800)
+            (1..10).forEach { moveTo(center + (to - center) * (it / 10f)) }
+            up()
+        }
+        waitUntilAtLeastOneExists(hasContentDescription("Выбрано: 2"), 5_000)
+        waitForIdle()
+        assertEquals(listOf(b, a), notes().others.map { it.id })
+    }
+
+    @Test
+    fun aNotesPinAndItsWayOutOfTheArchiveAreBesideTheStar() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val (a, b) = listOf("Альфа", "Бета").map { repo.createBoardNote(services.today(), JournalRepository.textBody(it)) }
+        repo.archiveOnBoard(b, true)
+        openBoard()
+        onNodeWithTag(a).performClick()
+        waitUntilAtLeastOneExists(hasContentDescription("Закрепить"), 5_000)
+        onNodeWithContentDescription("Закрепить").performClick()
+        waitUntil(timeoutMillis = 5_000) { notes().pinned.map { it.id } == listOf(a) }
+        waitUntilAtLeastOneExists(hasContentDescription("Открепить"), 5_000)
+        screenshot("board-15-pinned-note")
+        onNodeWithContentDescription("Меню").performClick()
+        assertTrue(onAllNodes(hasText("Закрепить")).fetchSemanticsNodes().isEmpty(), "the pin is beside the star, not in the menu")
+        onNodeWithContentDescription("Меню").performClick()
+        onNodeWithContentDescription("Назад").performClick()
+        waitUntilDoesNotExist(hasSetTextAction(), 5_000)
+
+        onNodeWithContentDescription("Архив").performClick()
+        waitUntilAtLeastOneExists(hasText("Бета"), 5_000)
+        onNodeWithTag(b).performClick()
+        waitUntilAtLeastOneExists(hasContentDescription("Из архива"), 5_000)
+        onNodeWithContentDescription("Из архива").performClick()
+        waitUntil(timeoutMillis = 5_000) { notes().others.map { it.id } == listOf(b) }
+        waitUntilAtLeastOneExists(hasContentDescription("Закрепить"), 5_000)
+    }
+
+    @Test
+    fun theToolbarsCheckboxTurnsANoteIntoItsListAndThePlaceholderNeverSitsOnABox() = runDesktopComposeUiTest(width = 412, height = 860) {
+        openBoard()
+        onNodeWithContentDescription("Новая записка").performClick()
+        onNodeWithText("Текст").performClick()
+        waitUntilAtLeastOneExists(hasText("Заметка"), 5_000)
+        onNodeWithContentDescription("Список дел").click() // the tool may be past the toolbar's right edge
+        waitUntilAtLeastOneExists(hasText("Пункт списка"), 5_000)
+        assertTrue(onAllNodes(hasText("Заметка")).fetchSemanticsNodes().isEmpty(), "no «Заметка» over a box")
+        screenshot("board-16-toolbar-list")
+    }
+
+    @Test
+    fun theNewNoteButtonStaysItsSizeWhenAnEmptyNoteCloses() = runDesktopComposeUiTest(width = 412, height = 860) {
+        openBoard()
+        fun button() = onAllNodes(hasContentDescription("Новая записка")).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
+        val size = button()!!.size
+        onNodeWithContentDescription("Новая записка").performClick()
+        onNodeWithText("Текст").performClick()
+        waitUntilAtLeastOneExists(hasText("Название"), 5_000)
+        mainClock.autoAdvance = false
+        onNodeWithContentDescription("Назад").performClick()
+        val seen = (0 until 30).mapNotNull {
+            mainClock.advanceTimeByFrame()
+            button()?.size
+        }
+        mainClock.autoAdvance = true
+        assertTrue(seen.isNotEmpty(), "the button is back")
+        assertEquals(emptyList(), seen.filter { it.width > size.width + 1f || it.height > size.height + 1f }, "it never stretched")
     }
 
     private fun ComposeUiTest.center(tag: String): Offset = onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.center

@@ -105,6 +105,7 @@ import app.benbow.client.archiveOnBoard
 import app.benbow.client.board
 import app.benbow.client.pinOnBoard
 import app.benbow.client.placeOnBoard
+import app.benbow.client.tickOnBoard
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -181,6 +182,11 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
             haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
             services.scope.launch { services.repo.placeOnBoard(id, to) }
         }
+    }
+    // A box ticked right on its card: the note gets a revision with only that box changed (it moves to «Отмечено»).
+    val tick: (String, String) -> Unit = { id, key ->
+        haptic.performHapticFeedback(HapticFeedbackType.ToggleOn)
+        services.scope.launch { services.repo.tickOnBoard(id, key, true) }
     }
     val focus = remember { FocusRequester() }
     LaunchedEffect(chosen.isNotEmpty()) { if (chosen.isNotEmpty()) runCatching { focus.requestFocus() } }
@@ -303,6 +309,7 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
                                         chosen.isNotEmpty(),
                                         open,
                                         choose,
+                                        tick,
                                         Modifier.animateItem(placementSpec = GLIDE),
                                     )
                                 }
@@ -322,6 +329,7 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
                                     chosen.isNotEmpty(),
                                     open,
                                     choose,
+                                    tick,
                                     Modifier.animateItem(placementSpec = GLIDE),
                                 )
                             }
@@ -475,8 +483,10 @@ private fun NoteSlot(
     choosing: Boolean,
     onOpen: (BoardNote) -> Unit,
     onChoose: (Any) -> Unit,
+    onTick: (String, String) -> Unit,
     modifier: Modifier,
 ) {
+    val tick = if (choosing) null else { key: String -> onTick(note.id, key) }
     val stage = LocalBoardStage.current
     val hover = remember { MutableInteractionSource() }
     val hovered by hover.collectIsHoveredAsState()
@@ -503,7 +513,7 @@ private fun NoteSlot(
     ) {
         val click = Modifier.clip(CARD_SHAPE).hand().clickable { onOpen(note) }
         if (shared == null) {
-            BoardCard(note, media, chosen, click)
+            BoardCard(note, media, chosen, click, onTick = tick)
         } else {
             with(shared) {
                 AnimatedVisibility(!open, enter = HOLD_IN, exit = HOLD_OUT) {
@@ -521,6 +531,7 @@ private fun NoteSlot(
                             clipInOverlayDuringTransition = OverlayClip(CARD_SHAPE),
                         ).then(click),
                         Modifier.animateEnterExit(enter = WORDS_IN, exit = WORDS_OUT),
+                        tick,
                     )
                 }
             }

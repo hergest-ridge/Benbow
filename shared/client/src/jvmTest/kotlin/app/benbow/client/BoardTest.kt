@@ -2,6 +2,10 @@ package app.benbow.client
 
 import app.benbow.client.db.BenbowDb
 import app.benbow.core.board.Board
+import app.benbow.core.content.Document
+import app.benbow.core.content.DocumentCodec
+import app.benbow.core.content.Span
+import app.benbow.core.content.TextBlock
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -141,6 +145,39 @@ class BoardTest {
         repo.moveToBoard(c)
         assertEquals(listOf("C", "A"), titles(repo.board().first().others))
         assertEquals(emptyList(), repo.boardArchive().first())
+    }
+
+    @Test
+    fun ticksOnACardFromTwoDevicesMergeWithoutAConflict() = runTest {
+        val server = FakeServer()
+        val phone = Device(server, "phone")
+        val body = DocumentCodec.encode(
+            Document(
+                listOf(TextBlock("t", children = listOf(Span("Продукты")))) +
+                    listOf("молоко", "хлеб", "сыр").mapIndexed { i, item ->
+                        TextBlock("b$i", listItem = "check", level = 1, checked = false, children = listOf(Span(item)))
+                    },
+            ),
+        )
+        val id = phone.repo.createBoardNote(TODAY, body)
+        phone.engine.sync()
+        val desktop = Device(server, "desktop")
+        desktop.engine.sync()
+
+        // Both tick a box while apart (neighbouring ones: one run of changed blocks for diff3).
+        assertTrue(phone.repo.tickOnBoard(id, "b0", true))
+        assertTrue(desktop.repo.tickOnBoard(id, "b1", true))
+        phone.engine.sync()
+        desktop.engine.sync()
+        phone.engine.sync()
+        listOf(phone, desktop).forEach { device ->
+            val entry = device.repo.entry(id).first()!!
+            assertEquals(emptyList(), entry.conflictHeads, "no conflict")
+            val boxes = DocumentCodec.decode(entry.body).blocks.drop(1).map { (it as TextBlock).checked }
+            assertEquals(listOf(true, true, false), boxes)
+        }
+        assertEquals(2, phone.repo.board().first().others.single().card.ticked)
+        assertEquals(listOf("сыр"), phone.repo.board().first().others.single().card.lines.map { it.text })
     }
 
     private companion object {

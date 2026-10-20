@@ -232,5 +232,62 @@ class BoardScreenTest {
         waitUntilAtLeastOneExists(hasText("Записки"), 5_000)
     }
 
+    @Test
+    fun aNewListIsWrittenBoxByBoxAndTickedOnItsCard() = runDesktopComposeUiTest(width = 412, height = 860) {
+        openBoard()
+        onNodeWithContentDescription("Новый список").performClick()
+        waitUntilAtLeastOneExists(hasText("Пункт списка"), 5_000)
+        // The title's field, then the box's: a line break starts the next box.
+        onAllNodes(hasSetTextAction())[1].performTextInput("молоко\nхлеб")
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasSetTextAction()).fetchSemanticsNodes().size == 3 }
+        onAllNodes(hasSetTextAction())[0].performTextInput("Продукты")
+        waitForIdle()
+        screenshot("board-10-list")
+        onNodeWithContentDescription("Назад").performClick()
+        waitUntilDoesNotExist(hasText("Пункт списка"), 5_000)
+        waitUntil(timeoutMillis = 5_000) {
+            notes().others.singleOrNull()?.card?.let {
+                it.title == "Продукты" && it.lines.map { l -> l.text } == listOf("молоко", "хлеб")
+            } ==
+                true
+        }
+        val id = notes().others.single().id
+
+        // A box ticked right on the card goes under «Отмечено».
+        waitUntilAtLeastOneExists(hasContentDescription("Отметить"), 5_000)
+        onAllNodes(hasContentDescription("Отметить"))[0].performClick()
+        waitUntil(timeoutMillis = 5_000) { notes().others.single().card.ticked == 1 }
+        waitUntilAtLeastOneExists(hasText("Отмечено: 1"), 5_000)
+        assertEquals(listOf("хлеб"), notes().others.single().card.lines.map { it.text })
+
+        onNodeWithTag(id).performClick()
+        waitUntilAtLeastOneExists(hasText("Пункт списка"), 5_000)
+        waitUntilAtLeastOneExists(hasText("Отмечено: 1"), 5_000)
+        screenshot("board-11-list-open")
+    }
+
+    @Test
+    fun aNotesLinesBecomeBoxesAndBack() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val id = repo.createBoardNote(services.today(), JournalRepository.textBody("Дела\nпозвонить\nкупить батарейки"))
+        openBoard()
+        onNodeWithTag(id).performClick()
+        waitUntilAtLeastOneExists(hasSetTextAction(), 5_000)
+        onNodeWithContentDescription("Меню").performClick()
+        onNodeWithText("Показать флажки").performClick()
+        waitUntilAtLeastOneExists(hasText("Пункт списка"), 5_000)
+        onNodeWithContentDescription("Назад").performClick()
+        waitUntil(timeoutMillis = 5_000) {
+            notes().others.single().card.let { it.title == "Дела" && it.lines.size == 2 && it.lines.all { l -> l.box } }
+        }
+
+        onNodeWithTag(id).performClick()
+        waitUntilAtLeastOneExists(hasText("Пункт списка"), 5_000)
+        onNodeWithContentDescription("Меню").performClick()
+        onNodeWithText("Скрыть флажки").performClick()
+        waitUntilDoesNotExist(hasText("Пункт списка"), 5_000)
+        onNodeWithContentDescription("Назад").performClick()
+        waitUntil(timeoutMillis = 5_000) { notes().others.single().card.lines.none { it.box } }
+    }
+
     private fun ComposeUiTest.center(tag: String): Offset = onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.center
 }

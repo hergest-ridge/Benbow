@@ -22,9 +22,18 @@ data class CardPreview(
     val more: Boolean = false,
 )
 
-/** A line of a card: plain, an open box, or a list item with its [bullet] ("•", "2."); a [heading] reads bold. */
+/**
+ * A line of a card: plain, an open box (with its block's [key], so the card can tick it), or a list item with its
+ * [bullet] ("•", "2."); a [heading] reads bold.
+ */
 @Serializable
-data class CardLine(val text: String, val box: Boolean = false, val bullet: String? = null, val heading: Boolean = false)
+data class CardLine(
+    val text: String,
+    val box: Boolean = false,
+    val bullet: String? = null,
+    val heading: Boolean = false,
+    val key: String? = null,
+)
 
 /** The card of [document]: at most [CARD_LINES] lines of up to [CARD_LINE] characters, spoilers left out (ADR-031). */
 internal fun cardOf(document: Document): CardPreview {
@@ -56,7 +65,13 @@ internal fun cardOf(document: Document): CardPreview {
                 return@forEachIndexed
             }
             more = more || line.length > CARD_LINE
-            lines += CardLine(line.take(CARD_LINE).trimEnd(), box = box, bullet = bullet.takeIf { i == 0 }, heading = heading)
+            lines += CardLine(
+                line.take(CARD_LINE).trimEnd(),
+                box = box,
+                bullet = bullet.takeIf { i == 0 },
+                heading = heading,
+                key = block.key.takeIf { box },
+            )
         }
     }
     // Blank lines read as the gaps they are, but never at the ends or two in a row.

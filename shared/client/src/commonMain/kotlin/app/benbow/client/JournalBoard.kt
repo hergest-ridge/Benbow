@@ -2,6 +2,8 @@ package app.benbow.client
 
 import app.benbow.core.board.Board
 import app.benbow.core.board.BoardRank
+import app.benbow.core.content.Checklists
+import app.benbow.core.content.DocumentCodec
 import app.benbow.core.sync.AttachmentState
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
@@ -86,6 +88,11 @@ fun JournalRepository.pinOnBoard(id: String, pinned: Boolean) = db.transaction {
 
 /** Into the board's archive (out of sight), or back from it: it keeps its place, so «Вернуть» puts it where it was. */
 fun JournalRepository.archiveOnBoard(id: String, archived: Boolean) = setField(id, Board.ARCHIVED, if (archived) "true" else null)
+
+/** A box ticked (or not) right on its card: a revision of the note's body that changes only that box's `checked`. */
+fun JournalRepository.tickOnBoard(id: String, key: String, checked: Boolean): Boolean = reviseBody(id) { body ->
+    runCatching { DocumentCodec.decode(body) }.getOrNull()?.let { Checklists.tick(it, key, checked) }?.let(DocumentCodec::encode)
+}
 
 private fun JournalRepository.boardRows(): Flow<List<BoardNote>> =
     combine(q.boardNotes(::boardNote).asFlow().mapToList(context), gentleRules()) { notes, rules ->

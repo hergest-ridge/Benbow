@@ -43,7 +43,7 @@ class CardPreviewTest {
             ),
         )
         assertEquals("Продукты", card.title)
-        assertEquals(listOf(CardLine("молоко", box = true), CardLine("яйца", box = true)), card.lines)
+        assertEquals(listOf(CardLine("молоко", box = true, key = "k1"), CardLine("яйца", box = true, key = "k3")), card.lines)
         assertEquals(2, card.ticked)
         // A list with no title: its first box is no title.
         assertEquals("", cardOf(Document(listOf(text("молоко", "check", false), text("хлеб", "check", false)))).title)

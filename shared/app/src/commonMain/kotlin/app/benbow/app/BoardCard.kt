@@ -2,6 +2,7 @@ package app.benbow.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,9 +12,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -30,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.board_checked
 import app.benbow.app.resources.board_files
+import app.benbow.app.resources.board_tick
 import app.benbow.client.BoardNote
 import app.benbow.client.CardLine
 import app.benbow.client.Media
@@ -42,7 +46,15 @@ import org.jetbrains.compose.resources.stringResource
  * more follows it, its open boxes, how many are ticked, its tags. [words] lets the open note's sheet fade them alone.
  */
 @Composable
-internal fun BoardCard(note: BoardNote, media: Media?, chosen: Boolean, modifier: Modifier = Modifier, words: Modifier = Modifier) {
+internal fun BoardCard(
+    note: BoardNote,
+    media: Media?,
+    chosen: Boolean,
+    modifier: Modifier = Modifier,
+    words: Modifier = Modifier,
+    /** Ticks an open box right on the card (its block's key); null: the boxes only show. */
+    onTick: ((String) -> Unit)? = null,
+) {
     val color = swatch(note.entry.background)
     val outline = when {
         chosen -> MaterialTheme.colorScheme.primary
@@ -53,12 +65,12 @@ internal fun BoardCard(note: BoardNote, media: Media?, chosen: Boolean, modifier
         modifier.fillMaxWidth().clip(CARD_SHAPE).background(color ?: MaterialTheme.colorScheme.surface)
             .border(if (chosen) 2.dp else 1.dp, outline, CARD_SHAPE),
     ) {
-        Column(words.fillMaxWidth()) { CardWords(note, media) }
+        Column(words.fillMaxWidth()) { CardWords(note, media, onTick) }
     }
 }
 
 @Composable
-private fun CardWords(note: BoardNote, media: Media?) {
+private fun CardWords(note: BoardNote, media: Media?, onTick: ((String) -> Unit)?) {
     val picture = note.picture
     if (picture != null && media != null) {
         val load by rememberMediaFile(media, picture.sha256)
@@ -79,7 +91,7 @@ private fun CardWords(note: BoardNote, media: Media?) {
         }
         if (card.lines.isNotEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                card.lines.forEachIndexed { i, line -> CardLineRow(line, last = card.more && i == card.lines.lastIndex) }
+                card.lines.forEachIndexed { i, line -> CardLineRow(line, last = card.more && i == card.lines.lastIndex, onTick) }
             }
         }
         if (card.ticked > 0) {
@@ -105,7 +117,7 @@ private fun CardWords(note: BoardNote, media: Media?) {
 }
 
 @Composable
-private fun CardLineRow(line: CardLine, last: Boolean) {
+private fun CardLineRow(line: CardLine, last: Boolean, onTick: ((String) -> Unit)?) {
     val text = if (last) line.text + "…" else line.text
     val style = if (line.heading) {
         MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
@@ -114,8 +126,20 @@ private fun CardLineRow(line: CardLine, last: Boolean) {
     }
     when {
         line.box -> Row(verticalAlignment = Alignment.Top) {
-            Icon(Icons.CheckBoxBlank, null, Modifier.padding(top = 1.dp).size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.width(8.dp))
+            val key = line.key
+            val tick = if (onTick != null && key != null) {
+                Modifier.clip(CircleShape).hand().clickable { onTick(key) }
+            } else {
+                Modifier
+            }
+            Box(Modifier.offset((-4).dp, (-3).dp).size(28.dp).then(tick), contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.CheckBoxBlank,
+                    stringResource(Res.string.board_tick).takeIf { onTick != null },
+                    Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Text(text, style = style, maxLines = 3, overflow = TextOverflow.Ellipsis)
         }
 

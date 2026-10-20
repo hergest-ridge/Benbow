@@ -3,12 +3,22 @@ package app.benbow.core.sync
 import app.benbow.core.content.Document
 import app.benbow.core.content.DocumentCodec
 import app.benbow.core.content.DocumentFormatException
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 
 /**
  * Three-way merge of lists: changes from both sides are combined; a chunk changed differently on
- * both sides is a conflict (null). Classic diff3 over LCS matches against the common base.
+ * both sides is a conflict (null) unless [conflict] can merge it finer. Classic diff3 over LCS matches
+ * against the common base.
  */
-fun <T> diff3(base: List<T>, ours: List<T>, theirs: List<T>): List<T>? {
+fun <T> diff3(
+    base: List<T>,
+    ours: List<T>,
+    theirs: List<T>,
+    conflict: (base: List<T>, ours: List<T>, theirs: List<T>) -> List<T>? = { _, _, _ -> null },
+): List<T>? {
     val toOurs = lcsMatches(base, ours)
     val toTheirs = lcsMatches(base, theirs)
     val result = ArrayList<T>()
@@ -24,7 +34,7 @@ fun <T> diff3(base: List<T>, ours: List<T>, theirs: List<T>): List<T>? {
         val bEnd = stable ?: base.size
         val oEnd = stable?.let { toOurs.getValue(it) } ?: ours.size
         val tEnd = stable?.let { toTheirs.getValue(it) } ?: theirs.size
-        result += resolve(base.subList(b, bEnd), ours.subList(o, oEnd), theirs.subList(t, tEnd)) ?: return null
+        result += resolve(base.subList(b, bEnd), ours.subList(o, oEnd), theirs.subList(t, tEnd), conflict) ?: return null
         if (stable == null) return result
         result += base[stable]
         b = stable + 1
@@ -33,11 +43,11 @@ fun <T> diff3(base: List<T>, ours: List<T>, theirs: List<T>): List<T>? {
     }
 }
 
-private fun <T> resolve(base: List<T>, ours: List<T>, theirs: List<T>): List<T>? = when {
+private fun <T> resolve(base: List<T>, ours: List<T>, theirs: List<T>, conflict: (List<T>, List<T>, List<T>) -> List<T>?): List<T>? = when {
     ours == theirs -> ours
     ours == base -> theirs
     theirs == base -> ours
-    else -> null
+    else -> conflict(base, ours, theirs)
 }
 
 /** Index map base → other for one longest common subsequence. */
@@ -67,7 +77,7 @@ private fun <T> lcsMatches(a: List<T>, b: List<T>): Map<Int, Int> {
  * result would be invalid (e.g. duplicate block keys). A null result is a conflict: keep both heads.
  */
 fun mergeDocumentBodies(base: String, ours: String, theirs: String): String? {
-    val merged = diff3(blockLines(base) ?: return null, blockLines(ours) ?: return null, blockLines(theirs) ?: return null)
+    val merged = diff3(blockLines(base) ?: return null, blockLines(ours) ?: return null, blockLines(theirs) ?: return null, ::mergeAlike)
         ?: return null
     val header = "{\"v\":${Document.CURRENT_VERSION},\"blocks\":["
     val text = if (merged.isEmpty()) "$header]}" else "$header\n${merged.joinToString(",\n")}\n]}"
@@ -79,6 +89,50 @@ fun mergeDocumentBodies(base: String, ours: String, theirs: String): String? {
     if (document.blocks.map { it.key }.toSet().size != document.blocks.size) return null
     return DocumentCodec.encode(document)
 }
+
+/**
+ * A run of blocks both sides changed, finer: when it holds the same blocks on all three sides (by key, in the same
+ * order), each block merges on its own, and a box's tick merges apart from its words (ADR-040: ticks on neighbouring
+ * boxes from two devices, or a tick here and a word there, are no conflict).
+ */
+private fun mergeAlike(base: List<String>, ours: List<String>, theirs: List<String>): List<String>? {
+    if (base.size != ours.size || base.size != theirs.size) return null
+    val b = base.map { line -> blockObject(line) ?: return null }
+    val o = ours.map { line -> blockObject(line) ?: return null }
+    val t = theirs.map { line -> blockObject(line) ?: return null }
+    if (b.map { it[KEY] } != o.map { it[KEY] } || b.map { it[KEY] } != t.map { it[KEY] }) return null
+    return base.indices.map { i ->
+        when {
+            ours[i] == theirs[i] -> ours[i]
+
+            ours[i] == base[i] -> theirs[i]
+
+            theirs[i] == base[i] -> ours[i]
+
+            o[i] - CHECKED == b[i] - CHECKED -> withTick(t[i], o[i][CHECKED])
+
+            // ours only ticked, theirs changed the rest
+            t[i] - CHECKED == b[i] - CHECKED -> withTick(o[i], t[i][CHECKED])
+
+            else -> return null
+        }
+    }
+}
+
+private fun blockObject(line: String): JsonObject? = runCatching { Json.parseToJsonElement(line).jsonObject }.getOrNull()
+
+private fun withTick(block: JsonObject, tick: JsonElement?): String = JsonObject(
+    if (tick ==
+        null
+    ) {
+        block - CHECKED
+    } else {
+        block + (CHECKED to tick)
+    },
+).toString()
+
+private const val KEY = "_key"
+private const val CHECKED = "checked"
 
 /** Canonical block lines without separators; null for documents that can't be merged (newer format). */
 private fun blockLines(body: String): List<String>? {

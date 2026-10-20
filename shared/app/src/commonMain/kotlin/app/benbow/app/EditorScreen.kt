@@ -30,6 +30,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -56,6 +58,8 @@ import app.benbow.app.resources.Res
 import app.benbow.app.resources.attachments
 import app.benbow.app.resources.background
 import app.benbow.app.resources.background_none
+import app.benbow.app.resources.board_hide_boxes
+import app.benbow.app.resources.board_show_boxes
 import app.benbow.app.resources.comment_hint
 import app.benbow.app.resources.comments
 import app.benbow.app.resources.comments_count
@@ -90,6 +94,8 @@ import app.benbow.client.createBoardNote
 import app.benbow.client.createTag
 import app.benbow.client.effectiveVeil
 import app.benbow.client.removeTag
+import app.benbow.core.content.Checklists
+import app.benbow.core.content.Document
 import app.benbow.core.content.DocumentCodec
 import app.benbow.core.content.DocumentFormatException
 import app.benbow.core.content.MarkdownExporter
@@ -125,6 +131,15 @@ import kotlin.coroutines.CoroutineContext
  */
 internal class EditorViewModel(private val services: AppServices, route: Route.Editor) : ViewModel() {
     private val repo = services.repo
+    private val board = route.board
+
+    /** A note on the board that is a list shows in the list editor (ADR-040, K4); this is its document then. */
+    var listDocument by mutableStateOf<Document?>(null)
+        private set
+
+    /** Goes up whenever the list is loaded anew (stored, synced, converted), so the list editor starts over. */
+    var listVersion by mutableIntStateOf(0)
+        private set
     private val session = DraftSession(
         repo,
         services.scope,
@@ -165,8 +180,32 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
     }
 
     fun onEdited(text: RichText) {
-        if (!reading) session.onChange(text)
+        // While a list shows, the rich editor is out of sight: only the list's own changes count.
+        if (!reading && listDocument == null) session.onChange(text)
     }
+
+    fun listChanged(document: Document) {
+        listDocument = document
+        session.onChange(document.toRichText())
+    }
+
+    /** «Показать флажки»: each line a box. */
+    fun showBoxes() {
+        val document = currentDocument() ?: return
+        val list = Checklists.toList(document)
+        listDocument = list
+        listVersion++
+        session.onChange(list.toRichText())
+    }
+
+    /** «Скрыть флажки»: the boxes back to lines, in the rich editor. */
+    fun hideBoxes() {
+        val list = listDocument ?: return
+        listDocument = null
+        start(DocumentCodec.encode(Checklists.toText(list)))
+    }
+
+    fun currentDocument(): Document? = listDocument ?: editor?.model?.toDocument()
 
     /** Fills a new, still empty entry with a template; the draft starts right away. */
     fun applyTemplate(id: String, context: TemplateContext) {
@@ -204,9 +243,9 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
 
     /** What's on screen right now (typing included), as plain text or portable Markdown. */
-    fun plainText(): String = editor?.model?.toDocument()?.toPlainText(includeSpoilers = true).orEmpty()
+    fun plainText(): String = currentDocument()?.toPlainText(includeSpoilers = true).orEmpty()
 
-    fun markdown(): String = editor?.model?.toDocument()?.let { MarkdownExporter().export(it) }.orEmpty()
+    fun markdown(): String = currentDocument()?.let { MarkdownExporter().export(it) }.orEmpty()
 
     fun copied() = services.messages.tryEmit(AppMessage.Copied)
 
@@ -284,7 +323,7 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
             return
         }
         if (entry.headRevision == shownHead) return
-        val text = encode(current.model)
+        val text = listDocument?.let(DocumentCodec::encode) ?: encode(current.model)
         when (text) {
             entry.body -> {
                 shownHead = entry.headRevision
@@ -310,6 +349,8 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
         editor = state
         shownHead = head
         clean = encode(state.model)
+        listDocument = text.toDocument().takeIf { board && Checklists.isList(it) }
+        listVersion++
     }
 
     private fun encode(text: RichText) = DocumentCodec.encode(text.toDocument())
@@ -359,7 +400,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     LaunchedEffect(Unit) {
         // A picture or video added while writing lands in the text: at the cursor, or after the text if it isn't there.
         services.attached.collect { added ->
-            if (added.entryId == vm.entryId && !vm.reading && added.kind in INLINE_KINDS) {
+            if (added.entryId == vm.entryId && !vm.reading && vm.listDocument == null && added.kind in INLINE_KINDS) {
                 vm.editor?.insertAtom(Atom.Attachment(added.attachmentId), atEnd = !editorFocused)
             }
         }
@@ -400,7 +441,12 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     // The attachments ribbon: open by default unless every attachment already sits in the text; the clip toggles it.
     var ribbonChoice by rememberSaveable { mutableStateOf<Boolean?>(null) }
     val attachments = detail?.attachments.orEmpty()
-    val inline = editor?.model?.paragraphs?.mapNotNullTo(HashSet()) { (it.atom as? Atom.Attachment)?.ref }.orEmpty()
+    // A list shows its pictures above its boxes, on the ribbon.
+    val inline = if (vm.listDocument != null) {
+        emptySet()
+    } else {
+        editor?.model?.paragraphs?.mapNotNullTo(HashSet()) { (it.atom as? Atom.Attachment)?.ref }.orEmpty()
+    }
     val ribbon = attachments.isNotEmpty() && (ribbonChoice ?: !attachments.all { it.meta.id in inline })
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
@@ -517,6 +563,18 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                         Box {
                             IconButton({ menu = true }, modifier = Modifier.hand()) { Icon(Icons.More, stringResource(Res.string.menu)) }
                             DropdownMenu(menu, { menu = false }) {
+                                // A note on the board: its lines as boxes and back, as Keep's «Показать флажки».
+                                if (route.board && !vm.reading) {
+                                    val list = vm.listDocument != null
+                                    if (list || vm.currentDocument()?.let(Checklists::canBeList) == true) {
+                                        DropdownMenuItem(text = {
+                                            Text(stringResource(if (list) Res.string.board_hide_boxes else Res.string.board_show_boxes))
+                                        }, onClick = {
+                                            menu = false
+                                            if (list) vm.hideBoxes() else vm.showBoxes()
+                                        }, modifier = Modifier.hand())
+                                    }
+                                }
                                 if (vm.reading) {
                                     DropdownMenuItem(text = { Text(stringResource(Res.string.edit)) }, onClick = {
                                         menu = false
@@ -625,13 +683,13 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                 }
             } else if (editor != null) {
                 Column(Modifier.navigationBarsPadding().imePadding()) {
-                    MediaBar(services, vm::ensureEntryId, dictation) {
+                    MediaBar(services, vm::ensureEntryId, dictation.takeIf { vm.listDocument == null }) {
                         IconButton({
                             vm.drawingAtEnd = !editorFocused
                             services.scope.launch { vm.ensureEntryId().let { id -> nav.open(Route.Drawing(id, null)) } }
                         }, modifier = Modifier.hand()) { Icon(Icons.Brush, stringResource(Res.string.drawing_add)) }
                     }
-                    EditorToolbar(editor)
+                    if (vm.listDocument == null) EditorToolbar(editor)
                 }
             }
         },
@@ -731,6 +789,10 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(24.dp),
                 )
+
+                editor != null && vm.listDocument != null -> key(vm.listVersion) {
+                    ChecklistEditor(vm.listDocument!!, vm::listChanged, Modifier.fillMaxSize(), focusFirst = route.entryId == null)
+                }
 
                 editor != null -> {
                     val focus = remember { FocusRequester() }

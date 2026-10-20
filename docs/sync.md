@@ -33,7 +33,7 @@ Per-op result: `applied | duplicate | merged | conflict | rejected(reason)`. `re
 ## Revision conflicts (server)
 When `parents[0] != head`:
 1. Store the incoming revision anyway (DAG sibling). It is never lost.
-2. Try a diff3 merge (base = parent, ours = head, theirs = incoming) over the canonical serialization, where one line = one block (content-format.md), using the shared code in `shared/core`. Then validate: the result must decode, and `_key`s must be unique (a duplicate counts as a conflict).
+2. Try a diff3 merge (base = parent, ours = head, theirs = incoming) over the canonical serialization, where one line = one block (content-format.md), using the shared code in `shared/core`. Then validate: the result must decode, and `_key`s must be unique (a duplicate counts as a conflict). As built (7.17 K4, ADR-040): a run of blocks both sides changed that holds the same blocks on all three (by `_key`, in order) merges block by block, and a list box's `checked` merges apart from the rest of its block, so ticks on neighbouring boxes from two devices, or a tick on one side and new words on the other, are no conflict; the same words changed two ways still are (`mergeAlike` in `Merge.kt`).
 3. Clean merge → new merge revision with two parents, result `merged`.
 4. Overlapping changes → entry gets `conflict_heads=[head, incoming]`, result `conflict`. Clients show a banner with both versions side by side. The user's resolution becomes a revision whose parents are both heads.
 

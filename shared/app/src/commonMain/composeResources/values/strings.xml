@@ -756,5 +756,12 @@
     <string name="board_archive">В архив</string>
     <string name="board_trash">В корзину</string>
     <string name="board_choose">Выбрать</string>
+    <string name="board_show_boxes">Показать флажки</string>
+    <string name="board_hide_boxes">Скрыть флажки</string>
+    <string name="board_add_item">Пункт списка</string>
+    <string name="board_move_item">Перетащить пункт</string>
+    <string name="board_remove_item">Убрать пункт</string>
+    <string name="board_title_hint">Заголовок</string>
+    <string name="board_tick">Отметить</string>
     <string name="more_search">Записи, теги, вложения</string>
 </resources>

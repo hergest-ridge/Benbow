@@ -79,10 +79,9 @@ private fun MoreList(services: AppServices, nav: Navigator) {
             )
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        if (services.labs) { // Поиск gave its tab to «Записки» for now (ADR-040)
-            MoreItem(Icons.Search, stringResource(Res.string.tab_search), stringResource(Res.string.more_search)) { nav.open(Route.Search) }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        }
+        // Поиск gave its tab to «Записки» for now (ADR-040).
+        MoreItem(Icons.Search, stringResource(Res.string.tab_search), stringResource(Res.string.more_search)) { nav.open(Route.Search) }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         val look = syncLook(status)
         MoreItem(Icons.Server, stringResource(Res.string.server), look?.label, look?.tone) { nav.open(Route.Server) }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

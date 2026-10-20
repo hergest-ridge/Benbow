@@ -112,8 +112,8 @@ fun sharedNoteText(subject: String?, text: String?): String {
 fun QuickCapture(services: AppServices, shared: SharedContent, onClose: () -> Unit) {
     AppTheme(services) {
         var text by rememberSaveable { mutableStateOf(shared.text) }
-        // Into the journal or onto the board (ADR-040, where the board shows): the last choice on this device stays.
-        var toBoard by remember { mutableStateOf(services.labs && services.settings.get(CAPTURE_TARGET) == BOARD_TARGET) }
+        // Into the journal or onto the board (ADR-040): the last choice on this device stays.
+        var toBoard by remember { mutableStateOf(services.settings.get(CAPTURE_TARGET) == BOARD_TARGET) }
         var saving by remember { mutableStateOf(false) }
         var error by remember { mutableStateOf<String?>(null) }
         val scope = rememberCoroutineScope()
@@ -169,13 +169,11 @@ fun QuickCapture(services: AppServices, shared: SharedContent, onClose: () -> Un
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(stringResource(Res.string.capture_title), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                        if (services.labs) {
-                            listOf(false to Res.string.capture_to_journal, true to Res.string.capture_to_board).forEach { (board, label) ->
-                                FilterChip(toBoard == board, {
-                                    toBoard = board
-                                    services.settings.put(CAPTURE_TARGET, if (board) BOARD_TARGET else "journal")
-                                }, { Text(stringResource(label)) }, Modifier.hand())
-                            }
+                        listOf(false to Res.string.capture_to_journal, true to Res.string.capture_to_board).forEach { (board, label) ->
+                            FilterChip(toBoard == board, {
+                                toBoard = board
+                                services.settings.put(CAPTURE_TARGET, if (board) BOARD_TARGET else "journal")
+                            }, { Text(stringResource(label)) }, Modifier.hand())
                         }
                     }
                     if (shared.files.isNotEmpty()) SharedFiles(shared.files)

@@ -81,10 +81,10 @@ internal class SearchViewModel(private val services: AppServices) : ViewModel() 
     val results: StateFlow<List<EntrySummary>?> = query.debounce(150).flatMapLatest { services.repo.search(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    /** The board's notes with the same words (ADR-040), for «Ещё N в записках»; only where the board shows. */
+    /** The board's notes with the same words (ADR-040), for «Ещё N в записках». */
     @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
     val inBoard: StateFlow<Int> = query.debounce(150).flatMapLatest { q ->
-        if (services.labs && q.text.isNotBlank()) services.repo.searchBoard(q.text).map { it.size } else flowOf(0)
+        if (q.text.isNotBlank()) services.repo.searchBoard(q.text).map { it.size } else flowOf(0)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     fun edit(change: (SearchQuery) -> SearchQuery) = query.update(change)

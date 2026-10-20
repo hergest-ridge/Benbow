@@ -656,7 +656,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                             DropdownMenu(menu, { menu = false }) {
                                 // Between the journal and the board (ADR-040): the same entry, one field; a note goes to
                                 // the journal on the day it was made, or on another day picked for it.
-                                if (services.labs && detail != null && !detail.inTrash && !vm.reading) {
+                                if (detail != null && !detail.inTrash && !vm.reading) {
                                     if (Board.onBoard(detail.fields)) {
                                         DropdownMenuItem(text = { Text(stringResource(Res.string.board_to_journal)) }, onClick = {
                                             menu = false

@@ -178,7 +178,7 @@ class AppServices(
     mic: DictationMic? = null,
     /** What plays sounds here (ADR-035): Media3 in a session on Android, JavaFX on desktop, the page's <audio>. */
     audio: AudioEngine = SilentAudio(),
-    /** Unfinished work shows (the board's spike, ADR-040): dev and bench builds and dev runs, never the owner's app. */
+    /** Unfinished work shows: dev and bench builds and dev runs, never the owner's app (nothing behind it right now). */
     val labs: Boolean = false,
 ) {
     val scope = CoroutineScope(SupervisorJob() + IoDispatcher)

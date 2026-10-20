@@ -55,7 +55,6 @@ class BoardScreenTest {
         mediaIn(java.nio.file.Files.createTempDirectory("benbow-media").toFile()),
         "desktop",
         "Test PC",
-        labs = true,
     )
     private val repo = services.repo
 

@@ -674,12 +674,10 @@ private fun FeedPost(
                 picking = false
                 if (choose) postponing = true else services.postpone(entry.id, null, entry.until)
             }
-            if (services.labs) {
-                DropdownMenuItem(text = { Text(stringResource(Res.string.entry_to_board)) }, onClick = {
-                    picking = false
-                    services.toBoard(listOf(entry.id))
-                }, modifier = Modifier.hand())
-            }
+            DropdownMenuItem(text = { Text(stringResource(Res.string.entry_to_board)) }, onClick = {
+                picking = false
+                services.toBoard(listOf(entry.id))
+            }, modifier = Modifier.hand())
             Row(Modifier.padding(horizontal = 8.dp)) {
                 REACTIONS.forEach { emoji ->
                     val on = emoji in item.reactions

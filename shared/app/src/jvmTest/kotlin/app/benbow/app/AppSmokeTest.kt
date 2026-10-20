@@ -233,6 +233,7 @@ class AppSmokeTest {
         waitForIdle()
         screenshot("10-journal-metadata")
 
+        onNodeWithText("Ещё").click() // Поиск lives in «Ещё» while «Записки» has its tab (ADR-040)
         onNodeWithText("Поиск").click()
         onNode(hasSetTextAction()).performTextInput("мор")
         waitUntilExactlyOneExists(hasText("Прогулка у моря"), 5_000)
@@ -474,6 +475,7 @@ class AppSmokeTest {
         waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Совсем тяжёлое").fetchSemanticsNodes().isEmpty() }
 
         // Looking for it on purpose finds it, under a curtain.
+        onNodeWithText("Ещё").click()
         onNodeWithText("Поиск").click()
         onNode(hasSetTextAction()).performTextInput("тяжёлое")
         waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Открыть", substring = true).fetchSemanticsNodes().size == 2 }

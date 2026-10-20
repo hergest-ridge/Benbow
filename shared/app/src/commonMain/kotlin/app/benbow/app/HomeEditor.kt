@@ -249,8 +249,7 @@ internal fun HomeEditor(services: AppServices, start: HomeLayout, home: HomeStat
                         },
                     )
                 }
-                // The board's block only where the board shows (ADR-040, labs builds for now).
-                val addable = layout.addable().filter { it != HomeBlockType.Notes || services.labs }
+                val addable = layout.addable()
                 if (adding && addable.isNotEmpty()) {
                     Catalog(addable, onPick = { kind ->
                         if (kind == HomeBlockType.Tag) {

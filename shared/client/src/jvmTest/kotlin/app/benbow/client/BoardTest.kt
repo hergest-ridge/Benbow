@@ -180,6 +180,22 @@ class BoardTest {
         assertEquals(listOf("сыр"), phone.repo.board().first().others.single().card.lines.map { it.text })
     }
 
+    @Test
+    fun theBoardsSearchFindsItsWordsItsArchiveTooAndNothingOfTheJournal() = runTest {
+        val repo = Device(FakeServer(), "phone").repo
+        repo.createNote(TODAY, "Смородина в дневнике")
+        val jam = repo.createBoardNote(TODAY, JournalRepository.textBody("Варенье из смородины"))
+        val old = repo.createBoardNote(TODAY, JournalRepository.textBody("Смородина прошлым летом"))
+        val gone = repo.createBoardNote(TODAY, JournalRepository.textBody("Смородина в корзине"))
+        repo.createBoardNote(TODAY, JournalRepository.textBody("Крыжовник"))
+        repo.archiveOnBoard(old, true)
+        repo.moveToTrash(gone)
+        assertEquals(listOf(jam, old), repo.searchBoard("смородина").first().map { it.id }, "the archive after the board, no trash")
+        assertEquals(4, repo.searchBoard("").first().size + 1, "empty words find every note but the trashed")
+        assertEquals(listOf(gone), repo.boardTrash().first().map { it.id })
+        assertEquals(emptyList(), repo.trash().first())
+    }
+
     private companion object {
         const val TODAY = "2026-10-20"
         const val LAST_YEAR = "2025-10-20"

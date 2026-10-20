@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -33,13 +34,18 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -48,6 +54,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,6 +62,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.Key
@@ -81,6 +89,8 @@ import androidx.navigationevent.compose.rememberNavigationEventState
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.background_none
 import app.benbow.app.resources.board_archive
+import app.benbow.app.resources.board_archive_empty
+import app.benbow.app.resources.board_archive_title
 import app.benbow.app.resources.board_as_grid
 import app.benbow.app.resources.board_as_list
 import app.benbow.app.resources.board_choose
@@ -88,25 +98,42 @@ import app.benbow.app.resources.board_chosen
 import app.benbow.app.resources.board_color
 import app.benbow.app.resources.board_empty
 import app.benbow.app.resources.board_empty_hint
+import app.benbow.app.resources.board_found_none
 import app.benbow.app.resources.board_hint
+import app.benbow.app.resources.board_in_archive
+import app.benbow.app.resources.board_kind_drawings
+import app.benbow.app.resources.board_kind_lists
+import app.benbow.app.resources.board_kind_pictures
+import app.benbow.app.resources.board_kind_sounds
+import app.benbow.app.resources.board_more_in_journal
 import app.benbow.app.resources.board_new_list
 import app.benbow.app.resources.board_others
 import app.benbow.app.resources.board_pin
 import app.benbow.app.resources.board_pinned
+import app.benbow.app.resources.board_search_clear
+import app.benbow.app.resources.board_search_hint
 import app.benbow.app.resources.board_trash
+import app.benbow.app.resources.board_unarchive
 import app.benbow.app.resources.board_unchoose
 import app.benbow.app.resources.board_unpin
 import app.benbow.app.resources.tab_board
 import app.benbow.client.BoardNote
 import app.benbow.client.BoardNotes
 import app.benbow.client.Media
+import app.benbow.client.SWATCHES
+import app.benbow.client.SearchQuery
 import app.benbow.client.Settings
 import app.benbow.client.archiveOnBoard
 import app.benbow.client.board
+import app.benbow.client.boardArchive
 import app.benbow.client.pinOnBoard
 import app.benbow.client.placeOnBoard
+import app.benbow.client.searchBoard
 import app.benbow.client.tickOnBoard
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.max
@@ -123,18 +150,42 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
     val view = remember { BoardView(services.settings) }
     val order = remember { BoardOrder() }
     data?.let { order.stored = it }
-    val grid = rememberLazyStaggeredGridState()
-    val drag = remember(grid, order) { BoardDrag(grid, isCard = ::isNoteKey, canSwap = order::sameKind, move = order::move) }
+    // The board, its archive or a search on it; each keeps its own scroll.
+    var mode by rememberSaveable { mutableStateOf(BOARD) }
+    var words by rememberSaveable { mutableStateOf("") }
+    var filter by remember { mutableStateOf(BoardFilter()) }
+    LaunchedEffect(Unit) {
+        // «Ещё N в записках» in the journal's search opens the board's search on the same words.
+        services.boardSearchFor.filterNotNull().collect {
+            words = it
+            filter = BoardFilter()
+            mode = SEARCH
+            services.boardSearchFor.value = null
+        }
+    }
+    val archived by remember(mode) { if (mode == ARCHIVE) services.repo.boardArchive() else flowOf(emptyList()) }
+        .collectAsStateWithLifecycle(emptyList())
+    val found by remember(mode, words) { if (mode == SEARCH) services.repo.searchBoard(words) else flowOf(null) }
+        .collectAsStateWithLifecycle(null)
+    val inJournal by remember(mode, words) {
+        if (mode == SEARCH && words.isNotBlank()) services.repo.search(SearchQuery(words)).map { it.size } else flowOf(0)
+    }.collectAsStateWithLifecycle(0)
+    val boardGrid = rememberLazyStaggeredGridState()
+    val archiveGrid = rememberLazyStaggeredGridState()
+    val searchGrid = rememberLazyStaggeredGridState()
+    val grid = when (mode) {
+        ARCHIVE -> archiveGrid
+        SEARCH -> searchGrid
+        else -> boardGrid
+    }
+    val drag = remember(grid, order) {
+        BoardDrag(grid, isCard = ::isNoteKey, canSwap = { a, b -> mode == BOARD && order.sameKind(a, b) }, move = order::move)
+    }
     val swipe = remember { BoardSwipe() }
     // A card swiped away stays out of sight until it has left the board.
     LaunchedEffect(data) {
-        swipe.key?.let { key ->
-            if (data?.let { (it.pinned + it.others).none { n -> n.id == key } } ==
-                true
-            ) {
-                swipe.gone()
-            }
-        }
+        val key = swipe.key ?: return@LaunchedEffect
+        if (data?.let { (it.pinned + it.others).none { n -> n.id == key } } == true) swipe.gone()
     }
     val stage = LocalBoardStage.current
     val haptic = LocalHapticFeedback.current
@@ -151,14 +202,36 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
         chosen = emptySet()
         coloring = false
     }
+    LaunchedEffect(mode) { unchoose() }
     NavigationBackHandler(
         rememberNavigationEventState(NavigationEventInfo.None),
-        isBackEnabled = chosen.isNotEmpty() && stage?.open != true,
-    ) { unchoose() }
-    val chosenNotes = { order.parts().let { (pinned, others) -> (pinned + others).filter { it.id in chosen } } }
-    val archive: (List<String>) -> Unit = { ids ->
-        services.scope.launch { ids.forEach { services.repo.archiveOnBoard(it, true) } }
-        services.messages.tryEmit(AppMessage.BoardArchived(ids))
+        isBackEnabled = (chosen.isNotEmpty() || mode != BOARD) && stage?.open != true,
+    ) { if (chosen.isNotEmpty()) unchoose() else mode = BOARD }
+    val pinnedLabel = stringResource(Res.string.board_pinned)
+    val othersLabel = stringResource(Res.string.board_others)
+    val archivedLabel = stringResource(Res.string.board_in_archive)
+    val sections = when (mode) {
+        ARCHIVE -> listOf(Section("h-archive", null, archived))
+
+        SEARCH -> found.orEmpty().filter(filter::matches).let { all ->
+            listOfNotNull(
+                Section("h-found", null, all.filter { !it.archived }),
+                all.filter { it.archived }.takeIf { it.isNotEmpty() }?.let { Section("h-archived", archivedLabel, it) },
+            )
+        }
+
+        else -> order.parts().let { (pinned, others) ->
+            listOfNotNull(
+                pinned.takeIf { it.isNotEmpty() }?.let { Section("h-pinned", pinnedLabel, it) },
+                Section("h-others", othersLabel.takeIf { pinned.isNotEmpty() }, others),
+            )
+        }
+    }
+    val shown = sections.flatMap { it.notes }
+    val chosenNotes = { shown.filter { it.id in chosen } }
+    val archive: (List<String>, Boolean) -> Unit = { ids, into ->
+        services.scope.launch { ids.forEach { services.repo.archiveOnBoard(it, into) } }
+        if (into) services.messages.tryEmit(AppMessage.BoardArchived(ids))
         unchoose()
     }
     val trash: (List<String>) -> Unit = { ids ->
@@ -172,13 +245,13 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
         services.scope.launch { notes.forEach { services.repo.pinOnBoard(it.id, !pinned) } }
         unchoose()
     }
-    // One card chosen moves a place back or on with Ctrl and the arrows (desktop and web).
+    // One card chosen moves a place back or on with Ctrl and the arrows (desktop and web), on the board itself.
     val step: (String, Int) -> Unit = { id, by ->
         val (pinned, others) = order.parts()
         val part = if (pinned.any { it.id == id }) pinned else others
         val at = part.indexOfFirst { it.id == id }
         val to = (at + by).coerceIn(0, part.lastIndex)
-        if (at >= 0 && to != at) {
+        if (mode == BOARD && at >= 0 && to != at) {
             haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
             services.scope.launch { services.repo.placeOnBoard(id, to) }
         }
@@ -196,7 +269,7 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
         when {
             event.key == Key.Escape -> unchoose()
             event.key == Key.Delete || event.key == Key.Backspace -> trash(ids)
-            event.key == Key.E && !event.isCtrlPressed -> archive(ids)
+            event.key == Key.E && !event.isCtrlPressed -> archive(ids, chosenNotes().any { !it.archived })
             event.key == Key.F && !event.isCtrlPressed -> pin()
             event.isCtrlPressed && ids.size == 1 && (event.key == Key.DirectionUp || event.key == Key.DirectionLeft) -> step(ids[0], -1)
             event.isCtrlPressed && ids.size == 1 && (event.key == Key.DirectionDown || event.key == Key.DirectionRight) -> step(ids[0], 1)
@@ -222,6 +295,10 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
         stage?.opening(null, null)
         nav.open(Route.Editor(null, services.today(), opened = services.now(), board = true, checklist = list))
     }
+    val toJournal = {
+        services.searchFor.value = SearchQuery(words)
+        nav.open(Route.Search)
+    }
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val wide = LocalWide.current
@@ -232,29 +309,42 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
             // A list in a wide window is a readable column in the middle.
             val inset = if (view.list) max(side.value, (maxWidth.value - LIST_WIDTH) / 2).dp else side
             Column(Modifier.fillMaxSize().then(keys).focusRequester(focus).focusable()) {
-                if (chosen.isEmpty()) {
-                    BoardTop(view.list) { view.change(!view.list) }
-                } else {
-                    val notes = chosenNotes()
-                    ChoiceBar(
-                        chosen.size,
-                        pinned = notes.isNotEmpty() && notes.all { it.pinned },
-                        onClear = unchoose,
-                        onPin = pin,
-                        onColor = { coloring = !coloring },
-                        onArchive = { archive(chosen.map { it as String }) },
-                        onTrash = { trash(chosen.map { it as String }) },
-                    )
-                    if (coloring) {
-                        SwatchPicker(
-                            selected = notes.map { it.entry.background }.distinct().singleOrNull(),
-                            noneLabel = stringResource(Res.string.background_none),
-                            onPick = { color -> services.scope.launch { notes.forEach { services.repo.setBackground(it.id, color) } } },
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                when {
+                    chosen.isNotEmpty() -> {
+                        val notes = chosenNotes()
+                        val inArchive = notes.isNotEmpty() && notes.all { it.archived }
+                        ChoiceBar(
+                            chosen.size,
+                            pinned = notes.isNotEmpty() && notes.all { it.pinned },
+                            archived = inArchive,
+                            onClear = unchoose,
+                            onPin = pin,
+                            onColor = { coloring = !coloring },
+                            onArchive = { archive(chosen.map { it as String }, !inArchive) },
+                            onTrash = { trash(chosen.map { it as String }) },
                         )
+                        if (coloring) {
+                            SwatchPicker(
+                                selected = notes.map { it.entry.background }.distinct().singleOrNull(),
+                                noneLabel = stringResource(Res.string.background_none),
+                                onPick = { color -> services.scope.launch { notes.forEach { services.repo.setBackground(it.id, color) } } },
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            )
+                        }
                     }
+
+                    mode == SEARCH -> {
+                        SearchTop(words, onWords = { words = it }, onBack = { mode = BOARD })
+                        FilterRow(found.orEmpty(), filter) { filter = it }
+                    }
+
+                    mode == ARCHIVE -> SubTop(stringResource(Res.string.board_archive_title), view.list, onBack = { mode = BOARD }) {
+                        view.change(!view.list)
+                    }
+
+                    else -> BoardTop(view.list, onSearch = { mode = SEARCH }, onArchive = { mode = ARCHIVE }) { view.change(!view.list) }
                 }
-                if (wide) QuickBar(create, Modifier.widthIn(max = 640.dp).align(Alignment.CenterHorizontally))
+                if (wide && mode == BOARD) QuickBar(create, Modifier.widthIn(max = 640.dp).align(Alignment.CenterHorizontally))
                 Box(
                     Modifier.weight(1f).fillMaxWidth()
                         .onGloballyPositioned { drag.board = it }
@@ -266,8 +356,8 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
                             fastest = with(density) { 1600.dp.toPx() },
                             onChoose = choose,
                             onPinch = { step -> view.change(step < 0) },
-                            swipe = swipe,
-                            onSwiped = { key -> archive(listOf(key as String)) },
+                            swipe = swipe.takeIf { mode == BOARD },
+                            onSwiped = { key -> archive(listOf(key as String), true) },
                             onDrop = { key ->
                                 order.placeOf(key as String)?.let { at ->
                                     order.pending = true
@@ -282,9 +372,20 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
                             },
                         ),
                 ) {
-                    val (pinned, others) = order.parts()
-                    if (data != null && pinned.isEmpty() && others.isEmpty()) {
-                        EmptyBoard(Modifier.align(Alignment.Center))
+                    val loaded = if (mode == SEARCH) found != null else data != null
+                    if (loaded && shown.isEmpty()) {
+                        Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                            when (mode) {
+                                SEARCH -> EmptyNote(stringResource(Res.string.board_found_none))
+                                ARCHIVE -> EmptyNote(stringResource(Res.string.board_archive_empty))
+                                else -> EmptyBoard(Modifier)
+                            }
+                            if (mode == SEARCH &&
+                                inJournal > 0
+                            ) {
+                                ElsewhereHint(stringResource(Res.string.board_more_in_journal, inJournal), toJournal)
+                            }
+                        }
                     } else {
                         LazyVerticalStaggeredGrid(
                             StaggeredGridCells.Fixed(lanes),
@@ -297,9 +398,11 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
                             verticalItemSpacing = 8.dp,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            if (pinned.isNotEmpty()) {
-                                item("h-pinned", span = StaggeredGridItemSpan.FullLine) { Header(stringResource(Res.string.board_pinned)) }
-                                items(pinned, key = { it.id }, contentType = { "note" }) { note ->
+                            sections.forEach { section ->
+                                section.label?.let { label ->
+                                    item(section.key, span = StaggeredGridItemSpan.FullLine) { Header(label) }
+                                }
+                                items(section.notes, key = { it.id }, contentType = { "note" }) { note ->
                                     NoteSlot(
                                         note,
                                         drag,
@@ -313,33 +416,144 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
                                         Modifier.animateItem(placementSpec = GLIDE),
                                     )
                                 }
-                                if (others.isNotEmpty()) {
-                                    item("h-others", span = StaggeredGridItemSpan.FullLine) {
-                                        Header(stringResource(Res.string.board_others))
-                                    }
-                                }
                             }
-                            items(others, key = { it.id }, contentType = { "note" }) { note ->
-                                NoteSlot(
-                                    note,
-                                    drag,
-                                    swipe,
-                                    services.media,
-                                    note.id in chosen,
-                                    chosen.isNotEmpty(),
-                                    open,
-                                    choose,
-                                    tick,
-                                    Modifier.animateItem(placementSpec = GLIDE),
-                                )
+                            if (mode == SEARCH && inJournal > 0) {
+                                item("h-journal", span = StaggeredGridItemSpan.FullLine) {
+                                    ElsewhereHint(stringResource(Res.string.board_more_in_journal, inJournal), toJournal)
+                                }
                             }
                         }
                     }
-                    drag.key?.let { key -> (pinned + others).firstOrNull { it.id == key }?.let { LiftedCard(it, drag, services.media) } }
+                    drag.key?.let { key -> shown.firstOrNull { it.id == key }?.let { LiftedCard(it, drag, services.media) } }
                 }
-                if (!wide) QuickBar(create)
+                if (!wide && mode == BOARD) QuickBar(create)
             }
         }
+    }
+}
+
+private const val BOARD = "board"
+private const val ARCHIVE = "archive"
+private const val SEARCH = "search"
+
+/** A part of the grid: its notes under a header (none for the first part). */
+private class Section(val key: String, val label: String?, val notes: List<BoardNote>)
+
+/** The board search's filters (Keep's): a kind of note, a color, a tag; null is any. */
+private data class BoardFilter(val kind: String? = null, val color: String? = null, val tag: String? = null) {
+    fun matches(note: BoardNote) = (kind == null || note.isKind(kind)) && (color == null || note.entry.background == color) &&
+        (tag == null || note.entry.tags.any { it.id == tag })
+}
+
+private fun BoardNote.isKind(kind: String) = when (kind) {
+    LISTS -> card.ticked > 0 || card.lines.any { it.box }
+    PICTURES -> picture != null
+    DRAWINGS -> "drawing" in kinds
+    else -> "voice" in kinds || "audio" in kinds
+}
+
+private const val LISTS = "lists"
+private const val PICTURES = "pictures"
+private const val DRAWINGS = "drawings"
+private const val SOUNDS = "sounds"
+
+/** The search's words, ← back to the board, ✕ to clear them. */
+@Composable
+private fun SearchTop(words: String, onWords: (String) -> Unit, onBack: () -> Unit) {
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    Row(
+        Modifier.fillMaxWidth().statusBarsPadding().padding(start = 4.dp, end = 4.dp, top = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BackButton(onBack)
+        TextField(
+            words,
+            onWords,
+            Modifier.weight(1f).focusRequester(focus),
+            placeholder = { Text(stringResource(Res.string.board_search_hint)) },
+            singleLine = true,
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+            ),
+        )
+        if (words.isNotEmpty()) {
+            IconButton({ onWords("") }, Modifier.hand()) { Icon(Icons.Close, stringResource(Res.string.board_search_clear)) }
+        }
+    }
+}
+
+/** Keep's search filters: kinds of notes, then the colors and tags the found notes have. */
+@Composable
+private fun FilterRow(found: List<BoardNote>, filter: BoardFilter, onFilter: (BoardFilter) -> Unit) {
+    val colors = found.mapNotNull { it.entry.background }.distinct().let { present -> SWATCHES.filter { it in present } }
+    val tags = found.flatMap { it.entry.tags }.distinctBy { it.id }
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        listOf(
+            LISTS to Res.string.board_kind_lists,
+            PICTURES to Res.string.board_kind_pictures,
+            DRAWINGS to Res.string.board_kind_drawings,
+            SOUNDS to Res.string.board_kind_sounds,
+        ).forEach { (kind, label) ->
+            val on = filter.kind == kind
+            FilterChip(on, { onFilter(filter.copy(kind = kind.takeUnless { on })) }, { Text(stringResource(label)) }, Modifier.hand())
+        }
+        colors.forEach { color ->
+            val on = filter.color == color
+            Box(
+                Modifier.size(28.dp).clip(CircleShape).background(swatch(color) ?: Color.Transparent)
+                    .border(
+                        if (on) 2.dp else 1.dp,
+                        if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                        CircleShape,
+                    )
+                    .hand().clickable { onFilter(filter.copy(color = color.takeUnless { on })) },
+            )
+        }
+        tags.forEach { tag ->
+            val on = filter.tag == tag.id
+            FilterChip(on, {
+                onFilter(filter.copy(tag = tag.id.takeUnless { on }))
+            }, { Text(LocalTags.current.name(tag)) }, Modifier.hand())
+        }
+    }
+}
+
+/** A sub-page of the board (its archive): ← back, its title, the grid or list switch. */
+@Composable
+private fun SubTop(title: String, list: Boolean, onBack: () -> Unit, onToggle: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().statusBarsPadding().padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BackButton(onBack)
+        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+        IconButton(onToggle, Modifier.hand()) {
+            Icon(
+                if (list) Icons.Blocks else Icons.ViewAgenda,
+                stringResource(if (list) Res.string.board_as_grid else Res.string.board_as_list),
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmptyNote(text: String) {
+    Text(text, Modifier.padding(24.dp), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+/** «Ещё N в дневнике» / «Ещё N в записках»: what the other side has for the same words, a tap away. */
+@Composable
+internal fun ElsewhereHint(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+        TextButton(onClick, Modifier.hand()) { Text(text) }
     }
 }
 
@@ -406,12 +620,14 @@ private class BoardOrder {
 }
 
 @Composable
-private fun BoardTop(list: Boolean, onToggle: () -> Unit) {
+private fun BoardTop(list: Boolean, onSearch: () -> Unit, onArchive: () -> Unit, onToggle: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().statusBarsPadding().padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(stringResource(Res.string.tab_board), Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall)
+        IconButton(onSearch, Modifier.hand()) { Icon(Icons.Search, stringResource(Res.string.board_search_hint)) }
+        IconButton(onArchive, Modifier.hand()) { Icon(Icons.Archive, stringResource(Res.string.board_archive_title)) }
         IconButton(onToggle, Modifier.hand()) {
             Icon(
                 if (list) Icons.Blocks else Icons.ViewAgenda,
@@ -426,6 +642,7 @@ private fun BoardTop(list: Boolean, onToggle: () -> Unit) {
 private fun ChoiceBar(
     count: Int,
     pinned: Boolean,
+    archived: Boolean,
     onClear: () -> Unit,
     onPin: () -> Unit,
     onColor: () -> Unit,
@@ -438,11 +655,19 @@ private fun ChoiceBar(
     ) {
         IconButton(onClear, Modifier.hand()) { Icon(Icons.Close, stringResource(Res.string.board_unchoose)) }
         Text(stringResource(Res.string.board_chosen, count), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-        IconButton(onPin, Modifier.hand()) {
-            Icon(Icons.Pin, stringResource(if (pinned) Res.string.board_unpin else Res.string.board_pin))
+        if (!archived) {
+            IconButton(onPin, Modifier.hand()) {
+                Icon(Icons.Pin, stringResource(if (pinned) Res.string.board_unpin else Res.string.board_pin))
+            }
         }
         IconButton(onColor, Modifier.hand()) { Icon(Icons.Palette, stringResource(Res.string.board_color)) }
-        IconButton(onArchive, Modifier.hand()) { Icon(Icons.Archive, stringResource(Res.string.board_archive)) }
+        IconButton(onArchive, Modifier.hand()) {
+            if (archived) {
+                Icon(Icons.Unarchive, stringResource(Res.string.board_unarchive))
+            } else {
+                Icon(Icons.Archive, stringResource(Res.string.board_archive))
+            }
+        }
         IconButton(onTrash, Modifier.hand()) { Icon(Icons.Delete, stringResource(Res.string.board_trash)) }
     }
 }
@@ -458,7 +683,7 @@ private fun Header(text: String) {
 }
 
 @Composable
-private fun EmptyBoard(modifier: Modifier) {
+internal fun EmptyBoard(modifier: Modifier) {
     Column(modifier.padding(32.dp).widthIn(max = 420.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(stringResource(Res.string.board_empty), style = MaterialTheme.typography.titleMedium)
         Text(

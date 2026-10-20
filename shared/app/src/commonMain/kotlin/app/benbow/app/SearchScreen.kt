@@ -44,6 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.benbow.app.resources.Res
+import app.benbow.app.resources.board_more_in_board
 import app.benbow.app.resources.filter_favorites
 import app.benbow.app.resources.filter_media
 import app.benbow.app.resources.search_empty
@@ -53,6 +54,7 @@ import app.benbow.app.resources.tag_picker_search
 import app.benbow.client.EntrySummary
 import app.benbow.client.SearchQuery
 import app.benbow.client.TagRef
+import app.benbow.client.searchBoard
 import app.benbow.client.tags
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -62,6 +64,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -76,6 +80,12 @@ internal class SearchViewModel(private val services: AppServices) : ViewModel() 
     @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
     val results: StateFlow<List<EntrySummary>?> = query.debounce(150).flatMapLatest { services.repo.search(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** The board's notes with the same words (ADR-040), for «Ещё N в записках»; only where the board shows. */
+    @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
+    val inBoard: StateFlow<Int> = query.debounce(150).flatMapLatest { q ->
+        if (services.labs && q.text.isNotBlank()) services.repo.searchBoard(q.text).map { it.size } else flowOf(0)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     fun edit(change: (SearchQuery) -> SearchQuery) = query.update(change)
 
@@ -174,9 +184,19 @@ internal fun SearchScreen(services: AppServices, nav: Navigator) {
                 )
             }
             val found = results ?: return@Column
+            val inBoard by vm.inBoard.collectAsStateWithLifecycle()
+            val toBoard = {
+                services.boardSearchFor.value = query.text
+                nav.selectTab(Route.Board)
+            }
             if (found.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(
+                    Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
                     Text(stringResource(Res.string.search_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (inBoard > 0) ElsewhereHint(stringResource(Res.string.board_more_in_board, inBoard), toBoard)
                 }
             } else if (query.withMedia) {
                 // Entries with media as a grid of their pictures, like the tag block that may have opened it.
@@ -219,6 +239,7 @@ internal fun SearchScreen(services: AppServices, nav: Navigator) {
                             nav.open(Route.Editor(entry.id, entry.day, readOnly = true))
                         }, media = services.media, showDay = true)
                     }
+                    if (inBoard > 0) item(key = "board") { ElsewhereHint(stringResource(Res.string.board_more_in_board, inBoard), toBoard) }
                 }
             }
         }

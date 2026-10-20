@@ -17,6 +17,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -26,13 +27,16 @@ import app.benbow.app.resources.Res
 import app.benbow.app.resources.gentle_count
 import app.benbow.app.resources.restore
 import app.benbow.app.resources.trash
+import app.benbow.app.resources.trash_board
 import app.benbow.app.resources.trash_calendar
 import app.benbow.app.resources.trash_calendar_item
 import app.benbow.app.resources.trash_category_item
 import app.benbow.app.resources.trash_empty
 import app.benbow.app.resources.trash_hint
+import app.benbow.app.resources.trash_journal
 import app.benbow.app.resources.trash_tag_item
 import app.benbow.app.resources.trash_tags
+import app.benbow.client.boardTrash
 import app.benbow.client.restoreCategory
 import app.benbow.client.restoreTag
 import app.benbow.client.trashedTags
@@ -48,6 +52,8 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun TrashScreen(services: AppServices, nav: Navigator) {
     val entries by services.repo.trash().collectAsStateWithLifecycle(null)
+    // The board's notes in a part of their own (ADR-040), never among the journal's entries.
+    val notes by remember { services.repo.boardTrash() }.collectAsStateWithLifecycle(emptyList())
     val events by services.calendar.trashedEvents().collectAsStateWithLifecycle(emptyList())
     val calendars by services.calendar.trashedCalendars().collectAsStateWithLifecycle(emptyList())
     val tags by services.repo.trashedTags().collectAsStateWithLifecycle(emptyList())
@@ -56,7 +62,7 @@ internal fun TrashScreen(services: AppServices, nav: Navigator) {
         TopAppBar(navigationIcon = { BackButton(nav::back) }, title = { Text(stringResource(Res.string.trash)) })
     }) { padding ->
         val items = entries ?: return@Scaffold
-        if (items.isEmpty() && events.isEmpty() && calendars.isEmpty() && tags.isEmpty() && categories.isEmpty()) {
+        if (items.isEmpty() && notes.isEmpty() && events.isEmpty() && calendars.isEmpty() && tags.isEmpty() && categories.isEmpty()) {
             Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(stringResource(Res.string.trash_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -71,10 +77,19 @@ internal fun TrashScreen(services: AppServices, nav: Navigator) {
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
                 )
             }
+            if (items.isNotEmpty() && notes.isNotEmpty()) item(key = "journal") { TrashHeader(stringResource(Res.string.trash_journal)) }
             items(items, key = { it.id }) { entry ->
                 EntryCard(entry, onClick = { nav.open(Route.Editor(entry.id, entry.day)) }) {
                     TextButton({
                         services.scope.launch { services.repo.restore(entry.id) }
+                    }, modifier = Modifier.hand()) { Text(stringResource(Res.string.restore)) }
+                }
+            }
+            if (notes.isNotEmpty()) item(key = "board") { TrashHeader(stringResource(Res.string.trash_board)) }
+            items(notes, key = { "n" + it.id }) { note ->
+                EntryCard(note, onClick = { nav.open(Route.Editor(note.id, note.day, board = true)) }) {
+                    TextButton({
+                        services.scope.launch { services.repo.restore(note.id) }
                     }, modifier = Modifier.hand()) { Text(stringResource(Res.string.restore)) }
                 }
             }
@@ -119,6 +134,15 @@ internal fun TrashScreen(services: AppServices, nav: Navigator) {
             }
         }
     }
+}
+
+@Composable
+private fun TrashHeader(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleSmall,
+        modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 4.dp),
+    )
 }
 
 @Composable

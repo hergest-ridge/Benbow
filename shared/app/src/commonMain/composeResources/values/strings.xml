@@ -763,5 +763,20 @@
     <string name="board_remove_item">Убрать пункт</string>
     <string name="board_title_hint">Заголовок</string>
     <string name="board_tick">Отметить</string>
+    <string name="board_archive_title">Архив</string>
+    <string name="board_archive_empty">В архиве пусто</string>
+    <string name="board_unarchive">Из архива</string>
+    <string name="board_search_hint">Искать в записках</string>
+    <string name="board_search_clear">Стереть</string>
+    <string name="board_found_none">Ничего не нашлось</string>
+    <string name="board_in_archive">В архиве</string>
+    <string name="board_more_in_journal">Ещё %1$d в дневнике</string>
+    <string name="board_more_in_board">Ещё %1$d в записках</string>
+    <string name="board_kind_lists">Списки</string>
+    <string name="board_kind_pictures">Картинки</string>
+    <string name="board_kind_drawings">Рисунки</string>
+    <string name="board_kind_sounds">Звуки</string>
+    <string name="trash_board">Записки</string>
+    <string name="trash_journal">Дневник</string>
     <string name="more_search">Записи, теги, вложения</string>
 </resources>

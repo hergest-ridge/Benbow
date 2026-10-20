@@ -285,6 +285,9 @@ class AppServices(
     /** What the Search tab is to show when it opens next (a tag block's selection); it takes it and clears it. */
     val searchFor = MutableStateFlow<SearchQuery?>(null)
 
+    /** Words for the board's search (ADR-040), asked from the journal's search: «Ещё N в записках». */
+    val boardSearchFor = MutableStateFlow<String?>(null)
+
     /** Set by the platform when it is opened for something; the app takes it and clears it. */
     val launch = MutableStateFlow<AppLaunch?>(null)
 

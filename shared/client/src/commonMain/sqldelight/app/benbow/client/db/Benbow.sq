@@ -97,8 +97,9 @@ SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, 
 WHERE day = ? AND json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system', 'event', 'reminder')
 ORDER BY created_at;
 
+-- The journal's trash; the board's notes have their own part of it (boardTrash, ADR-040).
 trash:
-SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM journal_entry
 WHERE json_extract(fields, '$.deleted') IS 'true'
 ORDER BY updated_at DESC;
 
@@ -222,6 +223,23 @@ UPDATE entry SET parent_id = ? WHERE id = ?;
 
 updateSpace:
 UPDATE entry SET space = ? WHERE id = ?;
+
+-- The board's notes in the trash, the latest first.
+boardTrash:
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM board_entry
+WHERE json_extract(fields, '$.deleted') IS 'true'
+ORDER BY updated_at DESC;
+
+-- Words on the board (K5), its archive too; the same terms as the journal's search (SearchIndex.terms). Types, colors
+-- and tags are picked in code.
+boardSearch:
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields, card, attachments FROM board_entry
+WHERE json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system', 'event', 'reminder')
+  AND (:m1 IS NULL OR id IN (SELECT entry_id FROM entry_search WHERE entry_search MATCH :m1))
+  AND (:m2 IS NULL OR id IN (SELECT entry_id FROM entry_search WHERE entry_search MATCH :m2))
+  AND (:m3 IS NULL OR id IN (SELECT entry_id FROM entry_search WHERE entry_search MATCH :m3))
+  AND (:m4 IS NULL OR id IN (SELECT entry_id FROM entry_search WHERE entry_search MATCH :m4))
+  AND (:rest IS NULL OR id IN (SELECT entry_id FROM entry_search WHERE entry_search MATCH :rest));
 
 -- The board (ADR-040): its notes, the archive included, in no order (BoardRank sorts them in code).
 boardNotes:

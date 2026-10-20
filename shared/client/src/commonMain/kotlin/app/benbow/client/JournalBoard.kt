@@ -24,6 +24,8 @@ data class BoardNote(
     val archived: Boolean,
     val card: CardPreview = CardPreview(),
     val picture: CardPicture? = null,
+    /** The kinds of its attachments (image, video, drawing, voice, audio, file): the board search's filters. */
+    val kinds: Set<String> = emptySet(),
 ) {
     val id get() = entry.id
 }
@@ -89,6 +91,31 @@ fun JournalRepository.pinOnBoard(id: String, pinned: Boolean) = db.transaction {
 /** Into the board's archive (out of sight), or back from it: it keeps its place, so «Вернуть» puts it where it was. */
 fun JournalRepository.archiveOnBoard(id: String, archived: Boolean) = setField(id, Board.ARCHIVED, if (archived) "true" else null)
 
+/**
+ * The board's notes with [text] (every word, as the journal's search reads them), its archive too: the pinned first,
+ * the others, then the archived, each in board order. Empty words find every note.
+ */
+fun JournalRepository.searchBoard(text: String): Flow<List<BoardNote>> = SearchIndex.terms(text).let { terms ->
+    combine(
+        q.boardSearch(
+            m1 = terms.getOrNull(0)?.either,
+            m2 = terms.getOrNull(1)?.either,
+            m3 = terms.getOrNull(2)?.either,
+            m4 = terms.getOrNull(3)?.either,
+            rest = terms.drop(4).takeIf { it.isNotEmpty() }?.joinToString(" ") { it.prefix },
+            mapper = ::boardNote,
+        ).asFlow().mapToList(context),
+        gentleRules(),
+    ) { notes, rules ->
+        val read = notes.map { it.copy(entry = rules.apply(it.entry)) }
+        sorted(read.filter { it.pinned && !it.archived }) + sorted(read.filter { !it.pinned && !it.archived }) +
+            sorted(read.filter { it.archived })
+    }
+}
+
+/** The board's notes in the trash, the latest first (the trash screen's «Записки»). */
+fun JournalRepository.boardTrash(): Flow<List<EntrySummary>> = q.boardTrash(::summaryOf).asFlow().mapToList(context)
+
 /** A box ticked (or not) right on its card: a revision of the note's body that changes only that box's `checked`. */
 fun JournalRepository.tickOnBoard(id: String, key: String, checked: Boolean): Boolean = reviseBody(id) { body ->
     runCatching { DocumentCodec.decode(body) }.getOrNull()?.let { Checklists.tick(it, key, checked) }?.let(DocumentCodec::encode)
@@ -123,6 +150,7 @@ private fun boardNote(
         card.takeIf { it.isNotEmpty() }?.let { runCatching { ClientJson.decodeFromString(CardPreview.serializer(), it) }.getOrNull() }
             ?: CardPreview(),
         picture = cover?.let { sha -> CardPicture(sha, coverRatio(decodeAttachments(attachments), sha)) },
+        kinds = decodeAttachments(attachments).values.filter { it.present }.mapTo(HashSet()) { it.meta.kind },
     )
 }
 

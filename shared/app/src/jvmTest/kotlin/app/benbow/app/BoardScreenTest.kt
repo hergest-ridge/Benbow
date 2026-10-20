@@ -21,7 +21,9 @@ import androidx.compose.ui.test.waitUntilAtLeastOneExists
 import androidx.compose.ui.test.waitUntilDoesNotExist
 import app.benbow.client.JournalRepository
 import app.benbow.client.Settings
+import app.benbow.client.archiveOnBoard
 import app.benbow.client.board
+import app.benbow.client.boardTrash
 import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.createBoardNote
 import app.benbow.client.db.BenbowDb
@@ -187,7 +189,8 @@ class BoardScreenTest {
         onNodeWithContentDescription("В корзину").performClick()
         waitUntil(timeoutMillis = 5_000) { notes().others.isEmpty() }
         waitUntilAtLeastOneExists(hasText("Записка в корзине"), 5_000)
-        assertEquals(listOf(a), runBlocking { repo.trash().first() }.map { it.id })
+        assertEquals(listOf(a), runBlocking { repo.boardTrash().first() }.map { it.id })
+        assertEquals(emptyList(), runBlocking { repo.trash().first() }, "the journal's trash keeps to the journal")
     }
 
     @Test
@@ -287,6 +290,67 @@ class BoardScreenTest {
         waitUntilDoesNotExist(hasText("Пункт списка"), 5_000)
         onNodeWithContentDescription("Назад").performClick()
         waitUntil(timeoutMillis = 5_000) { notes().others.single().card.lines.none { it.box } }
+    }
+
+    @Test
+    fun theArchiveShowsItsNotesAndLetsThemBack() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val (a, b) = listOf("Альфа", "Бета").map { repo.createBoardNote(services.today(), JournalRepository.textBody(it)) }
+        repo.archiveOnBoard(a, true)
+        openBoard()
+        waitUntilAtLeastOneExists(hasText("Бета"), 5_000)
+        assertTrue(onAllNodes(hasText("Альфа")).fetchSemanticsNodes().isEmpty())
+        onNodeWithContentDescription("Архив").performClick()
+        waitUntilAtLeastOneExists(hasText("Альфа"), 5_000)
+        screenshot("board-12-archive")
+        onNodeWithTag(a).performTouchInput {
+            down(center)
+            advanceEventTime(800)
+            up()
+        }
+        waitUntilAtLeastOneExists(hasText("Выбрано: 1"), 5_000)
+        onNodeWithContentDescription("Из архива").performClick()
+        waitUntil(timeoutMillis = 5_000) { notes().others.map { it.id }.toSet() == setOf(a, b) }
+        waitUntilAtLeastOneExists(hasText("В архиве пусто"), 5_000)
+        onNodeWithContentDescription("Назад").performClick()
+        waitUntilAtLeastOneExists(hasText("Альфа"), 5_000)
+    }
+
+    @Test
+    fun searchingTheBoardFiltersItAndPointsToTheJournalAndBack() = runDesktopComposeUiTest(width = 412, height = 860) {
+        repo.createNote(services.today(), "Смородина у мамы на даче")
+        repo.createBoardNote(services.today(), JournalRepository.textBody("Варенье\nсмородина, сахар"))
+        repo.createBoardNote(services.today(), JournalRepository.checklistBody())
+        repo.createBoardNote(services.today(), JournalRepository.textBody("Купить смородину"))
+        openBoard()
+        onNodeWithContentDescription("Искать в записках").performClick()
+        waitUntilAtLeastOneExists(hasSetTextAction(), 5_000)
+        onNode(hasSetTextAction()).performTextInput("смородина")
+        waitUntilAtLeastOneExists(hasText("Варенье"), 5_000)
+        waitUntilAtLeastOneExists(hasText("Купить смородину"), 5_000)
+        waitUntilAtLeastOneExists(hasText("Ещё 1 в дневнике"), 5_000)
+        screenshot("board-13-search")
+
+        // The journal's search has it, and points back to the board.
+        onNodeWithText("Ещё 1 в дневнике").performClick()
+        waitUntilAtLeastOneExists(hasText("Смородина у мамы на даче"), 5_000)
+        waitUntilAtLeastOneExists(hasText("Ещё 2 в записках"), 5_000)
+        onNodeWithText("Ещё 2 в записках").performClick()
+        waitUntilAtLeastOneExists(hasText("Варенье"), 5_000)
+    }
+
+    @Test
+    fun theTrashKeepsTheBoardsNotesApart() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val note = repo.createBoardNote(services.today(), JournalRepository.textBody("Старый список"))
+        val entry = repo.createNote(services.today(), "Старая запись")
+        repo.moveToTrash(note)
+        repo.moveToTrash(entry)
+        setContent { BenbowApp(services) }
+        onNodeWithText("Ещё").click()
+        onNodeWithText("Корзина").click()
+        waitUntilAtLeastOneExists(hasText("Старый список"), 5_000)
+        waitUntilAtLeastOneExists(hasText("Дневник"), 5_000)
+        assertTrue(onAllNodes(hasText("Записки")).fetchSemanticsNodes().isNotEmpty())
+        screenshot("board-14-trash")
     }
 
     private fun ComposeUiTest.center(tag: String): Offset = onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.center

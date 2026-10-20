@@ -37,6 +37,7 @@ import app.benbow.app.resources.more_gentle
 import app.benbow.app.resources.more_lock_off
 import app.benbow.app.resources.more_lock_on
 import app.benbow.app.resources.more_reminders
+import app.benbow.app.resources.more_search
 import app.benbow.app.resources.more_shortcuts
 import app.benbow.app.resources.more_shortcuts_web
 import app.benbow.app.resources.more_tagline
@@ -49,6 +50,7 @@ import app.benbow.app.resources.shortcuts
 import app.benbow.app.resources.speech_more_missing
 import app.benbow.app.resources.speech_more_ready
 import app.benbow.app.resources.speech_title
+import app.benbow.app.resources.tab_search
 import app.benbow.app.resources.tags
 import app.benbow.app.resources.trash
 import app.benbow.client.SpeechModel
@@ -77,6 +79,10 @@ private fun MoreList(services: AppServices, nav: Navigator) {
             )
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        if (services.labs) { // Поиск gave its tab to «Записки» for now (ADR-040)
+            MoreItem(Icons.Search, stringResource(Res.string.tab_search), stringResource(Res.string.more_search)) { nav.open(Route.Search) }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        }
         val look = syncLook(status)
         MoreItem(Icons.Server, stringResource(Res.string.server), look?.label, look?.tone) { nav.open(Route.Server) }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

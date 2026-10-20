@@ -56,6 +56,7 @@ class BenbowApplication : Application() {
             speechModel = { api -> SpeechModelStore(File(filesDir, "models/" + SpeechModelSpec.ID), api) },
             mic = AndroidDictationMic(this),
             audio = audio,
+            labs = packageName != "app.benbow", // the dev and bench builds show unfinished work, the owner's app never
         )
     }
 

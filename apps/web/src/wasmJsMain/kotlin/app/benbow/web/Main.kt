@@ -71,6 +71,7 @@ private suspend fun start() {
             mediaCacheBytes = 2L * 1024 * 1024 * 1024, // downloads kept in IndexedDB; the PC has room
             reminderClock = reminders,
             audio = BrowserAudio(),
+            labs = !pagePath().startsWith("/app"), // the dev server shows unfinished work, the server's /app/ never
         )
         val media = services.media as BrowserMedia
         // Hidden (another tab, minimized, closing): typing becomes a revision and everything goes to browser storage now.
@@ -135,3 +136,5 @@ private fun showStartupError(message: String): Unit = js(
         }
     }""",
 )
+
+private fun pagePath(): String = js("window.location.pathname")

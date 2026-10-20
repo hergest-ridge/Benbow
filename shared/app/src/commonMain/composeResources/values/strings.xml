@@ -733,4 +733,17 @@
     <string name="removed_card">Карточка удалена</string>
     <string name="removed_link">Ссылка убрана, текст остался</string>
     <string name="card_became_text">Карточка стала ссылкой в тексте</string>
+    <string name="tab_board">Записки</string>
+    <string name="board_spike">прототип · записки выдуманы</string>
+    <string name="board_pinned">Закреплённые</string>
+    <string name="board_others">Другие</string>
+    <string name="board_columns">Столбцы</string>
+    <string name="board_columns_auto">Авто</string>
+    <string name="board_cards">Карточек</string>
+    <string name="board_checked">Отмечено: %1$d</string>
+    <string name="board_frames">%1$d кадров · %2$s мс · опозданий %3$d · худший %4$d мс</string>
+    <string name="board_title_hint">Заголовок</string>
+    <string name="board_text_hint">Заметка</string>
+    <string name="board_close">Закрыть</string>
+    <string name="more_search">Записи, теги, вложения</string>
 </resources>

@@ -41,6 +41,7 @@ fun main() {
         mediaCacheBytes = 10L * 1024 * 1024 * 1024, // the PC has room; originals open without waiting
         reminderClock = clock,
         audio = JavaFxAudio(),
+        labs = System.getenv("BENBOW_LABS") == "1", // unfinished work, for dev runs only
     )
     application { BenbowDesktop(services, tray) }
 }

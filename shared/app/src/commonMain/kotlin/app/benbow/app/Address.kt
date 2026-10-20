@@ -12,6 +12,8 @@ internal fun Route.path(): String = when (this) {
 
     Route.Calendar, Route.CalendarImport -> "calendar"
 
+    Route.Board -> "notes"
+
     Route.Search -> "search"
 
     Route.More -> "more"
@@ -68,6 +70,7 @@ internal fun linkOf(path: String): Link? {
         null -> Link.Tab(Route.Home)
         "feed" -> Link.Tab(Route.Feed)
         "calendar" -> Link.Tab(Route.Calendar)
+        "notes" -> Link.Tab(Route.Board)
         "search" -> Link.Tab(Route.Search)
         "more" -> Link.Tab(Route.More)
         "new" -> Link.NewEntry

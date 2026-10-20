@@ -239,6 +239,11 @@ internal object Icons {
 
     /** Home's blocks ("Dashboard"). */
     val Blocks = icon("Blocks", "M3,13h8V3H3v10zM3,21h8v-6H3v6zM13,21h8V11h-8v10zM13,3v6h8V3h-8z")
+    val Board = icon(
+        "Board",
+        "M19,3H4.99C3.89,3 3,3.9 3,5l0.01,14c0,1.1 0.89,2 1.99,2h10l6,-6V5c0,-1.1 -0.9,-2 -2,-2zM7,8h10v2H7V8z" +
+            "M12,14H7v-2h5v2zM14,19.5V14h5.5L14,19.5z",
+    )
 
     private fun icon(name: String, path: String) = ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f)
         .addPath(addPathNodes(path), fill = SolidColor(Color.Black))

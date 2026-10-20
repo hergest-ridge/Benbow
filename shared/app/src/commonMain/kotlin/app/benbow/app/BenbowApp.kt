@@ -95,6 +95,7 @@ import app.benbow.app.resources.removed_link
 import app.benbow.app.resources.save_failed
 import app.benbow.app.resources.saved
 import app.benbow.app.resources.speech_failed
+import app.benbow.app.resources.tab_board
 import app.benbow.app.resources.tab_calendar
 import app.benbow.app.resources.tab_feed
 import app.benbow.app.resources.tab_home
@@ -158,6 +159,9 @@ internal sealed interface Route {
     data object Search : Route
 
     data object Calendar : Route
+
+    /** Notes beside the journal, Keep-like (ADR-040); for now the K0 spike, in [AppServices.labs] builds only. */
+    data object Board : Route
 
     data class Comments(val entryId: String) : Route
 
@@ -227,13 +231,18 @@ internal class Navigator(private val stack: SnapshotStateList<Route>, private va
 
 private class Tab(val route: Route, val label: StringResource, val icon: ImageVector)
 
-private val TAB_ROUTES = setOf(Route.Home, Route.Feed, Route.Calendar, Route.Search, Route.More)
+private val TAB_ROUTES = setOf(Route.Home, Route.Feed, Route.Calendar, Route.Board, Route.Search, Route.More)
 
-private val TABS = listOf(
+/**
+ * The tabs in order. «Записки» comes after Календарь (ADR-040), for now only where [labs] is on; there Поиск moves to
+ * «Ещё» for the time being (owner: six tabs are too many).
+ */
+private fun tabs(labs: Boolean) = listOfNotNull(
     Tab(Route.Home, Res.string.tab_home, Icons.Home),
     Tab(Route.Feed, Res.string.tab_feed, Icons.Feed),
     Tab(Route.Calendar, Res.string.tab_calendar, Icons.Calendar),
-    Tab(Route.Search, Res.string.tab_search, Icons.Search),
+    Tab(Route.Board, Res.string.tab_board, Icons.Board).takeIf { labs },
+    Tab(Route.Search, Res.string.tab_search, Icons.Search).takeUnless { labs },
     Tab(Route.More, Res.string.tab_more, Icons.MoreHoriz),
 )
 
@@ -321,7 +330,7 @@ private fun AppRoot(services: AppServices) {
                 Shortcut.NewEntry -> nav.open(Route.Editor(null, services.today(), opened = services.now()))
                 Shortcut.Search -> nav.selectTab(Route.Search)
                 Shortcut.Back -> nav.back()
-                is Shortcut.Tab -> TABS.getOrNull(shortcut.index)?.let { nav.selectTab(it.route) }
+                is Shortcut.Tab -> tabs(services.labs).getOrNull(shortcut.index)?.let { nav.selectTab(it.route) }
                 Shortcut.Save -> Unit // the open editor takes it
             }
         }
@@ -496,6 +505,7 @@ private fun AppFrame(
 
     fun Tab.press() = Modifier.hand().then(if (route == Route.Feed) Modifier.longPress(flipGentle) else Modifier)
     val current = backStack.lastOrNull { it in TAB_ROUTES }
+    val tabList = remember(services.labs) { tabs(services.labs) }
     var barHeight by remember { mutableIntStateOf(0) }
     val bar = with(LocalDensity.current) { barHeight.toDp() }
     // The mini-player (ADR-035) sits on the tab bar, or at the foot of a wide window; it opens the player screen.
@@ -511,7 +521,7 @@ private fun AppFrame(
             if (wide && (tabs || (twoPane && top != null && !top.fullWindow))) {
                 NavigationRail {
                     Spacer(Modifier.height(8.dp))
-                    TABS.forEach { tab ->
+                    tabList.forEach { tab ->
                         val label = stringResource(tab.label)
                         NavigationRailItem(
                             selected = current == tab.route,
@@ -559,7 +569,7 @@ private fun AppFrame(
                 }
                 if (bottomBar) {
                     ShortNavigationBar(Modifier.onSizeChanged { barHeight = it.height }) {
-                        TABS.forEach { tab ->
+                        tabList.forEach { tab ->
                             val label = stringResource(tab.label)
                             ShortNavigationBarItem(
                                 selected = top == tab.route,
@@ -648,6 +658,7 @@ private fun Screens(
             entry<Route.Drawing>(metadata = FULL_WINDOW) { DrawingScreen(services, nav, it) }
             entry<Route.Search>(metadata = TAB) { SearchScreen(services, listNav) }
             entry<Route.Calendar>(metadata = TAB) { CalendarScreen(services, listNav) }
+            entry<Route.Board>(metadata = TAB + FULL_WINDOW) { BoardScreen() } // a grid wants the window, not a list's pane
             entry<Route.More>(metadata = TAB) { MoreScreen(services, listNav) }
             entry<Route.Comments> { CommentsScreen(services, nav, it) }
             entry<Route.Tags> { TagsScreen(services, nav) }

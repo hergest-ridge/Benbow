@@ -70,6 +70,8 @@ data class AttachmentState(
     val caption: String? = null,
     val present: Boolean = true,
     val hlc: Hlc,
+    /** Deleted for good from the trash (ADR-041): the link holds no file any more. Only the server's purge sets it (7.18 M5). */
+    val purged: Boolean = false,
 )
 
 @Serializable

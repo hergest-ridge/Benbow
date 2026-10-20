@@ -1,0 +1,62 @@
+-- v8 -> v9 (7.18 M1, ADR-041): every attachment link as a row of its own, kept in step with entry.attachments by
+-- triggers (as in Benbow.sq) and filled once here from what the device already holds.
+CREATE TABLE attachment_ref (
+    entry_id TEXT NOT NULL,
+    attachment_id TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    mime TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    name TEXT,
+    width INTEGER,
+    height INTEGER,
+    duration_ms INTEGER,
+    captured_at INTEGER,
+    preview_sha256 TEXT,
+    position REAL NOT NULL,
+    present INTEGER NOT NULL,
+    purged INTEGER NOT NULL,
+    PRIMARY KEY (entry_id, attachment_id)
+);
+
+CREATE INDEX attachment_ref_by_sha ON attachment_ref(sha256);
+
+CREATE TRIGGER attachment_ref_insert AFTER INSERT ON entry BEGIN
+    DELETE FROM attachment_ref WHERE entry_id = new.id;
+    INSERT OR IGNORE INTO attachment_ref
+    SELECT e.id, a.key, json_extract(a.value, '$.meta.sha256'), coalesce(json_extract(a.value, '$.meta.kind'), 'file'),
+        coalesce(json_extract(a.value, '$.meta.mime'), 'application/octet-stream'), coalesce(json_extract(a.value, '$.meta.size'), 0),
+        json_extract(a.value, '$.meta.name'), json_extract(a.value, '$.meta.width'), json_extract(a.value, '$.meta.height'),
+        json_extract(a.value, '$.meta.duration_ms'), json_extract(a.value, '$.meta.captured_at'),
+        json_extract(a.value, '$.meta.preview_sha256'), coalesce(json_extract(a.value, '$.position'), 0),
+        json_type(a.value, '$.present') IS NOT 'false', json_type(a.value, '$.purged') IS 'true'
+    FROM entry AS e, json_each(CASE WHEN json_valid(e.attachments) THEN e.attachments ELSE '{}' END) AS a
+    WHERE e.id = new.id AND a.type = 'object' AND json_type(a.value, '$.meta.sha256') = 'text';
+END;
+
+CREATE TRIGGER attachment_ref_update AFTER UPDATE OF attachments ON entry WHEN new.attachments IS NOT old.attachments BEGIN
+    DELETE FROM attachment_ref WHERE entry_id = new.id;
+    INSERT OR IGNORE INTO attachment_ref
+    SELECT e.id, a.key, json_extract(a.value, '$.meta.sha256'), coalesce(json_extract(a.value, '$.meta.kind'), 'file'),
+        coalesce(json_extract(a.value, '$.meta.mime'), 'application/octet-stream'), coalesce(json_extract(a.value, '$.meta.size'), 0),
+        json_extract(a.value, '$.meta.name'), json_extract(a.value, '$.meta.width'), json_extract(a.value, '$.meta.height'),
+        json_extract(a.value, '$.meta.duration_ms'), json_extract(a.value, '$.meta.captured_at'),
+        json_extract(a.value, '$.meta.preview_sha256'), coalesce(json_extract(a.value, '$.position'), 0),
+        json_type(a.value, '$.present') IS NOT 'false', json_type(a.value, '$.purged') IS 'true'
+    FROM entry AS e, json_each(CASE WHEN json_valid(e.attachments) THEN e.attachments ELSE '{}' END) AS a
+    WHERE e.id = new.id AND a.type = 'object' AND json_type(a.value, '$.meta.sha256') = 'text';
+END;
+
+CREATE TRIGGER attachment_ref_delete AFTER DELETE ON entry BEGIN
+    DELETE FROM attachment_ref WHERE entry_id = old.id;
+END;
+
+INSERT OR IGNORE INTO attachment_ref
+SELECT e.id, a.key, json_extract(a.value, '$.meta.sha256'), coalesce(json_extract(a.value, '$.meta.kind'), 'file'),
+    coalesce(json_extract(a.value, '$.meta.mime'), 'application/octet-stream'), coalesce(json_extract(a.value, '$.meta.size'), 0),
+    json_extract(a.value, '$.meta.name'), json_extract(a.value, '$.meta.width'), json_extract(a.value, '$.meta.height'),
+    json_extract(a.value, '$.meta.duration_ms'), json_extract(a.value, '$.meta.captured_at'),
+    json_extract(a.value, '$.meta.preview_sha256'), coalesce(json_extract(a.value, '$.position'), 0),
+    json_type(a.value, '$.present') IS NOT 'false', json_type(a.value, '$.purged') IS 'true'
+FROM entry AS e, json_each(CASE WHEN json_valid(e.attachments) THEN e.attachments ELSE '{}' END) AS a
+WHERE a.type = 'object' AND json_type(a.value, '$.meta.sha256') = 'text';

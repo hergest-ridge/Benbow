@@ -53,6 +53,62 @@ CREATE TABLE media (
     uploaded_at INTEGER
 );
 
+-- One row per attachment link of an entry (ADR-041): the library, the trash's media and the device's estimates read
+-- it, never parsing entry.attachments per row. The triggers below make it from entry.attachments in the same statement
+-- as every write of it, so no write path can leave it behind; a value they can't read gives no row and never fails the
+-- write. The entry's day, space and trash are joined from `entry` (which also wakes the queries reading both).
+-- Regenerable from `entry`: not client-owned data.
+CREATE TABLE attachment_ref (
+    entry_id TEXT NOT NULL,
+    attachment_id TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    mime TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    name TEXT,
+    width INTEGER,
+    height INTEGER,
+    duration_ms INTEGER,
+    captured_at INTEGER,
+    preview_sha256 TEXT,
+    position REAL NOT NULL,
+    present INTEGER NOT NULL,
+    purged INTEGER NOT NULL,
+    PRIMARY KEY (entry_id, attachment_id)
+);
+
+CREATE INDEX attachment_ref_by_sha ON attachment_ref(sha256);
+
+CREATE TRIGGER attachment_ref_insert AFTER INSERT ON entry BEGIN
+    DELETE FROM attachment_ref WHERE entry_id = new.id;
+    INSERT OR IGNORE INTO attachment_ref
+    SELECT e.id, a.key, json_extract(a.value, '$.meta.sha256'), coalesce(json_extract(a.value, '$.meta.kind'), 'file'),
+        coalesce(json_extract(a.value, '$.meta.mime'), 'application/octet-stream'), coalesce(json_extract(a.value, '$.meta.size'), 0),
+        json_extract(a.value, '$.meta.name'), json_extract(a.value, '$.meta.width'), json_extract(a.value, '$.meta.height'),
+        json_extract(a.value, '$.meta.duration_ms'), json_extract(a.value, '$.meta.captured_at'),
+        json_extract(a.value, '$.meta.preview_sha256'), coalesce(json_extract(a.value, '$.position'), 0),
+        json_type(a.value, '$.present') IS NOT 'false', json_type(a.value, '$.purged') IS 'true'
+    FROM entry AS e, json_each(CASE WHEN json_valid(e.attachments) THEN e.attachments ELSE '{}' END) AS a
+    WHERE e.id = new.id AND a.type = 'object' AND json_type(a.value, '$.meta.sha256') = 'text';
+END;
+
+CREATE TRIGGER attachment_ref_update AFTER UPDATE OF attachments ON entry WHEN new.attachments IS NOT old.attachments BEGIN
+    DELETE FROM attachment_ref WHERE entry_id = new.id;
+    INSERT OR IGNORE INTO attachment_ref
+    SELECT e.id, a.key, json_extract(a.value, '$.meta.sha256'), coalesce(json_extract(a.value, '$.meta.kind'), 'file'),
+        coalesce(json_extract(a.value, '$.meta.mime'), 'application/octet-stream'), coalesce(json_extract(a.value, '$.meta.size'), 0),
+        json_extract(a.value, '$.meta.name'), json_extract(a.value, '$.meta.width'), json_extract(a.value, '$.meta.height'),
+        json_extract(a.value, '$.meta.duration_ms'), json_extract(a.value, '$.meta.captured_at'),
+        json_extract(a.value, '$.meta.preview_sha256'), coalesce(json_extract(a.value, '$.position'), 0),
+        json_type(a.value, '$.present') IS NOT 'false', json_type(a.value, '$.purged') IS 'true'
+    FROM entry AS e, json_each(CASE WHEN json_valid(e.attachments) THEN e.attachments ELSE '{}' END) AS a
+    WHERE e.id = new.id AND a.type = 'object' AND json_type(a.value, '$.meta.sha256') = 'text';
+END;
+
+CREATE TRIGGER attachment_ref_delete AFTER DELETE ON entry BEGIN
+    DELETE FROM attachment_ref WHERE entry_id = old.id;
+END;
+
 CREATE INDEX entry_by_day ON entry(day, created_at);
 
 CREATE TABLE draft (
@@ -313,6 +369,10 @@ SELECT id FROM entry;
 
 updateAttachments:
 UPDATE entry SET attachments = ?, media_count = ?, cover = ?, updated_at = ? WHERE id = ?;
+
+-- Every attachment link as attachment_ref holds it (ADR-041).
+attachmentRefs:
+SELECT * FROM attachment_ref ORDER BY entry_id, position, attachment_id;
 
 putMedia:
 INSERT INTO media(sha256, path, size, mime, origin, uploaded, name, captured_at, last_access_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)

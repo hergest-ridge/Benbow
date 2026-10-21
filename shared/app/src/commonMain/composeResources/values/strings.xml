@@ -67,8 +67,6 @@
     <string name="media_mic_denied">Чтобы записывать голос, разрешите доступ к микрофону</string>
     <string name="media_file">Добавить файл</string>
     <string name="media_open">Открыть в другом приложении</string>
-    <string name="media_remove">Убрать</string>
-    <string name="media_remove_confirm">Убрать вложение из записи? Файл останется на сервере и в истории.</string>
     <string name="media_unavailable">Файл сейчас недоступен: %1$s</string>
     <string name="attach_failed">Не удалось добавить файл: %1$s</string>
     <string name="player_next">Следующий трек</string>
@@ -823,4 +821,21 @@
         <item>МБ</item>
         <item>ГБ</item>
     </string-array>
+    <string name="trash_attachments">Вложения</string>
+    <string name="trash_media_total">Файлы в корзине: %1$s</string>
+    <string name="trash_latest">Недавние</string>
+    <string name="trash_oldest">Давние</string>
+    <string name="trash_heaviest">Тяжёлые</string>
+    <string name="trash_today">сегодня</string>
+    <string name="trash_yesterday">вчера</string>
+    <plurals name="trash_days_ago">
+        <item quantity="one">%1$d день назад</item>
+        <item quantity="few">%1$d дня назад</item>
+        <item quantity="many">%1$d дней назад</item>
+        <item quantity="other">%1$d дня назад</item>
+    </plurals>
+    <string name="trash_from_entry">из записи %1$s</string>
+    <string name="media_kind_image">Фото</string>
+    <string name="media_kind_video">Видео</string>
+    <string name="media_kind_drawing">Рисунок</string>
 </resources>

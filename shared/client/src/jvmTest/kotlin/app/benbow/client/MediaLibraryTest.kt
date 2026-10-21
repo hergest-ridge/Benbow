@@ -7,6 +7,7 @@ import kotlinx.coroutines.test.runTest
 import java.util.Properties
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /** The media library (ADR-041): what shows, in which order, with which entry and veil; taking out and back. */
 class MediaLibraryTest {
@@ -81,5 +82,48 @@ class MediaLibraryTest {
         assertEquals(emptyList(), shown())
         repo.restoreAttachments(keys)
         assertEquals(listOf("IMG_1.jpg", "IMG_2.jpg"), shown())
+    }
+
+    @Test
+    fun takenOffAttachmentsWaitInTheTrashTheLatestFirstThoseOfTrashedEntriesWithThem() = runTest {
+        val live = repo.createEntry("2026-10-20")
+        val gone = repo.createEntry("2026-10-19")
+        val comment = repo.createComment(live, "2026-10-21", "ещё")
+        val first = repo.attach(live, file(1), "image")
+        val second = repo.attach(live, file(2), "image")
+        val inComment = repo.attach(comment, file(3), "image")
+        val withEntry = repo.attach(gone, file(4), "image")
+        repo.removeAttachment(live, first)
+        repo.removeAttachment(comment, inComment)
+        repo.removeAttachment(live, second)
+        repo.removeAttachment(gone, withEntry)
+        repo.moveToTrash(gone)
+        val off = repo.takenOff().first()
+        assertEquals(listOf("IMG_2.jpg", "IMG_3.jpg", "IMG_1.jpg"), off.map { it.attachment.meta.name })
+        assertEquals(listOf(live, live, live), off.map { it.postId })
+        assertTrue(off.zipWithNext().all { (a, b) -> a.since!! > b.since!! })
+        repo.restoreAttachment(live, second)
+        assertEquals(listOf("IMG_3.jpg", "IMG_1.jpg"), repo.takenOff().first().map { it.attachment.meta.name })
+    }
+
+    @Test
+    fun theTrashWeighsEachEntryWithItsCommentsEachFileOnce() = runTest {
+        val post = repo.createEntry("2026-10-20")
+        val comment = repo.createComment(post, "2026-10-20", "к ней")
+        repo.attach(post, file(1), "image")
+        repo.attach(post, file(1), "image") // the same file twice
+        val off = repo.attach(post, file(2), "image")
+        repo.removeAttachment(post, off) // taken off before: still the entry's
+        repo.attach(comment, file(3), "image")
+        val live = repo.createEntry("2026-10-21")
+        val takenOff = repo.attach(live, file(4), "image")
+        repo.removeAttachment(live, takenOff)
+        // Before the post goes, both taken-off files wait in the trash on their own.
+        assertEquals(TrashMedia(emptyMap(), 2_000 + 4_000), repo.mediaInTrash().first())
+        repo.moveToTrash(post)
+        val trash = repo.mediaInTrash().first()
+        assertEquals(1_000L + 2_000 + 3_000, trash.entries.getValue(post).bytes)
+        assertTrue(trash.entries.getValue(post).since != null)
+        assertEquals(1_000L + 2_000 + 3_000 + 4_000, trash.bytes)
     }
 }

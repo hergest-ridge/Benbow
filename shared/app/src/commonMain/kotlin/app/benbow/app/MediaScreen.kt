@@ -23,7 +23,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -56,12 +55,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.library_open_entry
-import app.benbow.app.resources.media_remove
-import app.benbow.app.resources.media_remove_confirm
 import app.benbow.app.resources.media_unavailable
 import app.benbow.app.resources.months_genitive
 import app.benbow.app.resources.move_to_trash
-import app.benbow.app.resources.server_cancel
 import app.benbow.client.EntryDetail
 import app.benbow.client.library
 import app.benbow.core.media.AttachmentKey
@@ -104,7 +100,6 @@ internal fun MediaScreen(services: AppServices, nav: Navigator, route: Route.Med
             items,
             start = items.indexOfFirst { it.attachment.meta.id == route.attachmentId }.coerceAtLeast(0),
             entryOf = { entry },
-            confirmRemove = true,
         )
     }
 }
@@ -134,7 +129,6 @@ internal fun LibraryViewer(services: AppServices, nav: Navigator, route: Route.L
             items,
             start = items.indexOfFirst { it.key == route.key }.coerceAtLeast(0),
             entryOf = { null },
-            confirmRemove = false,
             onOpenEntry = { item -> byKey[item.key]?.let { nav.open(Route.Editor(it.postId, it.day, readOnly = true)) } },
         )
     }
@@ -147,15 +141,12 @@ private fun MediaPager(
     items: List<ViewerItem>,
     start: Int,
     entryOf: (String) -> EntryDetail?,
-    /** An entry's own viewer asks first; the library's puts the attachment in the trash at once («Вернуть» brings it back). */
-    confirmRemove: Boolean,
     onOpenEntry: ((ViewerItem) -> Unit)? = null,
 ) {
     val pager = rememberPagerState(initialPage = start) { items.size }
     var zoomed by remember { mutableStateOf(false) }
     var chrome by remember { mutableStateOf(true) }
     var dragY by remember { mutableFloatStateOf(0f) }
-    var confirm by remember { mutableStateOf(false) }
     var opened by remember { mutableStateOf(setOf<String>()) }
     val scope = rememberCoroutineScope()
     val dismissAt = with(LocalDensity.current) { 120.dp.toPx() }
@@ -169,12 +160,9 @@ private fun MediaPager(
         val to = (pager.currentPage + by).coerceIn(0, items.lastIndex)
         if (to != pager.currentPage) scope.launch { pager.animateScrollToPage(to) }
     }
+    // Into the trash at once, «Вернуть» on the snackbar (ADR-041): no question first, nothing is gone.
     val remove = { item: ViewerItem ->
-        if (confirmRemove) {
-            services.scope.launch { services.repo.removeAttachment(item.entryId, item.attachment.meta.id) }
-        } else {
-            services.trashMedia(listOf(AttachmentKey(item.entryId, item.attachment.meta.id)))
-        }
+        services.trashMedia(listOf(AttachmentKey(item.entryId, item.attachment.meta.id)))
         if (items.size == 1) nav.back()
     }
     Box(
@@ -265,29 +253,12 @@ private fun MediaPager(
                     }
                 }
                 if (current != null) {
-                    val label = stringResource(if (confirmRemove) Res.string.media_remove else Res.string.move_to_trash)
-                    IconButton({ if (confirmRemove) confirm = true else remove(current) }, modifier = Modifier.hand()) {
-                        Icon(Icons.Delete, label, tint = Color.White)
+                    IconButton({ remove(current) }, modifier = Modifier.hand()) {
+                        Icon(Icons.Delete, stringResource(Res.string.move_to_trash), tint = Color.White)
                     }
                 }
             }
         }
-    }
-    val current = items.getOrNull(pager.currentPage)
-    if (confirm && current != null) {
-        AlertDialog(
-            onDismissRequest = { confirm = false },
-            text = { Text(stringResource(Res.string.media_remove_confirm)) },
-            confirmButton = {
-                TextButton({
-                    confirm = false
-                    remove(current)
-                }, modifier = Modifier.hand()) { Text(stringResource(Res.string.media_remove)) }
-            },
-            dismissButton = {
-                TextButton({ confirm = false }, modifier = Modifier.hand()) { Text(stringResource(Res.string.server_cancel)) }
-            },
-        )
     }
 }
 

@@ -17,6 +17,8 @@ CREATE TABLE attachment_ref (
     position REAL NOT NULL,
     present INTEGER NOT NULL,
     purged INTEGER NOT NULL,
+    -- When the link last changed (its HLC's wall time): when it was taken off, for the trash.
+    changed_at INTEGER,
     PRIMARY KEY (entry_id, attachment_id)
 );
 
@@ -31,7 +33,8 @@ CREATE TRIGGER attachment_ref_insert AFTER INSERT ON entry BEGIN
         json_extract(a.value, '$.meta.duration_ms'), json_extract(a.value, '$.meta.captured_at'),
         json_extract(a.value, '$.meta.preview_sha256'), json_extract(a.value, '$.caption'),
         coalesce(json_extract(a.value, '$.position'), 0),
-        json_type(a.value, '$.present') IS NOT 'false', json_type(a.value, '$.purged') IS 'true'
+        json_type(a.value, '$.present') IS NOT 'false', json_type(a.value, '$.purged') IS 'true',
+        CAST(json_extract(a.value, '$.hlc.wall') AS INTEGER)
     FROM entry AS e, json_each(CASE WHEN json_valid(e.attachments) THEN e.attachments ELSE '{}' END) AS a
     WHERE e.id = new.id AND a.type = 'object' AND json_type(a.value, '$.meta.sha256') = 'text';
 END;
@@ -45,7 +48,8 @@ CREATE TRIGGER attachment_ref_update AFTER UPDATE OF attachments ON entry WHEN n
         json_extract(a.value, '$.meta.duration_ms'), json_extract(a.value, '$.meta.captured_at'),
         json_extract(a.value, '$.meta.preview_sha256'), json_extract(a.value, '$.caption'),
         coalesce(json_extract(a.value, '$.position'), 0),
-        json_type(a.value, '$.present') IS NOT 'false', json_type(a.value, '$.purged') IS 'true'
+        json_type(a.value, '$.present') IS NOT 'false', json_type(a.value, '$.purged') IS 'true',
+        CAST(json_extract(a.value, '$.hlc.wall') AS INTEGER)
     FROM entry AS e, json_each(CASE WHEN json_valid(e.attachments) THEN e.attachments ELSE '{}' END) AS a
     WHERE e.id = new.id AND a.type = 'object' AND json_type(a.value, '$.meta.sha256') = 'text';
 END;
@@ -61,6 +65,7 @@ SELECT e.id, a.key, json_extract(a.value, '$.meta.sha256'), coalesce(json_extrac
     json_extract(a.value, '$.meta.duration_ms'), json_extract(a.value, '$.meta.captured_at'),
     json_extract(a.value, '$.meta.preview_sha256'), json_extract(a.value, '$.caption'),
     coalesce(json_extract(a.value, '$.position'), 0),
-    json_type(a.value, '$.present') IS NOT 'false', json_type(a.value, '$.purged') IS 'true'
+    json_type(a.value, '$.present') IS NOT 'false', json_type(a.value, '$.purged') IS 'true',
+    CAST(json_extract(a.value, '$.hlc.wall') AS INTEGER)
 FROM entry AS e, json_each(CASE WHEN json_valid(e.attachments) THEN e.attachments ELSE '{}' END) AS a
 WHERE a.type = 'object' AND json_type(a.value, '$.meta.sha256') = 'text';

@@ -15,6 +15,7 @@ import java.util.Properties
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /** attachment_ref (ADR-041): one row per attachment link, in step with entry.attachments whatever writes it. */
 class AttachmentRefTest {
@@ -42,25 +43,52 @@ class AttachmentRefTest {
         val entry = phone.repo.createEntry("2026-10-20")
         val photo = phone.repo.attach(entry, file(1), "image", 4000, 3000, preview = file(2, 40))
         val voice = phone.repo.attach(entry, file(3), "voice", durationMs = 9_000)
+        val rows = phone.rows()
         assertEquals(
             listOf(
                 Attachment_ref(
-                    entry, photo,
-                    sha(
-                        1,
-                    ),
-                    "image", "image/jpeg", 1_000, "IMG_1.jpg", 4000, 3000, null, 501, sha(2), null, 1.0, 1, 0,
+                    entry_id = entry,
+                    attachment_id = photo,
+                    sha256 = sha(1),
+                    kind = "image",
+                    mime = "image/jpeg",
+                    size = 1_000,
+                    name = "IMG_1.jpg",
+                    width = 4000,
+                    height = 3000,
+                    duration_ms = null,
+                    captured_at = 501,
+                    preview_sha256 = sha(2),
+                    caption = null,
+                    position = 1.0,
+                    present = 1,
+                    purged = 0,
+                    changed_at = null,
                 ),
                 Attachment_ref(
-                    entry, voice,
-                    sha(
-                        3,
-                    ),
-                    "voice", "image/jpeg", 3_000, "IMG_3.jpg", null, null, 9_000, 503, null, null, 2.0, 1, 0,
+                    entry_id = entry,
+                    attachment_id = voice,
+                    sha256 = sha(3),
+                    kind = "voice",
+                    mime = "image/jpeg",
+                    size = 3_000,
+                    name = "IMG_3.jpg",
+                    width = null,
+                    height = null,
+                    duration_ms = 9_000,
+                    captured_at = 503,
+                    preview_sha256 = null,
+                    caption = null,
+                    position = 2.0,
+                    present = 1,
+                    purged = 0,
+                    changed_at = null,
                 ),
             ),
-            phone.rows(),
+            rows.map { it.copy(changed_at = null) },
         )
+        // When each link last changed is its clock's wall time: the later one later.
+        assertTrue(rows[0].changed_at!! < rows[1].changed_at!!)
         phone.repo.removeAttachment(entry, photo)
         assertEquals(listOf(0L, 1L), phone.rows().map { it.present })
         phone.repo.restoreAttachment(entry, photo)

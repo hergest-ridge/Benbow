@@ -13,6 +13,7 @@ CREATE TABLE attachment_ref (
     duration_ms INTEGER,
     captured_at INTEGER,
     preview_sha256 TEXT,
+    caption TEXT,
     position REAL NOT NULL,
     present INTEGER NOT NULL,
     purged INTEGER NOT NULL,
@@ -28,7 +29,8 @@ CREATE TRIGGER attachment_ref_insert AFTER INSERT ON entry BEGIN
         coalesce(json_extract(a.value, '$.meta.mime'), 'application/octet-stream'), coalesce(json_extract(a.value, '$.meta.size'), 0),
         json_extract(a.value, '$.meta.name'), json_extract(a.value, '$.meta.width'), json_extract(a.value, '$.meta.height'),
         json_extract(a.value, '$.meta.duration_ms'), json_extract(a.value, '$.meta.captured_at'),
-        json_extract(a.value, '$.meta.preview_sha256'), coalesce(json_extract(a.value, '$.position'), 0),
+        json_extract(a.value, '$.meta.preview_sha256'), json_extract(a.value, '$.caption'),
+        coalesce(json_extract(a.value, '$.position'), 0),
         json_type(a.value, '$.present') IS NOT 'false', json_type(a.value, '$.purged') IS 'true'
     FROM entry AS e, json_each(CASE WHEN json_valid(e.attachments) THEN e.attachments ELSE '{}' END) AS a
     WHERE e.id = new.id AND a.type = 'object' AND json_type(a.value, '$.meta.sha256') = 'text';
@@ -41,7 +43,8 @@ CREATE TRIGGER attachment_ref_update AFTER UPDATE OF attachments ON entry WHEN n
         coalesce(json_extract(a.value, '$.meta.mime'), 'application/octet-stream'), coalesce(json_extract(a.value, '$.meta.size'), 0),
         json_extract(a.value, '$.meta.name'), json_extract(a.value, '$.meta.width'), json_extract(a.value, '$.meta.height'),
         json_extract(a.value, '$.meta.duration_ms'), json_extract(a.value, '$.meta.captured_at'),
-        json_extract(a.value, '$.meta.preview_sha256'), coalesce(json_extract(a.value, '$.position'), 0),
+        json_extract(a.value, '$.meta.preview_sha256'), json_extract(a.value, '$.caption'),
+        coalesce(json_extract(a.value, '$.position'), 0),
         json_type(a.value, '$.present') IS NOT 'false', json_type(a.value, '$.purged') IS 'true'
     FROM entry AS e, json_each(CASE WHEN json_valid(e.attachments) THEN e.attachments ELSE '{}' END) AS a
     WHERE e.id = new.id AND a.type = 'object' AND json_type(a.value, '$.meta.sha256') = 'text';
@@ -56,7 +59,8 @@ SELECT e.id, a.key, json_extract(a.value, '$.meta.sha256'), coalesce(json_extrac
     coalesce(json_extract(a.value, '$.meta.mime'), 'application/octet-stream'), coalesce(json_extract(a.value, '$.meta.size'), 0),
     json_extract(a.value, '$.meta.name'), json_extract(a.value, '$.meta.width'), json_extract(a.value, '$.meta.height'),
     json_extract(a.value, '$.meta.duration_ms'), json_extract(a.value, '$.meta.captured_at'),
-    json_extract(a.value, '$.meta.preview_sha256'), coalesce(json_extract(a.value, '$.position'), 0),
+    json_extract(a.value, '$.meta.preview_sha256'), json_extract(a.value, '$.caption'),
+    coalesce(json_extract(a.value, '$.position'), 0),
     json_type(a.value, '$.present') IS NOT 'false', json_type(a.value, '$.purged') IS 'true'
 FROM entry AS e, json_each(CASE WHEN json_valid(e.attachments) THEN e.attachments ELSE '{}' END) AS a
 WHERE a.type = 'object' AND json_type(a.value, '$.meta.sha256') = 'text';

@@ -44,8 +44,20 @@ class AttachmentRefTest {
         val voice = phone.repo.attach(entry, file(3), "voice", durationMs = 9_000)
         assertEquals(
             listOf(
-                Attachment_ref(entry, photo, sha(1), "image", "image/jpeg", 1_000, "IMG_1.jpg", 4000, 3000, null, 501, sha(2), 1.0, 1, 0),
-                Attachment_ref(entry, voice, sha(3), "voice", "image/jpeg", 3_000, "IMG_3.jpg", null, null, 9_000, 503, null, 2.0, 1, 0),
+                Attachment_ref(
+                    entry, photo,
+                    sha(
+                        1,
+                    ),
+                    "image", "image/jpeg", 1_000, "IMG_1.jpg", 4000, 3000, null, 501, sha(2), null, 1.0, 1, 0,
+                ),
+                Attachment_ref(
+                    entry, voice,
+                    sha(
+                        3,
+                    ),
+                    "voice", "image/jpeg", 3_000, "IMG_3.jpg", null, null, 9_000, 503, null, null, 2.0, 1, 0,
+                ),
             ),
             phone.rows(),
         )

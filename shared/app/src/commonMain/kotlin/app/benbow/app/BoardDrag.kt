@@ -367,8 +367,8 @@ private suspend fun AwaitPointerEventScope.carry(drag: BoardDrag, haptic: Haptic
     }
 }
 
-/** A gesture that started as something else may still become a pinch when a second finger comes. */
-private suspend fun AwaitPointerEventScope.watchForPinch(onPinch: (Int) -> Unit) {
+/** A gesture that started as something else may still become a pinch when a second finger comes (the library's grid too). */
+internal suspend fun AwaitPointerEventScope.watchForPinch(onPinch: (Int) -> Unit) {
     while (true) {
         val event = awaitPointerEvent(PointerEventPass.Initial)
         val fingers = event.changes.count { it.pressed }

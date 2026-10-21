@@ -90,6 +90,8 @@ import app.benbow.app.resources.gentle_turned_off
 import app.benbow.app.resources.gentle_turned_on
 import app.benbow.app.resources.home_removed
 import app.benbow.app.resources.media_mic_denied
+import app.benbow.app.resources.media_trashed
+import app.benbow.app.resources.media_trashed_many
 import app.benbow.app.resources.months_genitive
 import app.benbow.app.resources.moved_open
 import app.benbow.app.resources.moved_to_board
@@ -125,6 +127,7 @@ import app.benbow.client.Veil
 import app.benbow.client.archiveOnBoard
 import app.benbow.client.editHomeLayout
 import app.benbow.client.plusBlock
+import app.benbow.client.restoreAttachments
 import app.benbow.client.restoreCategory
 import app.benbow.client.restoreTag
 import app.benbow.client.splitTag
@@ -187,6 +190,12 @@ internal sealed interface Route {
     data class Reminders(val day: String? = null) : Route
 
     data object Trash : Route
+
+    /** «Ещё → Медиатека» (ADR-041): every attachment shown in an entry. */
+    data object Library : Route
+
+    /** The library's viewer at [key] ("entry/attachment"), paging through what [view] shows. */
+    data class LibraryMedia(val view: LibraryView, val key: String) : Route
 
     /** A calendar file's preview and import (7.3d); the file is in [AppServices.calendarImports]. */
     data object CalendarImport : Route
@@ -506,6 +515,13 @@ private fun AppRoot(services: AppServices) {
                     if (result == SnackbarResult.ActionPerformed) message.ids.forEach { services.repo.restore(it) }
                 }
 
+                is AppMessage.MediaTrashed -> {
+                    val text = message.keys.singleOrNull()?.let { getString(Res.string.media_trashed) }
+                        ?: getString(Res.string.media_trashed_many, message.keys.size)
+                    val result = snackbar.showSnackbar(text, getString(Res.string.veil_undo), duration = SnackbarDuration.Long)
+                    if (result == SnackbarResult.ActionPerformed) services.repo.restoreAttachments(message.keys)
+                }
+
                 is AppMessage.VoiceReplaced -> {
                     val result = snackbar.showSnackbar(
                         getString(Res.string.voice_replaced),
@@ -660,7 +676,7 @@ internal val LocalWide = compositionLocalOf { false }
 /** How wide a screen grows in a big window: lines of text stay readable. */
 internal val READABLE = 820.dp
 
-private val Route.fullWindow get() = this is Route.Media || this is Route.Drawing
+private val Route.fullWindow get() = this is Route.Media || this is Route.LibraryMedia || this is Route.Drawing
 
 @Composable
 private fun AppNavigation(services: AppServices, backStack: SnapshotStateList<Route>, nav: Navigator, twoPane: Boolean) {
@@ -712,6 +728,7 @@ private fun Screens(
             entry<Route.History> { HistoryScreen(services, nav, it) }
             entry<Route.Revision> { RevisionScreen(services, nav, it) }
             entry<Route.Media>(metadata = FULL_WINDOW) { MediaScreen(services, nav, it) }
+            entry<Route.LibraryMedia>(metadata = FULL_WINDOW) { LibraryViewer(services, nav, it) }
             entry<Route.Drawing>(metadata = FULL_WINDOW) { DrawingScreen(services, nav, it) }
             entry<Route.Search>(metadata = TAB) { SearchScreen(services, listNav) }
             entry<Route.Calendar>(metadata = TAB) { CalendarScreen(services, listNav) }
@@ -723,6 +740,7 @@ private fun Screens(
             entry<Route.Tag> { TagPage(services, nav, it) }
             entry<Route.Reminders> { RemindersScreen(services, nav, it) }
             entry<Route.Trash> { TrashScreen(services, nav) }
+            entry<Route.Library> { LibraryScreen(services, nav) }
             entry<Route.CalendarImport> { CalendarImportScreen(services, nav) }
             entry<Route.Server> { ServerScreen(services, nav) }
             entry<Route.Export> { ExportScreen(services, nav) }

@@ -33,7 +33,9 @@ import app.benbow.client.calendar.moveJournalEvents
 import app.benbow.client.db.BenbowDb
 import app.benbow.client.moveToBoard
 import app.benbow.client.moveToJournal
+import app.benbow.client.removeAttachments
 import app.benbow.client.upcoming
+import app.benbow.core.media.AttachmentKey
 import app.benbow.ui.editor.Removal
 import app.cash.sqldelight.db.SqlDriver
 import kotlinx.coroutines.CancellationException
@@ -148,6 +150,9 @@ sealed interface AppMessage {
 
     /** A sound's transcript was let go; "Вернуть" puts [text] back. */
     data class TranscriptRemoved(val entryId: String, val attachmentId: String, val text: String) : AppMessage
+
+    /** Attachments were taken off their entries into the trash (ADR-041, the library); "Вернуть" puts them back. */
+    data class MediaTrashed(val keys: List<AttachmentKey>) : AppMessage
 
     /** A voice note gave way to its text (7.10e); "Вернуть" brings it back. */
     data class VoiceReplaced(val entryId: String, val attachmentId: String) : AppMessage
@@ -311,6 +316,13 @@ class AppServices(
         if (ids.isEmpty()) return
         scope.launch { ids.forEach { repo.moveToJournal(it) } }
         messages.tryEmit(AppMessage.MovedToJournal(ids, day))
+    }
+
+    /** Attachments off their entries into the trash, all at once (ADR-041); a snackbar offers them back. */
+    fun trashMedia(keys: List<AttachmentKey>) {
+        if (keys.isEmpty()) return
+        scope.launch { repo.removeAttachments(keys) }
+        messages.tryEmit(AppMessage.MediaTrashed(keys))
     }
 
     /** Set by the platform when it is opened for something; the app takes it and clears it. */

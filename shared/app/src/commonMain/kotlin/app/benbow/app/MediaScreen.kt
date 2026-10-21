@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animate
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
@@ -54,16 +55,33 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.benbow.app.resources.Res
+import app.benbow.app.resources.library_open_entry
 import app.benbow.app.resources.media_remove
 import app.benbow.app.resources.media_remove_confirm
 import app.benbow.app.resources.media_unavailable
+import app.benbow.app.resources.months_genitive
+import app.benbow.app.resources.move_to_trash
 import app.benbow.app.resources.server_cancel
 import app.benbow.client.EntryDetail
+import app.benbow.client.library
+import app.benbow.core.media.AttachmentKey
 import app.benbow.core.sync.AttachmentState
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.abs
+
+/** One page of the viewer: an attachment and the entry holding it; [curtain] names its entry while that is under the curtain. */
+internal data class ViewerItem(
+    val entryId: String,
+    val attachment: AttachmentState,
+    val curtain: String? = null,
+    /** The entry's day, said when the file doesn't know when it was made (the library's items come from many). */
+    val day: String? = null,
+) {
+    val key: String get() = "$entryId/${attachment.meta.id}"
+}
 
 /**
  * An entry's attachments full screen, in gallery order: swipe sideways between them, pull down (or up) to close, tap to
@@ -73,24 +91,72 @@ import kotlin.math.abs
 @Composable
 internal fun MediaScreen(services: AppServices, nav: Navigator, route: Route.Media) {
     val entry by services.repo.entry(route.entryId).collectAsStateWithLifecycle(null)
-    val items = entry?.attachments
+    val items = entry?.let { e -> e.attachments.map { ViewerItem(e.id, it) } }
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         if (items == null) return@Box
         if (items.isEmpty()) {
             LaunchedEffect(Unit) { nav.back() }
             return@Box
         }
-        MediaPager(services, nav, entry, items, start = items.indexOfFirst { it.meta.id == route.attachmentId }.coerceAtLeast(0))
+        MediaPager(
+            services,
+            nav,
+            items,
+            start = items.indexOfFirst { it.attachment.meta.id == route.attachmentId }.coerceAtLeast(0),
+            entryOf = { entry },
+            confirmRemove = true,
+        )
+    }
+}
+
+/**
+ * The library's viewer (ADR-041): the library's attachments as it shows them (its section, order and Бережно), across
+ * entries, with «Открыть запись». Taking one out puts it in the trash at once, with «Вернуть» on the snackbar.
+ */
+@Composable
+internal fun LibraryViewer(services: AppServices, nav: Navigator, route: Route.LibraryMedia) {
+    val all by remember { services.repo.library() }.collectAsStateWithLifecycle(null)
+    val gentle = LocalGentle.current
+    val shown = remember(all, route.view, gentle) { all?.let { route.view.of(it, gentle) } }
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        val list = shown ?: return@Box
+        if (list.isEmpty()) {
+            LaunchedEffect(Unit) { nav.back() }
+            return@Box
+        }
+        val byKey = remember(list) { list.associateBy { "${it.entryId}/${it.attachment.meta.id}" } }
+        val items = remember(list, gentle) {
+            list.map { item -> ViewerItem(item.entryId, item.attachment, item.postId.takeIf { item.curtained(gentle) }, item.day) }
+        }
+        MediaPager(
+            services,
+            nav,
+            items,
+            start = items.indexOfFirst { it.key == route.key }.coerceAtLeast(0),
+            entryOf = { null },
+            confirmRemove = false,
+            onOpenEntry = { item -> byKey[item.key]?.let { nav.open(Route.Editor(it.postId, it.day, readOnly = true)) } },
+        )
     }
 }
 
 @Composable
-private fun MediaPager(services: AppServices, nav: Navigator, entry: EntryDetail?, items: List<AttachmentState>, start: Int) {
+private fun MediaPager(
+    services: AppServices,
+    nav: Navigator,
+    items: List<ViewerItem>,
+    start: Int,
+    entryOf: (String) -> EntryDetail?,
+    /** An entry's own viewer asks first; the library's puts the attachment in the trash at once («Вернуть» brings it back). */
+    confirmRemove: Boolean,
+    onOpenEntry: ((ViewerItem) -> Unit)? = null,
+) {
     val pager = rememberPagerState(initialPage = start) { items.size }
     var zoomed by remember { mutableStateOf(false) }
     var chrome by remember { mutableStateOf(true) }
     var dragY by remember { mutableFloatStateOf(0f) }
     var confirm by remember { mutableStateOf(false) }
+    var opened by remember { mutableStateOf(setOf<String>()) }
     val scope = rememberCoroutineScope()
     val dismissAt = with(LocalDensity.current) { 120.dp.toPx() }
     val drag = rememberDraggableState { dragY += it }
@@ -102,6 +168,14 @@ private fun MediaPager(services: AppServices, nav: Navigator, entry: EntryDetail
     val step = { by: Int ->
         val to = (pager.currentPage + by).coerceIn(0, items.lastIndex)
         if (to != pager.currentPage) scope.launch { pager.animateScrollToPage(to) }
+    }
+    val remove = { item: ViewerItem ->
+        if (confirmRemove) {
+            services.scope.launch { services.repo.removeAttachment(item.entryId, item.attachment.meta.id) }
+        } else {
+            services.trashMedia(listOf(AttachmentKey(item.entryId, item.attachment.meta.id)))
+        }
+        if (items.size == 1) nav.back()
     }
     Box(
         Modifier.fillMaxSize().background(Color.Black.copy(alpha = fade))
@@ -133,14 +207,23 @@ private fun MediaPager(services: AppServices, nav: Navigator, entry: EntryDetail
             pager,
             userScrollEnabled = !zoomed,
             beyondViewportPageCount = 1,
-            key = { items[it].meta.id },
+            key = { items[it].key },
             modifier = Modifier.fillMaxSize(),
         ) { page ->
+            val item = items[page]
             val active = page == pager.currentPage
+            val curtain = item.curtain
+            if (curtain != null && curtain !in opened) {
+                // Under the curtain (Бережно) until a tap opens it, with the rest of its entry.
+                Box(Modifier.fillMaxSize().hand().clickable { opened = opened + curtain }, contentAlignment = Alignment.Center) {
+                    Curtain(Modifier.padding(24.dp).widthIn(max = 480.dp))
+                }
+                return@HorizontalPager
+            }
             MediaPage(
                 services,
-                items[page],
-                entry,
+                item.attachment,
+                entryOf(item.entryId),
                 active = active,
                 onZoom = { if (active) zoomed = it },
                 onTap = { chrome = !chrome },
@@ -164,9 +247,10 @@ private fun MediaPager(services: AppServices, nav: Navigator, entry: EntryDetail
             ) {
                 IconButton(nav::back, modifier = Modifier.hand()) { Icon(Icons.Back, null, tint = Color.White) }
                 Column(Modifier.weight(1f)) {
-                    current?.meta?.capturedAt?.let {
-                        Text(dateTimeLabel(it), color = Color.White, style = MaterialTheme.typography.titleSmall)
-                    }
+                    val months = stringArrayResource(Res.array.months_genitive)
+                    val time =
+                        current?.attachment?.meta?.capturedAt?.let { dateTimeLabel(it) } ?: current?.day?.let { dateLabel(it, months) }
+                    time?.let { Text(it, color = Color.White, style = MaterialTheme.typography.titleSmall) }
                     if (items.size > 1) {
                         Text(
                             "${pager.currentPage + 1} / ${items.size}",
@@ -175,12 +259,16 @@ private fun MediaPager(services: AppServices, nav: Navigator, entry: EntryDetail
                         )
                     }
                 }
-                if (current !=
-                    null
-                ) {
-                    IconButton({
-                        confirm = true
-                    }, modifier = Modifier.hand()) { Icon(Icons.Delete, stringResource(Res.string.media_remove), tint = Color.White) }
+                if (current != null && onOpenEntry != null) {
+                    TextButton({ onOpenEntry(current) }, modifier = Modifier.hand()) {
+                        Text(stringResource(Res.string.library_open_entry), color = Color.White)
+                    }
+                }
+                if (current != null) {
+                    val label = stringResource(if (confirmRemove) Res.string.media_remove else Res.string.move_to_trash)
+                    IconButton({ if (confirmRemove) confirm = true else remove(current) }, modifier = Modifier.hand()) {
+                        Icon(Icons.Delete, label, tint = Color.White)
+                    }
                 }
             }
         }
@@ -193,8 +281,7 @@ private fun MediaPager(services: AppServices, nav: Navigator, entry: EntryDetail
             confirmButton = {
                 TextButton({
                     confirm = false
-                    entry?.let { e -> services.scope.launch { services.repo.removeAttachment(e.id, current.meta.id) } }
-                    if (items.size == 1) nav.back()
+                    remove(current)
                 }, modifier = Modifier.hand()) { Text(stringResource(Res.string.media_remove)) }
             },
             dismissButton = {

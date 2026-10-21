@@ -36,6 +36,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performMouseInput
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
@@ -1581,7 +1582,7 @@ class AppSmokeTest {
         waitUntilExactlyOneExists(hasText("Ещё"), 5_000)
         onNodeWithText("Ещё").performClick()
         waitUntilExactlyOneExists(hasText("Расшифровка голосовых"), 5_000)
-        onNodeWithText("Расшифровка голосовых").performClick()
+        onNodeWithText("Расшифровка голосовых").performScrollTo().performClick() // below the window since «Медиатека»
         waitUntilExactlyOneExists(hasText("Модель на телефоне"), 5_000)
         screenshot("54-speech-settings")
     }

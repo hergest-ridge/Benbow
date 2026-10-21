@@ -71,6 +71,7 @@ CREATE TABLE attachment_ref (
     duration_ms INTEGER,
     captured_at INTEGER,
     preview_sha256 TEXT,
+    caption TEXT,
     position REAL NOT NULL,
     present INTEGER NOT NULL,
     purged INTEGER NOT NULL,
@@ -86,7 +87,8 @@ CREATE TRIGGER attachment_ref_insert AFTER INSERT ON entry BEGIN
         coalesce(json_extract(a.value, '$.meta.mime'), 'application/octet-stream'), coalesce(json_extract(a.value, '$.meta.size'), 0),
         json_extract(a.value, '$.meta.name'), json_extract(a.value, '$.meta.width'), json_extract(a.value, '$.meta.height'),
         json_extract(a.value, '$.meta.duration_ms'), json_extract(a.value, '$.meta.captured_at'),
-        json_extract(a.value, '$.meta.preview_sha256'), coalesce(json_extract(a.value, '$.position'), 0),
+        json_extract(a.value, '$.meta.preview_sha256'), json_extract(a.value, '$.caption'),
+        coalesce(json_extract(a.value, '$.position'), 0),
         json_type(a.value, '$.present') IS NOT 'false', json_type(a.value, '$.purged') IS 'true'
     FROM entry AS e, json_each(CASE WHEN json_valid(e.attachments) THEN e.attachments ELSE '{}' END) AS a
     WHERE e.id = new.id AND a.type = 'object' AND json_type(a.value, '$.meta.sha256') = 'text';
@@ -99,7 +101,8 @@ CREATE TRIGGER attachment_ref_update AFTER UPDATE OF attachments ON entry WHEN n
         coalesce(json_extract(a.value, '$.meta.mime'), 'application/octet-stream'), coalesce(json_extract(a.value, '$.meta.size'), 0),
         json_extract(a.value, '$.meta.name'), json_extract(a.value, '$.meta.width'), json_extract(a.value, '$.meta.height'),
         json_extract(a.value, '$.meta.duration_ms'), json_extract(a.value, '$.meta.captured_at'),
-        json_extract(a.value, '$.meta.preview_sha256'), coalesce(json_extract(a.value, '$.position'), 0),
+        json_extract(a.value, '$.meta.preview_sha256'), json_extract(a.value, '$.caption'),
+        coalesce(json_extract(a.value, '$.position'), 0),
         json_type(a.value, '$.present') IS NOT 'false', json_type(a.value, '$.purged') IS 'true'
     FROM entry AS e, json_each(CASE WHEN json_valid(e.attachments) THEN e.attachments ELSE '{}' END) AS a
     WHERE e.id = new.id AND a.type = 'object' AND json_type(a.value, '$.meta.sha256') = 'text';
@@ -373,6 +376,22 @@ UPDATE entry SET attachments = ?, media_count = ?, cover = ?, updated_at = ? WHE
 -- Every attachment link as attachment_ref holds it (ADR-041).
 attachmentRefs:
 SELECT * FROM attachment_ref ORDER BY entry_id, position, attachment_id;
+
+-- The media library (ADR-041): every attachment shown in an entry, the newest entries first, each with the entry it
+-- belongs to (a comment's own entry: its day, its place and what Бережно goes by). The trash keeps its own, comments on
+-- an entry in the trash with it.
+libraryItems:
+SELECT r.entry_id, r.attachment_id, r.sha256, r.kind, r.mime, r.size, r.name, r.width, r.height, r.duration_ms,
+    r.captured_at, r.preview_sha256, r.caption, r.position,
+    coalesce(p.id, e.id) AS post_id, coalesce(p.day, e.day) AS day, coalesce(p.space, e.space) AS space,
+    coalesce(p.fields, e.fields) AS post_fields, e.fields
+FROM attachment_ref AS r
+JOIN entry AS e ON e.id = r.entry_id
+LEFT JOIN entry AS p ON p.id = e.parent_id
+WHERE r.present = 1 AND r.purged = 0 AND e.kind != 'system'
+    AND json_extract(e.fields, '$.deleted') IS NOT 'true'
+    AND (p.id IS NULL OR json_extract(p.fields, '$.deleted') IS NOT 'true')
+ORDER BY coalesce(p.day, e.day) DESC, coalesce(p.created_at, e.created_at) DESC, e.created_at, r.position, r.attachment_id;
 
 putMedia:
 INSERT INTO media(sha256, path, size, mime, origin, uploaded, name, captured_at, last_access_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)

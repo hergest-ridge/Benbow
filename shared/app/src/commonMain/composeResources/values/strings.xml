@@ -802,4 +802,25 @@
     <string name="capture_to_board">В записки</string>
     <string name="trash_journal">Дневник</string>
     <string name="more_search">Записи, теги, вложения</string>
+    <string name="library">Медиатека</string>
+    <string name="more_library">Фото, видео, звуки и файлы из всех записей</string>
+    <string name="library_visual">Фото и видео</string>
+    <string name="library_sounds">Звуки и голос</string>
+    <string name="library_drawings">Рисунки</string>
+    <string name="library_files">Файлы</string>
+    <string name="library_by_size">По весу</string>
+    <string name="library_notes">С записками</string>
+    <string name="library_empty">Здесь пока пусто</string>
+    <string name="library_open_entry">Открыть запись</string>
+    <string name="library_chosen">Выбрано: %1$d</string>
+    <string name="library_total">Всего: %1$d · %2$s</string>
+    <string name="library_file">Файл</string>
+    <string name="media_trashed">Вложение в корзине</string>
+    <string name="media_trashed_many">Вложений в корзине: %1$d</string>
+    <string-array name="size_units">
+        <item>Б</item>
+        <item>КБ</item>
+        <item>МБ</item>
+        <item>ГБ</item>
+    </string-array>
 </resources>

@@ -30,10 +30,12 @@ import app.benbow.app.resources.Res
 import app.benbow.app.resources.appearance
 import app.benbow.app.resources.export
 import app.benbow.app.resources.gentle
+import app.benbow.app.resources.library
 import app.benbow.app.resources.lock
 import app.benbow.app.resources.lock_choices
 import app.benbow.app.resources.more_export
 import app.benbow.app.resources.more_gentle
+import app.benbow.app.resources.more_library
 import app.benbow.app.resources.more_lock_off
 import app.benbow.app.resources.more_lock_on
 import app.benbow.app.resources.more_reminders
@@ -81,6 +83,7 @@ private fun MoreList(services: AppServices, nav: Navigator) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         // Поиск gave its tab to «Записки» for now (ADR-040).
         MoreItem(Icons.Search, stringResource(Res.string.tab_search), stringResource(Res.string.more_search)) { nav.open(Route.Search) }
+        MoreItem(Icons.Gallery, stringResource(Res.string.library), stringResource(Res.string.more_library)) { nav.open(Route.Library) }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         val look = syncLook(status)
         MoreItem(Icons.Server, stringResource(Res.string.server), look?.label, look?.tone) { nav.open(Route.Server) }

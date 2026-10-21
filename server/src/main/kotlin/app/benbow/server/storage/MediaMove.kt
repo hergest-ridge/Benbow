@@ -64,7 +64,8 @@ class MediaMove(
     data class Progress(val files: Int, val totalFiles: Int, val bytes: Long, val totalBytes: Long)
 
     sealed interface Verdict {
-        data class Fine(val path: Path, val warnings: List<String>) : Verdict
+        /** The folder fits: [files] files of [bytes] are still to copy there, where [free] bytes are free. */
+        data class Fine(val path: Path, val files: Int, val bytes: Long, val free: Long, val warnings: List<String>) : Verdict
 
         data class Refused(val reason: String) : Verdict
     }
@@ -85,12 +86,17 @@ class MediaMove(
 
     fun moves(): Moves = runCatching { json.decodeFromString(Moves.serializer(), stateFile.readText()) }.getOrNull() ?: Moves()
 
+    /** What a move to [text] would copy, or why not; nothing is made or started (the admin page asks before [start]). */
+    fun preview(text: String): Verdict = synchronized(steps) {
+        if (moves().current != null) Verdict.Refused("перенос уже идёт") else check(text, probe = false)
+    }
+
     /** Checks [text] as the new media folder and, when it fits, starts copying there. */
     fun start(text: String): Verdict {
         var started: Move? = null
         val verdict = synchronized(steps) {
             if (moves().current != null) return Verdict.Refused("перенос уже идёт")
-            check(text).also { verdict ->
+            check(text, probe = true).also { verdict ->
                 if (verdict is Verdict.Fine) {
                     writeMark(verdict.path, MOVING, "Benbow media folder, being filled by a move", db.storeId)
                     val move = Move(blobs.root.toString(), verdict.path.toString(), now())
@@ -220,7 +226,7 @@ class MediaMove(
     }
 
     /** Whether [text] may become the media folder; a folder that doesn't exist is made (one level) for the write probe. */
-    private fun check(text: String): Verdict {
+    private fun check(text: String, probe: Boolean): Verdict {
         if (!blobs.ready()) return Verdict.Refused("папка медиа сейчас недоступна: ${blobs.folder.describe()}")
         val typed = text.trim().trim('"').trim()
         if (typed.isEmpty()) return Verdict.Refused("впишите путь к папке")
@@ -249,10 +255,11 @@ class MediaMove(
         if (!ours && path.exists() && path.listDirectoryEntries().isNotEmpty()) {
             return Verdict.Refused("в папке уже что-то лежит: выберите пустую или впишите новую, например ${path.resolve("Benbow-media")}")
         }
-        val need = tree(blobs.root, uploads = true).filter { (rel, size) -> !holds(path.resolve(rel), size) }.values.sum()
+        val todo = tree(blobs.root, uploads = true).filter { (rel, size) -> !holds(path.resolve(rel), size) }
+        val need = todo.values.sum()
         val free = disks.free(path) ?: 0
         if (free < need + RESERVE) return Verdict.Refused("не хватит места: нужно около ${gb(need + RESERVE)} ГБ, свободно ${gb(free)} ГБ")
-        probeWrite(path)?.let { return Verdict.Refused(it) }
+        if (probe) probeWrite(path)?.let { return Verdict.Refused(it) }
         val warnings = buildList {
             val disk = disks.physical(path)
             val copy = mirror()
@@ -260,7 +267,7 @@ class MediaMove(
                 add("это другой раздел того же физического диска, где второй диск: от поломки диска это не защищает")
             }
         }
-        return Verdict.Fine(path, warnings)
+        return Verdict.Fine(path, todo.size, need, free, warnings)
     }
 
     /**

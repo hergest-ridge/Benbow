@@ -6,6 +6,7 @@ import app.benbow.server.SpeechModel
 import app.benbow.server.backup.BackupStatus
 import app.benbow.server.backup.MirrorChoice
 import app.benbow.server.storage.BlobStore
+import app.benbow.server.storage.MediaMove
 import app.benbow.server.storage.MediaUnavailable
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -40,6 +41,7 @@ internal fun Route.adminRoutes(ctx: ServerContext) {
                 "link" -> call.respondAdmin(linkInner(ctx.peers))
                 "speech" -> call.respondAdmin(ctx.speech?.let(::speechInner).orEmpty())
                 "mirror" -> call.respondAdmin(mirrorInner(ctx))
+                "media" -> call.respondAdmin(mediaInner(ctx))
                 else -> call.respondText("Not found", status = HttpStatusCode.NotFound)
             }
         }
@@ -78,6 +80,8 @@ internal fun Route.adminRoutes(ctx: ServerContext) {
         }
     }
 
+    mediaMoveRoutes(ctx)
+
     post("/admin/mirror/off") {
         admin(ctx, "mirror-off#backups") { withContext(Dispatchers.IO) { ctx.backupJobs?.turnOffMirror() } }
     }
@@ -92,7 +96,7 @@ internal fun Route.adminRoutes(ctx: ServerContext) {
     }
 }
 
-private suspend fun RoutingContext.admin(ctx: ServerContext, done: String, action: suspend () -> Unit) {
+internal suspend fun RoutingContext.admin(ctx: ServerContext, done: String, action: suspend () -> Unit) {
     if (!adminAllowed(call, ctx)) return call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
     try {
         action()
@@ -125,7 +129,7 @@ private fun adminTabs(ctx: ServerContext): List<Tab> {
                 backups.mirrorPath == null || mirrorStale(backups) ||
                 System.currentTimeMillis() - backups.lastSnapshotAt > 48 * 3_600_000L
             )
-    val mediaGone = ctx.blobs?.ready() == false
+    val mediaGone = ctx.blobs?.ready() == false || ctx.mediaMove?.moves()?.current?.error != null
     return listOfNotNull(
         Tab("overview", "Сервер", "server"),
         Tab("devices", "Устройства", "phone"),
@@ -138,12 +142,12 @@ private fun adminTabs(ctx: ServerContext): List<Tab> {
 }
 
 /** The whole page; [flash] is what the last action has to say. */
-internal fun adminPage(ctx: ServerContext, admin: Boolean, flash: Flash? = null): String {
+internal fun adminPage(ctx: ServerContext, admin: Boolean, flash: Flash? = null, plan: MediaMove.Verdict.Fine? = null): String {
     val body = buildString {
         append(overview(ctx, admin))
         if (admin) {
             append(devicesSection(ctx))
-            append(backupsSection(ctx))
+            append(backupsSection(ctx, plan))
             ctx.storage?.let { append(spaceSection(it, ctx.purges)) }
             ctx.speech?.let { append(speechSection(it)) }
             append(friendsSection(ctx.peers))
@@ -225,7 +229,7 @@ private fun devicesSection(ctx: ServerContext): String = buildString {
     append("</div></div></section>")
 }
 
-private fun backupsSection(ctx: ServerContext): String = buildString {
+private fun backupsSection(ctx: ServerContext, plan: MediaMove.Verdict.Fine?): String = buildString {
     append("<section id=\"backups\" class=\"page\">")
     append(pageTitle("Резервные копии", "backup", "Проверенные снимки базы, копия на второй диск и медиафайлы."))
     append("<div class=\"card\">")
@@ -239,7 +243,6 @@ private fun backupsSection(ctx: ServerContext): String = buildString {
             append("<div class=\"banner ok\">${icon("ok")}<div>Последняя проверенная копия ${time(status.lastSnapshotAt)}</div></div>")
         }
         status.lastError?.let { append("<div class=\"banner err\">${icon("error")}<div>Ошибка последнего запуска: ${esc(it)}</div></div>") }
-        ctx.blobs?.let { mediaBanner(it)?.let(::append) }
         append("<dl class=\"kv\"><dt>Календарь</dt><dd>")
         append(
             if (ctx.calendar == null) {
@@ -249,16 +252,7 @@ private fun backupsSection(ctx: ServerContext): String = buildString {
             },
         )
         status.calendarError?.let { append(" · ошибка: ${esc(it)}") }
-        append("</dd>")
-        ctx.blobs?.let { store ->
-            val (count, bytes) = store.stats()
-            append(
-                "<dt>Медиафайлы</dt><dd>$count, ${"%.1f".format(
-                    bytes / 1_073_741_824.0,
-                )} ГБ в <code>${esc(store.root.toString())}</code></dd>",
-            )
-        }
-        append("</dl>")
+        append("</dd></dl>")
     }
     if (backups.isEmpty()) {
         append("<p class=\"muted\">Резервных копий пока нет.</p>")
@@ -278,6 +272,7 @@ private fun backupsSection(ctx: ServerContext): String = buildString {
     }
     append("<div class=\"row end\">${postButton("/admin/backup", "Сделать копию сейчас", "tonal", "backup", busy = "Делается…")}</div>")
     append("</div>")
+    append(mediaCard(ctx, plan))
     if (status != null) append(mirrorCard(ctx, status))
     append("</section>")
 }
@@ -290,7 +285,7 @@ private fun mirrorCard(ctx: ServerContext, status: BackupStatus): String = build
         val none = status.mirrorPath == null
         append("<details class=\"edit\"${if (none) " open" else ""}><summary class=\"btn text\">${icon("edit")}")
         append("${if (none) "Выбрать папку" else "Другая папка"}</summary>")
-        append("<form method=\"post\" action=\"/admin/mirror\" class=\"stack\"><div class=\"path-row\">")
+        append("<form method=\"post\" action=\"/admin/mirror#backups\" class=\"stack\"><div class=\"path-row\">")
         append(field("mirror-path", "Папка на другом диске этого компьютера", status.mirrorPath.orEmpty(), "H:\\Benbow-mirror"))
         append(
             "<button class=\"btn outlined\" type=\"button\" data-pick-folder=\"mirror-path\" data-no-drive>${icon(
@@ -361,7 +356,7 @@ private fun mirrorLine(status: BackupStatus): String {
 }
 
 /** A red banner while the media folder isn't there (ADR-042): what the server does meanwhile. */
-private fun mediaBanner(store: BlobStore): String? {
+internal fun mediaBanner(store: BlobStore): String? {
     if (store.ready()) return null
     return "<div class=\"banner err\">${icon("error")}<div><b>Папка медиа недоступна:</b> ${esc(store.folder.describe())}. " +
         "Дневник работает; файлы не принимаются и не отдаются, устройства держат их у себя и отправят позже.</div></div>"

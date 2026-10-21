@@ -54,6 +54,9 @@ fun JournalRepository.library(): Flow<List<LibraryItem>> = veiled(q.libraryItems
 /** The trash's «Вложения»: attachments taken off entries that aren't in the trash, the latest taken off first. */
 fun JournalRepository.takenOff(): Flow<List<LibraryItem>> = veiled(q.takenOff(::libraryRow).asFlow().mapToList(context))
 
+/** Everything waiting in the trash, taken off or with its entry, the heaviest first («Место»'s «Самое тяжёлое»). */
+fun JournalRepository.trashItems(): Flow<List<LibraryItem>> = veiled(q.trashItems(::libraryRow).asFlow().mapToList(context))
+
 /** What an entry in the trash holds: its files and its comments' (each file once), and since when it is there. */
 data class TrashWeight(val bytes: Long, val since: Long?)
 

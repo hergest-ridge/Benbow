@@ -820,6 +820,7 @@
         <item>КБ</item>
         <item>МБ</item>
         <item>ГБ</item>
+        <item>ТБ</item>
     </string-array>
     <string name="trash_attachments">Вложения</string>
     <string name="trash_media_total">Файлы в корзине: %1$s</string>
@@ -838,4 +839,52 @@
     <string name="media_kind_image">Фото</string>
     <string name="media_kind_video">Видео</string>
     <string name="media_kind_drawing">Рисунок</string>
+    <string name="storage">Место</string>
+    <plurals name="storage_files">
+        <item quantity="one">%1$d файл на сервере</item>
+        <item quantity="few">%1$d файла на сервере</item>
+        <item quantity="many">%1$d файлов на сервере</item>
+        <item quantity="other">%1$d файла на сервере</item>
+    </plurals>
+    <string name="storage_counted">посчитано %1$s</string>
+    <string name="storage_stale">Сервер сейчас не отвечает: здесь подсчёт с прошлого раза.</string>
+    <string name="storage_never">Нет связи с сервером, а прошлого подсчёта на этом устройстве нет.</string>
+    <string name="storage_refresh">Посчитать заново</string>
+    <string name="storage_disk">Диск с медиа</string>
+    <string name="storage_disk_ours">Benbow</string>
+    <string name="storage_disk_other">Другое</string>
+    <string name="storage_disk_free">Свободно</string>
+    <string name="storage_kinds">Что это</string>
+    <string name="storage_states">Где оно</string>
+    <string name="storage_months">По месяцам записей</string>
+    <string name="storage_month_line">%1$s: %2$s</string>
+    <string name="storage_heaviest">Самое тяжёлое</string>
+    <string name="storage_in_entries">В записях</string>
+    <string name="storage_in_trash">В корзине</string>
+    <string name="storage_kind_video">Видео</string>
+    <string name="storage_kind_image">Фото</string>
+    <string name="storage_kind_sound">Звуки и голос</string>
+    <string name="storage_kind_drawing">Рисунки</string>
+    <string name="storage_kind_file">Файлы</string>
+    <string name="storage_kind_preview">Превью и картинки ссылок</string>
+    <string name="storage_state_live">В записях</string>
+    <string name="storage_state_trash">В корзине</string>
+    <string name="storage_state_removed">Сняты с записей</string>
+    <string name="storage_state_unreferenced">Без записи</string>
+    <string name="storage_device">На этом устройстве</string>
+    <string name="storage_device_line">%1$s, кэш до %2$s</string>
+    <string name="storage_device_freeable">Можно освободить %1$s: эти файлы есть на сервере и в резервной копии и скачаются снова, когда понадобятся.</string>
+    <string name="storage_device_nothing">Освобождать нечего: здесь только то, что ещё нужно или не дошло до сервера.</string>
+    <string name="storage_free_phone">Освободить на телефоне</string>
+    <string name="storage_free_computer">Освободить на компьютере</string>
+    <string name="storage_free_browser">Освободить в браузере</string>
+    <string name="storage_freed">Освобождено %1$s</string>
+    <string name="storage_freed_none">Освобождать было нечего</string>
+    <string name="storage_backups">Резервные копии</string>
+    <string name="storage_database">База данных</string>
+    <string name="storage_snapshots">Снимки базы</string>
+    <string name="storage_mirror">Второй диск</string>
+    <string name="storage_mirror_free">свободно %1$s из %2$s</string>
+    <string name="storage_mirror_none">не настроен или не найден</string>
+    <string name="storage_nothing">Пока пусто</string>
 </resources>

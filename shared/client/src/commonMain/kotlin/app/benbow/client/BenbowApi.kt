@@ -14,6 +14,7 @@ import app.benbow.core.api.ReconcileResponse
 import app.benbow.core.api.RevisionInfo
 import app.benbow.core.api.ServerInfo
 import app.benbow.core.api.SpeechModelInfo
+import app.benbow.core.api.StorageReport
 import app.benbow.core.api.UploadStart
 import app.benbow.core.api.UploadStatus
 import app.benbow.core.calendar.CalendarOp
@@ -75,6 +76,9 @@ interface BenbowApi {
     /** Reads a page for a link card on the server (ADR-038; the web client can't reach other hosts). */
     suspend fun linkPreview(url: String): LinkPreviewInfo = throw UnsupportedOperationException("linkPreview")
 
+    /** What the server's files weigh, each file once (ADR-041, «Место»). */
+    suspend fun storage(): StorageReport = throw UnsupportedOperationException("storage")
+
     /**
      * A speech model file from byte [from] on (a Range request); [write] learns whether the server continued there
      * (`resumed`) or sent it from the start.
@@ -123,6 +127,8 @@ class KtorBenbowApi(private val client: HttpClient, private val baseUrl: String,
         contentType(ContentType.Application.Json)
         setBody(LinkPreviewRequest(url))
     }.ok().body()
+
+    override suspend fun storage(): StorageReport = client.get("$baseUrl/api/v1/storage") { auth() }.ok().body()
 
     override suspend fun revisions(entryId: String): List<RevisionInfo> =
         client.get("$baseUrl/api/v1/entries/$entryId/revisions") { auth() }.ok().body()

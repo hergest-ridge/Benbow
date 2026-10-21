@@ -14,6 +14,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -66,6 +68,7 @@ import app.benbow.app.resources.server_version
 import app.benbow.app.resources.server_web_code
 import app.benbow.app.resources.server_web_intro
 import app.benbow.app.resources.server_wrong_store
+import app.benbow.app.resources.storage
 import app.benbow.client.Connection
 import app.benbow.client.IoDispatcher
 import app.benbow.client.Probe
@@ -154,7 +157,16 @@ internal class ServerViewModel(private val services: AppServices) : ViewModel() 
 internal fun ServerScreen(services: AppServices, nav: Navigator) {
     val vm = viewModel { ServerViewModel(services) }
     Scaffold(topBar = {
-        TopAppBar(navigationIcon = { BackButton(nav::back) }, title = { Text(stringResource(Res.string.server)) })
+        TopAppBar(
+            navigationIcon = { BackButton(nav::back) },
+            title = { Text(stringResource(Res.string.server)) },
+            actions = {
+                // «Место» (ADR-041): what the files weigh there and here.
+                if (vm.connection != null) {
+                    IconButton({ nav.open(Route.Storage) }, Modifier.hand()) { Icon(Icons.Storage, stringResource(Res.string.storage)) }
+                }
+            },
+        )
     }) { padding ->
         Column(
             Modifier.padding(

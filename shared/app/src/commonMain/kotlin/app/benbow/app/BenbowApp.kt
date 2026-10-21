@@ -105,7 +105,10 @@ import app.benbow.app.resources.removed_card
 import app.benbow.app.resources.removed_link
 import app.benbow.app.resources.save_failed
 import app.benbow.app.resources.saved
+import app.benbow.app.resources.size_units
 import app.benbow.app.resources.speech_failed
+import app.benbow.app.resources.storage_freed
+import app.benbow.app.resources.storage_freed_none
 import app.benbow.app.resources.tab_board
 import app.benbow.app.resources.tab_calendar
 import app.benbow.app.resources.tab_feed
@@ -196,6 +199,9 @@ internal sealed interface Route {
 
     /** The library's viewer at [key] ("entry/attachment"), paging through what [view] shows. */
     data class LibraryMedia(val view: LibraryView, val key: String) : Route
+
+    /** «Место» (ADR-041): what the files weigh on the server and here. */
+    data object Storage : Route
 
     /** A calendar file's preview and import (7.3d); the file is in [AppServices.calendarImports]. */
     data object CalendarImport : Route
@@ -515,6 +521,23 @@ private fun AppRoot(services: AppServices) {
                     if (result == SnackbarResult.ActionPerformed) message.ids.forEach { services.repo.restore(it) }
                 }
 
+                is AppMessage.DeviceFreed -> {
+                    val (number, unit) = sizeParts(message.bytes)
+                    val size = "$number${Char(0x00A0)}${getStringArray(Res.array.size_units).getOrElse(unit) { "" }}"
+                    snackbar.showSnackbar(
+                        getString(
+                            if (message.bytes >
+                                0
+                            ) {
+                                Res.string.storage_freed
+                            } else {
+                                Res.string.storage_freed_none
+                            },
+                            size,
+                        ),
+                    )
+                }
+
                 is AppMessage.MediaTrashed -> {
                     val text = message.keys.singleOrNull()?.let { getString(Res.string.media_trashed) }
                         ?: getString(Res.string.media_trashed_many, message.keys.size)
@@ -741,6 +764,7 @@ private fun Screens(
             entry<Route.Reminders> { RemindersScreen(services, nav, it) }
             entry<Route.Trash> { TrashScreen(services, nav) }
             entry<Route.Library> { LibraryScreen(services, nav) }
+            entry<Route.Storage> { StorageScreen(services, nav) }
             entry<Route.CalendarImport> { CalendarImportScreen(services, nav) }
             entry<Route.Server> { ServerScreen(services, nav) }
             entry<Route.Export> { ExportScreen(services, nav) }

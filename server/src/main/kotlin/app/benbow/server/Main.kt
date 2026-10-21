@@ -17,6 +17,7 @@ import app.benbow.server.storage.Devices
 import app.benbow.server.storage.HighWater
 import app.benbow.server.storage.PairingCodes
 import app.benbow.server.storage.Restore
+import app.benbow.server.storage.StorageReports
 import io.ktor.server.engine.applicationEnvironment
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.engine.sslConnector
@@ -29,7 +30,7 @@ import java.nio.file.StandardOpenOption
 import kotlin.io.path.createDirectories
 import kotlin.system.exitProcess
 
-const val SERVER_VERSION = "0.11.2"
+const val SERVER_VERSION = "0.11.3"
 const val DEFAULT_PORT = 8765
 
 fun main(args: Array<String>) {
@@ -118,6 +119,7 @@ fun main(args: Array<String>) {
             calendarHighWater = calendarHighWater,
             webRoot = webRoot(),
             peers = peers,
+            storage = StorageReports(db, blobs, dataDir, config.backupMirror),
         )
     val server = embeddedServer(
         factory = Netty,

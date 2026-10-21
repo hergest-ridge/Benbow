@@ -178,5 +178,6 @@ class LibraryScreenTest {
         assertEquals("3,4" to 2, sizeParts(3_565_158))
         assertEquals("2" to 3, sizeParts(2L * 1024 * 1024 * 1024))
         assertEquals("12" to 3, sizeParts(12_884_901_888))
+        assertEquals("1,2" to 4, sizeParts(1_200L * 1024 * 1024 * 1024))
     }
 }

@@ -32,6 +32,7 @@ import app.benbow.server.storage.HighWater
 import app.benbow.server.storage.Migrations
 import app.benbow.server.storage.PairingCodes
 import app.benbow.server.storage.SqliteSyncStore
+import app.benbow.server.storage.StorageReports
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -91,6 +92,8 @@ class ServerContext(
     val webRoot: Path? = null,
     /** The link with friends' servers (ADR-039); null when its store didn't open (or in tests that don't need it). */
     val peers: PeerLink? = null,
+    /** What the files weigh («Место», ADR-041); null in tests that don't need it. */
+    val storage: StorageReports? = null,
 )
 
 data class DevicePrincipal(val deviceId: String)
@@ -226,6 +229,17 @@ fun Application.benbowModule(ctx: ServerContext) {
                     val cursor = call.request.queryParameters["cursor"]?.toLongOrNull() ?: 0
                     val limit = (call.request.queryParameters["limit"]?.toIntOrNull() ?: 200).coerceIn(1, MAX_PULL_LIMIT)
                     call.respond(CalendarRules(SqliteCalendarStore(calendar)).pull(cursor, limit))
+                }
+
+                /**
+                 * What the server's files weigh (ADR-041), each file once: by kind, by how alive (shown, in the trash,
+                 * taken off, held by nothing) and by the month of the entries holding them; the disks and the backups.
+                 */
+                get("/storage") {
+                    val storage =
+                        ctx.storage
+                            ?: return@get call.respond(HttpStatusCode.ServiceUnavailable, ApiError("no_media", "Media storage is off"))
+                    call.respond(withContext(Dispatchers.IO) { storage.report() })
                 }
 
                 /**

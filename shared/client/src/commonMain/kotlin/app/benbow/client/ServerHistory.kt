@@ -3,6 +3,8 @@ package app.benbow.client
 import app.benbow.client.db.BenbowDb
 import app.benbow.core.api.LinkPreviewInfo
 import app.benbow.core.api.RevisionInfo
+import app.benbow.core.api.StorageReport
+import kotlinx.serialization.Serializable
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
@@ -20,6 +22,34 @@ class ServerHistory(private val db: BenbowDb, private val apiFor: (Connection) -
 class ServerPages(private val db: BenbowDb, private val apiFor: (Connection) -> BenbowApi) {
     suspend fun preview(url: String): LinkPreviewInfo =
         apiFor(Settings(db).connection ?: throw PairingException("Not paired with a server")).linkPreview(url)
+}
+
+/**
+ * «Место» (ADR-041): the server's count of its files, and the last one this device got, so the screen has its numbers
+ * while the server is away (kept with the store's id: another server's count is never shown as this one's).
+ */
+class ServerStorage(private val db: BenbowDb, private val apiFor: (Connection) -> BenbowApi) {
+    @Serializable
+    private class Kept(val store: String, val report: StorageReport)
+
+    /** The last count this device got from the server it is paired with, or null. */
+    fun last(): StorageReport? {
+        val store = Settings(db).connection?.storeId ?: return null
+        val kept = Settings(db).get(KEY)?.let { runCatching { ClientJson.decodeFromString(Kept.serializer(), it) }.getOrNull() }
+        return kept?.takeIf { it.store == store }?.report
+    }
+
+    /** A fresh count from the server, kept for the next time. */
+    suspend fun fetch(): StorageReport {
+        val connection = Settings(db).connection ?: throw PairingException("Not paired with a server")
+        val report = apiFor(connection).storage()
+        Settings(db).put(KEY, ClientJson.encodeToString(Kept.serializer(), Kept(connection.storeId, report)))
+        return report
+    }
+
+    private companion object {
+        const val KEY = "storage.report"
+    }
 }
 
 /** One HTTP client per connection: each client owns threads and a connection pool, so they are not created per call. */

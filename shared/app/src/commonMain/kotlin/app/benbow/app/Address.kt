@@ -39,6 +39,8 @@ internal fun Route.path(): String = when (this) {
 
     Route.Library, is Route.LibraryMedia -> "media"
 
+    Route.Storage -> "space"
+
     Route.Server -> "server"
 
     Route.Export -> "export"
@@ -81,6 +83,7 @@ internal fun linkOf(path: String): Link? {
         "reminders" -> Link.Page(Route.Reminders())
         "trash" -> Link.Page(Route.Trash)
         "media" -> Link.Page(Route.Library)
+        "space" -> Link.Page(Route.Storage)
         "server" -> Link.Page(Route.Server)
         "export" -> Link.Page(Route.Export)
         "lock" -> Link.Page(Route.Lock)

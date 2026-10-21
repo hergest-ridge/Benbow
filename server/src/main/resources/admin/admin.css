@@ -231,3 +231,31 @@ details.edit[open] > summary { margin-bottom: 12px; }
   .card { padding: 16px; }
   .code { font-size: 36px; letter-spacing: 6px; }
 }
+
+/* «Место» (ADR-041): bars and their legend; the kinds take the charts' categorical slots in a fixed order, the states a
+   neutral ramp from the text colour, the disk the primary colour for Benbow's part. */
+:root {
+  --k-video:#2a78d6; --k-image:#eb6834; --k-sound:#1baf7a; --k-drawing:#eda100; --k-file:#e87ba4; --k-preview:#008300;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --k-video:#3987e5; --k-image:#d95926; --k-sound:#199e70; --k-drawing:#c98500; --k-file:#d55181; --k-preview:#008300; }
+}
+.hero { font: 500 32px/40px inherit; margin: 4px 0 0; }
+.bar { display: block; width: 100%; height: 16px; margin: 8px 0 6px; border-radius: 4px; background: var(--md-surface-container-highest); }
+.legend { display: grid; grid-template-columns: max-content 1fr max-content max-content; gap: 4px 12px; align-items: center; margin-bottom: 12px; }
+.legend-row { display: contents; }
+.legend .dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.legend b { font-weight: 500; text-align: right; }
+.k-video { fill: var(--k-video); background: var(--k-video); }
+.k-image { fill: var(--k-image); background: var(--k-image); }
+.k-sound { fill: var(--k-sound); background: var(--k-sound); }
+.k-drawing { fill: var(--k-drawing); background: var(--k-drawing); }
+.k-file { fill: var(--k-file); background: var(--k-file); }
+.k-preview { fill: var(--k-preview); background: var(--k-preview); }
+.s-live { fill: var(--md-on-surface); background: var(--md-on-surface); }
+.s-trash { fill: var(--md-on-surface-variant); background: var(--md-on-surface-variant); }
+.s-removed { fill: var(--md-outline); background: var(--md-outline); }
+.s-unreferenced { fill: var(--md-outline-variant); background: var(--md-outline-variant); }
+.d-ours { fill: var(--md-primary); background: var(--md-primary); }
+.d-other { fill: var(--md-outline); background: var(--md-outline); }
+.d-free { fill: var(--md-surface-container-highest); background: var(--md-surface-container-highest); border: 1px solid var(--md-outline-variant); }

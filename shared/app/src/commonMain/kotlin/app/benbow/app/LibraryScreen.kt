@@ -80,6 +80,7 @@ import app.benbow.app.resources.library_visual
 import app.benbow.app.resources.months_genitive
 import app.benbow.app.resources.move_to_trash
 import app.benbow.app.resources.size_units
+import app.benbow.app.resources.storage
 import app.benbow.client.LibraryItem
 import app.benbow.client.LibrarySection
 import app.benbow.client.Media
@@ -157,7 +158,13 @@ internal fun LibraryScreen(services: AppServices, nav: Navigator) {
     val choose = { item: LibraryItem -> chosen = chosen.toggle(item.key) }
     Scaffold(topBar = {
         if (chosen.isEmpty()) {
-            TopAppBar(navigationIcon = { BackButton(nav::back) }, title = { Text(stringResource(Res.string.library)) })
+            TopAppBar(
+                navigationIcon = { BackButton(nav::back) },
+                title = { Text(stringResource(Res.string.library)) },
+                actions = {
+                    IconButton({ nav.open(Route.Storage) }, Modifier.hand()) { Icon(Icons.Storage, stringResource(Res.string.storage)) }
+                },
+            )
         } else {
             val one = chosen.singleOrNull()?.let { key -> shown?.firstOrNull { it.key == key } }
             TopAppBar(
@@ -443,11 +450,11 @@ internal fun sizeLabel(bytes: Long): String {
     return "$number${Char(0x00A0)}${units.getOrElse(unit) { "" }}"
 }
 
-/** The number and the unit's index (0 bytes, 1 KB, 2 MB, 3 GB): one decimal below ten, with a comma. */
+/** The number and the unit's index (0 bytes, 1 KB, 2 MB, 3 GB, 4 TB): one decimal below ten, with a comma. */
 internal fun sizeParts(bytes: Long): Pair<String, Int> {
     var value = bytes.coerceAtLeast(0).toDouble()
     var unit = 0
-    while (value >= 1024 && unit < 3) {
+    while (value >= 1024 && unit < 4) {
         value /= 1024
         unit++
     }

@@ -26,12 +26,18 @@ interface Media {
     /** Keeps large local files under [capBytes]; returns the bytes freed (an evicted file is downloaded again when needed). */
     fun evict(capBytes: Long): Long
 
+    /** What this device keeps, and what [evict] may let go right now by the same rule («Освободить на телефоне»). */
+    fun usage(): Flow<MediaUsage>
+
     /** Files captured here that the server hasn't confirmed yet. */
     fun pendingCount(): Flow<Long>
 
     /** Uploads every captured file the server hasn't confirmed; returns how many finished. */
     suspend fun uploadPending(): Int
 }
+
+/** Bytes of files on this device: all of them, and those the server holds and has backed up (they may go). */
+data class MediaUsage(val total: Long, val freeable: Long)
 
 /** Failures in a row after which the rest of the queue waits for the next sync (the server is likely gone). */
 internal const val UPLOAD_FAILURES_IN_A_ROW = 3

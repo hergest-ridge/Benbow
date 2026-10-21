@@ -412,6 +412,20 @@ WHERE r.present = 0 AND r.purged = 0 AND e.kind != 'system'
     AND (p.id IS NULL OR json_extract(p.fields, '$.deleted') IS NOT 'true')
 ORDER BY r.changed_at DESC, r.entry_id, r.attachment_id;
 
+-- Everything waiting in the trash (ADR-041, «Место»): attachments taken off, and those of entries in the trash or of
+-- comments on them, the heaviest first; the same columns as libraryItems.
+trashItems:
+SELECT r.entry_id, r.attachment_id, r.sha256, r.kind, r.mime, r.size, r.name, r.width, r.height, r.duration_ms,
+    r.captured_at, r.preview_sha256, r.caption, r.position, r.changed_at,
+    coalesce(p.id, e.id) AS post_id, coalesce(p.day, e.day) AS day, coalesce(p.space, e.space) AS space,
+    coalesce(p.fields, e.fields) AS post_fields, e.fields
+FROM attachment_ref AS r
+JOIN entry AS e ON e.id = r.entry_id
+LEFT JOIN entry AS p ON p.id = e.parent_id
+WHERE r.purged = 0 AND e.kind != 'system'
+    AND (r.present = 0 OR json_extract(e.fields, '$.deleted') IS 'true' OR json_extract(p.fields, '$.deleted') IS 'true')
+ORDER BY r.size DESC, r.entry_id, r.attachment_id;
+
 -- Every file held by an entry in the trash or by a comment on one (taken off or not): what the trash weighs.
 trashFiles:
 SELECT e.id, e.parent_id, r.sha256, r.size
@@ -452,6 +466,13 @@ evictable:
 SELECT sha256, path, size FROM media
 WHERE size >= :minSize AND (origin = 'downloaded' OR (origin = 'captured' AND uploaded = 1 AND uploaded_at < :settledBefore))
 ORDER BY last_access_at;
+
+-- What this device keeps («Место», ADR-041): every file, and what evictable would let go now.
+mediaUsage:
+SELECT coalesce(SUM(size), 0) AS total,
+    coalesce(SUM(CASE WHEN size >= :minSize AND (origin = 'downloaded' OR (origin = 'captured' AND uploaded = 1 AND uploaded_at < :settledBefore))
+        THEN size ELSE 0 END), 0) AS freeable
+FROM media;
 
 forgetMedia:
 DELETE FROM media WHERE sha256 = ? AND (origin = 'downloaded' OR uploaded = 1);

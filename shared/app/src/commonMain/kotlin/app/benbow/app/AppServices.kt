@@ -19,6 +19,7 @@ import app.benbow.client.ReminderItem
 import app.benbow.client.SearchQuery
 import app.benbow.client.ServerHistory
 import app.benbow.client.ServerPages
+import app.benbow.client.ServerStorage
 import app.benbow.client.Settings
 import app.benbow.client.SpeechModel
 import app.benbow.client.SyncController
@@ -35,6 +36,7 @@ import app.benbow.client.moveToBoard
 import app.benbow.client.moveToJournal
 import app.benbow.client.removeAttachments
 import app.benbow.client.upcoming
+import app.benbow.core.api.StorageReport
 import app.benbow.core.media.AttachmentKey
 import app.benbow.ui.editor.Removal
 import app.cash.sqldelight.db.SqlDriver
@@ -46,6 +48,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.concurrent.Volatile
@@ -154,6 +157,9 @@ sealed interface AppMessage {
     /** Attachments were taken off their entries into the trash (ADR-041, the library); "Вернуть" puts them back. */
     data class MediaTrashed(val keys: List<AttachmentKey>) : AppMessage
 
+    /** «Освободить на телефоне» let [bytes] go (they come back from the server when needed). */
+    data class DeviceFreed(val bytes: Long) : AppMessage
+
     /** A voice note gave way to its text (7.10e); "Вернуть" brings it back. */
     data class VoiceReplaced(val entryId: String, val attachmentId: String) : AppMessage
 
@@ -173,7 +179,7 @@ class AppServices(
     val platform: String,
     val deviceName: String,
     /** Large media files kept on this device beyond what still has to reach the server. */
-    private val mediaCacheBytes: Long = 2L * 1024 * 1024 * 1024,
+    internal val mediaCacheBytes: Long = 2L * 1024 * 1024 * 1024,
     /** Rings reminders on this device (Android alarms, a tray message on desktop); none in tests. */
     private val reminderClock: ReminderClock? = null,
     /** Speech to text on this device (7.6) and its model; none on desktop and in the browser. */
@@ -196,6 +202,15 @@ class AppServices(
 
     /** Pages read on the server for link cards (the browser's way, ADR-038). */
     internal val pages = ServerPages(db, apis)
+
+    /** «Место» (ADR-041): the server's count of its files, and the last one kept here. */
+    internal val storage = ServerStorage(db, apis)
+
+    /** How «Место» gets a fresh count; tests put their own here. */
+    internal var storageReader: suspend () -> StorageReport = { storage.fetch() }
+
+    /** «Освободить на телефоне»: every large file the server holds and has backed up lets go here; the bytes freed. */
+    suspend fun freeDevice(): Long = withContext(IoDispatcher) { media.evict(0) }.also { messages.tryEmit(AppMessage.DeviceFreed(it)) }
 
     /** Addresses whose pages are being read for their cards right now (they shimmer). */
     val linkLoading = MutableStateFlow<Set<String>>(emptySet())

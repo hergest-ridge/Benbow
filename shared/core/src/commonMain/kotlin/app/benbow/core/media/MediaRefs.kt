@@ -2,13 +2,17 @@ package app.benbow.core.media
 
 import app.benbow.core.sync.AttachmentState
 
-/** What [MediaRefs] needs of an entry: [bodies] are its head and conflict heads as stored (canonical Document JSON). */
+/**
+ * What [MediaRefs] needs of an entry: [bodies] are its head and conflict heads as stored (canonical Document JSON);
+ * [day] places its files in months ([StorageCount]).
+ */
 data class MediaEntry(
     val id: String,
     val trashed: Boolean,
     val parent: String? = null,
     val attachments: Map<String, AttachmentState> = emptyMap(),
     val bodies: List<String> = emptyList(),
+    val day: String? = null,
 )
 
 /** How a reference names its file: an attachment's own file, its preview, or a SHA-256 in the entry's text. */

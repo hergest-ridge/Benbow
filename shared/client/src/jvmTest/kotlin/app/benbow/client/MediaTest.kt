@@ -130,6 +130,21 @@ class MediaTest {
         assertContentEquals(video, phone.media.file(file.sha256).readBytes(), "fetched again when needed")
     }
 
+    /** «Место» (ADR-041): what the device keeps and what «Освободить» may let go, by the cache's own rule. */
+    @Test
+    fun usageSaysWhatMayGoAndFreeingLetsGoExactlyThat() = runTest {
+        val server = FakeServer()
+        val big = Random(11).nextBytes(1_300_000)
+        server.blobs[sha256(big)] = big
+        val desktop = Device(server, "desktop")
+        desktop.media.file(sha256(big)) // a download: the server has it
+        val captured = desktop.media.import(Random(12).nextBytes(1_100_000).inputStream(), "video/mp4", "VID.mp4", null)
+        desktop.repo.attach(desktop.repo.createEntry("2026-10-21"), captured, "video") // not on the server yet
+        assertEquals(MediaUsage(2_400_000, 1_300_000), desktop.media.usage().first())
+        assertEquals(1_300_000L, desktop.media.evict(capBytes = 0))
+        assertEquals(MediaUsage(1_100_000, 0), desktop.media.usage().first())
+    }
+
     @Test
     fun downloadsGoLeastRecentlyViewedFirst() = runTest {
         val server = FakeServer()

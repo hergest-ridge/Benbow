@@ -93,6 +93,10 @@ class BrowserMedia(
         if (touched.add(sha256)) q.touchMedia(now(), sha256)
     }
 
+    override fun usage(): Flow<MediaUsage> = q.mediaUsage(SMALL_FILE, now() - SETTLE_MS) { total, freeable ->
+        MediaUsage(total, freeable)
+    }.asFlow().mapToOne(Dispatchers.Default)
+
     override fun awaitingUpload(sha256: String): Flow<Boolean> = q.selectMedia(sha256).asFlow().mapToOneOrNull(Dispatchers.Default).map {
         it != null && it.origin == "captured" && it.uploaded == 0L
     }

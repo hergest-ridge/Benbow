@@ -87,6 +87,7 @@ private fun adminTabs(ctx: ServerContext): List<Tab> {
         Tab("overview", "Сервер", "server"),
         Tab("devices", "Устройства", "phone"),
         Tab("backups", "Копии", "backup", alert = staleBackups),
+        ctx.storage?.let { Tab("space", "Место", "disk") },
         ctx.speech?.let { Tab("speech", "Голос", "mic") },
         Tab("friends", "Друзья", "chat"),
         Tab("link", "Связь", "sync", alert = linkNeedsAttention(ctx.peers)),
@@ -100,6 +101,7 @@ internal fun adminPage(ctx: ServerContext, admin: Boolean, flash: Flash? = null)
         if (admin) {
             append(devicesSection(ctx))
             append(backupsSection(ctx))
+            ctx.storage?.let { append(spaceSection(it)) }
             ctx.speech?.let { append(speechSection(it)) }
             append(friendsSection(ctx.peers))
             append(linkSection(ctx.peers))

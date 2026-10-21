@@ -5,6 +5,14 @@ plugins {
     alias(libs.plugins.compose.compiler)
 }
 
+// One version for the server, the web client and this app (ADR-042, U1), in gradle.properties. Android accepts an update
+// only with a higher versionCode, so it grows with every release: 0.13.0 -> 13000.
+val benbowVersion = providers.gradleProperty("benbow.version").get()
+val benbowVersionCode = benbowVersion.split('.').map(String::toInt).let { (major, minor, patch) ->
+    check(minor < 1000 && patch < 1000) { "benbow.version $benbowVersion: minor and patch must stay under 1000" }
+    major * 1_000_000 + minor * 1_000 + patch
+}
+
 // The release key lives outside the repo (tools/create-release-key.ps1). Android only accepts updates signed
 // with the same key, so losing it means uninstalling, which wipes anything not yet synced.
 val releaseSigning = providers.gradleProperty("benbow.signing")
@@ -22,8 +30,8 @@ android {
         applicationId = "app.benbow"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = benbowVersionCode
+        versionName = benbowVersion
         // The owner's phones are arm64; ONNX Runtime's native library is big (ADR-025).
         ndk { abiFilters += "arm64-v8a" }
     }

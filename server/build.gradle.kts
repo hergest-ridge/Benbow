@@ -1,3 +1,5 @@
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
 import java.security.MessageDigest
 import java.util.zip.Deflater
 import java.util.zip.GZIPOutputStream
@@ -11,6 +13,24 @@ plugins {
 kotlin {
     jvmToolchain(libs.versions.jvm.toolchain.get().toInt())
 }
+
+// The one version of Benbow (gradle.properties, ADR-042 U1) as SERVER_VERSION.
+val benbowVersion = providers.gradleProperty("benbow.version")
+val serverVersion = tasks.register("serverVersion") {
+    val version = benbowVersion
+    val output = layout.buildDirectory.dir("generated/version")
+    inputs.property("version", version)
+    outputs.dir(output)
+    doLast {
+        val file = output.get().asFile.resolve("app/benbow/server/Version.kt")
+        file.parentFile.mkdirs()
+        file.writeText(
+            "package app.benbow.server\n\n/** From `benbow.version` in gradle.properties (ADR-042, U1). */\n" +
+                "const val SERVER_VERSION = \"${version.get()}\"\n",
+        )
+    }
+}
+kotlin.sourceSets.named("main") { kotlin.srcDir(serverVersion) }
 
 application {
     mainClass = "app.benbow.server.MainKt"
@@ -120,6 +140,44 @@ val webApp = tasks.register<Sync>("webApp") {
     }
 }
 
+// The Android app this server's phones update from (ADR-042, U1): the signed release APK and `release.json` saying
+// what it is (from the build's own output-metadata.json, so it can't drift from the APK), for the package's `android`.
+val androidRelease = tasks.register("androidRelease") {
+    group = "distribution"
+    description = "The signed Android app and its release.json for the server package."
+    dependsOn(":apps:android:assembleRelease")
+    val apks = rootProject.layout.projectDirectory.dir("apps/android/build/outputs/apk/release")
+    val output = layout.buildDirectory.dir("android")
+    inputs.files(apks.file("output-metadata.json"), apks.file("android-release.apk"))
+    outputs.dir(output)
+    doLast {
+        @Suppress("UNCHECKED_CAST")
+        val element = (
+            (
+                JsonSlurper().parse(
+                    apks.file("output-metadata.json").asFile,
+                ) as Map<String, Any>
+                )["elements"] as List<Map<String, Any>>
+            ).single()
+        val apk = apks.asFile.resolve(element["outputFile"] as String)
+        val name = "benbow-${element["versionName"]}.apk"
+        val dir = output.get().asFile.apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        apk.copyTo(dir.resolve(name))
+        val sha = MessageDigest.getInstance("SHA-256").digest(apk.readBytes()).joinToString("") { "%02x".format(it) }
+        val release = mapOf(
+            "version_code" to element["versionCode"],
+            "version_name" to element["versionName"],
+            "file" to name,
+            "sha256" to sha,
+            "size" to apk.length(),
+        )
+        dir.resolve("release.json").writeText(JsonOutput.prettyPrint(JsonOutput.toJson(release)))
+    }
+}
+
 // The admin page wears the app's icon: one source, the web client's favicon (itself the app_icon drawing).
 tasks.named<ProcessResources>("processResources") {
     from(rootProject.file("apps/web/src/wasmJsMain/resources/favicon.svg")) {
@@ -131,6 +189,7 @@ tasks.named<ProcessResources>("processResources") {
 // `./gradlew :server:webApp` once, then `:server:run` serves it at /app/ too.
 tasks.named<JavaExec>("run") {
     systemProperty("benbow.web", layout.buildDirectory.dir("web").get().asFile.absolutePath)
+    systemProperty("benbow.android", layout.buildDirectory.dir("android").get().asFile.absolutePath)
 }
 
 tasks.register<Sync>("packageServer") {
@@ -164,6 +223,7 @@ tasks.register<Sync>("packageServer") {
     from(jlinkRuntime) { into("runtime") }
     from(layout.buildDirectory.dir("install/server/lib")) { into("lib") }
     from(webApp) { into("web") }
+    from(androidRelease) { into("android") }
     from("packaging/windows")
     // WinSW is not committed; drop WinSW.NET461.exe into packaging/winsw (see packaging/windows/README.txt).
     from("packaging/winsw") {

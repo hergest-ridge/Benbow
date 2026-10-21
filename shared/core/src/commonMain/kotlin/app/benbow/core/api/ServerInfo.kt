@@ -29,4 +29,15 @@ data class ServerInfo(
     val cursor: Long? = null,
     /** The calendar store, synced on its own channel (server 0.6.0+, ADR-027). */
     val calendar: CalendarInfo? = null,
+    /** The Android app this server carries, for phones to update from (server 0.13.0+, ADR-042); null when it has none. */
+    val android: AndroidApp? = null,
+)
+
+/** A signed release APK a server offers at `GET /api/v1/app/android` (ADR-042): same key as the installed app, or no update. */
+@Serializable
+data class AndroidApp(
+    @SerialName("version_code") val versionCode: Int,
+    @SerialName("version_name") val versionName: String,
+    val sha256: String,
+    val size: Long,
 )

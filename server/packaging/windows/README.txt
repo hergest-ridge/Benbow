@@ -4,6 +4,7 @@ Folder layout
   runtime\          bundled Java runtime (no system Java needed)
   lib\              server jars
   web\              the web client (the app in a browser), served at https://<this PC>:8765/app/
+  android\          the signed Android app of this version and its release.json; paired phones update from here
   run-console.cmd   run in a console window for testing
   install-service.cmd / uninstall-service.cmd   Windows service via WinSW (run as Administrator)
 

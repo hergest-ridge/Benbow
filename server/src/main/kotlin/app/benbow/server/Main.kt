@@ -34,8 +34,6 @@ import java.nio.file.StandardOpenOption
 import kotlin.io.path.createDirectories
 import kotlin.system.exitProcess
 
-const val SERVER_VERSION = "0.12.2"
-
 /** The purge journal beside the database (ADR-041): one line per purge and per undo. */
 const val PURGE_JOURNAL = "purge-journal.jsonl"
 const val DEFAULT_PORT = 8765
@@ -155,6 +153,9 @@ fun main(args: Array<String>) {
             backupJobs = backupJobs,
             mediaMove = mediaMove,
             leftFolders = leftFolders,
+            app = AppRelease.load(appRoot())?.also {
+                log.info("Android app {} ({}) offered to phones", it.info.versionName, it.info.versionCode)
+            },
             purges = purges,
         )
     val server = embeddedServer(
@@ -190,6 +191,12 @@ fun main(args: Array<String>) {
     )
     server.start(wait = true)
 }
+
+/** The Android app (ADR-042, U1): the package's `android` folder beside `lib`, or where `benbow.android` points (`:server:run`). */
+private fun appRoot(): Path? = System.getProperty("benbow.android")?.let(Path::of)
+    ?: runCatching {
+        Path.of(ServerContext::class.java.protectionDomain.codeSource.location.toURI()).parent.parent.resolve("android")
+    }.getOrNull()
 
 /** The web client's files: the package's `web` folder beside `lib`, or where `benbow.web` points (`:server:run`). */
 private fun webRoot(): Path? = System.getProperty("benbow.web")?.let(Path::of)

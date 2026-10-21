@@ -163,6 +163,14 @@ private fun overview(ctx: ServerContext, admin: Boolean): String = buildString {
     append("<div class=\"card\">")
     append("<div class=\"row\"><h3>Сервер работает</h3>${chip("ok", "ok", "в сети")}</div>")
     append("<dl class=\"kv\"><dt>Версия</dt><dd>$SERVER_VERSION</dd>")
+    append("<dt>Приложение для Android</dt><dd>")
+    append(
+        ctx.app?.info?.let {
+            "${esc(it.versionName)} (сборка ${it.versionCode}), ${"%.0f".format(it.size / 1_048_576.0)} МБ: телефоны обновляются отсюда"
+        }
+            ?: "в этом пакете нет",
+    )
+    append("</dd>")
     append("<dt>Хранилище</dt><dd class=\"mono\">${esc(ctx.db.storeId)}</dd>")
     append("<dt>Сертификат</dt><dd><span class=\"mono\">${esc(ctx.tlsFingerprint)}</span> ")
     append(

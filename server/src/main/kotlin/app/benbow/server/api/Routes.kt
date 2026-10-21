@@ -21,6 +21,7 @@ import app.benbow.core.calendar.CalendarPushRequest
 import app.benbow.core.calendar.CalendarRules
 import app.benbow.core.sync.SyncRules
 import app.benbow.core.text.Links
+import app.benbow.server.AppRelease
 import app.benbow.server.SERVER_VERSION
 import app.benbow.server.SpeechModel
 import app.benbow.server.backup.BackupJobs
@@ -110,6 +111,8 @@ class ServerContext(
     val mediaMove: MediaMove? = null,
     /** The folders moves left behind (P6); null in tests that don't need it. */
     val leftFolders: LeftFolders? = null,
+    /** The Android app this package carries (ADR-042, U1); null when it has none. */
+    val app: AppRelease? = null,
 )
 
 data class DevicePrincipal(val deviceId: String)
@@ -156,6 +159,7 @@ fun Application.benbowModule(ctx: ServerContext) {
                         Migrations.SCHEMA_VERSION,
                         ctx.db.latestCursor(),
                         ctx.calendar?.let { CalendarInfo(CalendarProtocol.VERSION, it.epoch, it.latestCursor()) },
+                        ctx.app?.info,
                     ),
                 )
             }
@@ -330,6 +334,18 @@ fun Application.benbowModule(ctx: ServerContext) {
                 /**
                  * A media file by SHA-256 (supports Range). HEAD answers whether the server has it.
                  */
+                /**
+                 * The signed Android app this server carries (ADR-042), as `info.android` describes it (supports Range, so a
+                 * cut download goes on). Phones check its SHA-256 before installing; Android installs it only over an app
+                 * signed with the same key.
+                 */
+                get("/app/android") {
+                    val app = ctx.app ?: return@get call.respond(HttpStatusCode.NotFound, ApiError("no_app", "This server carries no app"))
+                    call.response.header(HttpHeaders.ETag, "\"${app.info.sha256}\"")
+                    call.response.header(HttpHeaders.ContentDisposition, "attachment; filename=\"${app.file.fileName}\"")
+                    call.respond(LocalPathContent(app.file, ContentType("application", "vnd.android.package-archive")))
+                }
+
                 get("/blobs/{sha256}") {
                     val store =
                         ctx.blobs

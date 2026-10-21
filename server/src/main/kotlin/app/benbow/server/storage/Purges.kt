@@ -78,7 +78,9 @@ class Purges(
         data class Refused(val reason: String) : Commit
     }
 
+    /** Refused with [MediaUnavailable] while the media folder is gone (ADR-042): its files couldn't move or come back. */
     fun preview(request: PurgeRequest, device: String?): Preview {
+        blobs.folder.require()
         // A file held by nothing may still wait for its link (it can come first): only after thirty days.
         if (request.unreferenced.any { (placedAt(it) ?: 0) > now() - UNREFERENCED_MILLIS }) return Preview.Refused("too_new")
         val ready = when (val plan = db.locked { c -> plan(c, request) }) {
@@ -93,6 +95,7 @@ class Purges(
 
     @Synchronized
     fun commit(planId: String): Commit {
+        blobs.folder.require()
         val plan = plans[planId]?.takeIf { now() - it.made <= PLAN_MILLIS } ?: return Commit.Expired
         val id = UUID.randomUUID().toString()
         val at = now()
@@ -226,15 +229,19 @@ class Purges(
         st.executeQuery("SELECT sha256, size FROM blobs").use { rs -> buildMap { while (rs.next()) put(rs.getString(1), rs.getLong(2)) } }
     }
 
-    /** Files committed for the quarantine that haven't moved yet (after a crash too): moved now. Idempotent. */
+    /**
+     * Files committed for the quarantine that haven't moved yet (after a crash too): moved now. Idempotent. Waits while the
+     * media folder is gone (ADR-042): a file not found there then is not a file moved.
+     */
     @Synchronized
     fun moveQueued() {
+        if (!blobs.ready()) return
         for (row in rows("moved_at IS NULL AND deleted_at IS NULL AND back_at IS NULL")) {
             val from = blobs.root.resolve(row.path)
             val to = blobs.root.resolve(row.quarantine)
             when {
                 from.exists() -> {
-                    to.parent.createDirectories()
+                    blobs.folder.directory(row.quarantine.substringBeforeLast('/'))
                     Files.move(from, to, StandardCopyOption.ATOMIC_MOVE)
                 }
 
@@ -251,9 +258,11 @@ class Purges(
     /**
      * Quarantines that ended (at [now], or now for one freed at once): a file nothing references any more is deleted;
      * one referenced again goes back to the media folder (or, when it was uploaded again meanwhile, its copy here goes).
+     * Waits while the media folder is gone (ADR-042), so nothing is marked deleted that wasn't.
      */
     @Synchronized
     fun expire() {
+        if (!blobs.ready()) return
         val due = rows("moved_at IS NOT NULL AND deleted_at IS NULL AND back_at IS NULL AND due_at <= ?", now().toString())
         if (due.isEmpty()) return
         val held = MediaRefs(db.locked(::readMediaEntries)).held
@@ -282,6 +291,7 @@ class Purges(
     /** «Освободить сейчас» on the admin page: the purge's quarantine ends now. */
     @Synchronized
     fun freeNow(purgeId: String) {
+        blobs.folder.require()
         db.transaction { c ->
             c.prepareStatement(
                 "UPDATE purged_files SET due_at = ? WHERE purge_id = ? AND deleted_at IS NULL AND back_at IS NULL",
@@ -301,6 +311,7 @@ class Purges(
      */
     @Synchronized
     fun undo(purgeId: String): Boolean {
+        blobs.folder.require()
         val record = record(purgeId) ?: return false
         val files = rowsOf(purgeId)
         if (files.any { it.deletedAt != null } || undone(purgeId)) return false
@@ -336,7 +347,7 @@ class Purges(
             return
         }
         if (copy.exists() && !home.exists()) {
-            home.parent.createDirectories()
+            blobs.folder.directory(row.path.substringBeforeLast('/', ""))
             Files.move(copy, home, StandardCopyOption.ATOMIC_MOVE)
         }
         db.transaction { c ->

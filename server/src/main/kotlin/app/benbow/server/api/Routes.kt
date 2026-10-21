@@ -31,6 +31,7 @@ import app.benbow.server.storage.BlobStore
 import app.benbow.server.storage.Database
 import app.benbow.server.storage.Devices
 import app.benbow.server.storage.HighWater
+import app.benbow.server.storage.MediaUnavailable
 import app.benbow.server.storage.Migrations
 import app.benbow.server.storage.PairingCodes
 import app.benbow.server.storage.Purges
@@ -68,6 +69,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.InetAddress
 import java.nio.file.Path
+import kotlin.io.path.exists
 
 class ServerContext(
     val db: Database,
@@ -108,6 +110,10 @@ private const val MAX_PULL_LIMIT = 500
 private const val MAX_RECONCILE = 2_000
 private val NO_CALENDAR = ApiError("no_calendar", "The calendar store is off on this server; see its log")
 private val NO_PURGE = ApiError("no_purge", "Deleting for good is off on this server")
+
+/** 503 while the media folder isn't there (ADR-042): devices keep their files and try again later. */
+private suspend fun ApplicationCall.mediaUnavailable(e: MediaUnavailable) =
+    respond(HttpStatusCode.ServiceUnavailable, ApiError("media_unavailable", e.message.orEmpty()))
 
 // KDoc on routes feeds the generated OpenAPI summaries, so ktlint's "no KDoc in blocks" rule is off here.
 @Suppress("ktlint:standard:kdoc")
@@ -265,7 +271,12 @@ fun Application.benbowModule(ctx: ServerContext) {
                     val purges = ctx.purges ?: return@post call.respond(HttpStatusCode.ServiceUnavailable, NO_PURGE)
                     val request = call.receive<PurgeRequest>()
                     val device = call.principal<DevicePrincipal>()!!.deviceId
-                    when (val preview = withContext(Dispatchers.IO) { purges.preview(request, device) }) {
+                    val preview = try {
+                        withContext(Dispatchers.IO) { purges.preview(request, device) }
+                    } catch (e: MediaUnavailable) {
+                        return@post call.mediaUnavailable(e)
+                    }
+                    when (preview) {
                         is Purges.Preview.Ready -> call.respond(preview.preview)
 
                         is Purges.Preview.Refused -> call.respond(
@@ -282,7 +293,12 @@ fun Application.benbowModule(ctx: ServerContext) {
                 post("/purge/commit") {
                     val purges = ctx.purges ?: return@post call.respond(HttpStatusCode.ServiceUnavailable, NO_PURGE)
                     val request = call.receive<PurgeCommit>()
-                    when (val result = withContext(Dispatchers.IO) { purges.commit(request.planId) }) {
+                    val result = try {
+                        withContext(Dispatchers.IO) { purges.commit(request.planId) }
+                    } catch (e: MediaUnavailable) {
+                        return@post call.mediaUnavailable(e)
+                    }
+                    when (result) {
                         is Purges.Commit.Done -> {
                             ctx.highWater?.record(ctx.db)
                             call.respond(result.done)
@@ -311,9 +327,14 @@ fun Application.benbowModule(ctx: ServerContext) {
                             ?: return@get call.respond(HttpStatusCode.ServiceUnavailable, ApiError("no_media", "Media storage is off"))
                     val blob = store.blob(call.parameters["sha256"]!!)
                         ?: return@get call.respond(HttpStatusCode.NotFound, ApiError("not_found", "No such file"))
+                    val file = store.file(blob)
+                    // A known file the server can't reach right now: its folder is gone (ADR-042), not the file.
+                    if (!file.exists() && !withContext(Dispatchers.IO) { store.ready() }) {
+                        return@get call.mediaUnavailable(MediaUnavailable(store.folder.describe()))
+                    }
                     call.response.header(HttpHeaders.ETag, "\"${blob.sha256}\"")
                     call.response.header(HttpHeaders.CacheControl, "private, max-age=31536000, immutable")
-                    call.respond(LocalPathContent(store.file(blob), ContentType.parse(blob.mime)))
+                    call.respond(LocalPathContent(file, ContentType.parse(blob.mime)))
                 }
 
                 /**
@@ -348,6 +369,8 @@ fun Application.benbowModule(ctx: ServerContext) {
                         call.respond(HttpStatusCode.BadRequest, ApiError("bad_upload", e.message.orEmpty()))
                     } catch (e: BlobStore.InsufficientSpace) {
                         call.respond(HttpStatusCode.InsufficientStorage, ApiError("no_space", e.message.orEmpty()))
+                    } catch (e: MediaUnavailable) {
+                        call.mediaUnavailable(e)
                     }
                 }
 
@@ -382,7 +405,11 @@ fun Application.benbowModule(ctx: ServerContext) {
                             ApiError("stalled", "The chunk stopped arriving; send it again"),
                         )
                     }
-                    val result = withContext(Dispatchers.IO) { store.append(id, offset, bytes) }
+                    val result = try {
+                        withContext(Dispatchers.IO) { store.append(id, offset, bytes) }
+                    } catch (e: MediaUnavailable) {
+                        return@patch call.mediaUnavailable(e)
+                    }
                     when (result) {
                         is BlobStore.Chunk.Accepted -> call.respond(UploadStatus(id, result.offset, complete = result.blob != null))
 

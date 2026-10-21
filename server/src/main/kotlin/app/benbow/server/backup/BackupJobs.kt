@@ -9,6 +9,7 @@ import app.benbow.server.storage.BlobStore
 import app.benbow.server.storage.Database
 import app.benbow.server.storage.Purges
 import app.benbow.server.storage.SqliteSyncStore
+import app.benbow.server.storage.createUnder
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.builtins.serializer
@@ -37,6 +38,10 @@ data class BackupStatus(
     /** The calendar's own snapshots (ADR-027); its failures are reported here, apart from the journal's. */
     val calendarSnapshotAt: Long? = null,
     val calendarError: String? = null,
+    /** The second disk (ADR-042): its folder, when the snapshots last got there, and why the last pass didn't. */
+    val mirrorPath: String? = null,
+    val mirrorDbAt: Long? = null,
+    val mirrorProblem: String? = null,
 )
 
 /**
@@ -61,13 +66,19 @@ class BackupJobs(
     /** The tag registry's names, merges and trash the mirror was last written with (ADR-032). */
     private val exportedTagsFile = dataDir.resolve("export").resolve(".tags.json")
 
+    /** The second disk's folder with its mark and its last passes (ADR-042). */
+    private val mirrorFolder =
+        mirror?.let { MirrorFolder(it, db.storeId, dataDir.resolve("backups").resolve(MirrorFolder.PASSES), ::filledBefore) }
+
     @Volatile
     var status = BackupStatus(
         db.backups?.history()?.lastOrNull()?.createdAt,
-        null,
+        mirrorFolder?.passes()?.lastAt,
         readExportSeq(),
         null,
         calendar?.backups?.history()?.lastOrNull()?.createdAt,
+        mirrorPath = mirror?.toString(),
+        mirrorDbAt = mirrorFolder?.passes()?.dbAt,
     )
         private set
 
@@ -119,7 +130,11 @@ class BackupJobs(
         if (taken != null) log.info("Snapshot {} verified ({} rows)", taken.file, taken.rows.values.sum())
         val removed = backups.prune(Retention.keep(backups.history(), now))
         if (removed.isNotEmpty()) log.info("Pruned {} old snapshots", removed.size)
-        val mirrored = copyToMirror() && copyMediaToMirror()
+        // Only into this store's folder on the second disk (ADR-042); its media only while the media folder is there.
+        val mirrorState = mirrorFolder?.check()
+        val copied = mirrorState == MirrorFolder.State.Ready && copyToMirror()
+        val mirrored = copied && copyMediaToMirror()
+        if (copied) mirrorFolder?.record(now, if (mirrored) now else null)
         // Quarantines that ended (ADR-041), then the mirror's copies of those files: by the journal, the hash matching.
         purges?.expire()
         if (mirrored) mirror?.let { purges?.mirrorDeletions(it) }
@@ -128,6 +143,13 @@ class BackupJobs(
         status = status.copy(
             lastSnapshotAt = backups.history().lastOrNull()?.createdAt,
             lastMirrorAt = if (mirrored) now else status.lastMirrorAt,
+            mirrorDbAt = if (copied) now else status.mirrorDbAt,
+            mirrorProblem = when {
+                mirrorFolder == null || mirrorState == null -> null
+                mirrorState != MirrorFolder.State.Ready -> mirrorFolder.describe(mirrorState)
+                copied && !mirrored -> "снимки базы скопированы, медиафайлы нет: папка медиа недоступна"
+                else -> null
+            },
             lastError = corrupt.takeIf {
                 it.isNotEmpty()
             }?.let { "Media files don't match their hash: ${it.joinToString { b -> b.path }}" },
@@ -149,7 +171,7 @@ class BackupJobs(
         }
         if (taken != null) log.info("Calendar snapshot {} verified ({} rows)", taken.file, taken.rows.values.sum())
         backups.prune(Retention.keep(backups.history(), now))
-        mirror?.let { copySnapshots(backups, it.resolve("calendar"), it.resolve("calendar").resolve("manifest.json")) }
+        if (mirrorFolder?.check() == MirrorFolder.State.Ready) copySnapshots(backups, "calendar", "calendar/manifest.json")
         if (CalendarMirror(dataDir.resolve("export").resolve("calendars")).update(store)) log.info("Calendar mirror written")
         status = status.copy(calendarSnapshotAt = backups.history().lastOrNull()?.createdAt, calendarError = null)
         return taken != null
@@ -159,7 +181,7 @@ class BackupJobs(
     private fun copyToMirror(): Boolean {
         val target = mirror ?: return false
         val backups = db.backups ?: return false
-        copySnapshots(backups, target.resolve("db"), target.resolve("manifest.json"))
+        copySnapshots(backups, "db", "manifest.json")
         // The purge journal goes with the snapshots: a store rebuilt from the mirror does its purges again (ADR-041).
         val journal = dataDir.resolve("db").resolve(PURGE_JOURNAL)
         if (journal.exists()) {
@@ -171,12 +193,11 @@ class BackupJobs(
         return true
     }
 
-    /** Verified copies of [backups]' snapshots in [dir] (a folder of their own), then their manifest. */
-    private fun copySnapshots(backups: Backups, dir: Path, manifestCopy: Path) {
-        if (!dir.isAbsolute) {
-            error("backup.mirror must be an absolute path (use / in benbow.properties), got '$mirror'")
-        }
-        dir.createDirectories()
+    /** Verified copies of [backups]' snapshots in the mirror's [folder] (one of their own), then their manifest. */
+    private fun copySnapshots(backups: Backups, folder: String, manifest: String) {
+        val target = mirror ?: return
+        val dir = createUnder(target, folder)
+        val manifestCopy = target.resolve(manifest)
         val wanted = backups.history().filter { it.verified }.map { it.file }.toSet()
         for (name in wanted) {
             val source = backups.directory.resolve(name)
@@ -191,20 +212,33 @@ class BackupJobs(
         Files.copy(backups.manifest, manifestCopy, StandardCopyOption.REPLACE_EXISTING)
     }
 
-    /** Copies media files missing in the mirror (immutable, so presence + hash is enough). Never deletes there. */
+    /**
+     * Copies media files missing in the mirror (immutable, so presence + hash is enough). Never deletes there. False while
+     * the media folder is gone (ADR-042).
+     */
     private fun copyMediaToMirror(): Boolean {
         val store = blobs ?: return true
         val target = mirror ?: return false
+        if (!store.ready()) return false
         for (blob in store.all()) {
             val copy = target.resolve("media").resolve(blob.path)
             if (copy.exists() && copy.fileSize() == blob.size) continue
-            copy.parent.createDirectories()
+            createUnder(target, "media/" + blob.path.substringBeforeLast('/', ""))
             val tmp = copy.resolveSibling("${copy.fileName}.tmp")
             Files.copy(store.file(blob), tmp, StandardCopyOption.REPLACE_EXISTING)
             check(BlobStore.sha256(tmp) == blob.sha256) { "Mirror copy of ${blob.path} is corrupt" }
             Files.move(tmp, copy, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
         }
         return true
+    }
+
+    /** Whether [dir] is a mirror this store filled before its folder had a mark: a snapshot or a media file of its own. */
+    private fun filledBefore(dir: Path): Boolean {
+        val snapshots = db.backups?.let { b -> b.history().filter { it.verified }.map { b.directory.resolve(it.file) } }.orEmpty()
+        val snapshot = snapshots.any { s ->
+            runCatching { MirrorFolder.holds(dir.resolve("db").resolve(s.fileName), s.fileSize()) }.getOrDefault(false)
+        }
+        return snapshot || blobs?.all()?.takeLast(50)?.any { MirrorFolder.holds(dir.resolve("media").resolve(it.path), it.size) } == true
     }
 
     /** Drops abandoned partial uploads and re-hashes a slice of the media files (data-safety S7 scrub). */

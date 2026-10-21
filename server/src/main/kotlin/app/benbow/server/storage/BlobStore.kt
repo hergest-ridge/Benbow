@@ -12,7 +12,6 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.io.path.createDirectories
 import kotlin.io.path.deleteIfExists
 import kotlin.io.path.exists
 import kotlin.io.path.fileSize
@@ -21,7 +20,8 @@ import kotlin.io.path.inputStream
 /**
  * Media files addressed by SHA-256 (ADR-009, data-safety S7). An upload grows in `<media>/.uploads`,
  * is fsynced after every chunk, checked against its announced hash and size, then atomically renamed
- * to a human-readable path. Placed files are never changed or deleted here.
+ * to a human-readable path. Placed files are never changed or deleted here. All file work waits while the folder isn't
+ * this store's (ADR-042, [MediaFolder]): it answers [MediaUnavailable], and the background jobs skip their turn.
  */
 class BlobStore(private val db: Database, val root: Path, private val now: () -> Long = System::currentTimeMillis) {
     data class Blob(val sha256: String, val size: Long, val mime: String, val path: String)
@@ -48,8 +48,12 @@ class BlobStore(private val db: Database, val root: Path, private val now: () ->
 
     class InsufficientSpace(message: String) : Exception(message)
 
-    private val uploads = root.resolve(".uploads")
+    private val uploads = root.resolve(MediaFolder.UPLOADS)
     private val locks = ConcurrentHashMap<String, Any>()
+    val folder = MediaFolder(root, db.storeId, ::knownFiles)
+
+    /** Whether the media folder is there and this store's (ADR-042). */
+    fun ready(): Boolean = folder.ready()
 
     fun blob(sha256: String): Blob? = db.locked { c ->
         c.prepareStatement("SELECT sha256, size, mime, path FROM blobs WHERE sha256 = ?").use { st ->
@@ -65,6 +69,7 @@ class BlobStore(private val db: Database, val root: Path, private val now: () ->
         require(SHA256.matches(sha256)) { "sha256 must be 64 lowercase hex characters" }
         require(size in 1..MAX_SIZE) { "size must be 1..$MAX_SIZE" }
         require(MIME.matches(mime)) { "bad mime type" }
+        folder.require()
         blob(sha256)?.let { return Start.Exists(it) }
         return db.transaction { c ->
             c.prepareStatement("SELECT id, received FROM uploads WHERE sha256 = ? AND size = ?").use { st ->
@@ -72,7 +77,7 @@ class BlobStore(private val db: Database, val root: Path, private val now: () ->
                 st.setLong(2, size)
                 st.executeQuery().use { rs -> if (rs.next()) return@transaction Start.Upload(rs.getString(1), rs.getLong(2)) }
             }
-            uploads.createDirectories()
+            folder.directory(MediaFolder.UPLOADS)
             val free = Files.getFileStore(uploads).usableSpace
             if (free < size + RESERVE) throw InsufficientSpace("Not enough space for ${size / MB} MB in $root (${free / MB} MB free)")
             val id = UUID.randomUUID().toString()
@@ -103,6 +108,7 @@ class BlobStore(private val db: Database, val root: Path, private val now: () ->
         val upload = upload(id) ?: return Chunk.NotFound
         if (offset != upload.received) return Chunk.WrongOffset(upload.received)
         if (data.size > MAX_CHUNK || upload.received + data.size > upload.size) return Chunk.TooLarge
+        folder.require()
         val part = uploads.resolve("$id.part")
         FileChannel.open(part, StandardOpenOption.CREATE, StandardOpenOption.WRITE).use { channel ->
             channel.truncate(upload.received) // bytes written after the last recorded offset (crash) are dropped
@@ -126,6 +132,7 @@ class BlobStore(private val db: Database, val root: Path, private val now: () ->
 
     /** Partial uploads nobody touched for [maxAgeMillis]; the device still has the original and starts again. */
     fun dropStaleUploads(maxAgeMillis: Long): Int {
+        if (!ready()) return 0
         val stale = db.locked { c ->
             c.prepareStatement("SELECT id FROM uploads WHERE updated_at < ?").use { st ->
                 st.setLong(1, now() - maxAgeMillis)
@@ -138,6 +145,7 @@ class BlobStore(private val db: Database, val root: Path, private val now: () ->
 
     /** Re-hashes up to [limit] files not verified for [olderThanMillis] (data-safety S7 scrub); returns the corrupt ones. */
     fun scrub(olderThanMillis: Long, limit: Int): List<Blob> {
+        if (!ready()) return emptyList() // a missing folder isn't a corrupt file
         val due = db.locked { c ->
             c.prepareStatement("SELECT sha256, size, mime, path FROM blobs WHERE verified_at < ? ORDER BY verified_at LIMIT ?").use { st ->
                 st.setLong(1, now() - olderThanMillis)
@@ -167,11 +175,11 @@ class BlobStore(private val db: Database, val root: Path, private val now: () ->
      * Files on disk the database doesn't know, e.g. placed after the snapshot a restore went back to:
      * hashed and recorded again, so devices find them instead of uploading duplicates. Returns how many.
      * Never the uploads in progress, the quarantine of purged files (ADR-041), or the [purging] paths a committed
-     * purge is about to move there.
+     * purge is about to move there. Only in this store's folder (ADR-042): a folder of someone else's files is never read.
      */
     fun adoptUntracked(purging: Set<String> = emptySet()): Int {
-        if (!root.exists()) return 0
-        val known = all().mapTo(HashSet()) { it.path } + purging
+        if (!ready()) return 0
+        val known = all().mapTo(HashSet()) { it.path } + purging + MediaFolder.MARK
         val quarantine = root.resolve(Purges.QUARANTINE)
         val untracked = Files.walk(root).use { paths ->
             paths.filter {
@@ -224,6 +232,20 @@ class BlobStore(private val db: Database, val root: Path, private val now: () ->
         }
     }
 
+    /**
+     * Files the database expects in the folder, for telling an old folder of this store from a stranger's: the newest
+     * placed ones and the purged ones waiting where they are or in the quarantine (ADR-041).
+     */
+    private fun knownFiles(): List<MediaFolder.KnownFile> = db.locked { c ->
+        c.createStatement().use { st ->
+            st.executeQuery(
+                "SELECT path, size FROM (SELECT path, size FROM blobs ORDER BY created_at DESC LIMIT 50) " +
+                    "UNION ALL SELECT * FROM (SELECT CASE WHEN moved_at IS NULL THEN path ELSE quarantine END, size " +
+                    "FROM purged_files WHERE deleted_at IS NULL AND back_at IS NULL LIMIT 50)",
+            ).use { rs -> buildList { while (rs.next()) add(MediaFolder.KnownFile(rs.getString(1), rs.getLong(2))) } }
+        }
+    }
+
     private data class Upload(
         val id: String,
         val sha256: String,
@@ -262,8 +284,7 @@ class BlobStore(private val db: Database, val root: Path, private val now: () ->
             return Chunk.Accepted(upload.size, existing)
         }
         val relative = humanPath(upload)
-        val target = root.resolve(relative)
-        target.parent.createDirectories()
+        val target = folder.directory(relative.substringBeforeLast('/', "")).resolve(relative.substringAfterLast('/'))
         Files.move(part, target, StandardCopyOption.ATOMIC_MOVE)
         val blob = Blob(upload.sha256, upload.size, upload.mime, relative)
         db.transaction { c ->

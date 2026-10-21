@@ -3,6 +3,9 @@ package app.benbow.server.api
 import app.benbow.core.api.SpeechModelSpec
 import app.benbow.server.SERVER_VERSION
 import app.benbow.server.SpeechModel
+import app.benbow.server.backup.BackupStatus
+import app.benbow.server.storage.BlobStore
+import app.benbow.server.storage.MediaUnavailable
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respondRedirect
@@ -67,7 +70,12 @@ internal fun Route.adminRoutes(ctx: ServerContext) {
 
 private suspend fun RoutingContext.admin(ctx: ServerContext, done: String, action: suspend () -> Unit) {
     if (!adminAllowed(call, ctx)) return call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
-    action()
+    try {
+        action()
+    } catch (e: MediaUnavailable) { // undoing or freeing a purge needs the media folder (ADR-042)
+        val flash = Flash("Не получилось: ${e.message}", error = true)
+        return call.respondAdmin(adminPage(ctx, admin = true, flash), HttpStatusCode.ServiceUnavailable)
+    }
     call.respondRedirect("/?done=$done")
 }
 
@@ -89,13 +97,14 @@ private fun adminTabs(ctx: ServerContext): List<Tab> {
     val backups = ctx.backupStatus()
     val staleBackups = backups != null &&
         (
-            backups.lastError != null || backups.lastSnapshotAt == null ||
+            backups.lastError != null || backups.lastSnapshotAt == null || backups.mirrorProblem != null ||
                 System.currentTimeMillis() - backups.lastSnapshotAt > 48 * 3_600_000L
             )
+    val mediaGone = ctx.blobs?.ready() == false
     return listOfNotNull(
         Tab("overview", "Сервер", "server"),
         Tab("devices", "Устройства", "phone"),
-        Tab("backups", "Копии", "backup", alert = staleBackups),
+        Tab("backups", "Копии", "backup", alert = staleBackups || mediaGone),
         ctx.storage?.let { Tab("space", "Место", "disk") },
         ctx.speech?.let { Tab("speech", "Голос", "mic") },
         Tab("friends", "Друзья", "chat"),
@@ -134,6 +143,7 @@ private fun overview(ctx: ServerContext, admin: Boolean): String = buildString {
     )
     if (admin) ctx.dataDir?.let { append("<dt>Данные</dt><dd class=\"mono\">${esc(it.toString())}</dd>") }
     append("</dl>")
+    if (admin) ctx.blobs?.let { mediaBanner(it)?.let(::append) }
     append(
         "<p class=\"muted\">Benbow в браузере открывается на любом компьютере домашней сети: адрес этого компьютера, порт " +
             "<code>${ctx.port}</code>, <code>/app/</code>. Браузер один раз предупредит о самоподписанном сертификате; " +
@@ -204,11 +214,9 @@ private fun backupsSection(ctx: ServerContext): String = buildString {
             append("<div class=\"banner ok\">${icon("ok")}<div>Последняя проверенная копия ${time(status.lastSnapshotAt)}</div></div>")
         }
         status.lastError?.let { append("<div class=\"banner err\">${icon("error")}<div>Ошибка последнего запуска: ${esc(it)}</div></div>") }
-        append(
-            "<dl class=\"kv\"><dt>Второй диск</dt><dd>${status.lastMirrorAt?.let {
-                "копия ${time(it)}"
-            } ?: "не настроен или ещё не копировал (<code>backup.mirror</code> в <code>benbow.properties</code>)"}</dd>",
-        )
+        status.mirrorProblem?.let { append("<div class=\"banner err\">${icon("error")}<div><b>Второй диск:</b> ${esc(it)}</div></div>") }
+        ctx.blobs?.let { mediaBanner(it)?.let(::append) }
+        append("<dl class=\"kv\"><dt>Второй диск</dt><dd>${mirrorLine(status)}</dd>")
         append("<dt>Календарь</dt><dd>")
         append(
             if (ctx.calendar == null) {
@@ -247,6 +255,24 @@ private fun backupsSection(ctx: ServerContext): String = buildString {
     }
     append("<div class=\"row end\">${postButton("/admin/backup", "Сделать копию сейчас", "tonal", "backup", busy = "Делается…")}</div>")
     append("</div></section>")
+}
+
+/** Where the second disk stands (ADR-042): its last full copy, the snapshots alone, or why there is none. */
+private fun mirrorLine(status: BackupStatus): String {
+    val path = status.mirrorPath ?: return "не настроен (<code>backup.mirror</code> в <code>benbow.properties</code>)"
+    val where = " в <code>${esc(path)}</code>"
+    return when {
+        status.lastMirrorAt != null -> "копия ${time(status.lastMirrorAt)}$where"
+        status.mirrorDbAt != null -> "снимки базы ${time(status.mirrorDbAt)}, медиафайлы ещё нет$where"
+        else -> "ещё не копировал$where"
+    }
+}
+
+/** A red banner while the media folder isn't there (ADR-042): what the server does meanwhile. */
+private fun mediaBanner(store: BlobStore): String? {
+    if (store.ready()) return null
+    return "<div class=\"banner err\">${icon("error")}<div><b>Папка медиа недоступна:</b> ${esc(store.folder.describe())}. " +
+        "Дневник работает; файлы не принимаются и не отдаются, устройства держат их у себя и отправят позже.</div></div>"
 }
 
 /**

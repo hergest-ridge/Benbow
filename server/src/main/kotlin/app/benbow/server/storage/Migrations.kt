@@ -10,7 +10,8 @@ import java.util.UUID
 object Migrations {
     const val SCHEMA_VERSION = 4
 
-    private val steps: List<List<String>> = listOf(
+    // A getter: each new database gets its own store id and time, not one per process (ADR-042 marks rely on the id).
+    private val steps: List<List<String>> get() = listOf(
         // 1: store identity
         listOf(
             "CREATE TABLE store_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
@@ -120,6 +121,7 @@ object Migrations {
         val version = connection.userVersion()
         check(version <= SCHEMA_VERSION) { "Database schema $version is newer than this server ($SCHEMA_VERSION). Update the server." }
         if (version == SCHEMA_VERSION) return
+        val steps = steps
         for (target in version + 1..SCHEMA_VERSION) {
             connection.autoCommit = false
             try {

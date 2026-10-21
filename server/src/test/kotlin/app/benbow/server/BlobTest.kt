@@ -28,6 +28,7 @@ import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
 import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -115,6 +116,23 @@ class BlobTest {
         assertEquals(UploadStatus(null, bytes.size.toLong(), complete = true), client.start(token).body<UploadStatus>(), "dedup by hash")
         assertEquals(HttpStatusCode.NotFound, client.head("/api/v1/blobs/${"0".repeat(64)}") { bearerAuth(token) }.status)
         assertEquals(HttpStatusCode.Unauthorized, client.get("/api/v1/blobs/$sha").status)
+    }
+
+    @Test
+    fun aMissingMediaFolderAnswers503UntilItIsBack() = withServer { client, token ->
+        val id = client.start(token).body<UploadStatus>().id!!
+        assertTrue(client.chunk(token, id, 0, bytes).body<UploadStatus>().complete)
+        val media = dir.resolve("media")
+        val unplugged = dir.resolve("unplugged")
+        Files.move(media, unplugged) // the disk went away (ADR-042)
+        val download = client.get("/api/v1/blobs/$sha") { bearerAuth(token) }
+        assertEquals(HttpStatusCode.ServiceUnavailable, download.status, "not 404: the file isn't lost, its disk is away")
+        assertTrue("media_unavailable" in download.bodyAsText())
+        val other = byteArrayOf(1, 2, 3)
+        assertEquals(HttpStatusCode.ServiceUnavailable, client.start(token, sha256 = sha256(other), size = 3).status, "the device keeps it")
+        assertTrue(!media.exists())
+        Files.move(unplugged, media)
+        assertContentEquals(bytes, client.get("/api/v1/blobs/$sha") { bearerAuth(token) }.readRawBytes())
     }
 
     @Test

@@ -12,6 +12,7 @@ import app.benbow.core.sync.SetField
 import app.benbow.core.sync.SyncRules
 import app.benbow.server.storage.BlobStore
 import app.benbow.server.storage.Database
+import app.benbow.server.storage.MediaUnavailable
 import app.benbow.server.storage.Purges
 import app.benbow.server.storage.SqliteSyncStore
 import app.benbow.testing.TombstoneSimulation
@@ -29,6 +30,7 @@ import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
@@ -222,6 +224,55 @@ class PurgeTest {
         assertContentEquals(bytes, copy.readBytes())
         assertFalse(home.exists())
         assertNull(blobs.blob(video))
+    }
+
+    @Test
+    fun theQuarantineWaitsWhileTheMediaFolderIsGone() {
+        val (id, video, bytes) = purgeTrashedEntry()
+        val media = blobs.root
+        val unplugged = dir.resolve("unplugged")
+        val copy = Files.walk(media.resolve(Purges.QUARANTINE)).use { s -> s.filter { Files.isRegularFile(it) }.toList() }.single()
+        // The server died right after the commit, and then the disk went away (ADR-042).
+        val home = media.resolve(Json.decodeFromString(PurgeRecord.serializer(), journal.readLines().single()).files.single().path)
+        Files.move(copy, home)
+        db.locked { c -> c.createStatement().use { it.executeUpdate("UPDATE purged_files SET moved_at = NULL") } }
+        Files.move(media, unplugged)
+        purges.replay()
+        clock += week + 1
+        purges.expire()
+        assertFailsWith<MediaUnavailable> { purges.undo(id) }
+        assertFailsWith<MediaUnavailable> { purges.freeNow(id) }
+        assertFalse(media.exists(), "nothing made the folder again")
+        val unmoved = db.locked { c ->
+            c.createStatement().use { st ->
+                st.executeQuery("SELECT COUNT(*) FROM purged_files WHERE moved_at IS NULL").use {
+                    it.next()
+                    it.getInt(1)
+                }
+            }
+        }
+        assertEquals(1, unmoved, "not marked moved while nothing moved")
+
+        Files.move(unplugged, media)
+        purges.replay()
+        assertContentEquals(bytes, copy.readBytes(), "moved once the folder is back")
+        purges.expire()
+        assertFalse(copy.exists(), "and deleted, its week long over")
+        assertEquals(emptyList(), purges.waiting())
+        assertNull(blobs.blob(video))
+    }
+
+    @Test
+    fun noPurgeWhileTheMediaFolderIsGone() {
+        val (video, _) = file(9_000, 2)
+        entry("old", meta("v", video), trashed = true)
+        val preview = ready(PurgeRequest(entries = listOf("old")))
+        val unplugged = dir.resolve("unplugged")
+        Files.move(blobs.root, unplugged)
+        assertFailsWith<MediaUnavailable> { purges.preview(PurgeRequest(entries = listOf("old")), "phone") }
+        assertFailsWith<MediaUnavailable> { purges.commit(preview.planId) }
+        Files.move(unplugged, blobs.root)
+        assertIs<Purges.Commit.Done>(purges.commit(preview.planId))
     }
 
     @Test

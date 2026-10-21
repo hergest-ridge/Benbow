@@ -31,7 +31,7 @@ class BackupTest {
         val data = Files.createTempDirectory("benbow-backup")
         val mirror = Files.createTempDirectory("benbow-mirror")
         Database.open(data, "test").use { db ->
-            val jobs = BackupJobs(db, data, mirror)
+            val jobs = BackupJobs(db, data, mirror, disks = TestDisks())
             val rules = SyncRules(SqliteSyncStore(db))
             rules.push(
                 listOf(

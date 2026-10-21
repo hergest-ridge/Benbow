@@ -18,18 +18,24 @@ import kotlin.io.path.writeText
  * into a folder with this store's mark, or marks one that is empty or that this store filled before ([filledBefore]: a
  * snapshot of the same name and size, a media file the database knows). A folder a pass once filled is never made again
  * when it is gone (the disk unplugged, another disk under its letter): the pass skips it and the admin page says so. Its
- * last passes are kept in `backups/mirror.json`, so a restart doesn't forget them (as built 7.19 P1).
+ * last passes are kept in `backups/mirror.json`, so a restart doesn't forget them (as built 7.19 P1). A folder on the
+ * same volume as the database or the media ([apart]) is no second copy and gets nothing (P2).
  */
 internal class MirrorFolder(
     val root: Path,
     private val storeId: String,
     private val passesFile: Path,
     private val filledBefore: (Path) -> Boolean,
+    private val apart: List<Pair<String, Path>> = emptyList(),
+    private val disks: Disks = Disks.System,
 ) {
     sealed interface State {
         data object Ready : State
 
         data object NotAbsolute : State
+
+        /** On the same volume as [what] (the database or the media): no protection against a dead disk. */
+        data class SameVolume(val what: String) : State
 
         /** Filled before and gone now. */
         data object Missing : State
@@ -49,6 +55,8 @@ internal class MirrorFolder(
     @Synchronized
     fun check(): State {
         if (!root.isAbsolute) return State.NotAbsolute
+        val volume = disks.volume(root)
+        if (volume != null) apart.firstOrNull { disks.volume(it.second) == volume }?.let { return State.SameVolume(it.first) }
         val mark = readMark(root, MARK)
         if (mark != null) return if (mark == storeId) State.Ready else State.Foreign(mark)
         if (!root.isDirectory()) {
@@ -72,9 +80,17 @@ internal class MirrorFolder(
 
     fun describe(state: State): String = when (state) {
         State.Ready -> "на месте"
+
         State.NotAbsolute -> "путь $root не полный (в benbow.properties пишется с /, например H:/Benbow-mirror)"
+
+        is State.SameVolume ->
+            "папка $root на том же диске, что и ${state.what}: от поломки диска такая копия не защищает, она не делается. " +
+                "Укажите папку на другом диске"
+
         State.Missing -> "папки $root нет: диск не подключён или сменил букву. Копия не делается, пока она не вернётся"
+
         is State.Foreign -> "папка $root принадлежит другому хранилищу Benbow (${state.storeId.ifEmpty { "метка повреждена" }})"
+
         State.NotOurs -> "в папке $root лежат чужие файлы: копия туда не пишется. Укажите пустую папку"
     }
 

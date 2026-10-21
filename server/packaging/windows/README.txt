@@ -27,6 +27,12 @@ Service (run the scripts as Administrator)
   restore-calendar.cmd [latest|<file>] [data folder]
                                       the same for the calendar file alone (ADR-027); the journal
                                       is not touched.
+  restore-from-mirror.cmd <mirror folder> [data folder] [media folder]
+                                      on a NEW PC: builds the data folder from the backup mirror
+                                      (settings, certificate, snapshots, calendar, media, each file
+                                      checked; the mirror is only read). Then install-service.cmd.
+                                      The old server must stay off. A server for a friend is installed
+                                      fresh, never from a mirror or a copied data folder.
   - starts automatically (delayed) after boot, restarts on failure
   - opens TCP 8765 in the Windows firewall for private networks
   - logs: <data folder>\logs (server), <install folder>\service-logs (wrapper)

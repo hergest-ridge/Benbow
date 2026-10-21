@@ -50,20 +50,20 @@ class MirrorFolderTest {
     fun theFirstPassMarksTheMirrorAndItsPassesOutliveARestart() {
         change()
         val blob = photo(1)
-        val jobs = BackupJobs(db, data, mirror, blobs)
+        val jobs = BackupJobs(db, data, mirror, blobs, disks = TestDisks())
         val now = System.currentTimeMillis()
         jobs.runOnce(now)
         assertTrue("store=${db.storeId}" in mirror.resolve(MirrorFolder.MARK).readText())
         assertTrue(mirror.resolve("media").resolve(blob.path).exists())
         assertEquals(now, jobs.status.lastMirrorAt)
         assertNull(jobs.status.mirrorProblem)
-        assertEquals(now, BackupJobs(db, data, mirror, blobs).status.lastMirrorAt, "a restart doesn't forget it")
+        assertEquals(now, BackupJobs(db, data, mirror, blobs, disks = TestDisks()).status.lastMirrorAt, "a restart doesn't forget it")
     }
 
     @Test
     fun aMirrorOnceFilledIsNeverMadeAgainWhenItsDiskIsGone() {
         change()
-        val jobs = BackupJobs(db, data, mirror, blobs)
+        val jobs = BackupJobs(db, data, mirror, blobs, disks = TestDisks())
         jobs.runOnce()
         Files.move(mirror, mirror.resolveSibling("unplugged"))
         change()
@@ -78,7 +78,7 @@ class MirrorFolderTest {
     fun aFolderOfOtherThingsOrOfAnotherStoreGetsNoCopy() {
         mirror.createDirectories().resolve("отпуск.jpg").writeBytes(Random(2).nextBytes(100))
         change()
-        val jobs = BackupJobs(db, data, mirror, blobs)
+        val jobs = BackupJobs(db, data, mirror, blobs, disks = TestDisks())
         jobs.runOnce()
         assertEquals(listOf("отпуск.jpg"), mirror.listDirectoryEntries().map { it.name })
         assertTrue("чужие файлы" in jobs.status.mirrorProblem.orEmpty(), jobs.status.mirrorProblem)
@@ -86,7 +86,7 @@ class MirrorFolderTest {
 
         val foreign = Files.createTempDirectory("benbow-foreign")
         foreign.resolve(MirrorFolder.MARK).writeText("store=someone-else\n")
-        val other = BackupJobs(db, data, foreign, blobs)
+        val other = BackupJobs(db, data, foreign, blobs, disks = TestDisks())
         other.runOnce()
         assertEquals(listOf(MirrorFolder.MARK), foreign.listDirectoryEntries().map { it.name })
         assertTrue("другому хранилищу" in other.status.mirrorProblem.orEmpty(), other.status.mirrorProblem)
@@ -95,13 +95,13 @@ class MirrorFolderTest {
     @Test
     fun aMirrorFromBeforeMarksIsKnownByItsSnapshots() {
         change()
-        BackupJobs(db, data, mirror, blobs).runOnce()
+        BackupJobs(db, data, mirror, blobs, disks = TestDisks()).runOnce()
         // As a 0.12 server left it: copies, but no mark and no record of its passes.
         mirror.resolve(MirrorFolder.MARK).deleteExisting()
         data.resolve("backups").resolve(MirrorFolder.PASSES).deleteExisting()
         change()
         Thread.sleep(1_100)
-        val jobs = BackupJobs(db, data, mirror, blobs)
+        val jobs = BackupJobs(db, data, mirror, blobs, disks = TestDisks())
         jobs.runOnce()
         assertTrue(mirror.resolve(MirrorFolder.MARK).exists())
         assertNull(jobs.status.mirrorProblem)
@@ -113,7 +113,7 @@ class MirrorFolderTest {
         change()
         photo(3)
         Files.move(data.resolve("media"), data.resolve("unplugged"))
-        val jobs = BackupJobs(db, data, mirror, blobs)
+        val jobs = BackupJobs(db, data, mirror, blobs, disks = TestDisks())
         jobs.runOnce()
         assertEquals(1, mirror.resolve("db").listDirectoryEntries("*.sqlite").size)
         assertFalse(mirror.resolve("media").exists())

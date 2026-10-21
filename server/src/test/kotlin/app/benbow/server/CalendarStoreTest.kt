@@ -74,7 +74,7 @@ class CalendarStoreTest {
         val mirror = Files.createTempDirectory("benbow-calendar-mirror")
         val db = Database.open(dir, "test")
         val calendar = CalendarDatabase.open(dir, "test", db.storeId)
-        val jobs = BackupJobs(db, dir, mirror, calendar = calendar)
+        val jobs = BackupJobs(db, dir, mirror, calendar = calendar, disks = TestDisks())
         SyncRules(SqliteSyncStore(db)).push(listOf(CreateEntry("j1", "entry-1", "journal", "2026-10-15", 1)))
         CalendarRules(SqliteCalendarStore(calendar)).push(listOf(event("c1", "Врач", 1)))
 

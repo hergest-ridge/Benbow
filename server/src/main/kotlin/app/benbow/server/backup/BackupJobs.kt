@@ -42,6 +42,8 @@ data class BackupStatus(
     val mirrorPath: String? = null,
     val mirrorDbAt: Long? = null,
     val mirrorProblem: String? = null,
+    /** What doesn't stop a pass but should be seen (P2): little room left there, the same physical disk. */
+    val mirrorWarnings: List<String> = emptyList(),
 )
 
 /**
@@ -58,6 +60,8 @@ class BackupJobs(
     private val calendar: CalendarDatabase? = null,
     /** Deleting for good (ADR-041): its quarantine ends in these passes, and the mirror follows by its journal. */
     private val purges: Purges? = null,
+    /** Which disk each folder is on (ADR-042); tests put folders on disks of their own. */
+    private val disks: Disks = Disks.System,
 ) {
     private val log = LoggerFactory.getLogger("benbow.backup")
     private val executor = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "benbow-backup").apply { isDaemon = true } }
@@ -66,9 +70,13 @@ class BackupJobs(
     /** The tag registry's names, merges and trash the mirror was last written with (ADR-032). */
     private val exportedTagsFile = dataDir.resolve("export").resolve(".tags.json")
 
+    /** What the second disk must not share a disk with (ADR-042). */
+    private val apart = listOfNotNull("база" to dataDir, blobs?.let { "медиафайлы" to it.root })
+
     /** The second disk's folder with its mark and its last passes (ADR-042). */
-    private val mirrorFolder =
-        mirror?.let { MirrorFolder(it, db.storeId, dataDir.resolve("backups").resolve(MirrorFolder.PASSES), ::filledBefore) }
+    private val mirrorFolder = mirror?.let {
+        MirrorFolder(it, db.storeId, dataDir.resolve("backups").resolve(MirrorFolder.PASSES), ::filledBefore, apart, disks)
+    }
 
     @Volatile
     var status = BackupStatus(
@@ -134,11 +142,13 @@ class BackupJobs(
         val mirrorState = mirrorFolder?.check()
         val copied = mirrorState == MirrorFolder.State.Ready && copyToMirror()
         val mirrored = copied && copyMediaToMirror()
-        if (copied) mirrorFolder?.record(now, if (mirrored) now else null)
         // Quarantines that ended (ADR-041), then the mirror's copies of those files: by the journal, the hash matching.
         purges?.expire()
         if (mirrored) mirror?.let { purges?.mirrorDeletions(it) }
         exportChanged()
+        // The rest of the recovery kit, the export just written included (P2).
+        if (copied) mirror?.let { RecoveryKit(dataDir, it, db.storeId).copy() }
+        if (copied) mirrorFolder?.record(now, if (mirrored) now else null)
         val corrupt = checkMedia()
         status = status.copy(
             lastSnapshotAt = backups.history().lastOrNull()?.createdAt,
@@ -150,6 +160,7 @@ class BackupJobs(
                 copied && !mirrored -> "снимки базы скопированы, медиафайлы нет: папка медиа недоступна"
                 else -> null
             },
+            mirrorWarnings = if (copied) mirrorWarnings() else status.mirrorWarnings,
             lastError = corrupt.takeIf {
                 it.isNotEmpty()
             }?.let { "Media files don't match their hash: ${it.joinToString { b -> b.path }}" },
@@ -230,6 +241,20 @@ class BackupJobs(
             Files.move(tmp, copy, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
         }
         return true
+    }
+
+    /** What doesn't stop a pass but should be seen (ADR-042): little room left, the same physical disk as the data or media. */
+    private fun mirrorWarnings(): List<String> {
+        val target = mirror ?: return emptyList()
+        return buildList {
+            disks.free(target)?.takeIf { it < LOW_SPACE }?.let { add("на втором диске свободно ${"%.1f".format(it / GB)} ГБ") }
+            val disk = disks.physical(target)
+            if (disk != null) {
+                apart.firstOrNull { disks.physical(it.second) == disk }?.let {
+                    add("папка $target на другом разделе того же физического диска, что и ${it.first}: от поломки диска это не защищает")
+                }
+            }
+        }
     }
 
     /** Whether [dir] is a mirror this store filled before its folder had a mark: a snapshot or a media file of its own. */
@@ -334,3 +359,5 @@ private val registrySerializer = MapSerializer(String.serializer(), String.seria
 private const val STALE_UPLOAD_MS = 7L * 24 * 3_600_000
 private const val SCRUB_AFTER_MS = 7L * 24 * 3_600_000
 private const val SCRUB_BATCH = 200
+private const val GB = 1_073_741_824.0
+private const val LOW_SPACE = 5L * 1_073_741_824

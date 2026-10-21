@@ -161,7 +161,7 @@ class BlobTest {
         client.chunk(token, id, 0, bytes)
         val blob = blobs.blob(sha)!!
         val mirror = Files.createTempDirectory("benbow-mirror")
-        BackupJobs(db, dir, mirror, blobs).runOnce()
+        BackupJobs(db, dir, mirror, blobs, disks = TestDisks()).runOnce()
         assertContentEquals(bytes, mirror.resolve("media").resolve(blob.path).readBytes())
 
         blobs.file(blob).writeBytes(bytes.copyOf().also { it[0] = (it[0] + 1).toByte() })

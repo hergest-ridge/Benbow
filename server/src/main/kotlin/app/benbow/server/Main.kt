@@ -3,6 +3,7 @@ package app.benbow.server
 import app.benbow.server.api.ServerContext
 import app.benbow.server.api.benbowModule
 import app.benbow.server.backup.BackupJobs
+import app.benbow.server.backup.MirrorRestore
 import app.benbow.server.calendar.CalendarDatabase
 import app.benbow.server.peer.Letter
 import app.benbow.server.peer.Letters
@@ -31,7 +32,7 @@ import java.nio.file.StandardOpenOption
 import kotlin.io.path.createDirectories
 import kotlin.system.exitProcess
 
-const val SERVER_VERSION = "0.12.0"
+const val SERVER_VERSION = "0.12.1"
 
 /** The purge journal beside the database (ADR-041): one line per purge and per undo. */
 const val PURGE_JOURNAL = "purge-journal.jsonl"
@@ -50,6 +51,22 @@ fun main(args: Array<String>) {
     val lock = lockDataDir(dataDir) ?: run {
         log.error("Another Benbow server is already using {}. Stop it first (service: sc stop BenbowServer).", dataDir)
         exitProcess(2)
+    }
+    val fromMirror = args.indexOf("--restore-from-mirror")
+    if (fromMirror >= 0) {
+        val media = args.indexOf("--media").takeIf { it >= 0 }?.let { Path.of(args[it + 1]) }
+        val result = MirrorRestore.run(dataDir, Path.of(args[fromMirror + 1]), media)
+        log.info(
+            "Rebuilt from the mirror: store {}, new epoch {}, snapshot {}, {} media files ({} bytes) in {}",
+            result.storeId,
+            result.epoch,
+            result.snapshot.fileName,
+            result.files,
+            result.bytes,
+            result.media,
+        )
+        lock.release()
+        return
     }
     val restoreCalendar = args.indexOf("--restore-calendar")
     val restore = if (restoreCalendar >= 0) restoreCalendar else args.indexOf("--restore")

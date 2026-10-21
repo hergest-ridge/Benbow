@@ -98,6 +98,7 @@ private fun adminTabs(ctx: ServerContext): List<Tab> {
     val staleBackups = backups != null &&
         (
             backups.lastError != null || backups.lastSnapshotAt == null || backups.mirrorProblem != null ||
+                backups.mirrorPath == null || mirrorStale(backups) ||
                 System.currentTimeMillis() - backups.lastSnapshotAt > 48 * 3_600_000L
             )
     val mediaGone = ctx.blobs?.ready() == false
@@ -215,6 +216,7 @@ private fun backupsSection(ctx: ServerContext): String = buildString {
         }
         status.lastError?.let { append("<div class=\"banner err\">${icon("error")}<div>Ошибка последнего запуска: ${esc(it)}</div></div>") }
         status.mirrorProblem?.let { append("<div class=\"banner err\">${icon("error")}<div><b>Второй диск:</b> ${esc(it)}</div></div>") }
+        append(mirrorBanners(status, ctx))
         ctx.blobs?.let { mediaBanner(it)?.let(::append) }
         append("<dl class=\"kv\"><dt>Второй диск</dt><dd>${mirrorLine(status)}</dd>")
         append("<dt>Календарь</dt><dd>")
@@ -255,6 +257,25 @@ private fun backupsSection(ctx: ServerContext): String = buildString {
     }
     append("<div class=\"row end\">${postButton("/admin/backup", "Сделать копию сейчас", "tonal", "backup", busy = "Делается…")}</div>")
     append("</div></section>")
+}
+
+/** A mirror that copied everything once and hasn't for 48 hours, with nothing said about why (ADR-042). */
+private fun mirrorStale(status: BackupStatus) = status.mirrorProblem == null && status.lastMirrorAt != null &&
+    System.currentTimeMillis() - status.lastMirrorAt > 48 * 3_600_000L
+
+/** No second disk, an old copy, and what doesn't stop a pass but should be seen (ADR-042, P2). */
+private fun mirrorBanners(status: BackupStatus, ctx: ServerContext): String = buildString {
+    if (status.mirrorPath == null) {
+        val settings = ctx.dataDir?.resolve("benbow.properties")?.toString() ?: "benbow.properties"
+        append("<div class=\"banner err\">${icon("error")}<div><b>Второго диска нет.</b> База, её снимки и медиафайлы лежат ")
+        append("только на этом диске: если он сломается, останется лишь то, что есть на устройствах. Пока второй диск задаётся ")
+        append("строкой <code>backup.mirror=H:/Benbow-mirror</code> в <code>${esc(settings)}</code> и перезапуском службы.</div></div>")
+    }
+    if (mirrorStale(status)) {
+        append("<div class=\"banner err\">${icon("schedule")}<div><b>Копия на втором диске устарела:</b> последняя полная ")
+        append("${time(status.lastMirrorAt)}.</div></div>")
+    }
+    status.mirrorWarnings.forEach { append("<div class=\"banner info\">${icon("disk")}<div>${esc(it)}</div></div>") }
 }
 
 /** Where the second disk stands (ADR-042): its last full copy, the snapshots alone, or why there is none. */

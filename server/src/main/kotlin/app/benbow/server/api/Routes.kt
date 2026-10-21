@@ -32,6 +32,7 @@ import app.benbow.server.storage.BlobStore
 import app.benbow.server.storage.Database
 import app.benbow.server.storage.Devices
 import app.benbow.server.storage.HighWater
+import app.benbow.server.storage.LeftFolders
 import app.benbow.server.storage.MediaMove
 import app.benbow.server.storage.MediaUnavailable
 import app.benbow.server.storage.Migrations
@@ -107,6 +108,8 @@ class ServerContext(
     val backupJobs: BackupJobs? = null,
     /** Moving the media folder (ADR-042, P4); null in tests that don't need it. */
     val mediaMove: MediaMove? = null,
+    /** The folders moves left behind (P6); null in tests that don't need it. */
+    val leftFolders: LeftFolders? = null,
 )
 
 data class DevicePrincipal(val deviceId: String)

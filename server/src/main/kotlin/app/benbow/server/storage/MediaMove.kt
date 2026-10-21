@@ -138,6 +138,11 @@ class MediaMove(
         runner(Runnable { run(again) })
     }
 
+    /** Takes [path] off the folders earlier moves left (deleted after its check, or gone, P6). */
+    fun forgetLeft(path: String) = synchronized(steps) {
+        save(moves().copy(left = moves().left.filterNot { it.path == path }))
+    }
+
     /** Stops a move before its switch. What was copied stays in its folder; nothing is deleted. */
     fun cancel() = synchronized(steps) {
         val move = moves().current ?: return
@@ -241,7 +246,8 @@ class MediaMove(
         if (fileSystem.uppercase() !in FILE_SYSTEMS) {
             return Verdict.Refused("файловая система ${fileSystem.ifEmpty { "неизвестна" }} не подходит: нужна NTFS или ReFS")
         }
-        val others = listOfNotNull("нынешняя папка медиа" to blobs.root, "папка данных" to dataDir, mirror()?.let { "второй диск" to it })
+        val others = listOfNotNull("нынешняя папка медиа" to blobs.root, "папка данных" to dataDir, mirror()?.let { "второй диск" to it }) +
+            moves().left.map { "папка, оставленная прежним переносом" to Path.of(it.path) } // deleted later, it would take the media along
         others.firstOrNull { (_, other) -> path.startsWith(other) || other.startsWith(path) }?.let {
             return Verdict.Refused("новая папка не может быть внутри места, где ${it.first}, или содержать его")
         }

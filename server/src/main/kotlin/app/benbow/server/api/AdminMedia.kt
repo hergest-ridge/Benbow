@@ -1,5 +1,6 @@
 package app.benbow.server.api
 
+import app.benbow.server.storage.LeftFolders
 import app.benbow.server.storage.MediaMove
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receiveParameters
@@ -10,6 +11,7 @@ import io.ktor.server.routing.post
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.nio.file.Files
+import java.nio.file.Path
 
 /**
  * Moving the media folder on the admin page (ADR-042, as built 7.19 P5): a folder is checked and what it takes is shown
@@ -46,6 +48,22 @@ internal fun Route.mediaMoveRoutes(ctx: ServerContext) {
 
     post("/admin/media/retry") {
         admin(ctx, "media-retry#backups") { withContext(Dispatchers.IO) { ctx.mediaMove?.retry() } }
+    }
+
+    // The folders moves left behind (P6): checked, then deleted only after a second check finds everything safe.
+    post("/admin/media/left/check") {
+        val path = call.receiveParameters()["left-path"].orEmpty()
+        admin(ctx, "left-check#backups") { ctx.leftFolders?.check(path) }
+    }
+
+    post("/admin/media/left/delete") {
+        val path = call.receiveParameters()["left-path"].orEmpty()
+        admin(ctx, "left-delete#backups") { ctx.leftFolders?.delete(path) }
+    }
+
+    post("/admin/media/left/forget") {
+        val path = call.receiveParameters()["left-path"].orEmpty()
+        admin(ctx, "left-forget#backups") { ctx.leftFolders?.forget(path) }
     }
 
     post("/admin/media/cancel") {
@@ -126,9 +144,73 @@ internal fun mediaInner(ctx: ServerContext): String = buildString {
             append("<div class=\"row end\">${cancelButton()}</div>")
         }
     }
+    ctx.leftFolders?.report?.takeIf { it.deleted }?.let { done ->
+        append("<div class=\"banner ok\">${icon("ok")}<div>Старая папка <code>${esc(done.path)}</code> удалена: ${done.files} ")
+        append("${files(done.files)}, ${gb(done.bytes)} ГБ.</div></div>")
+    }
     for (left in moves.left.reversed()) {
         append("<div class=\"banner ok\">${icon("ok")}<div>Перенесено ${time(left.at)} из <code>${esc(left.path)}</code>. ")
         append("Прежняя папка оставлена как была и сервером больше не используется.</div></div>")
+        ctx.leftFolders?.let { append(leftFolder(it, left)) }
+    }
+}
+
+/** What can be done with a folder a move left (P6): wait out its week, check it, delete it after a second check. */
+private fun leftFolder(folders: LeftFolders, left: MediaMove.Left): String = buildString {
+    val report = folders.report?.takeIf { it.path == left.path }
+    val busy = folders.progress?.takeIf { it.path == left.path }
+    val hidden = "<input type=\"hidden\" name=\"left-path\" value=\"${esc(left.path)}\">"
+    fun button(action: String, label: String, style: String, confirm: String? = null) = buildString {
+        append("<form class=\"inline\" method=\"post\" action=\"$action#backups\"")
+        confirm?.let { append(" data-confirm=\"${esc(it)}\"") }
+        append(">$hidden<button class=\"btn $style\">${esc(label)}</button></form>")
+    }
+    when {
+        !Files.exists(Path.of(left.path)) -> {
+            append("<p class=\"muted\">Этой папки уже нет.</p>")
+            append("<div class=\"row end\">${button("/admin/media/left/forget", "Убрать из списка", "text")}</div>")
+        }
+
+        !folders.due(left) -> append(
+            "<p class=\"muted\">Неделю она остаётся запасной копией; удалить её можно будет с ${time(folders.deletableFrom(left))}.</p>",
+        )
+
+        busy != null -> {
+            val share = if (busy.totalFiles > 0) (busy.files * 10 / busy.totalFiles).coerceIn(0, 10) * 10 else 0
+            append("<div class=\"progress w$share\"><span></span></div>")
+            append("<p class=\"muted\">${if (busy.deleting) "Проверяется ещё раз перед удалением" else "Проверяется"}: ")
+            append("${busy.files} из ${busy.totalFiles} ${files(busy.totalFiles)}…</p>")
+        }
+
+        report != null && report.problems.isNotEmpty() -> {
+            append("<div class=\"banner err\">${icon("error")}<div><b>Удалять нельзя:</b> ")
+            append(report.problems.take(5).joinToString("; ") { esc(it) })
+            if (report.problems.size > 5) append(" и ещё ${report.problems.size - 5}")
+            append(". Папка остаётся как есть.</div></div>")
+            append("<div class=\"row end\">${button("/admin/media/left/check", "Проверить снова", "outlined")}</div>")
+        }
+
+        report != null && !report.deleted -> {
+            append(
+                "<div class=\"banner info\">${icon(
+                    "check",
+                )}<div>Проверено ${report.files} ${files(report.files)}, ${gb(report.bytes)} ГБ: ",
+            )
+            append("у каждого есть та же копия в нынешней папке")
+            if (report.purged > 0) append(", а ${report.purged} из них удалены навсегда")
+            append(".</div></div>")
+            append(
+                "<div class=\"row end\">${button(
+                    "/admin/media/left/delete",
+                    "Удалить старую папку",
+                    "outlined danger",
+                    confirm = "Удалить ${left.path} навсегда? ${report.files} ${files(report.files)}, ${gb(report.bytes)} ГБ. " +
+                        "Перед удалением всё проверится ещё раз. Это не отменить.",
+                )}</div>",
+            )
+        }
+
+        else -> append("<div class=\"row end\">${button("/admin/media/left/check", "Проверить и удалить…", "outlined")}</div>")
     }
 }
 

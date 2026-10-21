@@ -16,6 +16,7 @@ import app.benbow.server.storage.CALENDAR_HIGH_WATER
 import app.benbow.server.storage.Database
 import app.benbow.server.storage.Devices
 import app.benbow.server.storage.HighWater
+import app.benbow.server.storage.LeftFolders
 import app.benbow.server.storage.MediaMove
 import app.benbow.server.storage.PairingCodes
 import app.benbow.server.storage.Purges
@@ -132,6 +133,7 @@ fun main(args: Array<String>) {
     val backupJobs = BackupJobs(db, dataDir, config.backupMirror, blobs, calendar, purges).also { it.start(config.backupIntervalMinutes) }
     // A media move that was copying goes on (ADR-042, P4); one whose settings already switched is finished.
     val mediaMove = MediaMove(db, blobs, dataDir, mirror = backupJobs::mirror).also { it.resume() }
+    val leftFolders = LeftFolders(db, blobs, dataDir, mediaMove, mirror = backupJobs::mirror)
     val context =
         ServerContext(
             db = db,
@@ -152,6 +154,7 @@ fun main(args: Array<String>) {
             storage = StorageReports(db, blobs, dataDir, backupJobs::mirror, purges),
             backupJobs = backupJobs,
             mediaMove = mediaMove,
+            leftFolders = leftFolders,
             purges = purges,
         )
     val server = embeddedServer(

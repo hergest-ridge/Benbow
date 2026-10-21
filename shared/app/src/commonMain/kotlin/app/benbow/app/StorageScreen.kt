@@ -31,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -103,15 +104,21 @@ import app.benbow.app.resources.storage_state_removed
 import app.benbow.app.resources.storage_state_trash
 import app.benbow.app.resources.storage_state_unreferenced
 import app.benbow.app.resources.storage_states
+import app.benbow.app.resources.storage_unreferenced
+import app.benbow.app.resources.storage_unreferenced_line
+import app.benbow.app.resources.storage_unreferenced_more
 import app.benbow.app.resources.storage_waiting
+import app.benbow.app.resources.trash_purge
 import app.benbow.client.LibraryItem
 import app.benbow.client.LibrarySection
 import app.benbow.client.library
 import app.benbow.client.trashItems
+import app.benbow.core.api.PurgeRequest
 import app.benbow.core.api.StorageKind
 import app.benbow.core.api.StorageMonth
 import app.benbow.core.api.StorageReport
 import app.benbow.core.api.StorageState
+import app.benbow.core.api.UnreferencedFile
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -174,6 +181,8 @@ internal fun StorageScreen(services: AppServices, nav: Navigator) {
     var fresh by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
     var attempt by remember { mutableIntStateOf(0) }
+    var unreferenced by remember { mutableStateOf<List<UnreferencedFile>>(emptyList()) }
+    var purging by remember { mutableStateOf<PurgeRequest?>(null) }
     LaunchedEffect(attempt) {
         loading = true
         try {
@@ -184,7 +193,21 @@ internal fun StorageScreen(services: AppServices, nav: Navigator) {
         } catch (_: Exception) {
             fresh = false
         }
+        unreferenced = try {
+            services.unreferencedReader()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            emptyList()
+        }
         loading = false
+    }
+    purging?.let { request ->
+        PurgeSheet(services, request, onDone = { done ->
+            purging = null
+            services.purged(done)
+            attempt++
+        }, onDismiss = { purging = null })
     }
     Scaffold(topBar = {
         TopAppBar(
@@ -201,15 +224,17 @@ internal fun StorageScreen(services: AppServices, nav: Navigator) {
             item(key = "hero") { HeroCard(report, fresh, loading) }
             report?.let { counted ->
                 if (counted.bytes > 0) {
-                    item(key = "kinds") {
-                        val parts = StorageKind.ALL.map {
-                            Part(
-                                kindColor(it),
-                                stringResource(KIND_NAMES.getValue(it)),
-                                counted.kinds[it] ?: 0,
-                            )
+                    if (counted.kinds.values.any { it > 0 }) {
+                        item(key = "kinds") {
+                            val parts = StorageKind.ALL.map {
+                                Part(
+                                    kindColor(it),
+                                    stringResource(KIND_NAMES.getValue(it)),
+                                    counted.kinds[it] ?: 0,
+                                )
+                            }
+                            BreakdownCard(stringResource(Res.string.storage_kinds), parts, counted.bytes)
                         }
-                        BreakdownCard(stringResource(Res.string.storage_kinds), parts, counted.bytes)
                     }
                     item(key = "states") {
                         val parts = StorageState.ALL.map {
@@ -231,6 +256,11 @@ internal fun StorageScreen(services: AppServices, nav: Navigator) {
                                 )
                             }
                         }
+                    }
+                }
+                if (unreferenced.isNotEmpty()) {
+                    item(key = "unreferenced") {
+                        UnreferencedCard(unreferenced) { purging = PurgeRequest(unreferenced = unreferenced.map { it.sha256 }) }
                     }
                 }
                 if (counted.months.isNotEmpty()) item(key = "months") { MonthsCard(counted.months) }
@@ -587,6 +617,47 @@ internal fun squarify(weights: List<Double>, width: Float, height: Float): List<
     }
     return tiles
 }
+
+/**
+ * «Без записи»: files on the server no entry references, placed thirty days ago or more (a file may come before its
+ * link, so younger ones aren't offered). The heaviest few by name, and «Удалить навсегда» through the same sheet as
+ * the trash's: the server counts again, and the files wait out the quarantine.
+ */
+@Composable
+private fun UnreferencedCard(files: List<UnreferencedFile>, onPurge: () -> Unit) {
+    StorageCard(stringResource(Res.string.storage_unreferenced)) {
+        val muted = MaterialTheme.colorScheme.onSurfaceVariant
+        Text(
+            pluralStringResource(Res.plurals.storage_unreferenced_line, files.size, files.size, sizeLabel(files.sumOf { it.size })),
+            color = muted,
+        )
+        val months = stringArrayResource(Res.array.months_genitive)
+        files.take(UNREFERENCED_SHOWN).forEach { file ->
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    file.path.substringAfterLast('/'),
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    "${sizeLabel(file.size)} · ${dateLabel(dayOf(file.since), months)}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = muted,
+                )
+            }
+        }
+        if (files.size >
+            UNREFERENCED_SHOWN
+        ) {
+            Text(stringResource(Res.string.storage_unreferenced_more, files.size - UNREFERENCED_SHOWN), color = muted)
+        }
+        TextButton(onPurge, Modifier.hand()) { Text(stringResource(Res.string.trash_purge), color = MaterialTheme.colorScheme.error) }
+    }
+}
+
+private const val UNREFERENCED_SHOWN = 5
 
 /** What this device keeps against its cap, what may go now, and the button that lets it go. */
 @Composable

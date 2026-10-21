@@ -538,7 +538,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     val transcriptStyle = MaterialTheme.typography.bodyMedium
     val transcripts = detail?.transcripts.orEmpty()
     val tracks = detail?.tracks.orEmpty()
-    val pictures = remember(attachments, detail?.id, transcripts, tracks, transcriptStyle, vm.reading) {
+    val pictures = remember(attachments, detail?.id, detail?.purged, transcripts, tracks, transcriptStyle, vm.reading) {
         EntryPictures(
             services,
             attachments,
@@ -550,6 +550,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
             },
             onRename = { id, names -> detail?.id?.let { entry -> services.nameSound(entry, id, names) } },
             entryId = detail?.id,
+            purged = detail?.purged.orEmpty(),
             transcripts = transcripts,
             tracks = tracks,
             textHeight = { text, width ->

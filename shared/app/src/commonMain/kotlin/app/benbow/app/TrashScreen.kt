@@ -19,17 +19,21 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -62,10 +66,19 @@ import app.benbow.app.resources.trash_calendar
 import app.benbow.app.resources.trash_calendar_item
 import app.benbow.app.resources.trash_category_item
 import app.benbow.app.resources.trash_choose
+import app.benbow.app.resources.trash_chosen_up_to
 import app.benbow.app.resources.trash_days_ago
 import app.benbow.app.resources.trash_empty
+import app.benbow.app.resources.trash_free_choose
+import app.benbow.app.resources.trash_free_pick
+import app.benbow.app.resources.trash_free_text
+import app.benbow.app.resources.trash_free_title
 import app.benbow.app.resources.trash_from_entry
 import app.benbow.app.resources.trash_heaviest
+import app.benbow.app.resources.trash_helper_big
+import app.benbow.app.resources.trash_helper_free
+import app.benbow.app.resources.trash_helper_old
+import app.benbow.app.resources.trash_helper_video
 import app.benbow.app.resources.trash_hint
 import app.benbow.app.resources.trash_journal
 import app.benbow.app.resources.trash_latest
@@ -86,6 +99,7 @@ import app.benbow.client.mediaInTrash
 import app.benbow.client.restoreCategory
 import app.benbow.client.restoreTag
 import app.benbow.client.takenOff
+import app.benbow.client.trashItems
 import app.benbow.client.trashedTags
 import app.benbow.core.api.AttachmentRef
 import app.benbow.core.api.PurgeRequest
@@ -136,6 +150,9 @@ internal fun TrashScreen(services: AppServices, nav: Navigator) {
     var choosing by remember { mutableStateOf(false) }
     var chosen by remember { mutableStateOf(setOf<String>()) }
     var purging by remember { mutableStateOf<PurgeRequest?>(null) }
+    var freeing by remember { mutableStateOf(false) }
+    // Everything waiting here with its kind, for the «Видео» helper (an entry holding a video counts).
+    val waiting by remember { services.repo.trashItems() }.collectAsStateWithLifecycle(null)
     val toggle = { key: String -> chosen = if (key in chosen) chosen - key else chosen + key }
     val stopChoosing = {
         choosing = false
@@ -181,6 +198,19 @@ internal fun TrashScreen(services: AppServices, nav: Navigator) {
             )
         }
     }) { padding ->
+        if (freeing) {
+            val all = remember(entries, notes, off, media, waiting) {
+                val weights = { id: String -> media.entries[id]?.bytes ?: 0 }
+                entries.orEmpty().map { TrashPick("e:" + it.id, weights(it.id), null, false) } +
+                    notes.map { TrashPick("e:" + it.id, weights(it.id), null, false) } +
+                    off.map { TrashPick("a:" + it.entryId + "/" + it.attachment.meta.id, it.size, it.since, false) }
+            }
+            FreeDialog(all, onDismiss = { freeing = false }) { keys ->
+                freeing = false
+                chosen = keys
+                choosing = true
+            }
+        }
         purging?.let { request ->
             PurgeSheet(services, request, onDone = { done ->
                 purging = null
@@ -200,6 +230,18 @@ internal fun TrashScreen(services: AppServices, nav: Navigator) {
         val journal = remember(items, media, order) { order.of(items, { weight(it).since }, { weight(it).bytes }) }
         val board = remember(notes, media, order) { order.of(notes, { weight(it).since }, { weight(it).bytes }) }
         val attachments = remember(off, order) { order.of(off, { it.since }, { it.size }) }
+        // What the helpers choose from: every entry, note and attachment here with its weight, age and whether it is video.
+        val picks = remember(items, notes, off, media, waiting) {
+            val video = waiting.orEmpty().filter { it.attachment.meta.kind == "video" }.mapTo(HashSet()) { it.postId }
+            (items + notes).map { TrashPick("e:" + it.id, weight(it).bytes, weight(it).since, it.id in video) } +
+                off.map {
+                    TrashPick("a:" + it.entryId + "/" + it.attachment.meta.id, it.size, it.since, it.attachment.meta.kind == "video")
+                }
+        }
+        val choose = { keys: Set<String> ->
+            chosen = keys
+            choosing = true
+        }
         val sections = listOf(items, notes, off).count { it.isNotEmpty() }
         LazyColumn(Modifier.padding(padding).fillMaxSize()) {
             item {
@@ -224,6 +266,30 @@ internal fun TrashScreen(services: AppServices, nav: Navigator) {
                             TrashOrder.entries.forEach { value ->
                                 FilterChip(order == value, { order = value }, { Text(stringResource(value.label)) }, Modifier.hand())
                             }
+                        }
+                        // Helpers (ADR-041): each chooses at once; nothing final happens before the sheet's held button.
+                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            val old = now - OLD_MILLIS
+                            val helper = @Composable { label: StringResource, keys: () -> Set<String> ->
+                                val found = keys()
+                                AssistChip({
+                                    choose(found)
+                                }, { Text(stringResource(label)) }, Modifier.hand(), enabled = found.isNotEmpty())
+                            }
+                            AssistChip({ freeing = true }, { Text(stringResource(Res.string.trash_helper_free)) }, Modifier.hand())
+                            helper(Res.string.trash_helper_video) { picks.filter { it.video }.mapTo(LinkedHashSet()) { it.key } }
+                            helper(Res.string.trash_helper_old) {
+                                picks.filter { (it.since ?: now) < old }.mapTo(LinkedHashSet()) { it.key }
+                            }
+                            helper(Res.string.trash_helper_big) { picks.filter { it.bytes > BIG_BYTES }.mapTo(LinkedHashSet()) { it.key } }
+                        }
+                        if (choosing && chosen.isNotEmpty()) {
+                            val bytes = picks.filter { it.key in chosen }.sumOf { it.bytes }
+                            Text(
+                                stringResource(Res.string.trash_chosen_up_to, sizeLabel(bytes)),
+                                style = MaterialTheme.typography.labelLarge,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            )
                         }
                     }
                 }
@@ -295,6 +361,58 @@ internal fun TrashScreen(services: AppServices, nav: Navigator) {
         }
     }
 }
+
+/** One thing the helpers may choose: its key ("e:" or "a:"), what it holds, since when it is here, whether it is video. */
+internal data class TrashPick(val key: String, val bytes: Long, val since: Long?, val video: Boolean)
+
+/** The heaviest first until they hold at least [target] bytes (empty ones never). */
+internal fun heaviestUpTo(picks: List<TrashPick>, target: Long): Set<String> {
+    val out = LinkedHashSet<String>()
+    var sum = 0L
+    for (pick in picks.sortedByDescending { it.bytes }) {
+        if (sum >= target || pick.bytes <= 0) break
+        out += pick.key
+        sum += pick.bytes
+    }
+    return out
+}
+
+/**
+ * «Освободить…»: a slider up to everything the trash holds (5 GB to begin with, or all of it if less), and how many of
+ * the heaviest that takes; «Выбрать» chooses them. Each holds up to its weight: the server's sheet says what truly goes.
+ */
+@Composable
+private fun FreeDialog(picks: List<TrashPick>, onDismiss: () -> Unit, onChoose: (Set<String>) -> Unit) {
+    val total = picks.sumOf { it.bytes }.coerceAtLeast(1)
+    var share by remember { mutableFloatStateOf((FREE_DEFAULT.toDouble() / total).coerceAtMost(1.0).toFloat()) }
+    val target = (total * share.toDouble()).toLong()
+    val keys = remember(picks, target) { heaviestUpTo(picks, target) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(Res.string.trash_free_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(Res.string.trash_free_text, sizeLabel(target)))
+                Slider(share, { share = it }, Modifier.hand())
+                val chosen = picks.filter { it.key in keys }.sumOf { it.bytes }
+                Text(
+                    stringResource(Res.string.trash_free_pick, keys.size, sizeLabel(chosen)),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton({
+                onChoose(keys)
+            }, Modifier.hand(), enabled = keys.isNotEmpty()) { Text(stringResource(Res.string.trash_free_choose)) }
+        },
+        dismissButton = { TextButton(onDismiss, Modifier.hand()) { Text(stringResource(Res.string.cancel)) } },
+    )
+}
+
+private const val OLD_MILLIS = 30L * 24 * 3_600_000
+private const val BIG_BYTES = 100L * 1024 * 1024
+private const val FREE_DEFAULT = 5L * 1024 * 1024 * 1024
 
 @Composable
 private fun TrashHeader(text: String) {

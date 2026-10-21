@@ -63,6 +63,8 @@ class PurgedOnDeviceTest {
         assertTrue(repo.journal().first().none { it.id == gone })
         assertEquals(listOf(live), repo.library().first().map { it.postId })
         assertEquals(0L, media.dropPurged(), "nothing more")
+        // Where one stood in the text, the editor says it was deleted for good.
+        assertEquals(2, repo.entry(gone).first()!!.purged.size)
     }
 
     @Test

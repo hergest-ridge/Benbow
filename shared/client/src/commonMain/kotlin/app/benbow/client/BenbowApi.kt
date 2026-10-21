@@ -19,6 +19,7 @@ import app.benbow.core.api.RevisionInfo
 import app.benbow.core.api.ServerInfo
 import app.benbow.core.api.SpeechModelInfo
 import app.benbow.core.api.StorageReport
+import app.benbow.core.api.UnreferencedFile
 import app.benbow.core.api.UploadStart
 import app.benbow.core.api.UploadStatus
 import app.benbow.core.calendar.CalendarOp
@@ -83,6 +84,9 @@ interface BenbowApi {
     /** What the server's files weigh, each file once (ADR-041, «Место»). */
     suspend fun storage(): StorageReport = throw UnsupportedOperationException("storage")
 
+    /** Files no entry references, placed thirty days ago or more (ADR-041, «Место»). */
+    suspend fun unreferenced(): List<UnreferencedFile> = throw UnsupportedOperationException("unreferenced")
+
     /** What deleting these for good would do (ADR-041): counted by the server over every entry. */
     suspend fun purgePreview(request: PurgeRequest): PurgePreview = throw UnsupportedOperationException("purgePreview")
 
@@ -139,6 +143,8 @@ class KtorBenbowApi(private val client: HttpClient, private val baseUrl: String,
     }.ok().body()
 
     override suspend fun storage(): StorageReport = client.get("$baseUrl/api/v1/storage") { auth() }.ok().body()
+
+    override suspend fun unreferenced(): List<UnreferencedFile> = client.get("$baseUrl/api/v1/storage/unreferenced") { auth() }.ok().body()
 
     override suspend fun purgePreview(request: PurgeRequest): PurgePreview = client.post("$baseUrl/api/v1/purge/preview") {
         auth()

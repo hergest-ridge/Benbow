@@ -150,6 +150,8 @@ data class EntryDetail(
     val hasDraft: Boolean,
     /** Present attachments in gallery order. */
     val attachments: List<AttachmentState> = emptyList(),
+    /** Ids of attachments deleted for good (ADR-041): the text says so where one stood. */
+    val purged: Set<String> = emptySet(),
     /** As they read ([entry] reads them through the tag registry). */
     val tags: List<TagRef> = tagsOf(fields),
 ) {
@@ -273,6 +275,7 @@ class JournalRepository(
                 conflictHeads = ClientJson.decodeFromString(it.conflict_heads),
                 hasDraft = draft != null,
                 attachments = galleryOrder(decodeAttachments(it.attachments).values, draft?.body ?: it.body),
+                purged = decodeAttachments(it.attachments).filterValues { link -> link.purged }.keys,
                 tags = registry.resolve(tagsOf(fields)),
             )
         }

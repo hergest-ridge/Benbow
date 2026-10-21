@@ -41,6 +41,7 @@ import app.benbow.core.api.PurgeDone
 import app.benbow.core.api.PurgePreview
 import app.benbow.core.api.PurgeRequest
 import app.benbow.core.api.StorageReport
+import app.benbow.core.api.UnreferencedFile
 import app.benbow.core.media.AttachmentKey
 import app.benbow.ui.editor.Removal
 import app.cash.sqldelight.db.SqlDriver
@@ -215,6 +216,9 @@ class AppServices(
 
     /** How «Место» gets a fresh count; tests put their own here. */
     internal var storageReader: suspend () -> StorageReport = { storage.fetch() }
+
+    /** How «Место» gets the files no entry references (older than thirty days); tests put their own here. */
+    internal var unreferencedReader: suspend () -> List<UnreferencedFile> = { storage.unreferenced() }
 
     /** Deleting for good from the trash (ADR-041): the server's preview and commit; tests put their own here. */
     private val purging = ServerPurges(db, apis)

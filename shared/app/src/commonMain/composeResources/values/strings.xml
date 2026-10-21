@@ -161,6 +161,7 @@
     <string name="feed_scrubber_hint">Справа в длинной ленте: потяните его, чтобы перейти к нужному месяцу</string>
     <string name="feed_scrubber_label">Ползунок по датам</string>
     <string name="attachment_gone">Вложение удалено</string>
+    <string name="attachment_purged">Файл удалён навсегда</string>
     <string name="saved">Сохранено</string>
     <string name="save_failed">Не получилось сохранить: %1$s</string>
     <string name="reminder_now">Напоминание: %1$s</string>
@@ -930,4 +931,21 @@
         <item>Превью и картинки ссылок</item>
     </string-array>
     <string name="storage_waiting">Удаляются навсегда: %1$s, место освободится %2$s</string>
+    <string name="storage_unreferenced">Без записи</string>
+    <plurals name="storage_unreferenced_line">
+        <item quantity="one">%1$d файл (%2$s) лежит на сервере больше месяца, и его не держит ни одна запись.</item>
+        <item quantity="few">%1$d файла (%2$s) лежат на сервере больше месяца, и их не держит ни одна запись.</item>
+        <item quantity="many">%1$d файлов (%2$s) лежат на сервере больше месяца, и их не держит ни одна запись.</item>
+        <item quantity="other">%1$d файла (%2$s) лежат на сервере больше месяца, и их не держит ни одна запись.</item>
+    </plurals>
+    <string name="storage_unreferenced_more">и ещё %1$d</string>
+    <string name="trash_helper_free">Освободить…</string>
+    <string name="trash_helper_video">Видео</string>
+    <string name="trash_helper_old">Дольше 30 дней</string>
+    <string name="trash_helper_big">Больше 100 МБ</string>
+    <string name="trash_chosen_up_to">Освободит до %1$s: точно скажет сервер</string>
+    <string name="trash_free_title">Освободить место</string>
+    <string name="trash_free_text">Самое тяжёлое на %1$s</string>
+    <string name="trash_free_pick">Будет выбрано: %1$d · %2$s</string>
+    <string name="trash_free_choose">Выбрать</string>
 </resources>

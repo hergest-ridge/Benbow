@@ -9,6 +9,7 @@ import app.benbow.core.api.PurgeRequest
 import app.benbow.core.api.PurgedFile
 import app.benbow.core.api.PurgedLink
 import app.benbow.core.api.StayingInfo
+import app.benbow.core.api.UnreferencedFile
 import app.benbow.core.media.AttachmentKey
 import app.benbow.core.media.MediaRefs
 import app.benbow.core.media.MediaState
@@ -78,6 +79,8 @@ class Purges(
     }
 
     fun preview(request: PurgeRequest, device: String?): Preview {
+        // A file held by nothing may still wait for its link (it can come first): only after thirty days.
+        if (request.unreferenced.any { (placedAt(it) ?: 0) > now() - UNREFERENCED_MILLIS }) return Preview.Refused("too_new")
         val ready = when (val plan = db.locked { c -> plan(c, request) }) {
             is PurgePlan.Refused -> return Preview.Refused(refusal(plan))
             is PurgePlan.Ready -> plan
@@ -446,6 +449,33 @@ class Purges(
         }
     }
 
+    /** Files no entry references, placed thirty days ago or more, the heaviest first («Место»'s «Без записи»). */
+    fun unreferenced(): List<UnreferencedFile> = db.locked { c ->
+        val held = MediaRefs(readMediaEntries(c)).held
+        c.createStatement().use { st ->
+            st.executeQuery("SELECT sha256, size, mime, path, created_at FROM blobs ORDER BY size DESC").use { rs ->
+                buildList {
+                    while (rs.next()) {
+                        val sha = rs.getString(1)
+                        val since = rs.getLong(5)
+                        if (sha !in held &&
+                            since <= now() - UNREFERENCED_MILLIS
+                        ) {
+                            add(UnreferencedFile(sha, rs.getLong(2), rs.getString(3), rs.getString(4), since))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun placedAt(sha256: String): Long? = db.locked { c ->
+        c.prepareStatement("SELECT created_at FROM blobs WHERE sha256 = ?").use { st ->
+            st.setString(1, sha256)
+            st.executeQuery().use { rs -> if (rs.next()) rs.getLong(1) else null }
+        }
+    }
+
     /** Refuses an upload of a file whose every link is purged (the device drops its copy). */
     fun refusesUpload(sha256: String): Boolean {
         val purged = db.locked { c ->
@@ -554,6 +584,9 @@ class Purges(
         const val QUARANTINE = ".purged"
         const val QUARANTINE_MILLIS = 7L * 24 * 3_600_000
         const val PLAN_MILLIS = 10L * 60_000
+
+        /** A file held by nothing is offered for deleting only after this long (it may come before its link). */
+        const val UNREFERENCED_MILLIS = 30L * 24 * 3_600_000
         private val DAY = DateTimeFormatter.ofPattern("yyyy-MM-dd")
     }
 }

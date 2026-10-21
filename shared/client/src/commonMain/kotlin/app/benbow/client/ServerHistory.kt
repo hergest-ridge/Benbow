@@ -7,6 +7,7 @@ import app.benbow.core.api.PurgePreview
 import app.benbow.core.api.PurgeRequest
 import app.benbow.core.api.RevisionInfo
 import app.benbow.core.api.StorageReport
+import app.benbow.core.api.UnreferencedFile
 import kotlinx.serialization.Serializable
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -41,6 +42,10 @@ class ServerStorage(private val db: BenbowDb, private val apiFor: (Connection) -
         val kept = Settings(db).get(KEY)?.let { runCatching { ClientJson.decodeFromString(Kept.serializer(), it) }.getOrNull() }
         return kept?.takeIf { it.store == store }?.report
     }
+
+    /** Files no entry references, placed thirty days ago or more: «Без записи». */
+    suspend fun unreferenced(): List<UnreferencedFile> =
+        apiFor(Settings(db).connection ?: throw PairingException("Not paired with a server")).unreferenced()
 
     /** A fresh count from the server, kept for the next time. */
     suspend fun fetch(): StorageReport {

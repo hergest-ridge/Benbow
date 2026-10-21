@@ -29,6 +29,13 @@ data class StorageReport(
     val waitingUntil: Long? = null,
 )
 
+/**
+ * `GET /api/v1/storage/unreferenced` (ADR-041, 7.18 M6): a file no entry references, placed on the server at [since]
+ * (only ones older than thirty days are listed: a file may come before its link). [path] says what it is.
+ */
+@Serializable
+data class UnreferencedFile(val sha256: String, val size: Long, val mime: String, val path: String, val since: Long)
+
 /** One month ("YYYY-MM") of the entries that hold files: bytes by kind. */
 @Serializable
 data class StorageMonth(val month: String, val kinds: Map<String, Long>)

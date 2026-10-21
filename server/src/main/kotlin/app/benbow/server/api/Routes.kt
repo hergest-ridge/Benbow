@@ -249,6 +249,15 @@ fun Application.benbowModule(ctx: ServerContext) {
                 }
 
                 /**
+                 * Files no entry references, placed thirty days ago or more, the heaviest first (ADR-041, «Место»): they
+                 * can be deleted for good like the trash's.
+                 */
+                get("/storage/unreferenced") {
+                    val purges = ctx.purges ?: return@get call.respond(HttpStatusCode.ServiceUnavailable, NO_PURGE)
+                    call.respond(withContext(Dispatchers.IO) { purges.unreferenced() })
+                }
+
+                /**
                  * What deleting these for good would do (ADR-041): the files it deletes and those staying (with what keeps
                  * them), counted over every entry. Only entries and links in the trash; the plan lives ten minutes.
                  */

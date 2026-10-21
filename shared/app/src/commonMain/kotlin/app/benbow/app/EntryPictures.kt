@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.attachment_gone
+import app.benbow.app.resources.attachment_purged
 import app.benbow.app.resources.drawing_title
 import app.benbow.core.audio.TrackTags
 import app.benbow.core.sync.AttachmentState
@@ -50,6 +51,8 @@ internal class EntryPictures(
     private val textHeight: (String, Dp) -> Dp = { _, _ -> 0.dp },
     /** «Заменить текстом» (7.10e): the editor puts a voice note's transcript in its place. */
     private val onReplace: ((attachmentId: String, text: String) -> Unit)? = null,
+    /** Attachments deleted for good (ADR-041): where one stood, the text says so. */
+    private val purged: Set<String> = emptySet(),
 ) : AtomViews() {
     private fun find(atom: Atom.Attachment) = attachments.firstOrNull { it.meta.id == atom.ref }
 
@@ -74,7 +77,7 @@ internal class EntryPictures(
         Box(Modifier.fillMaxSize().padding(vertical = 4.dp)) {
             if (attachment == null) {
                 Text(
-                    stringResource(Res.string.attachment_gone),
+                    stringResource(if (atom.ref in purged) Res.string.attachment_purged else Res.string.attachment_gone),
                     style = MaterialTheme.typography.labelMedium,
                     color = colors.onSurfaceVariant,
                     modifier = Modifier.align(Alignment.CenterStart),

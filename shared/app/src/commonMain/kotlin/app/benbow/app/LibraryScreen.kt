@@ -341,7 +341,7 @@ private fun LibraryTile(
 
 /** A round mark while choosing: filled with a tick when chosen, an empty ring otherwise. */
 @Composable
-private fun ChoiceMark(chosen: Boolean, modifier: Modifier = Modifier) {
+internal fun ChoiceMark(chosen: Boolean, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
     Box(
         modifier.size(22.dp).clip(CircleShape)

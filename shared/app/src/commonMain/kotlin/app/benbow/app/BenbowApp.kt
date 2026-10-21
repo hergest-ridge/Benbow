@@ -99,6 +99,7 @@ import app.benbow.app.resources.moved_to_board_many
 import app.benbow.app.resources.moved_to_journal
 import app.benbow.app.resources.moved_to_journal_many
 import app.benbow.app.resources.postponed
+import app.benbow.app.resources.purge_done
 import app.benbow.app.resources.reminder_now
 import app.benbow.app.resources.removed_atom
 import app.benbow.app.resources.removed_card
@@ -519,6 +520,13 @@ private fun AppRoot(services: AppServices) {
                         ?: getString(Res.string.board_trashed_many, message.ids.size)
                     val result = snackbar.showSnackbar(text, getString(Res.string.veil_undo), duration = SnackbarDuration.Long)
                     if (result == SnackbarResult.ActionPerformed) message.ids.forEach { services.repo.restore(it) }
+                }
+
+                is AppMessage.Purged -> {
+                    val (number, unit) = sizeParts(message.bytes)
+                    val size = "$number${Char(0x00A0)}${getStringArray(Res.array.size_units).getOrElse(unit) { "" }}"
+                    val day = dateLabel(dayOf(message.freesOn), getStringArray(Res.array.months_genitive))
+                    snackbar.showSnackbar(getString(Res.string.purge_done, size, day), withDismissAction = true)
                 }
 
                 is AppMessage.DeviceFreed -> {

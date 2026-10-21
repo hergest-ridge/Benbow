@@ -24,6 +24,9 @@ data class StorageReport(
     val snapshots: Long = 0,
     /** When the server counted it (ms). */
     val counted: Long = 0,
+    /** Deleted for good, waiting out their quarantine (not in [bytes]): gone, and their space free, by [waitingUntil]. */
+    val waiting: Long = 0,
+    val waitingUntil: Long? = null,
 )
 
 /** One month ("YYYY-MM") of the entries that hold files: bytes by kind. */

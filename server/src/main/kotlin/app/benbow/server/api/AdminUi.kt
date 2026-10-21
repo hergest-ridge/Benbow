@@ -58,6 +58,8 @@ internal val doneMessages = mapOf(
     "note" to "Сообщение отправлено",
     "file" to "Файл зашифрован и положен в папку Диска",
     "check" to "Проверяю ящик",
+    "undone" to "Удаление отменено: файлы и вложения вернулись",
+    "freed" to "Место освобождено: файлы удалены навсегда",
 )
 
 internal class Flash(val text: String, val error: Boolean)

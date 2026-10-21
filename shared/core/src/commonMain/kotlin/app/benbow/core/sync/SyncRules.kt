@@ -67,7 +67,8 @@ class SyncRules(
         is SetField -> {
             val entry = store.entry(op.entryId) ?: return OpResult(op.opId, OpStatus.Rejected, "unknown entry")
             val current = entry.fields[op.field]
-            if (current == null || op.hlc > current.hlc) {
+            // Only the server's purge writes Purging.FIELD (ADR-041): a device's write of it is absorbed.
+            if (op.field != Purging.FIELD && (current == null || op.hlc > current.hlc)) {
                 store.putEntry(entry.copy(fields = entry.fields + (op.field to LwwValue(op.value, op.hlc))))
             }
             // Always logged, even when the write lost: the device skipped this entry while its op was
@@ -81,13 +82,16 @@ class SyncRules(
         is PutAttachment -> {
             val entry = store.entry(op.entryId) ?: return OpResult(op.opId, OpStatus.Rejected, "unknown entry")
             val current = entry.attachments[op.attachment.id]
-            if (current == null || op.hlc > current.hlc) {
+            // A purged link is final (ADR-041): a late put of it (an offline «Вернуть», a clock ahead) changes nothing.
+            if (current?.purged != true && (current == null || op.hlc > current.hlc)) {
                 // The file's identity never changes; only a preview may be added to it.
                 val meta = current?.meta?.let { it.copy(previewSha256 = it.previewSha256 ?: op.attachment.previewSha256) } ?: op.attachment
-                val state = AttachmentState(meta, op.position, op.caption, op.present, op.hlc)
+                // A link put on an entry deleted for good is purged with it: nothing comes back through it.
+                val gone = Purging.isPurged(entry)
+                val state = AttachmentState(meta, op.position, op.caption, op.present && !gone, op.hlc, purged = gone)
                 store.putEntry(entry.copy(attachments = entry.attachments + (meta.id to state)))
             }
-            store.appendChange(op.entryId) // logged even when it lost, like fields
+            store.appendChange(op.entryId) // logged even when it lost or was absorbed, like fields: the device re-pulls
             OpResult(op.opId, OpStatus.Applied)
         }
     }

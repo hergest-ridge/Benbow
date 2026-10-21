@@ -3,6 +3,7 @@ package app.benbow.server.api
 import app.benbow.core.api.DiskSpace
 import app.benbow.core.api.StorageKind
 import app.benbow.core.api.StorageState
+import app.benbow.server.storage.Purges
 import app.benbow.server.storage.StorageReports
 import kotlin.math.roundToLong
 
@@ -25,7 +26,7 @@ private val STATE_NAMES = mapOf(
     StorageState.UNREFERENCED to "Без записи",
 )
 
-internal fun spaceSection(storage: StorageReports): String = buildString {
+internal fun spaceSection(storage: StorageReports, purges: Purges? = null): String = buildString {
     append("<section id=\"space\" class=\"page\">")
     append(pageTitle("Место", "disk", "Сколько весят файлы на сервере: каждый файл один раз, где бы он ни был приложен."))
     append("<div class=\"card\">")
@@ -54,7 +55,44 @@ internal fun spaceSection(storage: StorageReports): String = buildString {
             "свободно ${size(it.free)} из ${size(it.total)}"
         } ?: "не настроен или не найден"}</dd>",
     )
-    append("</dl></div></section>")
+    append("</dl></div>")
+    purges?.waiting()?.takeIf { it.isNotEmpty() }?.let { append(quarantine(it)) }
+    append("</section>")
+}
+
+/**
+ * Purges waiting out their quarantine: what each deletes and when. «Отменить удаление» brings everything back (links and
+ * files); «Освободить сейчас» deletes the files at once. Both ask first.
+ */
+private fun quarantine(waiting: List<Purges.Waiting>): String = buildString {
+    append("<div class=\"card\"><h3>${icon("delete")}Удаляются навсегда</h3>")
+    append("<p class=\"lead\">Файлы, удалённые из корзины, ждут здесь семь дней. До этого их можно вернуть.</p><div class=\"list\">")
+    for (purge in waiting) {
+        val names = purge.names.take(3).joinToString(", ").let { if (purge.names.size > 3) "$it…" else it }
+        append("<div class=\"item\"><div class=\"avatar\">${icon("delete")}</div><div class=\"body\">")
+        append("<div class=\"headline\">${purge.files} ${files(purge.files)} · ${size(purge.bytes)}</div>")
+        append("<div class=\"support\">удалено ${time(purge.at)} · освободится ${time(purge.dueAt)}")
+        if (names.isNotEmpty()) append(" · ${esc(names)}")
+        append("</div></div>")
+        append(
+            postButton(
+                "/admin/purges/${esc(purge.id)}/undo",
+                "Отменить удаление",
+                "outlined",
+                confirm = "Вернуть эти файлы и вложения на их записи?",
+            ),
+        )
+        append(
+            postButton(
+                "/admin/purges/${esc(purge.id)}/free",
+                "Освободить сейчас",
+                "outlined danger",
+                confirm = "Удалить эти файлы сейчас? Вернуть их будет уже нельзя.",
+            ),
+        )
+        append("</div>")
+    }
+    append("</div></div>")
 }
 
 /** The disk as three parts: Benbow's files, everything else on it, what is free. */

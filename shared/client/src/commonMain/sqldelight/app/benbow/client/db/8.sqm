@@ -1,5 +1,10 @@
--- v8 -> v9 (7.18 M1, ADR-041): every attachment link as a row of its own, kept in step with entry.attachments by
--- triggers (as in Benbow.sq) and filled once here from what the device already holds.
+-- v8 -> v9 (7.18, ADR-041): every attachment link as a row of its own, kept in step with entry.attachments by
+-- triggers (as in Benbow.sq) and filled once here from what the device already holds (M1); the views leave out the
+-- entries deleted for good (M5).
+DROP VIEW journal_entry;
+DROP VIEW board_entry;
+CREATE VIEW journal_entry AS SELECT * FROM entry WHERE space IS NULL AND json_extract(fields, '$.purged') IS NOT 'true';
+CREATE VIEW board_entry AS SELECT * FROM entry WHERE space = 'board' AND json_extract(fields, '$.purged') IS NOT 'true';
 CREATE TABLE attachment_ref (
     entry_id TEXT NOT NULL,
     attachment_id TEXT NOT NULL,

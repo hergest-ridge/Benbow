@@ -19,6 +19,7 @@ import app.benbow.client.ReminderItem
 import app.benbow.client.SearchQuery
 import app.benbow.client.ServerHistory
 import app.benbow.client.ServerPages
+import app.benbow.client.ServerPurges
 import app.benbow.client.ServerStorage
 import app.benbow.client.Settings
 import app.benbow.client.SpeechModel
@@ -36,6 +37,9 @@ import app.benbow.client.moveToBoard
 import app.benbow.client.moveToJournal
 import app.benbow.client.removeAttachments
 import app.benbow.client.upcoming
+import app.benbow.core.api.PurgeDone
+import app.benbow.core.api.PurgePreview
+import app.benbow.core.api.PurgeRequest
 import app.benbow.core.api.StorageReport
 import app.benbow.core.media.AttachmentKey
 import app.benbow.ui.editor.Removal
@@ -157,6 +161,9 @@ sealed interface AppMessage {
     /** Attachments were taken off their entries into the trash (ADR-041, the library); "Вернуть" puts them back. */
     data class MediaTrashed(val keys: List<AttachmentKey>) : AppMessage
 
+    /** Deleted for good (ADR-041): [bytes] go from the server once its quarantine ends, at [freesOn]. */
+    data class Purged(val bytes: Long, val freesOn: Long) : AppMessage
+
     /** «Освободить на телефоне» let [bytes] go (they come back from the server when needed). */
     data class DeviceFreed(val bytes: Long) : AppMessage
 
@@ -208,6 +215,17 @@ class AppServices(
 
     /** How «Место» gets a fresh count; tests put their own here. */
     internal var storageReader: suspend () -> StorageReport = { storage.fetch() }
+
+    /** Deleting for good from the trash (ADR-041): the server's preview and commit; tests put their own here. */
+    private val purging = ServerPurges(db, apis)
+    internal var purgePreviewer: suspend (PurgeRequest) -> PurgePreview = { purging.preview(it) }
+    internal var purgeCommitter: suspend (String) -> PurgeDone = { purging.commit(it) }
+
+    /** After a purge: the snackbar, and a sync so this device takes the purged links and lets its copies go. */
+    fun purged(done: PurgeDone) {
+        messages.tryEmit(AppMessage.Purged(done.bytes, done.freesOn))
+        sync.requestSync()
+    }
 
     /** «Освободить на телефоне»: every large file the server holds and has backed up lets go here; the bytes freed. */
     suspend fun freeDevice(): Long = withContext(IoDispatcher) { media.evict(0) }.also { messages.tryEmit(AppMessage.DeviceFreed(it)) }
@@ -446,6 +464,7 @@ class AppServices(
         if (result !is SyncResult.Done) return result
         Settings(db).connection?.let { calendarStatus.value = calendarSync.sync(apis(it), it) }
         return try {
+            media.dropPurged() // before uploading: a file deleted for good is never sent
             media.uploadPending()
             media.evict(mediaCacheBytes)
             result

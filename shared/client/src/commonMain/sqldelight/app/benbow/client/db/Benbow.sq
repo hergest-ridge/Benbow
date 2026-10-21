@@ -33,10 +33,11 @@ CREATE INDEX entry_by_parent ON entry(parent_id);
 CREATE INDEX entry_by_space ON entry(space);
 
 -- Every place of the journal (feed, days, calendar, Home, look-backs, stats, tags, search) reads this view, never
--- `entry`, so a note on the board (or in a space a later app knows) can't show there (ADR-040).
-CREATE VIEW journal_entry AS SELECT * FROM entry WHERE space IS NULL;
+-- `entry`, so a note on the board (or in a space a later app knows) can't show there (ADR-040). An entry deleted for
+-- good (the field "purged", set only by the server, ADR-041) shows nowhere, the trash included.
+CREATE VIEW journal_entry AS SELECT * FROM entry WHERE space IS NULL AND json_extract(fields, '$.purged') IS NOT 'true';
 
-CREATE VIEW board_entry AS SELECT * FROM entry WHERE space = 'board';
+CREATE VIEW board_entry AS SELECT * FROM entry WHERE space = 'board' AND json_extract(fields, '$.purged') IS NOT 'true';
 
 -- Media files on this device, by SHA-256. A captured file stays until the server confirmed it;
 -- downloaded ones are a cache (docs/data-safety.md#client-side-safety).
@@ -192,7 +193,7 @@ SELECT id, kind, day, created_at, head_rev, body, fields, field_clocks, attachme
 -- Everything but app registries, oldest first: the archive export.
 exportEntries:
 SELECT id, kind, day, created_at, head_rev, body, conflict_heads, fields, field_clocks, attachments FROM entry
-WHERE kind != 'system' ORDER BY day, created_at;
+WHERE kind != 'system' AND json_extract(fields, '$.purged') IS NOT 'true' ORDER BY day, created_at;
 
 -- :m1..:m4 are one word each ("stem OR word*"), :rest the words after them; built by SearchIndex.terms, never raw
 -- input. One MATCH per word keeps OR unambiguous in both FTS query syntaxes. Null filters are off. A tag filter
@@ -467,6 +468,15 @@ SELECT sha256, path, size FROM media
 WHERE size >= :minSize AND (origin = 'downloaded' OR (origin = 'captured' AND uploaded = 1 AND uploaded_at < :settledBefore))
 ORDER BY last_access_at;
 
+-- Files here that only purged links name, and no text (ADR-041): deleted for good on the server, so here too. A link
+-- taken off or in the trash still holds its file, and so does any word of a live entry or a draft.
+purgedMedia:
+SELECT m.sha256, m.path, m.size FROM media AS m
+WHERE EXISTS (SELECT 1 FROM attachment_ref AS r WHERE (r.sha256 = m.sha256 OR r.preview_sha256 = m.sha256) AND r.purged = 1)
+    AND NOT EXISTS (SELECT 1 FROM attachment_ref AS r WHERE (r.sha256 = m.sha256 OR r.preview_sha256 = m.sha256) AND r.purged = 0)
+    AND NOT EXISTS (SELECT 1 FROM entry AS e WHERE instr(e.body, m.sha256) > 0 AND json_extract(e.fields, '$.purged') IS NOT 'true')
+    AND NOT EXISTS (SELECT 1 FROM draft AS d WHERE instr(d.body, m.sha256) > 0);
+
 -- What this device keeps («Место», ADR-041): every file, and what evictable would let go now.
 mediaUsage:
 SELECT coalesce(SUM(size), 0) AS total,
@@ -476,6 +486,11 @@ FROM media;
 
 forgetMedia:
 DELETE FROM media WHERE sha256 = ? AND (origin = 'downloaded' OR uploaded = 1);
+
+-- A file deleted for good on the server (ADR-041, purgedMedia): the one way a captured file leaves before the server
+-- confirmed it, by the owner's own purge.
+forgetPurged:
+DELETE FROM media WHERE sha256 = ?;
 
 -- After a server restore the server may lack files it once confirmed; the uploader asks again (dedup makes it cheap).
 recheckUploads:

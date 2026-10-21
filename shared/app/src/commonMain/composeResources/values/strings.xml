@@ -532,7 +532,7 @@
         <item quantity="other">%1$d дня с записями</item>
     </plurals>
     <string name="trash_empty">Корзина пуста</string>
-    <string name="trash_hint">Записи из корзины не удаляются: их можно вернуть в любой момент.</string>
+    <string name="trash_hint">Из корзины ничего не пропадает само: всё можно вернуть. Удалить навсегда можно, только выбрав и подтвердив.</string>
 
     <string name="history_offline">История версий хранится на сервере. Сейчас он недоступен: %1$s</string>
     <string name="history_empty">Версий пока нет — запись ещё не дошла до сервера.</string>
@@ -887,4 +887,47 @@
     <string name="storage_mirror_free">свободно %1$s из %2$s</string>
     <string name="storage_mirror_none">не настроен или не найден</string>
     <string name="storage_nothing">Пока пусто</string>
+    <string name="trash_choose">Выбрать</string>
+    <string name="trash_purge">Удалить навсегда</string>
+    <string name="purge_title">Удалить навсегда?</string>
+    <plurals name="purge_summary">
+        <item quantity="one">%1$d файл · %2$s</item>
+        <item quantity="few">%1$d файла · %2$s</item>
+        <item quantity="many">%1$d файлов · %2$s</item>
+        <item quantity="other">%1$d файла · %2$s</item>
+    </plurals>
+    <string name="purge_no_files">Файлов, которые можно удалить, здесь нет: они нужны другим записям или ещё не дошли до сервера. Выбранное всё равно уйдёт из корзины навсегда.</string>
+    <plurals name="purge_staying_live">
+        <item quantity="one">Ещё %1$d файл (%2$s) останется: он нужен записям вне корзины.</item>
+        <item quantity="few">Ещё %1$d файла (%2$s) останутся: они нужны записям вне корзины.</item>
+        <item quantity="many">Ещё %1$d файлов (%2$s) останутся: они нужны записям вне корзины.</item>
+        <item quantity="other">Ещё %1$d файла (%2$s) останутся: они нужны записям вне корзины.</item>
+    </plurals>
+    <plurals name="purge_staying_trash">
+        <item quantity="one">Ещё %1$d файл (%2$s) останется: он есть и в других записях в корзине.</item>
+        <item quantity="few">Ещё %1$d файла (%2$s) останутся: они есть и в других записях в корзине.</item>
+        <item quantity="many">Ещё %1$d файлов (%2$s) останутся: они есть и в других записях в корзине.</item>
+        <item quantity="other">Ещё %1$d файла (%2$s) останутся: они есть и в других записях в корзине.</item>
+    </plurals>
+    <plurals name="purge_not_arrived">
+        <item quantity="one">%1$d файл ещё не дошёл до сервера: его копия удалится с устройства.</item>
+        <item quantity="few">%1$d файла ещё не дошли до сервера: их копии удалятся с устройств.</item>
+        <item quantity="many">%1$d файлов ещё не дошли до сервера: их копии удалятся с устройств.</item>
+        <item quantity="other">%1$d файла ещё не дошли до сервера: их копии удалятся с устройств.</item>
+    </plurals>
+    <string name="purge_when">Место освободится %1$s. До этого удаление можно отменить на странице сервера.</string>
+    <string name="purge_hold">Удерживайте, чтобы удалить навсегда</string>
+    <string name="purge_offline">Удаляет только сервер, а связи с ним сейчас нет.</string>
+    <string name="purge_retry">Повторить</string>
+    <string name="purge_changed">Пока вы смотрели, что-то изменилось: вот новый подсчёт.</string>
+    <string name="purge_done">Удалено навсегда: %1$s · место освободится %2$s</string>
+    <string-array name="purge_kinds">
+        <item>Видео</item>
+        <item>Фото</item>
+        <item>Звуки и голос</item>
+        <item>Рисунки</item>
+        <item>Файлы</item>
+        <item>Превью и картинки ссылок</item>
+    </string-array>
+    <string name="storage_waiting">Удаляются навсегда: %1$s, место освободится %2$s</string>
 </resources>

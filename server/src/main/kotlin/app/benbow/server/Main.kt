@@ -16,6 +16,7 @@ import app.benbow.server.storage.Database
 import app.benbow.server.storage.Devices
 import app.benbow.server.storage.HighWater
 import app.benbow.server.storage.PairingCodes
+import app.benbow.server.storage.Purges
 import app.benbow.server.storage.Restore
 import app.benbow.server.storage.StorageReports
 import io.ktor.server.engine.applicationEnvironment
@@ -30,7 +31,10 @@ import java.nio.file.StandardOpenOption
 import kotlin.io.path.createDirectories
 import kotlin.system.exitProcess
 
-const val SERVER_VERSION = "0.11.3"
+const val SERVER_VERSION = "0.12.0"
+
+/** The purge journal beside the database (ADR-041): one line per purge and per undo. */
+const val PURGE_JOURNAL = "purge-journal.jsonl"
 const val DEFAULT_PORT = 8765
 
 fun main(args: Array<String>) {
@@ -100,8 +104,14 @@ fun main(args: Array<String>) {
     log.info("HTTPS on {}:{} | certificate SHA-256 {}", config.host, config.port, tls.fingerprint)
 
     val blobs = BlobStore(db, config.mediaRoot ?: dataDir.resolve("media"))
-    blobs.adoptUntracked().takeIf { it > 0 }?.let { log.warn("Recorded {} media files the database didn't know (after a restore?)", it) }
-    val backupJobs = BackupJobs(db, dataDir, config.backupMirror, blobs, calendar).also { it.start(config.backupIntervalMinutes) }
+    // Purges first (ADR-041): ones a restored snapshot lacks are done again from their journal, files moved on, and only
+    // then may the adoption look for files the database doesn't know (never ones on their way out).
+    val purges = Purges(db, blobs, dataDir.resolve("db").resolve(PURGE_JOURNAL))
+    purges.replay()
+    blobs.adoptUntracked(purges.pendingPaths()).takeIf { it > 0 }?.let {
+        log.warn("Recorded {} media files the database didn't know (after a restore?)", it)
+    }
+    val backupJobs = BackupJobs(db, dataDir, config.backupMirror, blobs, calendar, purges).also { it.start(config.backupIntervalMinutes) }
     val context =
         ServerContext(
             db = db,
@@ -119,7 +129,8 @@ fun main(args: Array<String>) {
             calendarHighWater = calendarHighWater,
             webRoot = webRoot(),
             peers = peers,
-            storage = StorageReports(db, blobs, dataDir, config.backupMirror),
+            storage = StorageReports(db, blobs, dataDir, config.backupMirror, purges),
+            purges = purges,
         )
     val server = embeddedServer(
         factory = Netty,

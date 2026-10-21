@@ -54,6 +54,15 @@ internal fun Route.adminRoutes(ctx: ServerContext) {
     post("/admin/devices/{id}/revoke") {
         admin(ctx, "revoked#devices") { ctx.devices.revoke(call.parameters["id"]!!) }
     }
+
+    // Deleting for good (ADR-041): within the quarantine a purge can be taken back, or its space freed at once.
+    post("/admin/purges/{id}/undo") {
+        admin(ctx, "undone#space") { ctx.purges?.undo(call.parameters["id"]!!) }
+    }
+
+    post("/admin/purges/{id}/free") {
+        admin(ctx, "freed#space") { ctx.purges?.freeNow(call.parameters["id"]!!) }
+    }
 }
 
 private suspend fun RoutingContext.admin(ctx: ServerContext, done: String, action: suspend () -> Unit) {
@@ -101,7 +110,7 @@ internal fun adminPage(ctx: ServerContext, admin: Boolean, flash: Flash? = null)
         if (admin) {
             append(devicesSection(ctx))
             append(backupsSection(ctx))
-            ctx.storage?.let { append(spaceSection(it)) }
+            ctx.storage?.let { append(spaceSection(it, ctx.purges)) }
             ctx.speech?.let { append(speechSection(it)) }
             append(friendsSection(ctx.peers))
             append(linkSection(ctx.peers))

@@ -8,7 +8,7 @@ import java.util.UUID
  * an existing database before calling [apply]; a newer schema is refused.
  */
 object Migrations {
-    const val SCHEMA_VERSION = 3
+    const val SCHEMA_VERSION = 4
 
     private val steps: List<List<String>> = listOf(
         // 1: store identity
@@ -84,6 +84,31 @@ object Migrations {
             "CREATE INDEX uploads_by_sha ON uploads(sha256)",
             // Attachment links of an entry (AttachmentState by attachment id, LWW per link)
             "ALTER TABLE entries ADD COLUMN attachments TEXT NOT NULL DEFAULT '{}'",
+        ),
+        // 4: deleting for good (ADR-041): every purge as its journal line, and each of its files on the way out
+        listOf(
+            """CREATE TABLE purges (
+                id TEXT PRIMARY KEY,
+                created_at INTEGER NOT NULL,
+                device_id TEXT,
+                record TEXT NOT NULL,
+                undone_at INTEGER
+            )""",
+            """CREATE TABLE purged_files (
+                sha256 TEXT NOT NULL,
+                purge_id TEXT NOT NULL REFERENCES purges(id),
+                size INTEGER NOT NULL,
+                mime TEXT NOT NULL,
+                path TEXT NOT NULL,
+                quarantine TEXT NOT NULL,
+                due_at INTEGER NOT NULL,
+                moved_at INTEGER,
+                deleted_at INTEGER,
+                back_at INTEGER,
+                mirror_deleted_at INTEGER,
+                PRIMARY KEY (sha256, purge_id)
+            )""",
+            "CREATE INDEX purged_files_by_sha ON purged_files(sha256)",
         ),
     )
 

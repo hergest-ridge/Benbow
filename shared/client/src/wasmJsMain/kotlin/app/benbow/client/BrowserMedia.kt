@@ -93,6 +93,17 @@ class BrowserMedia(
         if (touched.add(sha256)) q.touchMedia(now(), sha256)
     }
 
+    override fun dropPurged(): Long {
+        var freed = 0L
+        for (file in q.purgedMedia().executeAsList()) {
+            files.remove(file.sha256)
+            q.forgetPurged(file.sha256)
+            scope.launch { runCatching { shelf.delete(key(file.sha256)) } }
+            freed += file.size
+        }
+        return freed
+    }
+
     override fun usage(): Flow<MediaUsage> = q.mediaUsage(SMALL_FILE, now() - SETTLE_MS) { total, freeable ->
         MediaUsage(total, freeable)
     }.asFlow().mapToOne(Dispatchers.Default)
@@ -126,7 +137,12 @@ class BrowserMedia(
         return uploadEach(q.pendingUploads().executeAsList()) { media ->
             // never expected; the row stays
             val blob = files[media.sha256]?.blob ?: shelf.load(key(media.sha256)) ?: return@uploadEach false
-            upload(api, UploadStart(media.sha256, media.size, media.mime, media.name, media.captured_at), blob)
+            try {
+                upload(api, UploadStart(media.sha256, media.size, media.mime, media.name, media.captured_at), blob)
+            } catch (e: ApiException) {
+                if (isPurged(e)) return@uploadEach false // deleted for good: not a failure, and not sent
+                throw e
+            }
             q.markUploaded(now(), media.sha256)
             true
         }

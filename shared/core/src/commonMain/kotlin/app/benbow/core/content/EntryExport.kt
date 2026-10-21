@@ -124,9 +124,13 @@ object EntryExport {
         val visible = entry.attachments.values.filter {
             it.present && (it.meta.id !in inline || it.meta.id in transcripts)
         }.sortedBy { it.position }
-        if (visible.isEmpty()) return ""
+        // Files deleted for good from the trash (ADR-041) are named, never silently missing.
+        val gone = entry.attachments.values.filter { it.purged }.sortedBy { it.position }.joinToString("") { a ->
+            "\n<!-- ${a.meta.kind} ${(a.meta.name ?: a.meta.sha256).replace("--", "-")} deleted for good -->"
+        }
+        if (visible.isEmpty()) return if (gone.isEmpty()) "" else gone + "\n"
         val tracks = TrackTags.of(entry.fields.mapValues { it.value.value })
-        return visible.joinToString("\n", prefix = "\n", postfix = "\n") { a ->
+        return gone + visible.joinToString("\n", prefix = "\n", postfix = "\n") { a ->
             val tagged = tracks[a.meta.id]?.let { t -> listOfNotNull(t.artist, t.title).joinToString(" — ").ifEmpty { null } }
             val label = (a.caption ?: tagged ?: a.meta.name ?: a.meta.kind).replace('[', '(').replace(']', ')')
             val path = link(a)

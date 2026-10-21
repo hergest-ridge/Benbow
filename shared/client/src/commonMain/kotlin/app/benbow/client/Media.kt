@@ -26,6 +26,9 @@ interface Media {
     /** Keeps large local files under [capBytes]; returns the bytes freed (an evicted file is downloaded again when needed). */
     fun evict(capBytes: Long): Long
 
+    /** Deletes this device's copies of files deleted for good on the server (ADR-041); returns the bytes freed. */
+    fun dropPurged(): Long
+
     /** What this device keeps, and what [evict] may let go right now by the same rule («Освободить на телефоне»). */
     fun usage(): Flow<MediaUsage>
 
@@ -35,6 +38,9 @@ interface Media {
     /** Uploads every captured file the server hasn't confirmed; returns how many finished. */
     suspend fun uploadPending(): Int
 }
+
+/** The server let a file go for good (410 `purged`): its upload is skipped, and the copy goes once the purge is pulled. */
+internal fun isPurged(e: Exception) = e is ApiException && e.status == 410 && e.error == "purged"
 
 /** Bytes of files on this device: all of them, and those the server holds and has backed up (they may go). */
 data class MediaUsage(val total: Long, val freeable: Long)

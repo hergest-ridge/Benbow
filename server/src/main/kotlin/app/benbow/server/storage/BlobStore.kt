@@ -166,12 +166,17 @@ class BlobStore(private val db: Database, val root: Path, private val now: () ->
     /**
      * Files on disk the database doesn't know, e.g. placed after the snapshot a restore went back to:
      * hashed and recorded again, so devices find them instead of uploading duplicates. Returns how many.
+     * Never the uploads in progress, the quarantine of purged files (ADR-041), or the [purging] paths a committed
+     * purge is about to move there.
      */
-    fun adoptUntracked(): Int {
+    fun adoptUntracked(purging: Set<String> = emptySet()): Int {
         if (!root.exists()) return 0
-        val known = all().mapTo(HashSet()) { it.path }
+        val known = all().mapTo(HashSet()) { it.path } + purging
+        val quarantine = root.resolve(Purges.QUARANTINE)
         val untracked = Files.walk(root).use { paths ->
-            paths.filter { Files.isRegularFile(it) && !it.startsWith(uploads) && !it.fileName.toString().endsWith(".tmp") }
+            paths.filter {
+                Files.isRegularFile(it) && !it.startsWith(uploads) && !it.startsWith(quarantine) && !it.fileName.toString().endsWith(".tmp")
+            }
                 .map { root.relativize(it).joinToString("/") }
                 .filter { it !in known }
                 .toList()

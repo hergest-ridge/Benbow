@@ -7,6 +7,10 @@ import app.benbow.core.api.LinkPreviewRequest
 import app.benbow.core.api.PairRequest
 import app.benbow.core.api.PairResponse
 import app.benbow.core.api.Protocol
+import app.benbow.core.api.PurgeCommit
+import app.benbow.core.api.PurgeDone
+import app.benbow.core.api.PurgePreview
+import app.benbow.core.api.PurgeRequest
 import app.benbow.core.api.PushRequest
 import app.benbow.core.api.PushResponse
 import app.benbow.core.api.ReconcileRequest
@@ -79,6 +83,12 @@ interface BenbowApi {
     /** What the server's files weigh, each file once (ADR-041, «Место»). */
     suspend fun storage(): StorageReport = throw UnsupportedOperationException("storage")
 
+    /** What deleting these for good would do (ADR-041): counted by the server over every entry. */
+    suspend fun purgePreview(request: PurgeRequest): PurgePreview = throw UnsupportedOperationException("purgePreview")
+
+    /** Does exactly the plan, or nothing: 409 `changed` (preview again), 410 `expired`. */
+    suspend fun purgeCommit(planId: String): PurgeDone = throw UnsupportedOperationException("purgeCommit")
+
     /**
      * A speech model file from byte [from] on (a Range request); [write] learns whether the server continued there
      * (`resumed`) or sent it from the start.
@@ -129,6 +139,18 @@ class KtorBenbowApi(private val client: HttpClient, private val baseUrl: String,
     }.ok().body()
 
     override suspend fun storage(): StorageReport = client.get("$baseUrl/api/v1/storage") { auth() }.ok().body()
+
+    override suspend fun purgePreview(request: PurgeRequest): PurgePreview = client.post("$baseUrl/api/v1/purge/preview") {
+        auth()
+        contentType(ContentType.Application.Json)
+        setBody(request)
+    }.ok().body()
+
+    override suspend fun purgeCommit(planId: String): PurgeDone = client.post("$baseUrl/api/v1/purge/commit") {
+        auth()
+        contentType(ContentType.Application.Json)
+        setBody(PurgeCommit(planId))
+    }.ok().body()
 
     override suspend fun revisions(entryId: String): List<RevisionInfo> =
         client.get("$baseUrl/api/v1/entries/$entryId/revisions") { auth() }.ok().body()

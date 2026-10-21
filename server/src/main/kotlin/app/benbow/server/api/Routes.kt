@@ -5,6 +5,8 @@ import app.benbow.core.api.LinkPreviewRequest
 import app.benbow.core.api.PairRequest
 import app.benbow.core.api.PairResponse
 import app.benbow.core.api.Protocol
+import app.benbow.core.api.PurgeCommit
+import app.benbow.core.api.PurgeRequest
 import app.benbow.core.api.PushRequest
 import app.benbow.core.api.PushResponse
 import app.benbow.core.api.ReconcileRequest
@@ -31,6 +33,7 @@ import app.benbow.server.storage.Devices
 import app.benbow.server.storage.HighWater
 import app.benbow.server.storage.Migrations
 import app.benbow.server.storage.PairingCodes
+import app.benbow.server.storage.Purges
 import app.benbow.server.storage.SqliteSyncStore
 import app.benbow.server.storage.StorageReports
 import io.ktor.http.ContentType
@@ -94,6 +97,8 @@ class ServerContext(
     val peers: PeerLink? = null,
     /** What the files weigh («Место», ADR-041); null in tests that don't need it. */
     val storage: StorageReports? = null,
+    /** Deleting for good from the trash (ADR-041); null in tests that don't need it. */
+    val purges: Purges? = null,
 )
 
 data class DevicePrincipal(val deviceId: String)
@@ -102,6 +107,7 @@ private const val MAX_OPS_PER_PUSH = 500
 private const val MAX_PULL_LIMIT = 500
 private const val MAX_RECONCILE = 2_000
 private val NO_CALENDAR = ApiError("no_calendar", "The calendar store is off on this server; see its log")
+private val NO_PURGE = ApiError("no_purge", "Deleting for good is off on this server")
 
 // KDoc on routes feeds the generated OpenAPI summaries, so ktlint's "no KDoc in blocks" rule is off here.
 @Suppress("ktlint:standard:kdoc")
@@ -243,6 +249,51 @@ fun Application.benbowModule(ctx: ServerContext) {
                 }
 
                 /**
+                 * What deleting these for good would do (ADR-041): the files it deletes and those staying (with what keeps
+                 * them), counted over every entry. Only entries and links in the trash; the plan lives ten minutes.
+                 */
+                post("/purge/preview") {
+                    val purges = ctx.purges ?: return@post call.respond(HttpStatusCode.ServiceUnavailable, NO_PURGE)
+                    val request = call.receive<PurgeRequest>()
+                    val device = call.principal<DevicePrincipal>()!!.deviceId
+                    when (val preview = withContext(Dispatchers.IO) { purges.preview(request, device) }) {
+                        is Purges.Preview.Ready -> call.respond(preview.preview)
+
+                        is Purges.Preview.Refused -> call.respond(
+                            HttpStatusCode.BadRequest,
+                            ApiError(preview.reason, "Only what is in the trash"),
+                        )
+                    }
+                }
+
+                /**
+                 * Does exactly what the preview showed, or nothing: 409 `changed` when anything in it moved since (preview
+                 * again), 410 `expired` after ten minutes. The files wait seven days in the server's quarantine.
+                 */
+                post("/purge/commit") {
+                    val purges = ctx.purges ?: return@post call.respond(HttpStatusCode.ServiceUnavailable, NO_PURGE)
+                    val request = call.receive<PurgeCommit>()
+                    when (val result = withContext(Dispatchers.IO) { purges.commit(request.planId) }) {
+                        is Purges.Commit.Done -> {
+                            ctx.highWater?.record(ctx.db)
+                            call.respond(result.done)
+                        }
+
+                        Purges.Commit.Changed -> call.respond(
+                            HttpStatusCode.Conflict,
+                            ApiError("changed", "Something in the plan changed; preview again"),
+                        )
+
+                        Purges.Commit.Expired -> call.respond(HttpStatusCode.Gone, ApiError("expired", "The plan expired; preview again"))
+
+                        is Purges.Commit.Refused -> call.respond(
+                            HttpStatusCode.BadRequest,
+                            ApiError(result.reason, "Only what is in the trash"),
+                        )
+                    }
+                }
+
+                /**
                  * A media file by SHA-256 (supports Range). HEAD answers whether the server has it.
                  */
                 get("/blobs/{sha256}") {
@@ -266,6 +317,10 @@ fun Application.benbowModule(ctx: ServerContext) {
                             ?: return@post call.respond(HttpStatusCode.ServiceUnavailable, ApiError("no_media", "Media storage is off"))
                     val request = call.receive<UploadStart>()
                     val device = call.principal<DevicePrincipal>()!!.deviceId
+                    // A file whose every link was deleted for good (ADR-041): the device lets its copy go.
+                    if (ctx.purges?.let { withContext(Dispatchers.IO) { it.refusesUpload(request.sha256) } } == true) {
+                        return@post call.respond(HttpStatusCode.Gone, ApiError("purged", "Deleted for good"))
+                    }
                     try {
                         when (
                             val start = store.start(

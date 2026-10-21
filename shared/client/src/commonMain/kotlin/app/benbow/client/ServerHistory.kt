@@ -2,6 +2,9 @@ package app.benbow.client
 
 import app.benbow.client.db.BenbowDb
 import app.benbow.core.api.LinkPreviewInfo
+import app.benbow.core.api.PurgeDone
+import app.benbow.core.api.PurgePreview
+import app.benbow.core.api.PurgeRequest
 import app.benbow.core.api.RevisionInfo
 import app.benbow.core.api.StorageReport
 import kotlinx.serialization.Serializable
@@ -50,6 +53,15 @@ class ServerStorage(private val db: BenbowDb, private val apiFor: (Connection) -
     private companion object {
         const val KEY = "storage.report"
     }
+}
+
+/** Deleting for good from the trash (ADR-041): only the server does it, and only online. */
+class ServerPurges(private val db: BenbowDb, private val apiFor: (Connection) -> BenbowApi) {
+    suspend fun preview(request: PurgeRequest): PurgePreview = api().purgePreview(request)
+
+    suspend fun commit(planId: String): PurgeDone = api().purgeCommit(planId)
+
+    private fun api() = apiFor(Settings(db).connection ?: throw PairingException("Not paired with a server"))
 }
 
 /** One HTTP client per connection: each client owns threads and a connection pool, so they are not created per call. */

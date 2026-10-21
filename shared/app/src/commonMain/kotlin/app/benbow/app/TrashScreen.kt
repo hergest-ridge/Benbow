@@ -1,7 +1,9 @@
 package app.benbow.app
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -38,8 +41,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import app.benbow.app.resources.Res
+import app.benbow.app.resources.cancel
 import app.benbow.app.resources.gentle_count
+import app.benbow.app.resources.library_chosen
 import app.benbow.app.resources.library_file
 import app.benbow.app.resources.media_audio
 import app.benbow.app.resources.media_kind_drawing
@@ -53,6 +61,7 @@ import app.benbow.app.resources.trash_board
 import app.benbow.app.resources.trash_calendar
 import app.benbow.app.resources.trash_calendar_item
 import app.benbow.app.resources.trash_category_item
+import app.benbow.app.resources.trash_choose
 import app.benbow.app.resources.trash_days_ago
 import app.benbow.app.resources.trash_empty
 import app.benbow.app.resources.trash_from_entry
@@ -62,6 +71,7 @@ import app.benbow.app.resources.trash_journal
 import app.benbow.app.resources.trash_latest
 import app.benbow.app.resources.trash_media_total
 import app.benbow.app.resources.trash_oldest
+import app.benbow.app.resources.trash_purge
 import app.benbow.app.resources.trash_tag_item
 import app.benbow.app.resources.trash_tags
 import app.benbow.app.resources.trash_today
@@ -77,6 +87,8 @@ import app.benbow.client.restoreCategory
 import app.benbow.client.restoreTag
 import app.benbow.client.takenOff
 import app.benbow.client.trashedTags
+import app.benbow.core.api.AttachmentRef
+import app.benbow.core.api.PurgeRequest
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.StringResource
@@ -101,7 +113,8 @@ internal enum class TrashOrder(val label: StringResource) {
 /**
  * The journal's trash with what each entry weighs and how long it has been there, then the attachments taken off
  * entries (ADR-041: they wait here with their files), the board's notes, tags and categories (ADR-032: their entries
- * kept them all along), and the calendar's (ADR-027). Nothing here is gone: everything comes back from here.
+ * kept them all along), and the calendar's (ADR-027). Everything comes back from here; «Выбрать» then «Удалить навсегда»
+ * deletes chosen entries and attachments for good, through the server's count and a held button ([PurgeSheet]).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -119,9 +132,62 @@ internal fun TrashScreen(services: AppServices, nav: Navigator) {
     var opened by remember { mutableStateOf(setOf<String>()) }
     val gentle = LocalGentle.current
     val now = remember { services.now() }
+    // Choosing (ADR-041): "e:<entry>" and "a:<entry>/<attachment>"; nothing final happens before the sheet's held button.
+    var choosing by remember { mutableStateOf(false) }
+    var chosen by remember { mutableStateOf(setOf<String>()) }
+    var purging by remember { mutableStateOf<PurgeRequest?>(null) }
+    val toggle = { key: String -> chosen = if (key in chosen) chosen - key else chosen + key }
+    val stopChoosing = {
+        choosing = false
+        chosen = emptySet()
+    }
+    NavigationBackHandler(rememberNavigationEventState(NavigationEventInfo.None), isBackEnabled = choosing) { stopChoosing() }
     Scaffold(topBar = {
-        TopAppBar(navigationIcon = { BackButton(nav::back) }, title = { Text(stringResource(Res.string.trash)) })
+        if (!choosing) {
+            TopAppBar(
+                navigationIcon = { BackButton(nav::back) },
+                title = { Text(stringResource(Res.string.trash)) },
+                actions = {
+                    val any = entries.orEmpty().isNotEmpty() || notes.isNotEmpty() || off.isNotEmpty()
+                    if (any) TextButton({ choosing = true }, Modifier.hand()) { Text(stringResource(Res.string.trash_choose)) }
+                },
+            )
+        } else {
+            TopAppBar(
+                navigationIcon = { IconButton(stopChoosing, Modifier.hand()) { Icon(Icons.Close, stringResource(Res.string.cancel)) } },
+                title = { Text(stringResource(Res.string.library_chosen, chosen.size)) },
+                actions = {
+                    IconButton({
+                        val keys = chosen
+                        services.scope.launch {
+                            keys.forEach { key ->
+                                if (key.startsWith("e:")) services.repo.restore(key.drop(2))
+                                if (key.startsWith("a:")) key.drop(2).split('/').let { services.repo.restoreAttachment(it[0], it[1]) }
+                            }
+                        }
+                        stopChoosing()
+                    }, Modifier.hand(), enabled = chosen.isNotEmpty()) { Icon(Icons.Undo, stringResource(Res.string.restore)) }
+                    IconButton({
+                        purging = PurgeRequest(
+                            entries = chosen.filter { it.startsWith("e:") }.map { it.drop(2) },
+                            attachments = chosen.filter { it.startsWith("a:") }.map { key ->
+                                key.drop(2).split('/').let { AttachmentRef(it[0], it[1]) }
+                            },
+                        )
+                    }, Modifier.hand(), enabled = chosen.isNotEmpty()) {
+                        Icon(Icons.Delete, stringResource(Res.string.trash_purge), tint = MaterialTheme.colorScheme.error)
+                    }
+                },
+            )
+        }
     }) { padding ->
+        purging?.let { request ->
+            PurgeSheet(services, request, onDone = { done ->
+                purging = null
+                stopChoosing()
+                services.purged(done)
+            }, onDismiss = { purging = null })
+        }
         val items = entries ?: return@Scaffold
         val listed = items.isNotEmpty() || notes.isNotEmpty() || off.isNotEmpty()
         if (!listed && events.isEmpty() && calendars.isEmpty() && tags.isEmpty() && categories.isEmpty()) {
@@ -164,25 +230,41 @@ internal fun TrashScreen(services: AppServices, nav: Navigator) {
             }
             if (items.isNotEmpty() && sections > 1) item(key = "journal") { TrashHeader(stringResource(Res.string.trash_journal)) }
             items(journal, key = { it.id }) { entry ->
-                EntryCard(entry, onClick = { nav.open(Route.Editor(entry.id, entry.day)) }) {
-                    TrashedTrailing(weight(entry), now) { services.scope.launch { services.repo.restore(entry.id) } }
+                EntryCard(entry, onClick = { if (choosing) toggle("e:" + entry.id) else nav.open(Route.Editor(entry.id, entry.day)) }) {
+                    if (choosing) {
+                        ChoiceMark("e:" + entry.id in chosen, Modifier.padding(8.dp))
+                    } else {
+                        TrashedTrailing(weight(entry), now) { services.scope.launch { services.repo.restore(entry.id) } }
+                    }
                 }
             }
             if (off.isNotEmpty()) item(key = "attachments") { TrashHeader(stringResource(Res.string.trash_attachments)) }
             items(attachments, key = { "a" + it.entryId + "/" + it.attachment.meta.id }) { item ->
+                val key = "a:" + item.entryId + "/" + item.attachment.meta.id
                 TakenOffRow(
                     services,
                     item,
                     now,
                     curtained = item.veil != null && gentle && item.postId !in opened,
+                    chosen = if (choosing) key in chosen else null,
                     onReveal = { opened = opened + item.postId },
-                    onOpen = { nav.open(Route.Editor(item.postId, item.day, readOnly = true)) },
+                    onOpen = { if (choosing) toggle(key) else nav.open(Route.Editor(item.postId, item.day, readOnly = true)) },
+                    onLongPress = {
+                        choosing = true
+                        toggle(key)
+                    },
                 ) { services.scope.launch { services.repo.restoreAttachment(item.entryId, item.attachment.meta.id) } }
             }
             if (notes.isNotEmpty()) item(key = "board") { TrashHeader(stringResource(Res.string.trash_board)) }
             items(board, key = { "n" + it.id }) { note ->
-                EntryCard(note, onClick = { nav.open(Route.Editor(note.id, note.day, board = true)) }) {
-                    TrashedTrailing(weight(note), now) { services.scope.launch { services.repo.restore(note.id) } }
+                EntryCard(note, onClick = {
+                    if (choosing) toggle("e:" + note.id) else nav.open(Route.Editor(note.id, note.day, board = true))
+                }) {
+                    if (choosing) {
+                        ChoiceMark("e:" + note.id in chosen, Modifier.padding(8.dp))
+                    } else {
+                        TrashedTrailing(weight(note), now) { services.scope.launch { services.repo.restore(note.id) } }
+                    }
                 }
             }
             if (tags.isNotEmpty() || categories.isNotEmpty()) item(key = "tags") { TrashHeader(stringResource(Res.string.trash_tags)) }
@@ -255,21 +337,26 @@ private fun TrashedTrailing(weight: TrashWeight, now: Long, onRestore: () -> Uni
  * An attachment taken off its entry: its picture (frosted while its entry is veiled, until a tap), what it is, its
  * weight, the entry's day and how long ago; a tap opens the entry, «Восстановить» puts it back on it.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TakenOffRow(
     services: AppServices,
     item: LibraryItem,
     now: Long,
     curtained: Boolean,
+    /** Null while not choosing; else whether this one is chosen. */
+    chosen: Boolean?,
     onReveal: () -> Unit,
     onOpen: () -> Unit,
+    onLongPress: () -> Unit,
     onRestore: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
     val meta = item.attachment.meta
     val months = stringArrayResource(Res.array.months_genitive)
     Row(
-        Modifier.fillMaxWidth().hand().clickable(onClick = onOpen).padding(start = 16.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
+        Modifier.fillMaxWidth().hand().combinedClickable(onClick = onOpen, onLongClick = onLongPress)
+            .padding(start = 16.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -308,7 +395,11 @@ private fun TakenOffRow(
             )
             Text(line.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
         }
-        TextButton(onRestore, modifier = Modifier.hand()) { Text(stringResource(Res.string.restore)) }
+        if (chosen != null) {
+            ChoiceMark(chosen, Modifier.padding(8.dp))
+        } else {
+            TextButton(onRestore, modifier = Modifier.hand()) { Text(stringResource(Res.string.restore)) }
+        }
     }
 }
 

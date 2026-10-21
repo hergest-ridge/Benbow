@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.benbow.app.resources.Res
+import app.benbow.app.resources.months_genitive
 import app.benbow.app.resources.months_nominative
 import app.benbow.app.resources.storage
 import app.benbow.app.resources.storage_backups
@@ -102,6 +103,7 @@ import app.benbow.app.resources.storage_state_removed
 import app.benbow.app.resources.storage_state_trash
 import app.benbow.app.resources.storage_state_unreferenced
 import app.benbow.app.resources.storage_states
+import app.benbow.app.resources.storage_waiting
 import app.benbow.client.LibraryItem
 import app.benbow.client.LibrarySection
 import app.benbow.client.library
@@ -217,7 +219,18 @@ internal fun StorageScreen(services: AppServices, nav: Navigator) {
                                 counted.states[it] ?: 0,
                             )
                         }
-                        BreakdownCard(stringResource(Res.string.storage_states), parts, counted.bytes)
+                        BreakdownCard(stringResource(Res.string.storage_states), parts, counted.bytes) {
+                            // Deleted for good, waiting out the server's quarantine (ADR-041): not in the total any more.
+                            if (counted.waiting > 0) {
+                                val months = stringArrayResource(Res.array.months_genitive)
+                                val day = counted.waitingUntil?.let { dateLabel(dayOf(it), months) }.orEmpty()
+                                Text(
+                                    stringResource(Res.string.storage_waiting, sizeLabel(counted.waiting), day),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
                     }
                 }
                 if (counted.months.isNotEmpty()) item(key = "months") { MonthsCard(counted.months) }
@@ -285,10 +298,11 @@ private fun HeroCard(report: StorageReport?, fresh: Boolean, loading: Boolean) {
 
 /** One bar of every part in proportion, then a row for each: its colour, name, weight and share (none hides in a colour). */
 @Composable
-private fun BreakdownCard(title: String, parts: List<Part>, total: Long) {
+private fun BreakdownCard(title: String, parts: List<Part>, total: Long, below: @Composable () -> Unit = {}) {
     StorageCard(title) {
         StackedBar(parts, total)
         parts.filter { it.bytes > 0 }.forEach { LegendRow(it, total) }
+        below()
     }
 }
 

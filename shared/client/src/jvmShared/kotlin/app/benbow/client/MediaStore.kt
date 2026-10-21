@@ -77,6 +77,17 @@ class MediaStore(
     }
 
     /** True while a file captured here hasn't been confirmed by the server ("not safe yet"). */
+    override fun dropPurged(): Long {
+        var freed = 0L
+        for (file in q.purgedMedia().executeAsList()) {
+            val local = File(file.path)
+            if (local.exists() && !local.delete()) continue // in use; next time
+            q.forgetPurged(file.sha256)
+            freed += file.size
+        }
+        return freed
+    }
+
     override fun usage(): Flow<MediaUsage> = q.mediaUsage(SMALL_FILE, now() - SETTLE_MS) { total, freeable ->
         MediaUsage(total, freeable)
     }.asFlow().mapToOne(Dispatchers.Default)
@@ -120,7 +131,12 @@ class MediaStore(
         uploadEach(q.pendingUploads().executeAsList()) { media ->
             val file = File(media.path)
             if (!file.exists()) return@uploadEach false // never expected; the row stays so it isn't forgotten
-            upload(api, UploadStart(media.sha256, media.size, media.mime, media.name, media.captured_at), file)
+            try {
+                upload(api, UploadStart(media.sha256, media.size, media.mime, media.name, media.captured_at), file)
+            } catch (e: ApiException) {
+                if (isPurged(e)) return@uploadEach false // deleted for good: not a failure, and not sent
+                throw e
+            }
             q.markUploaded(now(), media.sha256)
             true
         }

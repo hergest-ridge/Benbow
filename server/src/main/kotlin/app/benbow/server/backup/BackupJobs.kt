@@ -2,10 +2,12 @@ package app.benbow.server.backup
 
 import app.benbow.core.content.TagBook
 import app.benbow.core.content.TagNames
+import app.benbow.server.PURGE_JOURNAL
 import app.benbow.server.calendar.CalendarDatabase
 import app.benbow.server.storage.Backups
 import app.benbow.server.storage.BlobStore
 import app.benbow.server.storage.Database
+import app.benbow.server.storage.Purges
 import app.benbow.server.storage.SqliteSyncStore
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.nullable
@@ -49,6 +51,8 @@ class BackupJobs(
     private val mirror: Path?,
     private val blobs: BlobStore? = null,
     private val calendar: CalendarDatabase? = null,
+    /** Deleting for good (ADR-041): its quarantine ends in these passes, and the mirror follows by its journal. */
+    private val purges: Purges? = null,
 ) {
     private val log = LoggerFactory.getLogger("benbow.backup")
     private val executor = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "benbow-backup").apply { isDaemon = true } }
@@ -116,6 +120,9 @@ class BackupJobs(
         val removed = backups.prune(Retention.keep(backups.history(), now))
         if (removed.isNotEmpty()) log.info("Pruned {} old snapshots", removed.size)
         val mirrored = copyToMirror() && copyMediaToMirror()
+        // Quarantines that ended (ADR-041), then the mirror's copies of those files: by the journal, the hash matching.
+        purges?.expire()
+        if (mirrored) mirror?.let { purges?.mirrorDeletions(it) }
         exportChanged()
         val corrupt = checkMedia()
         status = status.copy(
@@ -153,6 +160,14 @@ class BackupJobs(
         val target = mirror ?: return false
         val backups = db.backups ?: return false
         copySnapshots(backups, target.resolve("db"), target.resolve("manifest.json"))
+        // The purge journal goes with the snapshots: a store rebuilt from the mirror does its purges again (ADR-041).
+        val journal = dataDir.resolve("db").resolve(PURGE_JOURNAL)
+        if (journal.exists()) {
+            val copy = target.resolve("db").resolve(PURGE_JOURNAL)
+            val tmp = copy.resolveSibling("$PURGE_JOURNAL.tmp")
+            Files.copy(journal, tmp, StandardCopyOption.REPLACE_EXISTING)
+            Files.move(tmp, copy, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        }
         return true
     }
 

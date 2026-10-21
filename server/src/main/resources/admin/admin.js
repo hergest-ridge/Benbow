@@ -64,6 +64,7 @@
   const picker = document.getElementById("folder-picker");
   if (picker) {
     let target = null;
+    let hideDrive = false;
     let current = null;
     let parent = null;
     const list = picker.querySelector("[data-folder-list]");
@@ -93,7 +94,7 @@
       up.disabled = !current;
       list.replaceChildren();
       if (data.error) list.append(Object.assign(document.createElement("div"), { className: "none", textContent: data.error }));
-      if (data.drive.length) {
+      if (data.drive.length && !hideDrive) {
         list.append(group("Похоже на Google Диск"));
         data.drive.forEach((f) => list.append(row("drive", f.name, f.path)));
       }
@@ -109,6 +110,7 @@
       const open = e.target.closest("[data-pick-folder]");
       if (!open) return;
       target = document.getElementById(open.dataset.pickFolder);
+      hideDrive = open.hasAttribute("data-no-drive"); // the second disk is no place for Drive's folder
       picker.showModal();
       load(target && target.value.trim() ? target.value.trim() : null);
     });

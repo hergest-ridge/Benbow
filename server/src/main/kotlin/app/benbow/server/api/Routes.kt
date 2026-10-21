@@ -23,6 +23,7 @@ import app.benbow.core.sync.SyncRules
 import app.benbow.core.text.Links
 import app.benbow.server.SERVER_VERSION
 import app.benbow.server.SpeechModel
+import app.benbow.server.backup.BackupJobs
 import app.benbow.server.backup.BackupStatus
 import app.benbow.server.calendar.CalendarDatabase
 import app.benbow.server.calendar.SqliteCalendarStore
@@ -101,6 +102,8 @@ class ServerContext(
     val storage: StorageReports? = null,
     /** Deleting for good from the trash (ADR-041); null in tests that don't need it. */
     val purges: Purges? = null,
+    /** The backup passes: the second disk is chosen and turned off through them (ADR-042); null in tests that don't need it. */
+    val backupJobs: BackupJobs? = null,
 )
 
 data class DevicePrincipal(val deviceId: String)

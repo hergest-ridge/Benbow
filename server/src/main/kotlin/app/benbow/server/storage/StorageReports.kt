@@ -18,7 +18,8 @@ class StorageReports(
     private val db: Database,
     private val blobs: BlobStore,
     private val dataDir: Path?,
-    private val mirror: Path?,
+    /** The second disk now (it may change on the admin page, ADR-042). */
+    private val mirror: () -> Path?,
     private val purges: Purges? = null,
     private val now: () -> Long = System::currentTimeMillis,
 ) {
@@ -29,7 +30,7 @@ class StorageReports(
         val counted = cached?.takeIf { it.first == key }?.second ?: count().also { cached = key to it }
         return counted.copy(
             disk = space(blobs.root),
-            mirror = mirror?.takeIf { it.exists() }?.let(::space),
+            mirror = mirror()?.takeIf { it.exists() }?.let(::space),
             database =
             dataDir?.let { dir -> listOf("benbow.sqlite", "benbow.sqlite-wal").sumOf { size(dir.resolve("db").resolve(it)) } } ?: 0,
             snapshots = dataDir?.resolve("backups")?.resolve("db")?.let(::folderSize) ?: 0,

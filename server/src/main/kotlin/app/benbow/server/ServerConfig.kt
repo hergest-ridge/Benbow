@@ -61,6 +61,15 @@ data class ServerConfig(
             )
         }
 
+        /** Sets [values] in `<data>/benbow.properties` in one atomic write, keeping every other line's value (ADR-042, P3). */
+        fun update(dataDir: Path, values: Map<String, String>) {
+            val file = dataDir.resolve(FILE_NAME)
+            val props = Properties()
+            if (file.exists()) file.inputStream().use(props::load)
+            values.forEach { (key, value) -> props.setProperty(key, value) }
+            writeAtomically(file, props)
+        }
+
         private fun writeAtomically(file: Path, props: Properties) {
             file.parent.createDirectories()
             val tmp = file.resolveSibling("$FILE_NAME.tmp")

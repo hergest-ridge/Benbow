@@ -3,6 +3,7 @@ package app.benbow.server.backup
 import app.benbow.core.content.TagBook
 import app.benbow.core.content.TagNames
 import app.benbow.server.PURGE_JOURNAL
+import app.benbow.server.ServerConfig
 import app.benbow.server.calendar.CalendarDatabase
 import app.benbow.server.storage.Backups
 import app.benbow.server.storage.BlobStore
@@ -10,6 +11,7 @@ import app.benbow.server.storage.Database
 import app.benbow.server.storage.Purges
 import app.benbow.server.storage.SqliteSyncStore
 import app.benbow.server.storage.createUnder
+import app.benbow.server.storage.writeMark
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.builtins.serializer
@@ -19,12 +21,15 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import kotlin.io.path.createDirectories
 import kotlin.io.path.exists
 import kotlin.io.path.fileSize
 import kotlin.io.path.inputStream
+import kotlin.io.path.isDirectory
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.name
 import kotlin.io.path.readText
@@ -46,6 +51,9 @@ data class BackupStatus(
     val mirrorWarnings: List<String> = emptyList(),
 )
 
+/** How far a pass is in copying media to the second disk (P3), for the admin page. */
+data class MirrorProgress(val files: Int, val totalFiles: Int, val bytes: Long, val totalBytes: Long)
+
 /**
  * Periodic safety jobs: a verified snapshot when anything changed, GFS pruning, a copy to the
  * second location, and the Markdown mirror of changed entries. Failures are logged and shown on
@@ -55,7 +63,7 @@ data class BackupStatus(
 class BackupJobs(
     private val db: Database,
     private val dataDir: Path,
-    private val mirror: Path?,
+    mirror: Path?,
     private val blobs: BlobStore? = null,
     private val calendar: CalendarDatabase? = null,
     /** Deleting for good (ADR-041): its quarantine ends in these passes, and the mirror follows by its journal. */
@@ -73,22 +81,35 @@ class BackupJobs(
     /** What the second disk must not share a disk with (ADR-042). */
     private val apart = listOfNotNull("база" to dataDir, blobs?.let { "медиафайлы" to it.root })
 
-    /** The second disk's folder with its mark and its last passes (ADR-042). */
-    private val mirrorFolder = mirror?.let {
-        MirrorFolder(it, db.storeId, dataDir.resolve("backups").resolve(MirrorFolder.PASSES), ::filledBefore, apart, disks)
+    /** The second disk now: its folder with its mark and last passes (ADR-042). Changed on the admin page, no restart. */
+    private inner class Target(val path: Path) {
+        val folder = MirrorFolder(path, db.storeId, dataDir.resolve("backups").resolve(MirrorFolder.PASSES), ::filledBefore, apart, disks)
     }
+
+    @Volatile private var target: Target? = mirror?.let { Target(it) }
+
+    /** Serializes choosing a folder and turning the mirror off, apart from the passes (which may take long). */
+    private val choosing = Any()
 
     @Volatile
     var status = BackupStatus(
         db.backups?.history()?.lastOrNull()?.createdAt,
-        mirrorFolder?.passes()?.lastAt,
+        target?.folder?.passes()?.lastAt,
         readExportSeq(),
         null,
         calendar?.backups?.history()?.lastOrNull()?.createdAt,
         mirrorPath = mirror?.toString(),
-        mirrorDbAt = mirrorFolder?.passes()?.dbAt,
+        mirrorDbAt = target?.folder?.passes()?.dbAt,
     )
         private set
+
+    /** Copying media to the second disk right now, or null. */
+    @Volatile
+    var progress: MirrorProgress? = null
+        private set
+
+    /** The second disk's folder now, or null. */
+    fun mirror(): Path? = target?.path
 
     fun start(intervalMinutes: Long) {
         executor.scheduleWithFixedDelay({ runSafely() }, 1, intervalMinutes, TimeUnit.MINUTES)
@@ -99,8 +120,57 @@ class BackupJobs(
         executor.awaitTermination(30, TimeUnit.SECONDS)
     }
 
-    /** One pass now (admin page button); failures show up in [status] like scheduled runs. */
+    /** One pass now, on this thread; failures show up in [status] like scheduled runs. */
     fun runNow() = runSafely(reason = "manual")
+
+    /** One pass in the background, after any running one (the admin page's button: a first copy takes a while). */
+    fun runSoon(): Future<*> = executor.submit { runSafely(reason = "manual") }
+
+    /**
+     * Makes [path] the second disk (null: none) from now on, without a restart (ADR-042, P3). A pass under way finishes with
+     * the folder it began with; the old folder is left as it is. With a folder, a pass starts in the background at once.
+     */
+    fun changeMirror(path: Path?): Future<*> {
+        val next = path?.let { Target(it) }
+        target = next
+        val passes = next?.folder?.passes()
+        updateStatus {
+            it.copy(
+                mirrorPath = path?.toString(),
+                lastMirrorAt = passes?.lastAt,
+                mirrorDbAt = passes?.dbAt,
+                mirrorProblem = null,
+                mirrorWarnings = emptyList(),
+            )
+        }
+        return if (path != null) runSoon() else CompletableFuture.completedFuture(null)
+    }
+
+    /**
+     * «Второй диск» on the admin page (ADR-042, P3): checks the folder ([MirrorChoice]), marks it as this store's, writes
+     * `backup.mirror` in one atomic step and switches to it. Nothing is changed when the check fails.
+     */
+    fun chooseMirror(text: String): MirrorChoice.Verdict = synchronized(choosing) {
+        val verdict = MirrorChoice(db.storeId, apart, disks, ::firstPassBytes, ::filledBefore).check(text)
+        if (verdict is MirrorChoice.Verdict.Fine) {
+            writeMark(verdict.path, MirrorFolder.MARK, "Benbow backup mirror", db.storeId)
+            ServerConfig.update(dataDir, mapOf("backup.mirror" to verdict.path.toString().replace('\\', '/')))
+            log.info("Second disk: {} (was {})", verdict.path, mirror())
+            changeMirror(verdict.path)
+        }
+        verdict
+    }
+
+    /** No second disk from now on; its folder stays as it is. */
+    fun turnOffMirror() {
+        synchronized(choosing) {
+            ServerConfig.update(dataDir, mapOf("backup.mirror" to ""))
+            log.info("Second disk turned off (was {})", mirror())
+            changeMirror(null)
+        }
+    }
+
+    private fun updateStatus(change: (BackupStatus) -> BackupStatus) = synchronized(this) { status = change(status) }
 
     @Synchronized // the button and the schedule never run the jobs at the same time
     private fun runSafely(reason: String = "scheduled") {
@@ -108,13 +178,13 @@ class BackupJobs(
             runOnce(reason = reason)
         } catch (e: Exception) {
             log.error("Backup run failed", e)
-            status = status.copy(lastError = "${e::class.simpleName}: ${e.message}")
+            updateStatus { it.copy(lastError = "${e::class.simpleName}: ${e.message}") }
         }
         try {
             runCalendar(reason = reason)
         } catch (e: Exception) {
             log.error("Calendar backup failed", e)
-            status = status.copy(calendarError = "${e::class.simpleName}: ${e.message}")
+            updateStatus { it.copy(calendarError = "${e::class.simpleName}: ${e.message}") }
         }
     }
 
@@ -138,33 +208,44 @@ class BackupJobs(
         if (taken != null) log.info("Snapshot {} verified ({} rows)", taken.file, taken.rows.values.sum())
         val removed = backups.prune(Retention.keep(backups.history(), now))
         if (removed.isNotEmpty()) log.info("Pruned {} old snapshots", removed.size)
-        // Only into this store's folder on the second disk (ADR-042); its media only while the media folder is there.
-        val mirrorState = mirrorFolder?.check()
-        val copied = mirrorState == MirrorFolder.State.Ready && copyToMirror()
-        val mirrored = copied && copyMediaToMirror()
+        // Only into this store's folder on the second disk (ADR-042), the one there was when the pass began; its media
+        // only while the media folder is there.
+        val t = target
+        val mirrorState = t?.folder?.check()
+        val dest = t?.path?.takeIf { mirrorState == MirrorFolder.State.Ready }
+        val copied = dest != null && copyToMirror(dest)
+        val mirrored = dest != null && copied && copyMediaToMirror(dest)
         // Quarantines that ended (ADR-041), then the mirror's copies of those files: by the journal, the hash matching.
         purges?.expire()
-        if (mirrored) mirror?.let { purges?.mirrorDeletions(it) }
+        if (dest != null && mirrored) purges?.mirrorDeletions(dest)
         exportChanged()
         // The rest of the recovery kit, the export just written included (P2).
-        if (copied) mirror?.let { RecoveryKit(dataDir, it, db.storeId).copy() }
-        if (copied) mirrorFolder?.record(now, if (mirrored) now else null)
+        if (t != null && dest != null && copied) {
+            RecoveryKit(dataDir, dest, db.storeId).copy()
+            t.folder.record(now, if (mirrored) now else null)
+        }
+        val warnings = if (dest != null && copied) mirrorWarnings(dest) else null
         val corrupt = checkMedia()
-        status = status.copy(
-            lastSnapshotAt = backups.history().lastOrNull()?.createdAt,
-            lastMirrorAt = if (mirrored) now else status.lastMirrorAt,
-            mirrorDbAt = if (copied) now else status.mirrorDbAt,
-            mirrorProblem = when {
-                mirrorFolder == null || mirrorState == null -> null
-                mirrorState != MirrorFolder.State.Ready -> mirrorFolder.describe(mirrorState)
-                copied && !mirrored -> "снимки базы скопированы, медиафайлы нет: папка медиа недоступна"
-                else -> null
-            },
-            mirrorWarnings = if (copied) mirrorWarnings() else status.mirrorWarnings,
-            lastError = corrupt.takeIf {
-                it.isNotEmpty()
-            }?.let { "Media files don't match their hash: ${it.joinToString { b -> b.path }}" },
-        )
+        updateStatus { s ->
+            // The mirror changed while this pass ran: what it found belongs to the old folder.
+            val same = target === t
+            s.copy(
+                lastSnapshotAt = backups.history().lastOrNull()?.createdAt,
+                lastMirrorAt = if (same && mirrored) now else s.lastMirrorAt,
+                mirrorDbAt = if (same && copied) now else s.mirrorDbAt,
+                mirrorProblem = when {
+                    !same -> s.mirrorProblem
+                    t == null || mirrorState == null -> null
+                    mirrorState != MirrorFolder.State.Ready -> t.folder.describe(mirrorState)
+                    copied && !mirrored -> "снимки базы скопированы, медиафайлы нет: папка медиа недоступна"
+                    else -> null
+                },
+                mirrorWarnings = if (same && warnings != null) warnings else s.mirrorWarnings,
+                lastError = corrupt.takeIf {
+                    it.isNotEmpty()
+                }?.let { "Media files don't match their hash: ${it.joinToString { b -> b.path }}" },
+            )
+        }
         return taken != null
     }
 
@@ -182,17 +263,17 @@ class BackupJobs(
         }
         if (taken != null) log.info("Calendar snapshot {} verified ({} rows)", taken.file, taken.rows.values.sum())
         backups.prune(Retention.keep(backups.history(), now))
-        if (mirrorFolder?.check() == MirrorFolder.State.Ready) copySnapshots(backups, "calendar", "calendar/manifest.json")
+        val t = target
+        if (t != null && t.folder.check() == MirrorFolder.State.Ready) copySnapshots(backups, t.path, "calendar", "calendar/manifest.json")
         if (CalendarMirror(dataDir.resolve("export").resolve("calendars")).update(store)) log.info("Calendar mirror written")
-        status = status.copy(calendarSnapshotAt = backups.history().lastOrNull()?.createdAt, calendarError = null)
+        updateStatus { it.copy(calendarSnapshotAt = backups.history().lastOrNull()?.createdAt, calendarError = null) }
         return taken != null
     }
 
     /** Copies snapshots missing in the mirror (verified by SHA-256) and prunes ones the source pruned. */
-    private fun copyToMirror(): Boolean {
-        val target = mirror ?: return false
+    private fun copyToMirror(target: Path): Boolean {
         val backups = db.backups ?: return false
-        copySnapshots(backups, "db", "manifest.json")
+        copySnapshots(backups, target, "db", "manifest.json")
         // The purge journal goes with the snapshots: a store rebuilt from the mirror does its purges again (ADR-041).
         val journal = dataDir.resolve("db").resolve(PURGE_JOURNAL)
         if (journal.exists()) {
@@ -204,9 +285,8 @@ class BackupJobs(
         return true
     }
 
-    /** Verified copies of [backups]' snapshots in the mirror's [folder] (one of their own), then their manifest. */
-    private fun copySnapshots(backups: Backups, folder: String, manifest: String) {
-        val target = mirror ?: return
+    /** Verified copies of [backups]' snapshots in [target]'s [folder] (one of their own), then their manifest. */
+    private fun copySnapshots(backups: Backups, target: Path, folder: String, manifest: String) {
         val dir = createUnder(target, folder)
         val manifestCopy = target.resolve(manifest)
         val wanted = backups.history().filter { it.verified }.map { it.file }.toSet()
@@ -227,32 +307,41 @@ class BackupJobs(
      * Copies media files missing in the mirror (immutable, so presence + hash is enough). Never deletes there. False while
      * the media folder is gone (ADR-042).
      */
-    private fun copyMediaToMirror(): Boolean {
+    private fun copyMediaToMirror(target: Path): Boolean {
         val store = blobs ?: return true
-        val target = mirror ?: return false
         if (!store.ready()) return false
-        for (blob in store.all()) {
-            val copy = target.resolve("media").resolve(blob.path)
-            if (copy.exists() && copy.fileSize() == blob.size) continue
-            createUnder(target, "media/" + blob.path.substringBeforeLast('/', ""))
-            val tmp = copy.resolveSibling("${copy.fileName}.tmp")
-            Files.copy(store.file(blob), tmp, StandardCopyOption.REPLACE_EXISTING)
-            check(BlobStore.sha256(tmp) == blob.sha256) { "Mirror copy of ${blob.path} is corrupt" }
-            Files.move(tmp, copy, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        val missing = store.all().filter { blob ->
+            target.resolve("media").resolve(blob.path).let {
+                !it.exists() ||
+                    it.fileSize() != blob.size
+            }
+        }
+        val total = missing.sumOf { it.size }
+        var bytes = 0L
+        try {
+            missing.forEachIndexed { done, blob ->
+                progress = MirrorProgress(done, missing.size, bytes, total)
+                val copy = target.resolve("media").resolve(blob.path)
+                createUnder(target, "media/" + blob.path.substringBeforeLast('/', ""))
+                val tmp = copy.resolveSibling("${copy.fileName}.tmp")
+                Files.copy(store.file(blob), tmp, StandardCopyOption.REPLACE_EXISTING)
+                check(BlobStore.sha256(tmp) == blob.sha256) { "Mirror copy of ${blob.path} is corrupt" }
+                Files.move(tmp, copy, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+                bytes += blob.size
+            }
+        } finally {
+            progress = null
         }
         return true
     }
 
     /** What doesn't stop a pass but should be seen (ADR-042): little room left, the same physical disk as the data or media. */
-    private fun mirrorWarnings(): List<String> {
-        val target = mirror ?: return emptyList()
-        return buildList {
-            disks.free(target)?.takeIf { it < LOW_SPACE }?.let { add("на втором диске свободно ${"%.1f".format(it / GB)} ГБ") }
-            val disk = disks.physical(target)
-            if (disk != null) {
-                apart.firstOrNull { disks.physical(it.second) == disk }?.let {
-                    add("папка $target на другом разделе того же физического диска, что и ${it.first}: от поломки диска это не защищает")
-                }
+    private fun mirrorWarnings(target: Path): List<String> = buildList {
+        disks.free(target)?.takeIf { it < LOW_SPACE }?.let { add("на втором диске свободно ${"%.1f".format(it / GB)} ГБ") }
+        val disk = disks.physical(target)
+        if (disk != null) {
+            apart.firstOrNull { disks.physical(it.second) == disk }?.let {
+                add("папка $target на другом разделе того же физического диска, что и ${it.first}: от поломки диска это не защищает")
             }
         }
     }
@@ -264,6 +353,16 @@ class BackupJobs(
             runCatching { MirrorFolder.holds(dir.resolve("db").resolve(s.fileName), s.fileSize()) }.getOrDefault(false)
         }
         return snapshot || blobs?.all()?.takeLast(50)?.any { MirrorFolder.holds(dir.resolve("media").resolve(it.path), it.size) } == true
+    }
+
+    /** What a first pass into an empty folder would copy: the media, the snapshots, the export. */
+    private fun firstPassBytes(): Long {
+        fun size(dir: Path): Long = if (!dir.isDirectory()) {
+            0
+        } else {
+            Files.walk(dir).use { s -> s.filter { Files.isRegularFile(it) }.mapToLong { it.fileSize() }.sum() }
+        }
+        return (blobs?.stats()?.second ?: 0) + size(dataDir.resolve("backups")) + size(dataDir.resolve("export"))
     }
 
     /** Drops abandoned partial uploads and re-hashes a slice of the media files (data-safety S7 scrub). */
@@ -311,7 +410,7 @@ class BackupJobs(
         exportStateFile.parent.createDirectories()
         if (renamed.isNotEmpty()) exportedTagsFile.writeText(Json.encodeToString(registrySerializer, registry))
         exportStateFile.writeText(seq.toString())
-        status = status.copy(lastExportSeq = seq)
+        updateStatus { it.copy(lastExportSeq = seq) }
     }
 
     /** Tag id to the name its entries hold most (tags from before ids have no name of their own). */

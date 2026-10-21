@@ -20,6 +20,12 @@ interface Disks {
     /** Bytes free for this process, or null when nothing of the path exists. */
     fun free(path: Path): Long?
 
+    /** The file system (NTFS, ReFS, exFAT, FAT32...), or null when nothing of the path exists. */
+    fun fileSystem(path: Path): String?
+
+    /** Whether the path is on the Google Drive app's streaming disk, which only shows files kept in the cloud. */
+    fun streaming(path: Path): Boolean
+
     object System : Disks {
         private val numbers = ConcurrentHashMap<Char, Pair<Int?, Long>>()
 
@@ -31,6 +37,13 @@ interface Disks {
         }
 
         override fun free(path: Path): Long? = existing(path)?.let { runCatching { Files.getFileStore(it).usableSpace }.getOrNull() }
+
+        override fun fileSystem(path: Path): String? = existing(path)?.let { runCatching { Files.getFileStore(it).type() }.getOrNull() }
+
+        /** The Drive app labels its disk "<account> - Google Drive", cut short at times. */
+        override fun streaming(path: Path): Boolean = existing(path)?.let {
+            runCatching { Files.getFileStore(it).name().contains("Googl", ignoreCase = true) }.getOrNull()
+        } == true
 
         /** Windows only: `Get-Partition` for the drive letter, asked at most once an hour per letter. */
         override fun physical(path: Path): Int? {

@@ -138,7 +138,7 @@ fun main(args: Array<String>) {
             dataDir = dataDir,
             port = config.port,
             backupStatus = { backupJobs.status },
-            backupNow = backupJobs::runNow,
+            backupNow = { backupJobs.runSoon() },
             highWater = highWater,
             blobs = blobs,
             speech = SpeechModel(dataDir.resolve("models")),
@@ -146,7 +146,8 @@ fun main(args: Array<String>) {
             calendarHighWater = calendarHighWater,
             webRoot = webRoot(),
             peers = peers,
-            storage = StorageReports(db, blobs, dataDir, config.backupMirror, purges),
+            storage = StorageReports(db, blobs, dataDir, backupJobs::mirror, purges),
+            backupJobs = backupJobs,
             purges = purges,
         )
     val server = embeddedServer(

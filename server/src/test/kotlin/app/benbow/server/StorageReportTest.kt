@@ -41,7 +41,7 @@ class StorageReportTest {
     private val dir = Files.createTempDirectory("benbow-storage")
     private val db = Database.open(dir, "test")
     private val blobs = BlobStore(db, dir.resolve("media"))
-    private val reports = StorageReports(db, blobs, dir, mirror = null)
+    private val reports = StorageReports(db, blobs, dir, mirror = { null })
     private var clock = 1L
 
     private fun hlc() = Hlc(clock++, 0, "test")

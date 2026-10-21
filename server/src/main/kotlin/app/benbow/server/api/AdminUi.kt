@@ -49,6 +49,8 @@ internal suspend fun ApplicationCall.respondAdmin(html: String, status: HttpStat
 internal val doneMessages = mapOf(
     "code" to "Код готов: введите его на устройстве",
     "backup" to "Копия делается: она появится в списке",
+    "mirror" to "Второй диск выбран: копия туда делается, ход виден ниже. Прежняя папка, если была, осталась как есть",
+    "mirror-off" to "Второй диск отключён: копии туда больше не идут, уже сделанные остались в папке",
     "speech" to "Модель скачивается",
     "revoked" to "Устройство отключено",
     "mail" to "Ящик сохранён: подключаюсь",

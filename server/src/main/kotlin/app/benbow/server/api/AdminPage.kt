@@ -4,16 +4,20 @@ import app.benbow.core.api.SpeechModelSpec
 import app.benbow.server.SERVER_VERSION
 import app.benbow.server.SpeechModel
 import app.benbow.server.backup.BackupStatus
+import app.benbow.server.backup.MirrorChoice
 import app.benbow.server.storage.BlobStore
 import app.benbow.server.storage.MediaUnavailable
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
+import io.ktor.server.request.receiveParameters
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.RoutingContext
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -35,6 +39,7 @@ internal fun Route.adminRoutes(ctx: ServerContext) {
                 "friends" -> call.respondAdmin(friendsInner(ctx.peers))
                 "link" -> call.respondAdmin(linkInner(ctx.peers))
                 "speech" -> call.respondAdmin(ctx.speech?.let(::speechInner).orEmpty())
+                "mirror" -> call.respondAdmin(mirrorInner(ctx))
                 else -> call.respondText("Not found", status = HttpStatusCode.NotFound)
             }
         }
@@ -56,6 +61,25 @@ internal fun Route.adminRoutes(ctx: ServerContext) {
 
     post("/admin/devices/{id}/revoke") {
         admin(ctx, "revoked#devices") { ctx.devices.revoke(call.parameters["id"]!!) }
+    }
+
+    // The second disk (ADR-042, P3): a folder checked before anything is saved, then a first copy in the background.
+    post("/admin/mirror") {
+        if (!adminAllowed(call, ctx)) return@post call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
+        val jobs = ctx.backupJobs ?: return@post call.respondText("Копии выключены", status = HttpStatusCode.ServiceUnavailable)
+        val text = call.receiveParameters()["mirror-path"].orEmpty()
+        when (val verdict = withContext(Dispatchers.IO) { jobs.chooseMirror(text) }) {
+            is MirrorChoice.Verdict.Refused -> call.respondAdmin(
+                adminPage(ctx, admin = true, Flash("Эта папка не подходит: ${verdict.reason}", error = true)),
+                HttpStatusCode.BadRequest,
+            )
+
+            is MirrorChoice.Verdict.Fine -> call.respondRedirect("/?done=mirror#backups")
+        }
+    }
+
+    post("/admin/mirror/off") {
+        admin(ctx, "mirror-off#backups") { withContext(Dispatchers.IO) { ctx.backupJobs?.turnOffMirror() } }
     }
 
     // Deleting for good (ADR-041): within the quarantine a purge can be taken back, or its space freed at once.
@@ -215,11 +239,8 @@ private fun backupsSection(ctx: ServerContext): String = buildString {
             append("<div class=\"banner ok\">${icon("ok")}<div>Последняя проверенная копия ${time(status.lastSnapshotAt)}</div></div>")
         }
         status.lastError?.let { append("<div class=\"banner err\">${icon("error")}<div>Ошибка последнего запуска: ${esc(it)}</div></div>") }
-        status.mirrorProblem?.let { append("<div class=\"banner err\">${icon("error")}<div><b>Второй диск:</b> ${esc(it)}</div></div>") }
-        append(mirrorBanners(status, ctx))
         ctx.blobs?.let { mediaBanner(it)?.let(::append) }
-        append("<dl class=\"kv\"><dt>Второй диск</dt><dd>${mirrorLine(status)}</dd>")
-        append("<dt>Календарь</dt><dd>")
+        append("<dl class=\"kv\"><dt>Календарь</dt><dd>")
         append(
             if (ctx.calendar == null) {
                 "<b>не открылся</b> (дневник работает; причина в журнале сервера)"
@@ -256,7 +277,58 @@ private fun backupsSection(ctx: ServerContext): String = buildString {
         append("</div>")
     }
     append("<div class=\"row end\">${postButton("/admin/backup", "Сделать копию сейчас", "tonal", "backup", busy = "Делается…")}</div>")
-    append("</div></section>")
+    append("</div>")
+    if (status != null) append(mirrorCard(ctx, status))
+    append("</section>")
+}
+
+/** «Второй диск» (ADR-042, P3): where it stands (live, since a first copy takes a while), another folder, turning it off. */
+private fun mirrorCard(ctx: ServerContext, status: BackupStatus): String = buildString {
+    append("<div class=\"card\"><h3>${icon("disk")}Второй диск</h3>")
+    append("<div data-live=\"mirror\">${mirrorInner(ctx)}</div>")
+    if (ctx.backupJobs != null) {
+        val none = status.mirrorPath == null
+        append("<details class=\"edit\"${if (none) " open" else ""}><summary class=\"btn text\">${icon("edit")}")
+        append("${if (none) "Выбрать папку" else "Другая папка"}</summary>")
+        append("<form method=\"post\" action=\"/admin/mirror\" class=\"stack\"><div class=\"path-row\">")
+        append(field("mirror-path", "Папка на другом диске этого компьютера", status.mirrorPath.orEmpty(), "H:\\Benbow-mirror"))
+        append(
+            "<button class=\"btn outlined\" type=\"button\" data-pick-folder=\"mirror-path\" data-no-drive>${icon(
+                "folder_open",
+            )}Выбрать…</button></div>",
+        )
+        append(
+            "<p class=\"hint\">Пустая папка или новая (сервер её создаст) на другом физическом диске, не сетевая. Сервер проверит " +
+                "диск, место и запись, а потом скопирует туда снимки, медиафайлы, настройки и записи в Markdown. Прежняя папка, если " +
+                "была, останется как есть.</p>",
+        )
+        append("<div class=\"row end\"><button class=\"btn\">Сохранить и скопировать</button></div></form></details>")
+        if (!none) {
+            append(
+                "<div class=\"row end\">${postButton(
+                    "/admin/mirror/off",
+                    "Отключить",
+                    "outlined danger",
+                    confirm = "Отключить второй диск? Копии туда больше не пойдут; уже сделанные останутся в папке.",
+                )}</div>",
+            )
+        }
+    }
+    append("</div>")
+}
+
+/** The live part of «Второй диск»: what stops it, what to know, the copy under way, the last one. */
+internal fun mirrorInner(ctx: ServerContext): String = buildString {
+    val status = ctx.backupStatus() ?: return@buildString
+    status.mirrorProblem?.let { append("<div class=\"banner err\">${icon("error")}<div>${esc(it)}</div></div>") }
+    append(mirrorBanners(status, ctx))
+    ctx.backupJobs?.progress?.let { p ->
+        val share = if (p.totalBytes > 0) (p.bytes * 10 / p.totalBytes).toInt().coerceIn(0, 10) * 10 else 0
+        val gb = { bytes: Long -> "%.1f".format(bytes / 1_073_741_824.0) }
+        append("<div class=\"progress w$share\"><span></span></div>")
+        append("<p class=\"muted\">Копируются медиафайлы: ${p.files} из ${p.totalFiles}, ${gb(p.bytes)} из ${gb(p.totalBytes)} ГБ…</p>")
+    }
+    append("<p>${mirrorLine(status)}</p>")
 }
 
 /** A mirror that copied everything once and hasn't for 48 hours, with nothing said about why (ADR-042). */
@@ -266,10 +338,9 @@ private fun mirrorStale(status: BackupStatus) = status.mirrorProblem == null && 
 /** No second disk, an old copy, and what doesn't stop a pass but should be seen (ADR-042, P2). */
 private fun mirrorBanners(status: BackupStatus, ctx: ServerContext): String = buildString {
     if (status.mirrorPath == null) {
-        val settings = ctx.dataDir?.resolve("benbow.properties")?.toString() ?: "benbow.properties"
         append("<div class=\"banner err\">${icon("error")}<div><b>Второго диска нет.</b> База, её снимки и медиафайлы лежат ")
-        append("только на этом диске: если он сломается, останется лишь то, что есть на устройствах. Пока второй диск задаётся ")
-        append("строкой <code>backup.mirror=H:/Benbow-mirror</code> в <code>${esc(settings)}</code> и перезапуском службы.</div></div>")
+        append("только на этом диске: если он сломается, останется лишь то, что есть на устройствах. Выберите папку на другом ")
+        append("диске ниже.</div></div>")
     }
     if (mirrorStale(status)) {
         append("<div class=\"banner err\">${icon("schedule")}<div><b>Копия на втором диске устарела:</b> последняя полная ")
@@ -280,7 +351,7 @@ private fun mirrorBanners(status: BackupStatus, ctx: ServerContext): String = bu
 
 /** Where the second disk stands (ADR-042): its last full copy, the snapshots alone, or why there is none. */
 private fun mirrorLine(status: BackupStatus): String {
-    val path = status.mirrorPath ?: return "не настроен (<code>backup.mirror</code> в <code>benbow.properties</code>)"
+    val path = status.mirrorPath ?: return "не выбран"
     val where = " в <code>${esc(path)}</code>"
     return when {
         status.lastMirrorAt != null -> "копия ${time(status.lastMirrorAt)}$where"

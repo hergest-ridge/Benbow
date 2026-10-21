@@ -45,7 +45,7 @@ class AppReleaseTest {
         val dir = Files.createTempDirectory("benbow-android")
         dir.resolve("benbow-0.13.0.apk").writeBytes(apk)
         dir.resolve(AppRelease.MANIFEST).writeText(
-            """{"version_code": 13000, "version_name": "0.13.0", "file": "$file", "sha256": "$sha256", "size": $size}""",
+            """{"version_code": 13000, "version_name": "0.13.0", "package": "app.benbow", "file": "$file", "sha256": "$sha256", "size": $size}""",
         )
         return dir
     }
@@ -56,6 +56,7 @@ class AppReleaseTest {
         assertEquals(13000, app.info.versionCode)
         assertEquals("0.13.0", app.info.versionName)
         assertEquals(sha, app.info.sha256)
+        assertEquals("app.benbow", app.info.packageName)
         assertNull(AppRelease.load(release(sha256 = "0".repeat(64))), "a hash that doesn't match")
         assertNull(AppRelease.load(release(size = 5)), "a size that doesn't match")
         assertNull(AppRelease.load(release(file = "../elsewhere.apk")), "only a file beside the manifest")

@@ -49,6 +49,8 @@ class MainActivity : ComponentActivity() {
 
             ACTION_ANSWER_PROMPT -> services.launch.value = AppLaunch.AnswerPrompt
 
+            AndroidAppUpdater.ACTION_UPDATE -> services.launch.value = AppLaunch.Update
+
             // "Открыть с помощью" on an .ics file: its import preview (7.3d).
             Intent.ACTION_VIEW -> intent.data?.let { uri ->
                 services.importCalendarFile(displayName(uri) ?: "calendar.ics") {

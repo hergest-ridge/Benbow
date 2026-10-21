@@ -564,6 +564,17 @@
     <string name="server_never">ещё не было</string>
     <string name="server_sync_now">Синхронизировать</string>
     <string name="server_wrong_store">По этому адресу отвечает другое хранилище. Синхронизация остановлена, ваши изменения сохранены на устройстве.</string>
+    <string name="update_title">Обновление %1$s</string>
+    <string name="update_available">Доступна версия %1$s</string>
+    <string name="update_fetching">Загружается: %1$s из %2$s МБ</string>
+    <string name="update_install">Обновить</string>
+    <string name="update_allow">Разрешите Benbow устанавливать обновления</string>
+    <string name="update_busy_recording">Сначала закончите запись голоса</string>
+    <string name="update_busy_dictating">Сначала закончите диктовку</string>
+    <string name="update_busy_playing">Сначала остановите звук</string>
+    <string name="update_installing">Устанавливается %1$s…</string>
+    <string name="update_restart">Benbow закроется и откроется уже новым</string>
+    <string name="update_failed">Не получилось: %1$s. Нажмите, чтобы попробовать ещё раз</string>
     <string name="server_incompatible">Версии приложения и сервера несовместимы. Обновите то, что старее; изменения ждут на устройстве.</string>
     <string name="server_calendar_unsupported">Сервер пока без календаря: события ждут на устройстве, пока его не обновят.</string>
     <string name="server_calendar_problem">Календарь не синхронизировался: %1$s</string>

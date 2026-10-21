@@ -98,6 +98,9 @@ interface BenbowApi {
      * (`resumed`) or sent it from the start.
      */
     suspend fun downloadSpeechFile(name: String, from: Long, write: suspend (channel: ByteReadChannel, resumed: Boolean) -> Unit)
+
+    /** The Android app the server carries (ADR-042), from byte [from] on (Range: a cut download goes on). */
+    suspend fun downloadApp(from: Long, write: suspend (channel: ByteReadChannel, resumed: Boolean) -> Unit)
 }
 
 /** The finished upload didn't match its hash (corrupted on the way); start it again. */
@@ -111,6 +114,9 @@ val ClientJson = Json { ignoreUnknownKeys = true }
 
 /** One upload chunk, sending included: 8 MB needs at least ~220 kbit/s. */
 internal const val CHUNK_REQUEST_TIMEOUT_MS = 5 * 60_000L
+
+/** The app's APK (~40 MB) over slow Wi-Fi; a cut one goes on from where it stopped. */
+internal const val APP_REQUEST_TIMEOUT_MS = 10 * 60_000L
 
 class KtorBenbowApi(private val client: HttpClient, private val baseUrl: String, private val token: () -> String?) :
     BenbowApi,
@@ -215,6 +221,17 @@ class KtorBenbowApi(private val client: HttpClient, private val baseUrl: String,
     override suspend fun downloadSpeechFile(name: String, from: Long, write: suspend (channel: ByteReadChannel, resumed: Boolean) -> Unit) {
         client.prepareGet("$baseUrl/api/v1/models/speech/$name") {
             auth()
+            if (from > 0) header(HttpHeaders.Range, "bytes=$from-")
+        }.execute { response ->
+            response.ok()
+            write(response.bodyAsChannel(), response.status == HttpStatusCode.PartialContent)
+        }
+    }
+
+    override suspend fun downloadApp(from: Long, write: suspend (channel: ByteReadChannel, resumed: Boolean) -> Unit) {
+        client.prepareGet("$baseUrl/api/v1/app/android") {
+            auth()
+            timeout { requestTimeoutMillis = APP_REQUEST_TIMEOUT_MS }
             if (from > 0) header(HttpHeaders.Range, "bytes=$from-")
         }.execute { response ->
             response.ok()

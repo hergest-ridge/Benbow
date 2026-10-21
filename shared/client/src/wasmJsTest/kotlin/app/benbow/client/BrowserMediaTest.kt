@@ -83,6 +83,8 @@ class BrowserMediaTest {
         override suspend fun speechModel(): SpeechModelInfo = TODO()
 
         override suspend fun downloadSpeechFile(name: String, from: Long, write: suspend (ByteReadChannel, Boolean) -> Unit) = TODO()
+
+        override suspend fun downloadApp(from: Long, write: suspend (ByteReadChannel, Boolean) -> Unit) = TODO()
     }
 
     private class Device(val shelf: MemoryShelf, val db: BenbowDb, val server: BlobServer, var clock: Long = 1_000) {

@@ -152,13 +152,10 @@ val androidRelease = tasks.register("androidRelease") {
     outputs.dir(output)
     doLast {
         @Suppress("UNCHECKED_CAST")
-        val element = (
-            (
-                JsonSlurper().parse(
-                    apks.file("output-metadata.json").asFile,
-                ) as Map<String, Any>
-                )["elements"] as List<Map<String, Any>>
-            ).single()
+        val metadata = JsonSlurper().parse(apks.file("output-metadata.json").asFile) as Map<String, Any>
+
+        @Suppress("UNCHECKED_CAST")
+        val element = (metadata["elements"] as List<Map<String, Any>>).single()
         val apk = apks.asFile.resolve(element["outputFile"] as String)
         val name = "benbow-${element["versionName"]}.apk"
         val dir = output.get().asFile.apply {
@@ -170,6 +167,7 @@ val androidRelease = tasks.register("androidRelease") {
         val release = mapOf(
             "version_code" to element["versionCode"],
             "version_name" to element["versionName"],
+            "package" to metadata["applicationId"],
             "file" to name,
             "sha256" to sha,
             "size" to apk.length(),

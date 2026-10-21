@@ -33,6 +33,7 @@ class AppRelease(val info: AndroidApp, val file: Path) {
                     versionName = text("version_name"),
                     sha256 = text("sha256"),
                     size = json.getValue("size").jsonPrimitive.long,
+                    packageName = json["package"]?.jsonPrimitive?.content,
                 )
                 val file = dir.resolve(text("file")).normalize()
                 check(file.parent == dir.normalize() && file.isRegularFile()) { "no ${text("file")} beside $MANIFEST" }

@@ -81,6 +81,7 @@ private fun MoreList(services: AppServices, nav: Navigator) {
             )
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        UpdateItem(services) // a newer app from the server (ADR-042), first when there is one
         // Поиск gave its tab to «Записки» for now (ADR-040).
         MoreItem(Icons.Search, stringResource(Res.string.tab_search), stringResource(Res.string.more_search)) { nav.open(Route.Search) }
         MoreItem(Icons.Gallery, stringResource(Res.string.library), stringResource(Res.string.more_library)) { nav.open(Route.Library) }
@@ -132,7 +133,7 @@ private fun MoreList(services: AppServices, nav: Navigator) {
 }
 
 @Composable
-private fun MoreItem(icon: ImageVector, title: String, subtitle: String?, tone: Color? = null, onClick: () -> Unit) {
+internal fun MoreItem(icon: ImageVector, title: String, subtitle: String?, tone: Color? = null, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().hand().clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,

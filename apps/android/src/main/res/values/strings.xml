@@ -1,6 +1,11 @@
 <resources>
     <string name="app_name">Benbow</string>
     <string name="reminders_channel">Напоминания</string>
+    <string name="updates_channel">Обновления</string>
+    <string name="update_ready_title">Benbow %1$s готов к установке</string>
+    <string name="update_ready_text">Нажмите, чтобы обновить</string>
+    <string name="update_done_title">Benbow обновлён до %1$s</string>
+    <string name="update_done_text">Нажмите, чтобы открыть</string>
     <string name="shortcut_note">Заметка</string>
     <string name="shortcut_entry">Запись</string>
     <string name="tile_note">Заметка</string>

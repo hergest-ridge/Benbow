@@ -163,6 +163,7 @@ internal class VoiceRecorder(private val context: Context) {
             file = target
             startedAt = SystemClock.elapsedRealtime()
             recording = true
+            VoiceRecording.active.value = true
             true
         } catch (_: Exception) {
             recorder?.release()
@@ -177,6 +178,7 @@ internal class VoiceRecorder(private val context: Context) {
         val active = recorder ?: return null
         recorder = null
         recording = false
+        VoiceRecording.active.value = false
         val duration = SystemClock.elapsedRealtime() - startedAt
         return try {
             active.stop()

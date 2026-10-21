@@ -1,5 +1,6 @@
 package app.benbow.client
 
+import app.benbow.core.api.AndroidApp
 import app.benbow.core.api.KnownEntry
 import app.benbow.core.api.PairResponse
 import app.benbow.core.api.Protocol
@@ -43,6 +44,10 @@ internal class FakeServer(val storeId: String = "store-1", val epoch: Long = 1, 
 
     /** The speech model's files as this server would hand them out (empty = not downloaded). */
     val speechFiles = mutableMapOf<String, ByteArray>()
+
+    /** The Android app this server carries (ADR-042): its bytes and what `info` says of it. */
+    var app: ByteArray? = null
+    var appInfo: AndroidApp? = null
 
     /** A copy of this server as a backup would have it now (files included), restored under a new epoch. */
     fun restoredCopy(epoch: Long, withFiles: Boolean = true) = FakeServer(storeId, epoch, calendarEpoch).also {
@@ -95,6 +100,7 @@ internal class FakeApi(var server: FakeServer, var serverStore: String = server.
         } else {
             null
         },
+        server.appInfo,
     )
 
     override suspend fun pair(code: String, deviceName: String, platform: String): PairResponse = error("not used")
@@ -165,6 +171,15 @@ internal class FakeApi(var server: FakeServer, var serverStore: String = server.
     }
 
     var speechChunk = Int.MAX_VALUE
+
+    /** The server's app (ADR-042), served at most [appChunk] bytes per call. */
+    override suspend fun downloadApp(from: Long, write: suspend (channel: ByteReadChannel, resumed: Boolean) -> Unit) {
+        val bytes = server.app ?: throw ApiException(404, "no_app", "This server carries no app")
+        val start = from.toInt()
+        write(ByteReadChannel(bytes.copyOfRange(start, minOf(bytes.size, start + appChunk))), start > 0)
+    }
+
+    var appChunk = Int.MAX_VALUE
 }
 
 internal fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }

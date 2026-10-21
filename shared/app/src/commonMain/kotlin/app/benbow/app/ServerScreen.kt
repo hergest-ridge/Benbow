@@ -284,7 +284,13 @@ private fun Paired(services: AppServices, vm: ServerViewModel, connection: Conne
     when (val last = status.last) {
         is SyncResult.WrongServer -> Text(stringResource(Res.string.server_wrong_store), color = MaterialTheme.colorScheme.error)
 
-        is SyncResult.Incompatible -> Text(stringResource(Res.string.server_incompatible), color = MaterialTheme.colorScheme.error)
+        is SyncResult.Incompatible -> {
+            Text(stringResource(Res.string.server_incompatible), color = MaterialTheme.colorScheme.error)
+            // The app this server carries is the one that syncs with it (ADR-042): its update right here.
+            updateLook(services)?.let { look ->
+                TextButton(onClick = { look.action?.invoke() }, enabled = look.action != null) { Text("${look.title}: ${look.subtitle}") }
+            }
+        }
 
         is SyncResult.Failed -> Text(
             stringResource(Res.string.server_error, last.reason),

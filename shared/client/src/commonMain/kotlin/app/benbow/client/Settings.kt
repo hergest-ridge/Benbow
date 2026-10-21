@@ -1,6 +1,7 @@
 package app.benbow.client
 
 import app.benbow.client.db.BenbowDb
+import app.benbow.core.api.AndroidApp
 import kotlin.concurrent.Volatile
 
 /** A paired server. The token is a bearer secret; it never leaves this device except to that server. */
@@ -73,8 +74,14 @@ class Settings(private val db: BenbowDb) {
         get() = get(CURSOR)?.toLongOrNull() ?: 0
         set(value) = put(CURSOR, value.toString())
 
+    /** The Android app the paired server offered at the last sync (ADR-042, U2); null when it offers none. */
+    var serverApp: AndroidApp?
+        get() = get(SERVER_APP)?.let { runCatching { ClientJson.decodeFromString(AndroidApp.serializer(), it) }.getOrNull() }
+        set(value) = if (value == null) remove(SERVER_APP) else put(SERVER_APP, ClientJson.encodeToString(AndroidApp.serializer(), value))
+
     companion object {
         private const val URL = "server.url"
+        private const val SERVER_APP = "server.app"
         private const val FINGERPRINT = "server.fingerprint"
         private const val TOKEN = "server.token"
         private const val STORE = "server.store_id"

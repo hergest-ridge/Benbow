@@ -78,7 +78,7 @@ fun interface SpeechModelFactory {
 data class Attached(val entryId: String, val attachmentId: String, val kind: String)
 
 /** Where the app should go when something outside opens it (a launcher shortcut, the widget, an .ics file). */
-enum class AppLaunch { NewEntry, AnswerPrompt, CalendarImport }
+enum class AppLaunch { NewEntry, AnswerPrompt, CalendarImport, Update }
 
 /** The archive export, which runs in the app scope so leaving the screen doesn't stop it. */
 sealed interface ExportState {
@@ -197,6 +197,8 @@ class AppServices(
     mic: DictationMic? = null,
     /** What plays sounds here (ADR-035): Media3 in a session on Android, JavaFX on desktop, the page's <audio>. */
     audio: AudioEngine = SilentAudio(),
+    /** Updating this app from its server (ADR-042, U2); Android only. */
+    updater: AppUpdater? = null,
     /** Unfinished work shows: dev and bench builds and dev runs, never the owner's app (nothing behind it right now). */
     val labs: Boolean = false,
 ) {
@@ -394,6 +396,16 @@ class AppServices(
     } else {
         null
     }
+
+    /** This app's update from its server (ADR-042, U2): looked at after every sync. */
+    val updates = AppUpdates(updater, { Settings(db) }, { apiOf(it, apis) }, scope) {
+        when {
+            VoiceRecording.active.value -> UpdateBusy.Recording
+            dictations?.active?.value != null -> UpdateBusy.Dictating
+            player.state.value?.playing == true -> UpdateBusy.Playing
+            else -> null
+        }
+    }.also { updates -> scope.launch { sync.status.collect { updates.check() } } }
 
     /** Voice notes brought back after «Заменить текстом» (7.10e): an open editor of their entry puts them in the text again. */
     val voiceBack = MutableSharedFlow<String>(extraBufferCapacity = 4)

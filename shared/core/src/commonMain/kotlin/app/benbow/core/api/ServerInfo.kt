@@ -40,4 +40,6 @@ data class AndroidApp(
     @SerialName("version_name") val versionName: String,
     val sha256: String,
     val size: Long,
+    /** The app's id (`app.benbow`): a device offers only an update of itself (a dev build never takes the owner's app). */
+    @SerialName("package") val packageName: String? = null,
 )

@@ -49,6 +49,8 @@ class SyncEngine(private val db: BenbowDb, private val apiFor: (Connection) -> B
         try {
             val info = api.info()
             if (info.storeId != connection.storeId) return SyncResult.WrongServer(connection.storeId, info.storeId)
+            // Before the protocol check: an app too old to sync is just the one that needs its server's app (ADR-042).
+            if (settings.serverApp != info.android) settings.serverApp = info.android
             if (Protocol.MAX !in info.protocolMin..info.protocolMax) return SyncResult.Incompatible(info.protocolMin, info.protocolMax)
             val restored = info.epoch != connection.epoch || (info.cursor ?: Long.MAX_VALUE) < settings.cursor
             val healed = if (restored) reconcile(api, connection, info) else 0

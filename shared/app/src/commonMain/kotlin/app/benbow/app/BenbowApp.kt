@@ -348,6 +348,9 @@ private fun AppRoot(services: AppServices) {
                     nav.selectTab(Route.Calendar)
                     nav.open(Route.CalendarImport)
                 }
+
+                // The update's notification (ADR-042): «Ещё», where «Обновить» is the first line.
+                AppLaunch.Update -> nav.selectTab(Route.More)
             }
         }
     }

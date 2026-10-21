@@ -32,6 +32,7 @@ import app.benbow.server.storage.BlobStore
 import app.benbow.server.storage.Database
 import app.benbow.server.storage.Devices
 import app.benbow.server.storage.HighWater
+import app.benbow.server.storage.MediaMove
 import app.benbow.server.storage.MediaUnavailable
 import app.benbow.server.storage.Migrations
 import app.benbow.server.storage.PairingCodes
@@ -104,6 +105,8 @@ class ServerContext(
     val purges: Purges? = null,
     /** The backup passes: the second disk is chosen and turned off through them (ADR-042); null in tests that don't need it. */
     val backupJobs: BackupJobs? = null,
+    /** Moving the media folder (ADR-042, P4); null in tests that don't need it. */
+    val mediaMove: MediaMove? = null,
 )
 
 data class DevicePrincipal(val deviceId: String)

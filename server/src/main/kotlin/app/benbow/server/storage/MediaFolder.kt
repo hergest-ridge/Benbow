@@ -34,13 +34,17 @@ class MediaFolder(val root: Path, private val storeId: String, private val known
 
         /** Neither empty nor this store's: someone else's files. */
         data object NotOurs : State
+
+        /** This store's folder from before a move to [to] (P4): left as it was, never used again. */
+        data class Moved(val to: String) : State
     }
 
     /** Where the folder stands now; marks a new or an old folder of this store on the way (see the class). */
     @Synchronized
     fun check(): State {
         val mark = readMark(root, MARK)
-        if (mark != null) return if (mark == storeId) State.Ready else State.Foreign(mark)
+        if (mark != null && mark == storeId) return markValue(root, MARK, MOVED_TO)?.let { State.Moved(it) } ?: State.Ready
+        if (mark != null) return State.Foreign(mark)
         val expected = known()
         if (!root.isDirectory()) {
             if (expected.isNotEmpty()) return State.Missing
@@ -74,6 +78,7 @@ class MediaFolder(val root: Path, private val storeId: String, private val known
         State.Missing -> "папки $root нет или в ней нет файлов, которые знает база (диск не подключён или сменил букву?)"
         is State.Foreign -> "папка $root принадлежит другому хранилищу Benbow (${state.storeId.ifEmpty { "метка повреждена" }})"
         State.NotOurs -> "в папке $root лежат чужие файлы, сервер её не использует"
+        is State.Moved -> "папка $root перенесена в ${state.to}: сервер её больше не использует"
     }
 
     private fun marked(): State {
@@ -86,6 +91,9 @@ class MediaFolder(val root: Path, private val storeId: String, private val known
     companion object {
         const val MARK = ".benbow-media"
         const val UPLOADS = ".uploads"
+
+        /** The mark's line naming where a moved folder went (P4). */
+        const val MOVED_TO = "moved-to"
     }
 }
 
@@ -93,14 +101,19 @@ class MediaUnavailable(message: String) : Exception(message)
 
 /** The store id in [root]'s mark [name]: null without one, empty when it names none. */
 internal fun readMark(root: Path, name: String): String? {
-    val file = root.resolve(name)
-    if (!file.isRegularFile()) return null
-    return runCatching { file.readLines().firstOrNull { it.startsWith("store=") }?.removePrefix("store=")?.trim() }.getOrNull() ?: ""
+    if (!root.resolve(name).isRegularFile()) return null
+    return markValue(root, name, "store") ?: ""
 }
 
-/** Writes [root]'s mark [name] for [storeId] in one step (temporary file, fsync, atomic rename). */
-internal fun writeMark(root: Path, name: String, title: String, storeId: String) {
-    val text = "# $title. Keep this file: the Benbow server uses this folder only while it names its store.\nstore=$storeId\n"
+/** The value of [key] in [root]'s mark [name], or null. */
+internal fun markValue(root: Path, name: String, key: String): String? = runCatching {
+    root.resolve(name).readLines().firstOrNull { it.startsWith("$key=") }?.removePrefix("$key=")?.trim()
+}.getOrNull()
+
+/** Writes [root]'s mark [name] for [storeId] (and [extra] lines) in one step (temporary file, fsync, atomic rename). */
+internal fun writeMark(root: Path, name: String, title: String, storeId: String, extra: Map<String, String> = emptyMap()) {
+    val lines = extra.entries.joinToString("") { "${it.key}=${it.value}\n" }
+    val text = "# $title. Keep this file: the Benbow server uses this folder only while it names its store.\nstore=$storeId\n$lines"
     val tmp = Files.createTempFile(root, "$name-", ".tmp")
     Files.newOutputStream(tmp, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING).use {
         it.write(text.toByteArray())

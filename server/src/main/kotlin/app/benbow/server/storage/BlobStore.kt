@@ -12,6 +12,8 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.withLock
 import kotlin.io.path.deleteIfExists
 import kotlin.io.path.exists
 import kotlin.io.path.fileSize
@@ -21,9 +23,10 @@ import kotlin.io.path.inputStream
  * Media files addressed by SHA-256 (ADR-009, data-safety S7). An upload grows in `<media>/.uploads`,
  * is fsynced after every chunk, checked against its announced hash and size, then atomically renamed
  * to a human-readable path. Placed files are never changed or deleted here. All file work waits while the folder isn't
- * this store's (ADR-042, [MediaFolder]): it answers [MediaUnavailable], and the background jobs skip their turn.
+ * this store's (ADR-042, [MediaFolder]): it answers [MediaUnavailable], and the background jobs skip their turn. File work
+ * runs under [withFiles]; moving the media folder ([MediaMove]) switches [root] under the same lock, exclusively (P4).
  */
-class BlobStore(private val db: Database, val root: Path, private val now: () -> Long = System::currentTimeMillis) {
+class BlobStore(private val db: Database, root: Path, private val now: () -> Long = System::currentTimeMillis) {
     data class Blob(val sha256: String, val size: Long, val mime: String, val path: String)
 
     sealed interface Start {
@@ -48,9 +51,36 @@ class BlobStore(private val db: Database, val root: Path, private val now: () ->
 
     class InsufficientSpace(message: String) : Exception(message)
 
-    private val uploads = root.resolve(MediaFolder.UPLOADS)
+    /** The media folder now; it changes only when a move switches (P4). */
+    @Volatile
+    var root: Path = root
+        private set
+
+    @Volatile
+    var folder = MediaFolder(root, db.storeId, ::knownFiles)
+        private set
+
+    private val uploads get() = root.resolve(MediaFolder.UPLOADS)
     private val locks = ConcurrentHashMap<String, Any>()
-    val folder = MediaFolder(root, db.storeId, ::knownFiles)
+
+    /** Held (shared) by everything that writes in the media folder, exclusively by a move's switch. Taken before the DB's. */
+    private val files = ReentrantReadWriteLock()
+
+    /** Runs [block] as file work in the media folder: a move's switch waits for it, and it waits for a switch. */
+    fun <T> withFiles(block: () -> T): T = files.readLock().withLock(block)
+
+    /**
+     * Runs [block] with all file work held off, then makes [to] the media folder if [block] returned true (a move's
+     * switch, [MediaMove]).
+     */
+    internal fun switching(to: Path, block: () -> Boolean): Boolean = files.writeLock().withLock {
+        val done = block()
+        if (done) {
+            root = to
+            folder = MediaFolder(to, db.storeId, ::knownFiles)
+        }
+        done
+    }
 
     /** Whether the media folder is there and this store's (ADR-042). */
     fun ready(): Boolean = folder.ready()
@@ -65,13 +95,13 @@ class BlobStore(private val db: Database, val root: Path, private val now: () ->
     fun file(blob: Blob): Path = root.resolve(blob.path)
 
     /** Begins an upload, or resumes the one already open for this hash. */
-    fun start(sha256: String, size: Long, mime: String, name: String?, capturedAt: Long?, deviceId: String?): Start {
+    fun start(sha256: String, size: Long, mime: String, name: String?, capturedAt: Long?, deviceId: String?): Start = withFiles {
         require(SHA256.matches(sha256)) { "sha256 must be 64 lowercase hex characters" }
         require(size in 1..MAX_SIZE) { "size must be 1..$MAX_SIZE" }
         require(MIME.matches(mime)) { "bad mime type" }
         folder.require()
-        blob(sha256)?.let { return Start.Exists(it) }
-        return db.transaction { c ->
+        blob(sha256)?.let { return@withFiles Start.Exists(it) }
+        db.transaction { c ->
             c.prepareStatement("SELECT id, received FROM uploads WHERE sha256 = ? AND size = ?").use { st ->
                 st.setString(1, sha256)
                 st.setLong(2, size)
@@ -105,6 +135,10 @@ class BlobStore(private val db: Database, val root: Path, private val now: () ->
      * upload's lock never waits on a network connection (a dead one held it for hours, see ChunkBody).
      */
     fun append(id: String, offset: Long, data: ByteArray): Chunk = synchronized(locks.computeIfAbsent(id) { Any() }) {
+        withFiles { appendLocked(id, offset, data) }
+    }
+
+    private fun appendLocked(id: String, offset: Long, data: ByteArray): Chunk {
         val upload = upload(id) ?: return Chunk.NotFound
         if (offset != upload.received) return Chunk.WrongOffset(upload.received)
         if (data.size > MAX_CHUNK || upload.received + data.size > upload.size) return Chunk.TooLarge
@@ -127,12 +161,12 @@ class BlobStore(private val db: Database, val root: Path, private val now: () ->
             }
         }
         if (received < upload.size) return Chunk.Accepted(received, null)
-        place(upload.copy(received = received), part)
+        return place(upload.copy(received = received), part)
     }
 
     /** Partial uploads nobody touched for [maxAgeMillis]; the device still has the original and starts again. */
-    fun dropStaleUploads(maxAgeMillis: Long): Int {
-        if (!ready()) return 0
+    fun dropStaleUploads(maxAgeMillis: Long): Int = withFiles {
+        if (!ready()) return@withFiles 0
         val stale = db.locked { c ->
             c.prepareStatement("SELECT id FROM uploads WHERE updated_at < ?").use { st ->
                 st.setLong(1, now() - maxAgeMillis)
@@ -140,7 +174,7 @@ class BlobStore(private val db: Database, val root: Path, private val now: () ->
             }
         }
         stale.forEach { id -> synchronized(locks.computeIfAbsent(id) { Any() }) { drop(id, uploads.resolve("$id.part")) } }
-        return stale.size
+        stale.size
     }
 
     /** Re-hashes up to [limit] files not verified for [olderThanMillis] (data-safety S7 scrub); returns the corrupt ones. */
@@ -177,8 +211,8 @@ class BlobStore(private val db: Database, val root: Path, private val now: () ->
      * Never the uploads in progress, the quarantine of purged files (ADR-041), or the [purging] paths a committed
      * purge is about to move there. Only in this store's folder (ADR-042): a folder of someone else's files is never read.
      */
-    fun adoptUntracked(purging: Set<String> = emptySet()): Int {
-        if (!ready()) return 0
+    fun adoptUntracked(purging: Set<String> = emptySet()): Int = withFiles {
+        if (!ready()) return@withFiles 0
         val known = all().mapTo(HashSet()) { it.path } + purging + MediaFolder.MARK
         val quarantine = root.resolve(Purges.QUARANTINE)
         val untracked = Files.walk(root).use { paths ->
@@ -211,7 +245,7 @@ class BlobStore(private val db: Database, val root: Path, private val now: () ->
             }
             adopted++
         }
-        return adopted
+        adopted
     }
 
     fun all(): List<Blob> = db.locked { c ->

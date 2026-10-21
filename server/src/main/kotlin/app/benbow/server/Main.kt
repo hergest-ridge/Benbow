@@ -16,6 +16,7 @@ import app.benbow.server.storage.CALENDAR_HIGH_WATER
 import app.benbow.server.storage.Database
 import app.benbow.server.storage.Devices
 import app.benbow.server.storage.HighWater
+import app.benbow.server.storage.MediaMove
 import app.benbow.server.storage.PairingCodes
 import app.benbow.server.storage.Purges
 import app.benbow.server.storage.Restore
@@ -32,7 +33,7 @@ import java.nio.file.StandardOpenOption
 import kotlin.io.path.createDirectories
 import kotlin.system.exitProcess
 
-const val SERVER_VERSION = "0.12.1"
+const val SERVER_VERSION = "0.12.2"
 
 /** The purge journal beside the database (ADR-041): one line per purge and per undo. */
 const val PURGE_JOURNAL = "purge-journal.jsonl"
@@ -129,6 +130,8 @@ fun main(args: Array<String>) {
         log.warn("Recorded {} media files the database didn't know (after a restore?)", it)
     }
     val backupJobs = BackupJobs(db, dataDir, config.backupMirror, blobs, calendar, purges).also { it.start(config.backupIntervalMinutes) }
+    // A media move that was copying goes on (ADR-042, P4); one whose settings already switched is finished.
+    val mediaMove = MediaMove(db, blobs, dataDir, mirror = backupJobs::mirror).also { it.resume() }
     val context =
         ServerContext(
             db = db,
@@ -148,6 +151,7 @@ fun main(args: Array<String>) {
             peers = peers,
             storage = StorageReports(db, blobs, dataDir, backupJobs::mirror, purges),
             backupJobs = backupJobs,
+            mediaMove = mediaMove,
             purges = purges,
         )
     val server = embeddedServer(

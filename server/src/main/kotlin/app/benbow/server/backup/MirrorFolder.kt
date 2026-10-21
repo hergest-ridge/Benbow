@@ -26,7 +26,7 @@ internal class MirrorFolder(
     private val storeId: String,
     private val passesFile: Path,
     private val filledBefore: (Path) -> Boolean,
-    private val apart: List<Pair<String, Path>> = emptyList(),
+    private val apart: () -> List<Pair<String, Path>> = { emptyList() },
     private val disks: Disks = Disks.System,
 ) {
     sealed interface State {
@@ -56,7 +56,7 @@ internal class MirrorFolder(
     fun check(): State {
         if (!root.isAbsolute) return State.NotAbsolute
         val volume = disks.volume(root)
-        if (volume != null) apart.firstOrNull { disks.volume(it.second) == volume }?.let { return State.SameVolume(it.first) }
+        if (volume != null) apart().firstOrNull { disks.volume(it.second) == volume }?.let { return State.SameVolume(it.first) }
         val mark = readMark(root, MARK)
         if (mark != null) return if (mark == storeId) State.Ready else State.Foreign(mark)
         if (!root.isDirectory()) {

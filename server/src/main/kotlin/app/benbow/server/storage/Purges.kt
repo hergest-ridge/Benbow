@@ -234,7 +234,9 @@ class Purges(
      * media folder is gone (ADR-042): a file not found there then is not a file moved.
      */
     @Synchronized
-    fun moveQueued() {
+    fun moveQueued() = blobs.withFiles { moveQueuedNow() } // a media move's switch waits for it (ADR-042, P4)
+
+    private fun moveQueuedNow() {
         if (!blobs.ready()) return
         for (row in rows("moved_at IS NULL AND deleted_at IS NULL AND back_at IS NULL")) {
             val from = blobs.root.resolve(row.path)
@@ -261,7 +263,9 @@ class Purges(
      * Waits while the media folder is gone (ADR-042), so nothing is marked deleted that wasn't.
      */
     @Synchronized
-    fun expire() {
+    fun expire() = blobs.withFiles { expireNow() }
+
+    private fun expireNow() {
         if (!blobs.ready()) return
         val due = rows("moved_at IS NOT NULL AND deleted_at IS NULL AND back_at IS NULL AND due_at <= ?", now().toString())
         if (due.isEmpty()) return
@@ -310,7 +314,9 @@ class Purges(
      * Refused once any of its files is gone for good.
      */
     @Synchronized
-    fun undo(purgeId: String): Boolean {
+    fun undo(purgeId: String): Boolean = blobs.withFiles { undoNow(purgeId) }
+
+    private fun undoNow(purgeId: String): Boolean {
         blobs.folder.require()
         val record = record(purgeId) ?: return false
         val files = rowsOf(purgeId)

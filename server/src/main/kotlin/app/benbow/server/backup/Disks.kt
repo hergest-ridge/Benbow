@@ -2,9 +2,13 @@ package app.benbow.server.backup
 
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardOpenOption
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import kotlin.io.path.deleteIfExists
 import kotlin.io.path.exists
+import kotlin.io.path.readBytes
 
 /**
  * Which disk a folder is on (ADR-042): its volume, the physical disk under it where Windows can tell, and the room left.
@@ -74,4 +78,30 @@ interface Disks {
         private val DRIVE = Regex("""[A-Za-z]:\\""")
         private const val HOUR = 3_600_000L
     }
+}
+
+/**
+ * Null when the server itself can write, sync, read back and remove a file in [path] (made first when missing, one level
+ * only, and removed again when the probe fails); else why not, in words for the admin page (ADR-042).
+ */
+internal fun probeWrite(path: Path): String? {
+    val made = !path.exists()
+    val failure = try {
+        if (made) Files.createDirectory(path)
+        val probe = path.resolve(".benbow-write-test-${UUID.randomUUID()}")
+        val bytes = UUID.randomUUID().toString().toByteArray()
+        try {
+            Files.newOutputStream(probe, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE).use {
+                it.write(bytes)
+                (it as? java.io.FileOutputStream)?.fd?.sync()
+            }
+            if (!probe.readBytes().contentEquals(bytes)) "записанное туда не читается обратно" else null
+        } finally {
+            probe.deleteIfExists()
+        }
+    } catch (e: Exception) {
+        "сервер не может туда писать (${e::class.simpleName}: ${e.message})"
+    }
+    if (failure != null && made) runCatching { Files.deleteIfExists(path) }
+    return failure
 }

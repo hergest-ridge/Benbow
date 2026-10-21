@@ -1,15 +1,10 @@
 package app.benbow.server.backup
 
 import app.benbow.server.storage.readMark
-import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.StandardOpenOption
-import java.util.UUID
-import kotlin.io.path.deleteIfExists
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
 import kotlin.io.path.listDirectoryEntries
-import kotlin.io.path.readBytes
 
 /**
  * Whether a folder may become the second disk (ADR-042, as built 7.19 P3), checked before anything is saved: a full path
@@ -69,30 +64,8 @@ class MirrorChoice internal constructor(
         if (!ours && free < need + RESERVE) {
             return Verdict.Refused("не хватит места: нужно около ${gb(need + RESERVE)} ГБ, свободно ${gb(free)} ГБ")
         }
-        writable(path)?.let { return Verdict.Refused(it) }
+        probeWrite(path)?.let { return Verdict.Refused(it) }
         return Verdict.Fine(path, warnings(path, free - if (ours) 0 else need))
-    }
-
-    /** Null when the server could write, sync, read back and remove a file there; else why not. */
-    private fun writable(path: Path): String? {
-        val made = !path.exists()
-        return try {
-            if (made) Files.createDirectory(path)
-            val probe = path.resolve(".benbow-write-test-${UUID.randomUUID()}")
-            val bytes = UUID.randomUUID().toString().toByteArray()
-            try {
-                Files.newOutputStream(probe, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE).use {
-                    it.write(bytes)
-                    (it as? java.io.FileOutputStream)?.fd?.sync()
-                }
-                if (!probe.readBytes().contentEquals(bytes)) "записанное туда не читается обратно" else null
-            } finally {
-                probe.deleteIfExists()
-            }
-        } catch (e: Exception) {
-            if (made) runCatching { Files.deleteIfExists(path) }
-            "сервер не может туда писать (${e::class.simpleName}: ${e.message})"
-        }
     }
 
     private fun warnings(path: Path, freeAfter: Long): List<String> = buildList {

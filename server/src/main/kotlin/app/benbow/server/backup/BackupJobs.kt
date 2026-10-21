@@ -78,12 +78,12 @@ class BackupJobs(
     /** The tag registry's names, merges and trash the mirror was last written with (ADR-032). */
     private val exportedTagsFile = dataDir.resolve("export").resolve(".tags.json")
 
-    /** What the second disk must not share a disk with (ADR-042). */
-    private val apart = listOfNotNull("база" to dataDir, blobs?.let { "медиафайлы" to it.root })
+    /** What the second disk must not share a disk with (ADR-042); the media folder as it is now (it may move, P4). */
+    private fun apart() = listOfNotNull("база" to dataDir, blobs?.let { "медиафайлы" to it.root })
 
     /** The second disk now: its folder with its mark and last passes (ADR-042). Changed on the admin page, no restart. */
     private inner class Target(val path: Path) {
-        val folder = MirrorFolder(path, db.storeId, dataDir.resolve("backups").resolve(MirrorFolder.PASSES), ::filledBefore, apart, disks)
+        val folder = MirrorFolder(path, db.storeId, dataDir.resolve("backups").resolve(MirrorFolder.PASSES), ::filledBefore, ::apart, disks)
     }
 
     @Volatile private var target: Target? = mirror?.let { Target(it) }
@@ -151,7 +151,7 @@ class BackupJobs(
      * `backup.mirror` in one atomic step and switches to it. Nothing is changed when the check fails.
      */
     fun chooseMirror(text: String): MirrorChoice.Verdict = synchronized(choosing) {
-        val verdict = MirrorChoice(db.storeId, apart, disks, ::firstPassBytes, ::filledBefore).check(text)
+        val verdict = MirrorChoice(db.storeId, apart(), disks, ::firstPassBytes, ::filledBefore).check(text)
         if (verdict is MirrorChoice.Verdict.Fine) {
             writeMark(verdict.path, MirrorFolder.MARK, "Benbow backup mirror", db.storeId)
             ServerConfig.update(dataDir, mapOf("backup.mirror" to verdict.path.toString().replace('\\', '/')))
@@ -340,7 +340,7 @@ class BackupJobs(
         disks.free(target)?.takeIf { it < LOW_SPACE }?.let { add("на втором диске свободно ${"%.1f".format(it / GB)} ГБ") }
         val disk = disks.physical(target)
         if (disk != null) {
-            apart.firstOrNull { disks.physical(it.second) == disk }?.let {
+            apart().firstOrNull { disks.physical(it.second) == disk }?.let {
                 add("папка $target на другом разделе того же физического диска, что и ${it.first}: от поломки диска это не защищает")
             }
         }

@@ -16,6 +16,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import app.benbow.app.AppUpdater
+import app.benbow.app.InstallOutcome
 import app.benbow.client.AppDownload
 import app.benbow.client.BenbowApi
 import app.benbow.core.api.AndroidApp
@@ -64,8 +65,8 @@ class AndroidAppUpdater(private val context: Context) : AppUpdater {
         return null
     }
 
-    override suspend fun install(file: String, failed: (String) -> Unit) = withContext(Dispatchers.IO) {
-        InstallReceiver.failed = failed
+    override suspend fun install(file: String, quiet: Boolean, outcome: (InstallOutcome) -> Unit) = withContext(Dispatchers.IO) {
+        InstallReceiver.outcome = outcome
         val apk = File(file)
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
@@ -84,7 +85,7 @@ class AndroidAppUpdater(private val context: Context) : AppUpdater {
             val status = PendingIntent.getBroadcast(
                 context,
                 id,
-                Intent(context, InstallReceiver::class.java),
+                Intent(context, InstallReceiver::class.java).putExtra(InstallReceiver.EXTRA_QUIET, quiet),
                 PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT, // the installer adds its result
             )
             session.commit(status.intentSender)
@@ -149,26 +150,40 @@ class AndroidAppUpdater(private val context: Context) : AppUpdater {
     }
 }
 
-/** What Android says of an install: its own dialog when it wants the owner's yes, or why it refused. */
+/**
+ * What Android says of an install: its own dialog when it wants the owner's yes (after a tap), or why it refused. A quiet
+ * install (U3) never puts a dialog over what the owner is doing: Android's question drops the session, and the update
+ * waits for «Обновить».
+ */
 class InstallReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
-            PackageInstaller.STATUS_PENDING_USER_ACTION -> intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)?.let {
-                context.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            PackageInstaller.STATUS_PENDING_USER_ACTION -> if (intent.getBooleanExtra(EXTRA_QUIET, false)) {
+                val session = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1)
+                if (session >= 0) runCatching { context.packageManager.packageInstaller.abandonSession(session) }
+                outcome?.invoke(InstallOutcome.NeedsYou)
+            } else {
+                intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)?.let {
+                    context.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
             }
 
             PackageInstaller.STATUS_SUCCESS -> Unit
 
             // this process ends with the update
 
-            else -> failed?.invoke(intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "Android refused ($status)")
+            else -> outcome?.invoke(
+                InstallOutcome.Refused(intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "Android refused ($status)"),
+            )
         }
     }
 
     companion object {
-        /** Where a refusal goes: the update's state, set by the install it answers. */
+        const val EXTRA_QUIET = "app.benbow.QUIET"
+
+        /** Where the answer goes: the update's state, set by the install it answers. */
         @Volatile
-        var failed: ((String) -> Unit)? = null
+        var outcome: ((InstallOutcome) -> Unit)? = null
     }
 }
 

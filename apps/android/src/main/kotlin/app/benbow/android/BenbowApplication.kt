@@ -6,6 +6,7 @@ import android.net.Network
 import android.os.Build
 import android.os.Process
 import android.provider.Settings
+import android.util.Log
 import androidx.sqlite.db.SupportSQLiteDatabase
 import app.benbow.android.asr.SandboxTranscriber
 import app.benbow.app.AndroidDictationMic
@@ -16,6 +17,7 @@ import app.benbow.client.SecretBox
 import app.benbow.client.SpeechModelStore
 import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.db.BenbowDb
+import app.benbow.client.keepBeforeMigrating
 import app.benbow.core.api.SpeechModelSpec
 import app.cash.sqldelight.db.QueryResult
 import app.cash.sqldelight.db.SqlSchema
@@ -61,7 +63,15 @@ class BenbowApplication : Application() {
         )
     }
 
-    private fun durableDriver(schema: SqlSchema<QueryResult.Value<Unit>>, name: String) = AndroidSqliteDriver(
+    private fun durableDriver(schema: SqlSchema<QueryResult.Value<Unit>>, name: String): AndroidSqliteDriver {
+        // A copy before this build migrates the file: the outbox and drafts live only here, and updates may come
+        // unwatched (ADR-042). Without one (a full disk) the migration still runs in its own transaction.
+        runCatching { keepBeforeMigrating(getDatabasePath(name), schema.version) }
+            .onFailure { Log.w("benbow", "No copy of $name before its migration", it) }
+        return durableDriverOpen(schema, name)
+    }
+
+    private fun durableDriverOpen(schema: SqlSchema<QueryResult.Value<Unit>>, name: String) = AndroidSqliteDriver(
         schema = schema,
         context = this,
         name = name,

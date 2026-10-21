@@ -310,6 +310,7 @@ private fun AppRoot(services: AppServices) {
         services.sync.foreground = false
         services.lock.onLeave()
         services.gentle.onLeave()
+        services.updates.inBackground() // a quiet update may go in now (ADR-042, U3)
     }
     val backStack = remember { mutableStateListOf<Route>(Route.Home) }
     val nav = remember(backStack) { Navigator(backStack) }

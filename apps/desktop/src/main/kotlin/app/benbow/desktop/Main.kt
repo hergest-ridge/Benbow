@@ -8,6 +8,7 @@ import app.benbow.app.BenbowDesktop
 import app.benbow.app.mediaIn
 import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.db.BenbowDb
+import app.benbow.client.keepBeforeMigrating
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +23,13 @@ fun main() {
     val properties = Properties().apply {
         put("journal_mode", "WAL")
         put("synchronous", "FULL")
+    }
+    // A copy of each file before this build migrates it: the outbox and drafts live only here until synced.
+    // Without one (a full disk) the migration still runs in its own transaction.
+    for ((name, version) in listOf("benbow.db" to BenbowDb.Schema.version, "calendar.db" to CalendarDb.Schema.version)) {
+        runCatching {
+            keepBeforeMigrating(File(dir, name), version)
+        }.onFailure { System.err.println("No copy of $name before its migration: $it") }
     }
     val driver = JdbcSqliteDriver("jdbc:sqlite:${File(dir, "benbow.db").absolutePath}", properties, BenbowDb.Schema)
     // The calendar's own file (ADR-027), never mixed with the journal's.

@@ -574,6 +574,8 @@
     <string name="update_busy_playing">Сначала остановите звук</string>
     <string name="update_installing">Устанавливается %1$s…</string>
     <string name="update_restart">Benbow закроется и откроется уже новым</string>
+    <string name="update_quiet">Обновлять приложение само</string>
+    <string name="update_quiet_hint">Новая версия с сервера ставится сама, когда вы выходите из Benbow, и никогда во время записи, диктовки или звука. Google Play Protect может при этом спросить про проверку приложения; если не установить, версия подождёт кнопки «Обновить» в «Ещё»</string>
     <string name="update_failed">Не получилось: %1$s. Нажмите, чтобы попробовать ещё раз</string>
     <string name="server_incompatible">Версии приложения и сервера несовместимы. Обновите то, что старее; изменения ждут на устройстве.</string>
     <string name="server_calendar_unsupported">Сервер пока без календаря: события ждут на устройстве, пока его не обновят.</string>

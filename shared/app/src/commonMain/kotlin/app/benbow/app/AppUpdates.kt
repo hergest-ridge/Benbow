@@ -27,11 +27,23 @@ interface AppUpdater {
      */
     suspend fun prepare(app: AndroidApp, api: () -> BenbowApi, progress: (Long, Long) -> Unit): String
 
-    /** Hands the checked file to the system; [failed] hears back when it refuses (a success ends this process). */
-    suspend fun install(file: String, failed: (String) -> Unit)
+    /**
+     * Hands the checked file to the system; [outcome] hears back when it refuses or, [quiet], when it wants the owner's
+     * yes (then nothing is shown over what the owner is doing: the install is dropped and waits for a tap). A success ends
+     * this process.
+     */
+    suspend fun install(file: String, quiet: Boolean, outcome: (InstallOutcome) -> Unit)
 
     /** Tells the owner outside the app that [app] is ready (a notification). */
     fun announce(app: AndroidApp)
+}
+
+/** What the system said of an install that didn't happen. */
+sealed interface InstallOutcome {
+    data class Refused(val reason: String) : InstallOutcome
+
+    /** A quiet install the system wouldn't do without the owner: it waits for «Обновить». */
+    data object NeedsYou : InstallOutcome
 }
 
 sealed interface UpdateState {
@@ -50,21 +62,39 @@ sealed interface UpdateState {
 enum class UpdateBusy { Recording, Dictating, Playing }
 
 /**
- * Updating this app from its own server (ADR-042, as built 7.19 U2). A sync remembers what app the server offers
+ * Updating this app from its own server (ADR-042, as built 7.19 U2, U3). A sync remembers what app the server offers
  * (`Settings.serverApp`); when it is this app and newer, it is fetched and checked in the background, the owner is told
- * once, and «Ещё» offers «Обновить». The install is the platform's ([AppUpdater]), only on the owner's tap and never
- * while a recording, a dictation or a sound is under way; drafts are saved as the app goes to the background.
+ * once, and «Ещё» offers «Обновить». The install is the platform's ([AppUpdater]) and never runs while a recording, a
+ * dictation or a sound is under way: on the owner's tap, or, with [quiet] on (U3), by itself as the owner leaves the app
+ * (only then: at a process's start or in a background sync "not in front" can't be told from "not shown yet", and a
+ * dialog Google Play Protect may put up should come when the owner can tell it is Benbow's). Drafts are on disk by then
+ * (S12) and the outbox in the database.
  */
 class AppUpdates(
     private val updater: AppUpdater?,
     private val settings: () -> Settings,
     private val api: (Settings) -> BenbowApi,
     private val scope: CoroutineScope,
+    /** Whether the app is in front; a quiet install waits until it isn't. */
+    private val foreground: () -> Boolean = { true },
     private val busy: () -> UpdateBusy?,
 ) {
     private val _state = MutableStateFlow<UpdateState>(UpdateState.None)
     val state: StateFlow<UpdateState> = _state
     private var fetching: Job? = null
+
+    /** Whether this device updates itself here at all (Android). */
+    val supported: Boolean get() = updater != null
+
+    private val _quiet = MutableStateFlow(settings().get(QUIET) == "1")
+
+    /** «Обновлять приложение само» (U3): a ready update goes in while the app is away; off until the owner turns it on. */
+    val quiet: StateFlow<Boolean> = _quiet
+
+    fun setQuiet(on: Boolean) {
+        settings().put(QUIET, if (on) "1" else "0")
+        _quiet.value = on
+    }
 
     /** The server's app when it is this app and newer than this build. */
     fun offered(): AndroidApp? {
@@ -109,6 +139,9 @@ class AppUpdates(
         }
     }
 
+    /** The owner left the app: a quiet update may go in now. */
+    fun inBackground() = quietly()
+
     /** What keeps «Обновить» from working now, or null. */
     fun blocker(): UpdateBusy? = busy()
 
@@ -119,18 +152,38 @@ class AppUpdates(
     }
 
     /** The owner's «Обновить»: installs a ready update unless something is under way; false when it didn't start. */
-    fun install(): Boolean {
+    fun install(): Boolean = start(quiet = false)
+
+    /**
+     * With [quiet] on, away from the front and nothing under way: the ready update goes in by itself, one try per version.
+     * Google Play Protect asks about an app it hasn't seen at every install, over whatever is on screen; a version it
+     * didn't take (or Android wanted the owner's yes) waits for «Обновить» instead of asking again each time.
+     */
+    private fun quietly() {
+        val ready = _state.value as? UpdateState.Ready ?: return
+        if (!_quiet.value || foreground() || settings().get(QUIET_TRIED) == ready.app.versionCode.toString()) return
+        if (busy() != null || updater?.canInstall() != true) return
+        settings().put(QUIET_TRIED, ready.app.versionCode.toString())
+        start(quiet = true)
+    }
+
+    private fun start(quiet: Boolean): Boolean {
         val updater = updater ?: return false
         val ready = _state.value as? UpdateState.Ready ?: return false
         if (busy() != null || !updater.canInstall()) return false
         _state.value = UpdateState.Installing(ready.app)
-        val failed = { reason: String -> _state.value = UpdateState.Failed(ready.app, reason) }
+        val outcome = { said: InstallOutcome ->
+            _state.value = when (said) {
+                is InstallOutcome.Refused -> UpdateState.Failed(ready.app, said.reason)
+                InstallOutcome.NeedsYou -> ready
+            }
+        }
         scope.launch {
             try {
-                updater.install(ready.file, failed)
+                updater.install(ready.file, quiet, outcome)
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                failed(e.message ?: e::class.simpleName.orEmpty())
+                outcome(InstallOutcome.Refused(e.message ?: e::class.simpleName.orEmpty()))
             }
         }
         return true
@@ -138,6 +191,8 @@ class AppUpdates(
 
     private companion object {
         const val ANNOUNCED = "update.announced"
+        const val QUIET = "update.quiet"
+        const val QUIET_TRIED = "update.quiet.tried"
     }
 }
 

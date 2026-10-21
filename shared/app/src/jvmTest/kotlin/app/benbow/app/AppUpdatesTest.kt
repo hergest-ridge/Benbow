@@ -29,7 +29,9 @@ class AppUpdatesTest {
         var prepared = 0
         val announced = mutableListOf<Int>()
         val installed = mutableListOf<String>()
+        val quietly = mutableListOf<Boolean>()
         var refuse: String? = null
+        var asks = false
 
         override fun canInstall() = allowed
 
@@ -43,9 +45,11 @@ class AppUpdatesTest {
             return "/cache/benbow-${app.versionCode}.apk"
         }
 
-        override suspend fun install(file: String, failed: (String) -> Unit) {
+        override suspend fun install(file: String, quiet: Boolean, outcome: (InstallOutcome) -> Unit) {
             installed += file
-            refuse?.let(failed)
+            quietly += quiet
+            refuse?.let { outcome(InstallOutcome.Refused(it)) }
+            if (asks && quiet) outcome(InstallOutcome.NeedsYou)
         }
 
         override fun announce(app: AndroidApp) {
@@ -122,5 +126,46 @@ class AppUpdatesTest {
         onNodeWithText("Обновить").performClick()
         waitUntilAtLeastOneExists(hasText("Устанавливается 0.13.1…"))
         assertEquals(2, updater.installed.size)
+    }
+
+    @Test
+    fun aQuietUpdateGoesInOnlyAwayFromTheFrontAndNeverWithADialog() {
+        services.sync.foreground = true
+        services.updates.inBackground()
+        assertIs<UpdateState.Ready>(offer(newer))
+        assertTrue(updater.installed.isEmpty(), "quiet is off until the owner turns it on")
+        services.updates.setQuiet(true)
+        assertTrue(updater.installed.isEmpty(), "not while the app is in front")
+
+        services.sync.foreground = false
+        updater.asks = true // Android wants the owner's yes: nothing pops up, it waits for «Обновить»
+        services.updates.inBackground()
+        runBlocking { withTimeout(5_000) { services.updates.state.first { it is UpdateState.Ready && updater.installed.size == 1 } } }
+        assertEquals(listOf(true), updater.quietly)
+
+        updater.asks = false
+        services.updates.inBackground()
+        assertEquals(listOf(true), updater.quietly, "one quiet try per version: then it waits for «Обновить»")
+        assertTrue(services.updates.install())
+        runBlocking { withTimeout(5_000) { while (updater.quietly.size < 2) kotlinx.coroutines.delay(20) } }
+        assertEquals(listOf(true, false), updater.quietly)
+        services.settings.serverApp = newer.copy(versionCode = 13002, versionName = "0.13.2")
+        services.updates.check() // a newer version gets its own quiet try, as the owner leaves again
+        runBlocking { withTimeout(5_000) { services.updates.state.first { it is UpdateState.Ready && it.app.versionCode == 13002 } } }
+        assertEquals(listOf(true, false), updater.quietly, "not as soon as it is fetched")
+        services.updates.inBackground()
+        runBlocking { withTimeout(5_000) { while (updater.quietly.size < 3) kotlinx.coroutines.delay(20) } }
+        assertEquals(listOf(true, false, true), updater.quietly)
+        assertTrue(
+            AppServices(
+                JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), BenbowDb.Schema),
+                JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), CalendarDb.Schema),
+                mediaIn(java.nio.file.Files.createTempDirectory("benbow-media").toFile()),
+                "android",
+                "Another phone",
+                updater = FakeUpdater(),
+            ).updates.quiet.value.not(),
+            "off on a new device",
+        )
     }
 }

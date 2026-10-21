@@ -398,7 +398,7 @@ class AppServices(
     }
 
     /** This app's update from its server (ADR-042, U2): looked at after every sync. */
-    val updates = AppUpdates(updater, { Settings(db) }, { apiOf(it, apis) }, scope) {
+    val updates = AppUpdates(updater, { Settings(db) }, { apiOf(it, apis) }, scope, foreground = { sync.foreground }) {
         when {
             VoiceRecording.active.value -> UpdateBusy.Recording
             dictations?.active?.value != null -> UpdateBusy.Dictating

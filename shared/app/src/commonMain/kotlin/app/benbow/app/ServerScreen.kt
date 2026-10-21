@@ -21,6 +21,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -29,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
@@ -69,6 +71,8 @@ import app.benbow.app.resources.server_web_code
 import app.benbow.app.resources.server_web_intro
 import app.benbow.app.resources.server_wrong_store
 import app.benbow.app.resources.storage
+import app.benbow.app.resources.update_quiet
+import app.benbow.app.resources.update_quiet_hint
 import app.benbow.client.Connection
 import app.benbow.client.IoDispatcher
 import app.benbow.client.Probe
@@ -319,6 +323,21 @@ private fun Paired(services: AppServices, vm: ServerViewModel, connection: Conne
     }
     Button(services.sync::requestSync, enabled = !status.syncing, modifier = Modifier.fillMaxWidth().hand(!status.syncing)) {
         Text(stringResource(Res.string.server_sync_now))
+    }
+    if (services.updates.supported) {
+        // Updates from this server (ADR-042, U3): by a tap in «Ещё», or by themselves while the app is away.
+        val quiet by services.updates.quiet.collectAsStateWithLifecycle()
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f).padding(end = 16.dp)) {
+                Text(stringResource(Res.string.update_quiet), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    stringResource(Res.string.update_quiet_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(quiet, services.updates::setQuiet, modifier = Modifier.hand())
+        }
     }
 
     if (rejected.isNotEmpty()) {

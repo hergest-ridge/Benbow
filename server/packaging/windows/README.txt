@@ -8,6 +8,12 @@ Folder layout
   run-console.cmd   run in a console window for testing
   install-service.cmd / uninstall-service.cmd   Windows service via WinSW (run as Administrator)
 
+One file instead (benbow-server-setup-<version>.exe, `gradlew :server:installer`)
+  The same as install-service.cmd / update-service.cmd / uninstall-service.cmd with a wizard in Russian: asks for
+  the data folder on a new install, updates in place over an older version (also one installed by these scripts),
+  refuses an older version over a newer one, adds an entry to "Programs and Features"; removing it leaves the data.
+  Unsigned: Windows SmartScreen asks once ("More info" -> "Run anyway").
+
 WinSW
   The service wrapper is WinSW v2.12.0 (https://github.com/winsw/winsw/releases/tag/v2.12.0).
   Put WinSW.NET461.exe into server\packaging\winsw\ before `gradlew :server:packageServer`;

@@ -177,6 +177,17 @@ val androidRelease = tasks.register("androidRelease") {
     }
 }
 
+// The package says which version it is: setup.exe refuses to put an older one over it (ADR-042, I2).
+val packageVersion = tasks.register("packageVersion") {
+    val version = benbowVersion
+    val output = layout.buildDirectory.dir("package-version")
+    inputs.property("version", version)
+    outputs.dir(output)
+    doLast {
+        output.get().asFile.apply { mkdirs() }.resolve("version.txt").writeText(version.get())
+    }
+}
+
 // The admin page wears the app's icon: one source, the web client's favicon (itself the app_icon drawing).
 tasks.named<ProcessResources>("processResources") {
     from(rootProject.file("apps/web/src/wasmJsMain/resources/favicon.svg")) {
@@ -223,6 +234,7 @@ tasks.register<Sync>("packageServer") {
     from(layout.buildDirectory.dir("install/server/lib")) { into("lib") }
     from(webApp) { into("web") }
     from(androidRelease) { into("android") }
+    from(packageVersion)
     from("packaging/windows")
     // WinSW is not committed; drop WinSW.NET461.exe into packaging/winsw (see packaging/windows/README.txt).
     from("packaging/winsw") {
@@ -249,4 +261,41 @@ tasks.register<Sync>("packageServer") {
         val output = process.inputStream.bufferedReader().readText()
         check(process.waitFor() == 0 && "self-check ok" in output) { "The packaged server failed its self-check:\n$output" }
     }
+}
+
+// One setup.exe in Russian over the package (ADR-042, I2), by Inno Setup 6's ISCC: where its installer puts it, for
+// this user or for all, or `-Pinnosetup.iscc=<path>`. Not part of `check`: the gate needs no Inno Setup.
+tasks.register<Exec>("installer") {
+    group = "distribution"
+    description = "benbow-server-setup-<version>.exe from the server package (needs Inno Setup 6)."
+    dependsOn("packageServer")
+    val script = layout.projectDirectory.file("packaging/installer/benbow-server.iss")
+    val icon = layout.projectDirectory.file("packaging/installer/benbow.ico")
+    val source = layout.buildDirectory.dir("package/benbow-server")
+    val output = layout.buildDirectory.dir("installer")
+    val version = benbowVersion
+    val given = providers.gradleProperty("innosetup.iscc")
+    val places = listOf("LOCALAPPDATA" to "Programs\\", "ProgramFiles(x86)" to "", "ProgramFiles" to "").map { (variable, under) ->
+        providers.environmentVariable(variable).map { "$it\\${under}Inno Setup 6\\ISCC.exe" }
+    }
+    inputs.files(script, icon)
+    inputs.dir(source)
+    inputs.property("version", version)
+    outputs.dir(output)
+    doFirst {
+        val found = given.orNull ?: places.mapNotNull { it.orNull }.firstOrNull { File(it).exists() }
+        executable = checkNotNull(found) { "Inno Setup 6 is missing: install it (jrsoftware.org) or pass -Pinnosetup.iscc=<ISCC.exe>." }
+        output.get().asFile.deleteRecursively()
+    }
+    argumentProviders.add(
+        CommandLineArgumentProvider {
+            listOf(
+                "/Q",
+                "/DAppVersion=${version.get()}",
+                "/DSourceDir=${source.get().asFile.absolutePath}",
+                "/DOutputDir=${output.get().asFile.absolutePath}",
+                script.asFile.absolutePath,
+            )
+        },
+    )
 }

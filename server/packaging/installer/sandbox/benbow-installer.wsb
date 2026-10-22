@@ -1,0 +1,11 @@
+<!-- The installer drill (ADR-042, I2); see README.txt beside it. Host paths are this repository's on the owner's PC. -->
+<Configuration>
+  <MappedFolders>
+    <MappedFolder><HostFolder>C:\projects\Benbow\server\packaging\installer\sandbox</HostFolder><SandboxFolder>C:\test</SandboxFolder><ReadOnly>true</ReadOnly></MappedFolder>
+    <MappedFolder><HostFolder>C:\projects\Benbow\.tmp\sandbox\in</HostFolder><SandboxFolder>C:\in</SandboxFolder><ReadOnly>true</ReadOnly></MappedFolder>
+    <MappedFolder><HostFolder>C:\projects\Benbow\.tmp\sandbox\pkg</HostFolder><SandboxFolder>C:\pkg</SandboxFolder><ReadOnly>true</ReadOnly></MappedFolder>
+    <MappedFolder><HostFolder>C:\projects\Benbow\.tmp\sandbox\out</HostFolder><SandboxFolder>C:\out</SandboxFolder><ReadOnly>false</ReadOnly></MappedFolder>
+  </MappedFolders>
+  <LogonCommand><Command>cmd /c C:\test\test.cmd</Command></LogonCommand>
+  <MemoryInMB>4096</MemoryInMB>
+</Configuration>

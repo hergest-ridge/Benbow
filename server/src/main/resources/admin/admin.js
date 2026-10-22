@@ -17,10 +17,12 @@
   const left = document.querySelector(".snackbar");
   if (left) left._timer = setTimeout(() => left.classList.add("gone"), left.classList.contains("err") ? 8000 : 3500);
   if (location.search) history.replaceState(null, "", location.pathname + location.hash);
+  document.querySelector("[data-focus]")?.scrollIntoView({ block: "start" }); // a step further down its section
 
   document.addEventListener("click", (e) => {
     const copy = e.target.closest("[data-copy]");
     if (copy) navigator.clipboard.writeText(copy.dataset.copy).then(() => snack("Скопировано"), () => snack("Не удалось скопировать", true));
+    if (e.target.closest("[data-print]")) window.print(); // the code of the copy outside the house, on paper
   });
 
   // Questions before what can't be undone, and a busy button while a form goes.

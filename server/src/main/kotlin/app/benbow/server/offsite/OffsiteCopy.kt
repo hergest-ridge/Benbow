@@ -12,10 +12,12 @@ import org.slf4j.LoggerFactory
 import java.io.FileOutputStream
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.util.HexFormat
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import kotlin.io.path.createDirectories
 import kotlin.io.path.deleteIfExists
 import kotlin.io.path.exists
 import kotlin.io.path.fileSize
@@ -23,6 +25,8 @@ import kotlin.io.path.isDirectory
 import kotlin.io.path.isRegularFile
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.name
+import kotlin.io.path.readText
+import kotlin.io.path.writeText
 
 /** How far a pass is in encrypting media into the copy outside the house, for the admin page. */
 data class OffsiteProgress(val files: Int, val totalFiles: Int, val bytes: Long, val totalBytes: Long)
@@ -67,6 +71,18 @@ class OffsiteCopy(
         private set
 
     fun key(): OffsiteKey? = OffsiteKey.load(keyFile)
+
+    private val passphraseFile = dataDir.resolve("backups").resolve("offsite-passphrase.txt")
+
+    /** When the passphrase was last set or typed right on the admin page (E4); a file of its own, apart from the passes. */
+    fun passphraseAt(): Long? = runCatching { passphraseFile.readText().trim().toLong() }.getOrNull()
+
+    fun notePassphrase(at: Long) {
+        passphraseFile.parent.createDirectories()
+        val tmp = passphraseFile.resolveSibling("${passphraseFile.fileName}.tmp")
+        tmp.writeText(at.toString())
+        Files.move(tmp, passphraseFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+    }
 
     internal fun folder(key: OffsiteKey): OffsiteFolder? = root?.let {
         OffsiteFolder(it, db.storeId, key.recipient, dataDir.resolve("backups").resolve(OffsiteFolder.PASSES))

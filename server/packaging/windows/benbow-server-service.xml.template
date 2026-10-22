@@ -4,7 +4,7 @@
   <name>Benbow Server</name>
   <description>Benbow journal server: LAN HTTPS API, storage and backups.</description>
   <executable>%BASE%\runtime\bin\java.exe</executable>
-  <arguments>-Xmx512m -Dfile.encoding=UTF-8 --enable-native-access=ALL-UNNAMED -cp "%BASE%\lib\*" app.benbow.server.MainKt --data "@DATA_DIR@"</arguments>
+  <arguments>-Xmx1g -Dfile.encoding=UTF-8 --enable-native-access=ALL-UNNAMED -cp "%BASE%\lib\*" app.benbow.server.MainKt --data "@DATA_DIR@"</arguments>
   <startmode>Automatic</startmode>
   <delayedAutoStart>true</delayedAutoStart>
   <onfailure action="restart" delay="10 sec"/>

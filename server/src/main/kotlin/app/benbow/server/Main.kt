@@ -8,6 +8,7 @@ import app.benbow.server.calendar.CalendarDatabase
 import app.benbow.server.offsite.AgeFiles
 import app.benbow.server.offsite.OffsiteCopy
 import app.benbow.server.offsite.OffsiteKey
+import app.benbow.server.offsite.OffsiteSetup
 import app.benbow.server.peer.Letter
 import app.benbow.server.peer.Letters
 import app.benbow.server.peer.Opened
@@ -164,6 +165,16 @@ fun main(args: Array<String>) {
                 log.info("Android app {} ({}) offered to phones", it.info.versionName, it.info.versionCode)
             },
             purges = purges,
+            offsite = offsite,
+            offsiteSetup = OffsiteSetup(
+                offsite,
+                dataDir,
+                db.storeId,
+                apart = {
+                    listOfNotNull("данные" to dataDir, "медиафайлы" to blobs.root, backupJobs.mirror()?.let { "второй диск" to it })
+                },
+                runSoon = { backupJobs.runSoon() },
+            ),
             // Read once now, so «Где хранить» has its answer by the time the page is opened (ADR-042, I1).
             survey = HostSurvey.system()?.also { it.current() },
         )

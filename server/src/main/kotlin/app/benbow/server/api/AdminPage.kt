@@ -5,6 +5,7 @@ import app.benbow.server.SERVER_VERSION
 import app.benbow.server.SpeechModel
 import app.benbow.server.backup.BackupStatus
 import app.benbow.server.backup.MirrorChoice
+import app.benbow.server.offsite.OffsiteSetup
 import app.benbow.server.storage.BlobStore
 import app.benbow.server.storage.MediaMove
 import app.benbow.server.storage.MediaUnavailable
@@ -43,6 +44,7 @@ internal fun Route.adminRoutes(ctx: ServerContext) {
                 "mirror" -> call.respondAdmin(mirrorInner(ctx))
                 "media" -> call.respondAdmin(mediaInner(ctx))
                 "places" -> call.respondAdmin(placesInner(ctx))
+                "offsite" -> call.respondAdmin(offsiteInner(ctx))
                 else -> call.respondText("Not found", status = HttpStatusCode.NotFound)
             }
         }
@@ -82,6 +84,7 @@ internal fun Route.adminRoutes(ctx: ServerContext) {
     }
 
     mediaMoveRoutes(ctx)
+    offsiteRoutes(ctx)
 
     post("/admin/mirror/off") {
         admin(ctx, "mirror-off#backups") { withContext(Dispatchers.IO) { ctx.backupJobs?.turnOffMirror() } }
@@ -144,13 +147,19 @@ private fun adminTabs(ctx: ServerContext): List<Tab> {
 }
 
 /** The whole page; [flash] is what the last action has to say. */
-internal fun adminPage(ctx: ServerContext, admin: Boolean, flash: Flash? = null, plan: MediaMove.Verdict.Fine? = null): String {
+internal fun adminPage(
+    ctx: ServerContext,
+    admin: Boolean,
+    flash: Flash? = null,
+    plan: MediaMove.Verdict.Fine? = null,
+    offsiteStep: OffsiteSetup.Pending? = null,
+): String {
     val body = buildString {
         append(overview(ctx, admin))
         if (admin) {
             append(placesSection(ctx))
             append(devicesSection(ctx))
-            append(backupsSection(ctx, plan))
+            append(backupsSection(ctx, plan, offsiteStep))
             ctx.storage?.let { append(spaceSection(it, ctx.purges)) }
             ctx.speech?.let { append(speechSection(it)) }
             append(friendsSection(ctx.peers))
@@ -243,7 +252,7 @@ private fun devicesSection(ctx: ServerContext): String = buildString {
     append("</div></div></section>")
 }
 
-private fun backupsSection(ctx: ServerContext, plan: MediaMove.Verdict.Fine?): String = buildString {
+private fun backupsSection(ctx: ServerContext, plan: MediaMove.Verdict.Fine?, offsiteStep: OffsiteSetup.Pending?): String = buildString {
     append("<section id=\"backups\" class=\"page\">")
     append(pageTitle("Резервные копии", "backup", "Проверенные снимки базы, копия на второй диск и медиафайлы."))
     append("<div class=\"card\">")
@@ -288,6 +297,7 @@ private fun backupsSection(ctx: ServerContext, plan: MediaMove.Verdict.Fine?): S
     append("</div>")
     append(mediaCard(ctx, plan))
     if (status != null) append(mirrorCard(ctx, status))
+    append(offsiteCard(ctx, offsiteStep))
     append("</section>")
 }
 

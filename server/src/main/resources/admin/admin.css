@@ -275,3 +275,19 @@ details.edit[open] > summary { margin-bottom: 12px; }
 .row.command { flex-wrap: nowrap; align-items: flex-start; }
 .row.command pre { flex: 1; min-width: 0; margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; white-space: pre-wrap;
   overflow-wrap: anywhere; background: var(--md-surface-container-highest); font: 13px/20px "Cascadia Mono", Consolas, ui-monospace, monospace; }
+
+/* «Копия вне дома» (ADR-043, E4): the code to write down, the way in, the code page on paper. */
+.code-key { margin: 12px 0; padding: 16px; border-radius: 12px; background: var(--md-surface-container-highest); white-space: pre-wrap;
+  overflow-wrap: anywhere; font: 500 18px/28px "Cascadia Mono", Consolas, ui-monospace, monospace; letter-spacing: 1px; }
+fieldset.choice { border: none; margin: 4px 0; padding: 0; display: grid; gap: 8px; }
+fieldset.choice legend { font-size: 12px; line-height: 16px; color: var(--md-on-surface-variant); padding: 0 4px 4px; }
+fieldset.choice label { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border-radius: 12px;
+  border: 1px solid var(--md-outline-variant); cursor: pointer; }
+fieldset.choice label:has(input:checked) { border-color: var(--md-primary); background: color-mix(in srgb, var(--md-primary) 6%, transparent); }
+fieldset.choice input { margin-top: 3px; accent-color: var(--md-primary); }
+@media print {
+  .no-print, .drawer, .snackbar { display: none !important; }
+  body { background: #fff; color: #000; }
+  .card { box-shadow: none; border: 1px solid #999; }
+  .code-key { background: #fff; border: 1px solid #000; color: #000; }
+}

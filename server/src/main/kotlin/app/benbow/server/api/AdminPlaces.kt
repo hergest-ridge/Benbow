@@ -35,6 +35,7 @@ internal fun placesInner(ctx: ServerContext): String = buildString {
         append(placeCard("Медиафайлы", "folder", advice.media, busy = moving, form = ::mediaForm))
         val copying = "Идёт копия на второй диск: ход в «Копиях».".takeIf { ctx.backupJobs?.progress != null }
         append(placeCard("Второй диск", "backup", advice.mirror, busy = copying, form = ::mirrorForm))
+        append(offsiteHint(ctx))
         append(disksCard(advice))
     }
     append(networkCard(NetworkAdvice.advise(survey, ctx.lanAddresses().firstOrNull(), ctx.port)))
@@ -99,6 +100,28 @@ private fun placeCard(
             append("</div></div>")
             append(form(better.path))
         }
+    }
+    append("</div>")
+}
+
+/** The copy outside the house (ADR-043): optional, so «можно лучше» at most, never «надо поправить». */
+private fun offsiteHint(ctx: ServerContext): String = buildString {
+    val copy = ctx.offsite ?: return@buildString
+    val root = copy.root
+    append(
+        "<div class=\"card\"><div class=\"row\"><h3>${icon(
+            "backup",
+        )}Копия вне дома</h3>${stateChip(if (root != null) State.Good else State.Note)}</div>",
+    )
+    if (root != null) {
+        append("<dl class=\"kv\"><dt>Папка</dt><dd><code>${esc(root.toString())}</code></dd></dl>")
+        append("<p>Зашифрованная копия уходит из дома; когда она делалась и проверялась, видно в «Копиях».</p>")
+    } else {
+        append("<p>Её нет. Второй диск спасает от поломки диска, но не от пожара или кражи: тогда выручит копия в папке облака ")
+        append("или на диске, который хранится не дома. Она зашифрована и не обязательна.</p>")
+        append(
+            "<div class=\"row end\"><a class=\"btn tonal\" href=\"#backups\">${icon("backup")}<span>Включить в «Копиях»</span></a></div>",
+        )
     }
     append("</div>")
 }

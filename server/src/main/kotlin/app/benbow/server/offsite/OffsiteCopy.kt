@@ -104,6 +104,7 @@ class OffsiteCopy(
         if (state != OffsiteFolder.State.Ready) return Outcome.Skipped(folder.describe(state))
         val target = folder.root
         dropParts(target)
+        OffsiteReadme.write(target, db.storeId, key.recipient)
         var passes = folder.passes()
         val written = passes.written.toMutableMap()
 

@@ -107,9 +107,13 @@ class OffsiteCopyTest {
 
         val mark = root.resolve(".benbow-offsite").readText()
         assertTrue("store=${db.storeId}" in mark && "recipient=${key.recipient}" in mark, mark)
-        for (file in files().filter { it.name != ".benbow-offsite" }) {
+        for (file in files().filter { it.name != ".benbow-offsite" && it.name != "README.txt" }) {
             assertTrue(file.readBytes().copyOf(21).decodeToString() == "age-encryption.org/v1", "$file is encrypted")
         }
+        // The one plain file there (E6): how to open it, with the public key and never the secret one.
+        val readme = root.resolve("README.txt").readText()
+        assertTrue(db.storeId in readme && key.recipient in readme && "restore-from-offsite.cmd" in readme && "age -d -i" in readme)
+        assertFalse(key.secret in readme || key.secret.drop(16).take(20) in readme, "no part of the secret")
         val snapshot = db.backups!!.history().single()
         val home = db.backups!!.directory.resolve(snapshot.file)
         assertContentEquals(home.readBytes(), AgeFiles.decrypt(root.resolve("db").resolve("${snapshot.file}.age").readBytes(), key))

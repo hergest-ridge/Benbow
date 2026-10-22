@@ -267,4 +267,6 @@ details.edit[open] > summary { margin-bottom: 12px; }
 .steps li { margin: 6px 0; }
 .center { text-align: center; }
 .install .btn { width: 100%; justify-content: center; }
+.bare main { max-width: 600px; }
+.bare .page-title .logo { width: 40px; height: 40px; }
 .break { overflow-wrap: anywhere; word-break: break-all; }

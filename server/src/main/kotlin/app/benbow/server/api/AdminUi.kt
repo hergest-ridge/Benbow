@@ -78,25 +78,34 @@ internal class Tab(val id: String, val title: String, val icon: String, val aler
 /**
  * The page: a navigation drawer on the left and one section at a time (`.page`, shown by `:target`, the first one when
  * the address has no section), so it also works before its script runs. [extra] goes after the sections (dialogs).
+ * Without the [drawer] it is one narrow column (the public install page, read on a phone).
  */
-internal fun adminShell(tabs: List<Tab>, body: String, flash: Flash?, subtitle: String, extra: String = ""): String = buildString {
+internal fun adminShell(
+    tabs: List<Tab>,
+    body: String,
+    flash: Flash?,
+    subtitle: String,
+    extra: String = "",
+    drawer: Boolean = true,
+): String = buildString {
     append("<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\"><title>Benbow — сервер</title>")
     append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">")
     append("<link rel=\"icon\" href=\"/admin/assets/icon.svg\" type=\"image/svg+xml\">")
     append("<link rel=\"stylesheet\" href=\"/admin/assets/admin.css\"><script src=\"/admin/assets/admin.js\" defer></script></head><body>")
-    append(
-        "<div class=\"layout\"><nav class=\"drawer\" aria-label=\"Разделы\"><div class=\"brand\">" +
-            "<img class=\"logo\" src=\"/admin/assets/icon.svg\" alt=\"\">",
-    )
-    append("<div><div class=\"title\">Адмирал Бенбоу</div><div class=\"subtitle\">${esc(subtitle)}</div></div></div>")
-    append("<div class=\"nav\">")
-    tabs.forEach {
-        append("<a href=\"#${it.id}\">${icon(it.icon)}<span>${esc(it.title)}</span>")
-        if (it.alert) append("<span class=\"dot\" title=\"Требует внимания\"></span>")
-        append("</a>")
+    append(if (drawer) "<div class=\"layout\">" else "<div class=\"layout bare\">")
+    if (drawer) {
+        append("<nav class=\"drawer\" aria-label=\"Разделы\"><div class=\"brand\">")
+        append("<img class=\"logo\" src=\"/admin/assets/icon.svg\" alt=\"\">")
+        append("<div><div class=\"title\">Адмирал Бенбоу</div><div class=\"subtitle\">${esc(subtitle)}</div></div></div>")
+        append("<div class=\"nav\">")
+        tabs.forEach {
+            append("<a href=\"#${it.id}\">${icon(it.icon)}<span>${esc(it.title)}</span>")
+            if (it.alert) append("<span class=\"dot\" title=\"Требует внимания\"></span>")
+            append("</a>")
+        }
+        append("</div><div class=\"foot\"><a class=\"btn tonal\" href=\"/app/\" title=\"Открыть Benbow в браузере\">${icon("open")}")
+        append("<span class=\"btn-label\">Открыть Benbow</span></a></div></nav>")
     }
-    append("</div><div class=\"foot\"><a class=\"btn tonal\" href=\"/app/\" title=\"Открыть Benbow в браузере\">${icon("open")}")
-    append("<span class=\"btn-label\">Открыть Benbow</span></a></div></nav>")
     append("<div class=\"content\"><main>")
     append(body)
     append("</main></div></div>")

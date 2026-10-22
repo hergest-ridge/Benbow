@@ -40,7 +40,8 @@ internal fun Route.appInstallRoutes(ctx: ServerContext) {
 private fun installPage(ctx: ServerContext, host: String): String {
     val body = buildString {
         append("<section id=\"install\" class=\"page\">")
-        append(pageTitle("Benbow для Android", "phone", "Дневник на телефоне; записи хранятся на этом компьютере."))
+        append("<h1 class=\"page-title\"><img class=\"logo\" src=\"/admin/assets/icon.svg\" alt=\"\">Benbow для Android</h1>")
+        append("<p class=\"page-lead\">Дневник на телефоне; записи хранятся на этом компьютере.</p>")
         append("<div class=\"card install\">")
         val app = ctx.app?.info
         if (app == null) {
@@ -65,7 +66,7 @@ private fun installPage(ctx: ServerContext, host: String): String {
         }
         append("</div></section>")
     }
-    return adminShell(emptyList(), body, null, versionLine())
+    return adminShell(emptyList(), body, null, versionLine(), drawer = false)
 }
 
 /** «Телефон без приложения»: a QR code of this computer's `/install` page on the home network, for the admin page. */

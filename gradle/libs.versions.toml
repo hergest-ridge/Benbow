@@ -29,6 +29,7 @@ commons-compress = "1.28.0"
 tink = "1.23.0"
 angus-mail = "2.0.5"
 zxing = "3.5.3"
+jagged = "1.0.0"
 greenmail = "2.1.14"
 sqldelight = "2.4.1"
 sqlite-jdbc = "3.53.4.0"
@@ -106,6 +107,8 @@ commons-compress = { module = "org.apache.commons:commons-compress", version.ref
 tink = { module = "com.google.crypto.tink:tink", version.ref = "tink" }
 angus-mail = { module = "org.eclipse.angus:jakarta.mail", version.ref = "angus-mail" }
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
+jagged-x25519 = { module = "com.exceptionfactory.jagged:jagged-x25519", version.ref = "jagged" }
+jagged-scrypt = { module = "com.exceptionfactory.jagged:jagged-scrypt", version.ref = "jagged" }
 greenmail = { module = "com.icegreen:greenmail", version.ref = "greenmail" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }

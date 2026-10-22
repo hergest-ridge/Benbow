@@ -9,3 +9,4 @@
 *.ttf binary
 *.otf binary
 *.ico binary
+server/src/test/resources/age-vectors/** binary

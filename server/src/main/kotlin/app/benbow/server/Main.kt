@@ -5,6 +5,8 @@ import app.benbow.server.api.benbowModule
 import app.benbow.server.backup.BackupJobs
 import app.benbow.server.backup.MirrorRestore
 import app.benbow.server.calendar.CalendarDatabase
+import app.benbow.server.offsite.AgeFiles
+import app.benbow.server.offsite.OffsiteKey
 import app.benbow.server.peer.Letter
 import app.benbow.server.peer.Letters
 import app.benbow.server.peer.Opened
@@ -30,6 +32,7 @@ import io.ktor.server.netty.Netty
 import org.slf4j.LoggerFactory
 import java.nio.channels.FileChannel
 import java.nio.channels.FileLock
+import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import kotlin.io.path.createDirectories
@@ -228,5 +231,15 @@ private fun selfCheck() {
     jakarta.mail.Session.getInstance(java.util.Properties()).getStore("imaps")
     org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream::class.java.name
     javax.net.ssl.SSLContext.getDefault()
+    // age for the copy outside the house (ADR-043): X25519 and ChaCha20-Poly1305 from the bundled runtime, scrypt too.
+    val key = OffsiteKey.generate()
+    val sealed = Files.createTempFile("benbow-self-check", ".age")
+    try {
+        AgeFiles.encrypt("ok".toByteArray(), sealed, key)
+        check(AgeFiles.decrypt(Files.readAllBytes(sealed), key).decodeToString() == "ok") { "age" }
+        check(OffsiteKey.unseal(key.seal("self-check", workFactor = 10), "self-check") == key) { "age with a passphrase" }
+    } finally {
+        Files.deleteIfExists(sealed)
+    }
     println("self-check ok")
 }

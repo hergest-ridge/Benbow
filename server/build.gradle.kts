@@ -63,6 +63,8 @@ dependencies {
     implementation(libs.tink) // sealed letters to friends' servers (ADR-039)
     implementation(libs.angus.mail) // the shared mailbox the letters travel through (IMAP)
     implementation(libs.zxing.core) // the QR code a phone scans to install the app (ADR-042, U4)
+    implementation(libs.jagged.x25519) // age files for the copy outside the house (ADR-043)
+    implementation(libs.jagged.scrypt) // key.age, the key sealed with the owner's passphrase
 
     testImplementation(libs.kotlin.test)
     testImplementation(libs.ktor.server.test.host)

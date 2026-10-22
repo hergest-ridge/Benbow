@@ -87,6 +87,8 @@ class OffsiteCopyTest {
         root.resolve("media").resolve(it.take(2)).resolve("$it.age")
     }
 
+    private fun done(outcome: OffsiteCopy.Outcome) = assertIs<OffsiteCopy.Outcome.Done>(outcome).copy(check = null)
+
     private fun files(): List<Path> = Files.walk(root).use { s -> s.filter { Files.isRegularFile(it) }.toList() }
 
     private fun unzip(bytes: ByteArray): Map<String, ByteArray> = ZipInputStream(bytes.inputStream()).use { z ->
@@ -100,7 +102,8 @@ class OffsiteCopyTest {
         entry("e1", a, b)
         jobs.runOnce(clock)
         val outcome = assertIs<OffsiteCopy.Outcome.Done>(copy.pass(clock))
-        assertEquals(OffsiteCopy.Outcome.Done(1, 2, true), outcome)
+        assertEquals(OffsiteCopy.Outcome.Done(1, 2, true), outcome.copy(check = null))
+        assertTrue(outcome.check!!.ok, outcome.check.toString())
 
         val mark = root.resolve(".benbow-offsite").readText()
         assertTrue("store=${db.storeId}" in mark && "recipient=${key.recipient}" in mark, mark)
@@ -130,14 +133,14 @@ class OffsiteCopyTest {
         copy.pass(clock)
         val old = FileTime.fromMillis(1_000_000_000_000)
         files().forEach { Files.setLastModifiedTime(it, old) }
-        assertEquals(OffsiteCopy.Outcome.Done(0, 0, true), copy.pass(clock + 1))
+        assertEquals(OffsiteCopy.Outcome.Done(0, 0, true), done(copy.pass(clock + 1)))
         assertTrue(files().all { Files.getLastModifiedTime(it) == old }, "nothing written again: no churn in the cloud")
 
         // A pass cut short: a file never finished, one cut, a temporary file left behind.
         Files.delete(mediaCopy(a))
         mediaCopy(b).writeBytes(mediaCopy(b).readBytes().copyOf(1_000))
         mediaCopy(a).resolveSibling("x.age.part").writeBytes(byteArrayOf(1, 2, 3))
-        assertEquals(OffsiteCopy.Outcome.Done(0, 2, true), copy.pass(clock + 2))
+        assertEquals(OffsiteCopy.Outcome.Done(0, 2, true), done(copy.pass(clock + 2)))
         assertEquals(a.sha256, AgeFiles.sha256(mediaCopy(a), key))
         assertEquals(b.sha256, AgeFiles.sha256(mediaCopy(b), key))
         assertTrue(files().none { it.name.endsWith(".part") })
@@ -196,7 +199,7 @@ class OffsiteCopyTest {
         entry("e1", bad)
         blobs.file(bad).writeBytes(Random(9).nextBytes(bad.size.toInt()))
         jobs.runOnce(clock)
-        assertEquals(OffsiteCopy.Outcome.Done(1, 0, false), copy.pass(clock))
+        assertEquals(OffsiteCopy.Outcome.Done(1, 0, false), done(copy.pass(clock)))
         assertFalse(mediaCopy(bad).exists(), "a file that doesn't match its hash never goes out as if it did")
     }
 

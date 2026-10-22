@@ -47,6 +47,9 @@ internal class OffsiteFolder(val root: Path, private val storeId: String, privat
         val lastAt: Long? = null,
         val dbAt: Long? = null,
         val written: Map<String, String> = emptyMap(),
+        /** When a check last found everything there opening as it should (E3), and what the last one found wrong. */
+        val checkedAt: Long? = null,
+        val checkProblem: String? = null,
     )
 
     fun passes(): Passes = runCatching { Json.decodeFromString(Passes.serializer(), passesFile.readText()) }

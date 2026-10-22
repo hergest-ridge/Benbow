@@ -77,7 +77,8 @@ class Backups(val directory: Path, val manifest: Path, private val prefix: Strin
         }
     }
 
-    private fun verify(file: Path, expected: Map<String, Long>): Boolean =
+    /** Whether [file] opens, passes `integrity_check` and holds [expected] rows (also a copy brought back from outside, ADR-043). */
+    internal fun verify(file: Path, expected: Map<String, Long>): Boolean =
         DriverManager.getConnection("jdbc:sqlite:file:${file.toUri().path}?mode=ro").use { c ->
             val integrity = c.createStatement().use { st ->
                 st.executeQuery("PRAGMA integrity_check").use { rs ->

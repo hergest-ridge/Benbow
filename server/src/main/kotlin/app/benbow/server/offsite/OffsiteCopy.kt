@@ -58,8 +58,8 @@ class OffsiteCopy(
 
         data class Skipped(val why: String) : Outcome
 
-        /** [media] false while the media folder is gone: the snapshots went, the media wait. */
-        data class Done(val snapshots: Int, val files: Int, val media: Boolean) : Outcome
+        /** [media] false while the media folder is gone: the snapshots went, the media wait. [check]: when one ran. */
+        data class Done(val snapshots: Int, val files: Int, val media: Boolean, val check: OffsiteCheck.Result? = null) : Outcome
     }
 
     @Volatile
@@ -111,9 +111,39 @@ class OffsiteCopy(
         }
         archive(export, exported, written, "export.zip", target, key)
         archive(dataDir, CONFIG.map(dataDir::resolve).filter { it.isRegularFile() }, written, "config.zip", target, key)
-        folder.record(passes.copy(lastAt = if (media.done) now else passes.lastAt, written = written.toMap()))
+        passes = passes.copy(lastAt = if (media.done) now else passes.lastAt, written = written.toMap())
         if (snapshots + media.files > 0) log.info("Copy outside the house: {} snapshots, {} media files", snapshots, media.files)
-        return Outcome.Done(snapshots, media.files, media.done)
+
+        // The check (E3): after new snapshots went there, and once a day anyway; until one finds everything, every pass.
+        val check = if (snapshots > 0 || passes.checkedAt == null || now - passes.checkedAt >= CHECK_EVERY) {
+            val folders = listOfNotNull(db.backups?.let { "db" to it }, calendar?.backups?.let { "calendar" to it }).toMap()
+            val scratch = dataDir.resolve("backups").resolve("offsite-check.sqlite")
+            OffsiteCheck(target, key, scratch).run(folders, written, blobs?.takeIf { it.ready() }?.all().orEmpty())
+        } else {
+            null
+        }
+        if (check != null) {
+            passes = passes.copy(
+                written = written.toMap(),
+                checkedAt = if (check.ok) now else passes.checkedAt,
+                checkProblem = problem(check),
+            )
+            if (!check.ok) log.warn("Copy outside the house: {}", passes.checkProblem)
+        }
+        folder.record(passes)
+        return Outcome.Done(snapshots, media.files, media.done, check)
+    }
+
+    /** What a check found wrong, for the admin page; null when nothing. */
+    private fun problem(check: OffsiteCheck.Result): String? = when {
+        check.ok -> null
+
+        check.held -> "не открылись ${check.bad.size} файлов из ${check.checked}: ничего не удалено. Проверьте диск или синхронизацию папки"
+
+        else -> listOfNotNull(
+            check.bad.takeIf { it.isNotEmpty() }?.let { "не открылись как должны и будут записаны заново: ${it.joinToString()}" },
+            check.missing.takeIf { it.isNotEmpty() }?.let { "нет файлов: ${it.joinToString()}" },
+        ).joinToString("; ")
     }
 
     /** [backups]' verified snapshots in `<target>/<folder>/<name>.age`, the ones pruned at home pruned there, then the manifest. */
@@ -228,6 +258,7 @@ class OffsiteCopy(
 
     companion object {
         const val KEY_FILE = "offsite-key.txt"
+        const val CHECK_EVERY = 24L * 3_600_000
 
         /** The settings a server is stood up again with (as in the second disk's recovery kit, without the key itself). */
         val CONFIG = setOf(ServerConfig.FILE_NAME, "tls/server.keystore", "peer/identity.json")

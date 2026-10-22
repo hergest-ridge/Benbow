@@ -210,7 +210,9 @@ private fun devicesSection(ctx: ServerContext): String = buildString {
         )
         append(postButton("/admin/pairing-code", "Получить код", "", "key"))
     }
-    append("</div><div class=\"card\"><h3>Подключённые</h3>")
+    append("</div>")
+    append(installCard(ctx)) // a phone with no app yet: the QR code of the install page (ADR-042, U4)
+    append("<div class=\"card\"><h3>Подключённые</h3>")
     val devices = ctx.devices.list()
     if (devices.isEmpty()) append("<p class=\"muted\">Пока нет подключённых устройств.</p>")
     append("<div class=\"list\">")

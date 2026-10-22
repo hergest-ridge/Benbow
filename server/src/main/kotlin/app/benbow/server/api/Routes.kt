@@ -142,6 +142,7 @@ fun Application.benbowModule(ctx: ServerContext) {
     routing {
         adminRoutes(ctx)
         peerAdminRoutes(ctx)
+        appInstallRoutes(ctx)
         webApp(ctx.webRoot)
         route("/api/v1") {
             /**

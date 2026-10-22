@@ -62,6 +62,7 @@ dependencies {
     implementation(libs.commons.compress) // unpacks the speech model archive (.tar.bz2)
     implementation(libs.tink) // sealed letters to friends' servers (ADR-039)
     implementation(libs.angus.mail) // the shared mailbox the letters travel through (IMAP)
+    implementation(libs.zxing.core) // the QR code a phone scans to install the app (ADR-042, U4)
 
     testImplementation(libs.kotlin.test)
     testImplementation(libs.ktor.server.test.host)

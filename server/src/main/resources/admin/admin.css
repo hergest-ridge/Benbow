@@ -259,3 +259,12 @@ details.edit[open] > summary { margin-bottom: 12px; }
 .d-ours { fill: var(--md-primary); background: var(--md-primary); }
 .d-other { fill: var(--md-outline); background: var(--md-outline); }
 .d-free { fill: var(--md-surface-container-highest); background: var(--md-surface-container-highest); border: 1px solid var(--md-outline-variant); }
+
+/* The install page and its QR code on the admin page (ADR-042, U4). */
+.qr { display: flex; justify-content: center; margin: 12px 0; }
+.qr-code { width: 220px; height: 220px; border-radius: 8px; }
+.steps { margin: 12px 0; padding-left: 20px; line-height: 1.5; }
+.steps li { margin: 6px 0; }
+.center { text-align: center; }
+.install .btn { width: 100%; justify-content: center; }
+.break { overflow-wrap: anywhere; word-break: break-all; }

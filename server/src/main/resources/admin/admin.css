@@ -270,3 +270,8 @@ details.edit[open] > summary { margin-bottom: 12px; }
 .bare main { max-width: 600px; }
 .bare .page-title .logo { width: 40px; height: 40px; }
 .break { overflow-wrap: anywhere; word-break: break-all; }
+
+/* «Где хранить» (ADR-042, I1): a command for an administrator's prompt, with its copy button. */
+.row.command { flex-wrap: nowrap; align-items: flex-start; }
+.row.command pre { flex: 1; min-width: 0; margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; white-space: pre-wrap;
+  overflow-wrap: anywhere; background: var(--md-surface-container-highest); font: 13px/20px "Cascadia Mono", Consolas, ui-monospace, monospace; }

@@ -11,6 +11,7 @@ import app.benbow.server.peer.Opened
 import app.benbow.server.peer.PeerDatabase
 import app.benbow.server.peer.PeerIdentity
 import app.benbow.server.peer.PeerLink
+import app.benbow.server.setup.HostSurvey
 import app.benbow.server.storage.BlobStore
 import app.benbow.server.storage.CALENDAR_HIGH_WATER
 import app.benbow.server.storage.Database
@@ -157,6 +158,8 @@ fun main(args: Array<String>) {
                 log.info("Android app {} ({}) offered to phones", it.info.versionName, it.info.versionCode)
             },
             purges = purges,
+            // Read once now, so «Где хранить» has its answer by the time the page is opened (ADR-042, I1).
+            survey = HostSurvey.system()?.also { it.current() },
         )
     val server = embeddedServer(
         factory = Netty,

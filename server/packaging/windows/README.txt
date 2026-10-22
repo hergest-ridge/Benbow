@@ -38,6 +38,12 @@ Service (run the scripts as Administrator)
   - opens TCP 8765 in the Windows firewall for private networks
   - logs: <data folder>\logs (server), <install folder>\service-logs (wrapper)
 
+First run
+  Open https://localhost:8765 on this PC. «Где хранить» shows the disks, suggests where the media and the
+  second copy (another physical disk) should go, and checks that the home network is private and that the
+  firewall lets phones in. A phone without the app gets it from https://<this PC>:8765/install (a QR code
+  in «Устройства»).
+
 Web client
   Open https://<this PC's address>:8765/app/ in Edge, Chrome or Firefox on any PC of the home network
   (https://localhost:8765/app/ on this PC). The browser warns once about the self-signed certificate;

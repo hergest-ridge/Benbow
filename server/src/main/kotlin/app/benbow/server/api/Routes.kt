@@ -29,6 +29,7 @@ import app.benbow.server.backup.BackupStatus
 import app.benbow.server.calendar.CalendarDatabase
 import app.benbow.server.calendar.SqliteCalendarStore
 import app.benbow.server.peer.PeerLink
+import app.benbow.server.setup.HostSurvey
 import app.benbow.server.storage.BlobStore
 import app.benbow.server.storage.Database
 import app.benbow.server.storage.Devices
@@ -113,6 +114,10 @@ class ServerContext(
     val leftFolders: LeftFolders? = null,
     /** The Android app this package carries (ADR-042, U1); null when it has none. */
     val app: AppRelease? = null,
+    /** This PC's disks and home network for «Где хранить» (ADR-042, I1); null away from Windows and in most tests. */
+    val survey: HostSurvey? = null,
+    /** This computer's addresses on the home network, the one phones are shown first. */
+    val lanAddresses: () -> List<String> = ::lanAddresses,
 )
 
 data class DevicePrincipal(val deviceId: String)

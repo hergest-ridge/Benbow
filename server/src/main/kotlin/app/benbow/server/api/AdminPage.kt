@@ -42,6 +42,7 @@ internal fun Route.adminRoutes(ctx: ServerContext) {
                 "speech" -> call.respondAdmin(ctx.speech?.let(::speechInner).orEmpty())
                 "mirror" -> call.respondAdmin(mirrorInner(ctx))
                 "media" -> call.respondAdmin(mediaInner(ctx))
+                "places" -> call.respondAdmin(placesInner(ctx))
                 else -> call.respondText("Not found", status = HttpStatusCode.NotFound)
             }
         }
@@ -132,6 +133,7 @@ private fun adminTabs(ctx: ServerContext): List<Tab> {
     val mediaGone = ctx.blobs?.ready() == false || ctx.mediaMove?.moves()?.current?.error != null
     return listOfNotNull(
         Tab("overview", "Сервер", "server"),
+        Tab("places", "Где хранить", "folder", alert = placesProblems(ctx).isNotEmpty()),
         Tab("devices", "Устройства", "phone"),
         Tab("backups", "Копии", "backup", alert = staleBackups || mediaGone),
         ctx.storage?.let { Tab("space", "Место", "disk") },
@@ -146,6 +148,7 @@ internal fun adminPage(ctx: ServerContext, admin: Boolean, flash: Flash? = null,
     val body = buildString {
         append(overview(ctx, admin))
         if (admin) {
+            append(placesSection(ctx))
             append(devicesSection(ctx))
             append(backupsSection(ctx, plan))
             ctx.storage?.let { append(spaceSection(it, ctx.purges)) }
@@ -181,6 +184,7 @@ private fun overview(ctx: ServerContext, admin: Boolean): String = buildString {
     if (admin) ctx.dataDir?.let { append("<dt>Данные</dt><dd class=\"mono\">${esc(it.toString())}</dd>") }
     append("</dl>")
     if (admin) ctx.blobs?.let { mediaBanner(it)?.let(::append) }
+    if (admin) placesBanner(placesProblems(ctx))?.let(::append)
     append(
         "<p class=\"muted\">Benbow в браузере открывается на любом компьютере домашней сети: адрес этого компьютера, порт " +
             "<code>${ctx.port}</code>, <code>/app/</code>. Браузер один раз предупредит о самоподписанном сертификате; " +

@@ -1,0 +1,12 @@
+<!-- The restore drill of the copy outside the house (ADR-043, E5); see README.txt beside it. Host paths are the owner's PC's. -->
+<Configuration>
+  <MappedFolders>
+    <MappedFolder><HostFolder>C:\projects\Benbow\server\packaging\installer\sandbox</HostFolder><SandboxFolder>C:\test</SandboxFolder><ReadOnly>true</ReadOnly></MappedFolder>
+    <MappedFolder><HostFolder>C:\projects\Benbow\.tmp\sandbox\in</HostFolder><SandboxFolder>C:\in</SandboxFolder><ReadOnly>true</ReadOnly></MappedFolder>
+    <MappedFolder><HostFolder>C:\projects\Benbow\.tmp\sandbox\pkg-new</HostFolder><SandboxFolder>C:\pkg</SandboxFolder><ReadOnly>true</ReadOnly></MappedFolder>
+    <MappedFolder><HostFolder>C:\projects\Benbow\.tmp\sandbox\offsite-copy</HostFolder><SandboxFolder>C:\copy</SandboxFolder><ReadOnly>false</ReadOnly></MappedFolder>
+    <MappedFolder><HostFolder>C:\projects\Benbow\.tmp\sandbox\out</HostFolder><SandboxFolder>C:\out</SandboxFolder><ReadOnly>false</ReadOnly></MappedFolder>
+  </MappedFolders>
+  <LogonCommand><Command>cmd /c C:\test\offsite-restore.cmd</Command></LogonCommand>
+  <MemoryInMB>4096</MemoryInMB>
+</Configuration>

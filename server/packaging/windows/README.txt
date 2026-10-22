@@ -40,6 +40,10 @@ Service (run the scripts as Administrator)
                                       checked; the mirror is only read). Then install-service.cmd.
                                       The old server must stay off. A server for a friend is installed
                                       fresh, never from a mirror or a copied data folder.
+  restore-from-offsite.cmd <copy folder> [data folder] [media folder] [--key-file <the code's file>]
+                                      on a NEW PC when nothing at home is left: the same from the encrypted
+                                      copy outside the house (ADR-043); asks for the recovery code or the
+                                      copy's passphrase. Then install-service.cmd or setup.exe.
   - starts automatically (delayed) after boot, restarts on failure
   - opens TCP 8765 in the Windows firewall for private networks
   - logs: <data folder>\logs (server), <install folder>\service-logs (wrapper)

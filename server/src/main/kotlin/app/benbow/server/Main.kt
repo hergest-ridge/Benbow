@@ -8,6 +8,7 @@ import app.benbow.server.calendar.CalendarDatabase
 import app.benbow.server.offsite.AgeFiles
 import app.benbow.server.offsite.OffsiteCopy
 import app.benbow.server.offsite.OffsiteKey
+import app.benbow.server.offsite.OffsiteRestore
 import app.benbow.server.offsite.OffsiteSetup
 import app.benbow.server.peer.Letter
 import app.benbow.server.peer.Letters
@@ -38,6 +39,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import kotlin.io.path.createDirectories
+import kotlin.io.path.readText
 import kotlin.system.exitProcess
 
 /** The purge journal beside the database (ADR-041): one line per purge and per undo. */
@@ -70,6 +72,35 @@ fun main(args: Array<String>) {
             result.files,
             result.bytes,
             result.media,
+        )
+        lock.release()
+        return
+    }
+    val fromOffsite = args.indexOf("--restore-from-offsite")
+    if (fromOffsite >= 0) {
+        val copy = Path.of(args[fromOffsite + 1])
+        val media = args.indexOf("--media").takeIf { it >= 0 }?.let { Path.of(args[it + 1]) }
+        // The code from its file, or typed (the code or the passphrase), never on the command line.
+        val typed = args.indexOf("--key-file").takeIf { it >= 0 }?.let { Path.of(args[it + 1]).readText() }
+            ?: System.console()?.readPassword("Код восстановления или пароль копии: ")?.let(::String)
+            ?: error("No console to ask for the code: pass --key-file <the code's file>")
+        // A wrong code, a passphrase that doesn't open, a folder not empty: said in a line, not a stack trace.
+        val result = try {
+            OffsiteRestore.run(dataDir, copy, OffsiteRestore.key(copy, typed), media)
+        } catch (e: IllegalStateException) {
+            log.error("Restore from the copy outside the house refused: {}", e.message)
+            System.err.println(e.message)
+            lock.release()
+            exitProcess(1)
+        }
+        log.info(
+            "Rebuilt from the copy outside the house: store {}, new epoch {}, snapshot {}, {} media files in {} ({} unknown to it)",
+            result.storeId,
+            result.epoch,
+            result.snapshot.fileName,
+            result.files,
+            result.media,
+            result.unknown,
         )
         lock.release()
         return

@@ -11,6 +11,6 @@ Content format: Portable Text-based JSON + exporters, palette tokens, full v1 fo
 
 ## Later
 13. Existing data to import (Day One, Keep, Telegram, Notion, Obsidian)? Affects importer priority (7.4).
-15. Encryption at rest (DB, media) beyond BitLocker and Android file-based encryption? Backup encryption is slice 7.7.
+15. Encryption at rest (DB, media) beyond BitLocker and Android file-based encryption? Backups: an optional encrypted copy outside the house (ADR-043, 7.7).
 16. Repo hosting and CI (private GitHub + Actions?), license.
 17. Remote access outside home: Tailscale when needed?

@@ -6,9 +6,12 @@ import java.io.FileOutputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
 import java.text.Normalizer
 import java.time.Instant
 import java.time.temporal.ChronoUnit
+import java.util.HexFormat
+import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import kotlin.io.path.createDirectories
 import kotlin.io.path.exists
@@ -49,6 +52,14 @@ class OffsiteKey private constructor(val secret: String) {
     fun seal(passphrase: String, workFactor: Int = WORK_FACTOR): ByteArray {
         needMemory(workFactor)
         return AgeFiles.encryptToPassphrase(text().toByteArray(Charsets.US_ASCII), passphraseBytes(passphrase), workFactor)
+    }
+
+    /** A media file's name in the copy: a keyed hash of its SHA-256, so the copy shows no file's hash (ADR-043). */
+    fun mediaName(sha256: String): String {
+        val mac = Mac.getInstance("HmacSHA256")
+        val names = MessageDigest.getInstance("SHA-256").digest("benbow offsite names\n$secret".toByteArray(Charsets.US_ASCII))
+        mac.init(SecretKeySpec(names, "HmacSHA256"))
+        return HexFormat.of().formatHex(mac.doFinal(sha256.toByteArray(Charsets.US_ASCII)))
     }
 
     override fun equals(other: Any?) = other is OffsiteKey && other.secret == secret

@@ -33,8 +33,17 @@ import kotlin.io.path.deleteIfExists
 object AgeFiles {
     private const val CHUNK = 65_536
 
-    /** Encrypts [source] into [target]; the SHA-256 of [source] as it was read. */
-    fun encrypt(source: Path, target: Path, key: OffsiteKey): String = Files.newByteChannel(source).use { encrypt(it, target, key) }
+    /** `age-encryption.org/v1`, one X25519 stanza (share and body) and the MAC line: 22 + 54 + 44 + 48 bytes. */
+    private const val HEADER = 168L
+    private const val NONCE = 16L
+    private const val TAG = 16L
+
+    /**
+     * Encrypts [source] into [target]; the SHA-256 of [source] as it was read. With [expect], a source that reads as
+     * anything else (a media file gone bad at home) never takes [target]'s name.
+     */
+    fun encrypt(source: Path, target: Path, key: OffsiteKey, expect: String? = null): String =
+        Files.newByteChannel(source).use { encrypt(it, target, key, expect) }
 
     /** Encrypts [bytes] into [target]; their SHA-256. */
     fun encrypt(bytes: ByteArray, target: Path, key: OffsiteKey): String = encrypt(Channels.newChannel(bytes.inputStream()), target, key)
@@ -67,7 +76,10 @@ object AgeFiles {
     /** A small file, decrypted whole in memory. */
     fun decrypt(bytes: ByteArray, key: OffsiteKey): ByteArray = readAll(decrypting(Channels.newChannel(bytes.inputStream()), key))
 
-    private fun encrypt(input: ReadableByteChannel, target: Path, key: OffsiteKey): String {
+    /** The size of an age file holding [plain] bytes for one X25519 recipient: a pass's quick check of what is there. */
+    fun encryptedSize(plain: Long): Long = HEADER + NONCE + plain + TAG * maxOf(1, (plain + CHUNK - 1) / CHUNK)
+
+    private fun encrypt(input: ReadableByteChannel, target: Path, key: OffsiteKey, expect: String? = null): String {
         val tmp = target.resolveSibling("${target.fileName}.part")
         try {
             val digest = MessageDigest.getInstance("SHA-256")
@@ -79,6 +91,7 @@ object AgeFiles {
                 file.force(true)
             }
             val sha = HexFormat.of().formatHex(digest.digest())
+            if (expect != null && sha != expect) throw SourceChanged("${target.fileName}: the source reads as $sha, not $expect")
             if (sha256(tmp, key) != sha) throw IOException("${tmp.fileName} didn't decrypt back to what was written")
             Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
             return sha
@@ -122,6 +135,9 @@ object AgeFiles {
             buffer.clear()
         }
     }
+
+    /** The source didn't read as the hash it was expected to have: nothing took the target's name. */
+    class SourceChanged(message: String) : IOException(message)
 
     /** Passes writes through; closing it leaves the file open. */
     private class KeptOpen(private val file: FileChannel) : WritableByteChannel {

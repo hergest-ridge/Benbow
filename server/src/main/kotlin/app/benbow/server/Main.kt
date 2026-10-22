@@ -6,6 +6,7 @@ import app.benbow.server.backup.BackupJobs
 import app.benbow.server.backup.MirrorRestore
 import app.benbow.server.calendar.CalendarDatabase
 import app.benbow.server.offsite.AgeFiles
+import app.benbow.server.offsite.OffsiteCopy
 import app.benbow.server.offsite.OffsiteKey
 import app.benbow.server.peer.Letter
 import app.benbow.server.peer.Letters
@@ -132,7 +133,9 @@ fun main(args: Array<String>) {
     blobs.adoptUntracked(purges.pendingPaths()).takeIf { it > 0 }?.let {
         log.warn("Recorded {} media files the database didn't know (after a restore?)", it)
     }
-    val backupJobs = BackupJobs(db, dataDir, config.backupMirror, blobs, calendar, purges).also { it.start(config.backupIntervalMinutes) }
+    val offsite = OffsiteCopy(db, dataDir, config.backupOffsite, blobs, calendar, purges)
+    val backupJobs = BackupJobs(db, dataDir, config.backupMirror, blobs, calendar, purges, offsite = offsite)
+        .also { it.start(config.backupIntervalMinutes) }
     // A media move that was copying goes on (ADR-042, P4); one whose settings already switched is finished.
     val mediaMove = MediaMove(db, blobs, dataDir, mirror = backupJobs::mirror).also { it.resume() }
     val leftFolders = LeftFolders(db, blobs, dataDir, mediaMove, mirror = backupJobs::mirror)

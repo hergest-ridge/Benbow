@@ -21,6 +21,8 @@ data class ServerConfig(
     val backupIntervalMinutes: Long = 60,
     /** Where media files live (ADR-009); empty = `<data>/media`. */
     val mediaRoot: Path? = null,
+    /** The encrypted copy outside the house (ADR-043); empty = none. */
+    val backupOffsite: Path? = null,
 ) {
     companion object {
         const val FILE_NAME = "benbow.properties"
@@ -45,6 +47,7 @@ data class ServerConfig(
                 "backup.mirror" to "",
                 "backup.intervalMinutes" to "60",
                 "media.root" to "",
+                "backup.offsite" to "",
             )
             val missing = defaults.filterKeys { props.getProperty(it) == null }
             if (missing.isNotEmpty()) {
@@ -58,6 +61,7 @@ data class ServerConfig(
                 backupMirror = props.getProperty("backup.mirror").trim().takeIf { it.isNotEmpty() }?.let(Path::of),
                 backupIntervalMinutes = props.getProperty("backup.intervalMinutes").toLong().coerceIn(5, 24 * 60),
                 mediaRoot = props.getProperty("media.root").trim().takeIf { it.isNotEmpty() }?.let(Path::of),
+                backupOffsite = props.getProperty("backup.offsite").trim().takeIf { it.isNotEmpty() }?.let(Path::of),
             )
         }
 

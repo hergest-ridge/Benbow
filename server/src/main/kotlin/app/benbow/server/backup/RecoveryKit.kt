@@ -68,7 +68,7 @@ internal class RecoveryKit(private val dataDir: Path, private val mirror: Path, 
         const val README = "README.txt"
 
         /** The data folder's files the kit keeps under `config/`, by their place in the data folder. */
-        val CONFIG = listOf(ServerConfig.FILE_NAME, "tls/server.keystore", "peer/identity.json")
+        val CONFIG = listOf(ServerConfig.FILE_NAME, "tls/server.keystore", "peer/identity.json", "keys/offsite-key.txt")
 
         /** [source] to [copy] through a temporary file with its time, checked by SHA-256; skipped when [copy] holds the same. */
         fun copyChecked(source: Path, copy: Path, always: Boolean = false) {

@@ -5,6 +5,7 @@ import app.benbow.core.content.TagNames
 import app.benbow.server.PURGE_JOURNAL
 import app.benbow.server.ServerConfig
 import app.benbow.server.calendar.CalendarDatabase
+import app.benbow.server.offsite.OffsiteCopy
 import app.benbow.server.storage.Backups
 import app.benbow.server.storage.BlobStore
 import app.benbow.server.storage.Database
@@ -49,6 +50,8 @@ data class BackupStatus(
     val mirrorProblem: String? = null,
     /** What doesn't stop a pass but should be seen (P2): little room left there, the same physical disk. */
     val mirrorWarnings: List<String> = emptyList(),
+    /** Why the last pass of the copy outside the house failed (ADR-043); what it found is in [OffsiteCopy.last]. */
+    val offsiteError: String? = null,
 )
 
 /** How far a pass is in copying media to the second disk (P3), for the admin page. */
@@ -70,6 +73,8 @@ class BackupJobs(
     private val purges: Purges? = null,
     /** Which disk each folder is on (ADR-042); tests put folders on disks of their own. */
     private val disks: Disks = Disks.System,
+    /** The encrypted copy outside the house (ADR-043): its pass comes after the journal's and the calendar's. */
+    val offsite: OffsiteCopy? = null,
 ) {
     private val log = LoggerFactory.getLogger("benbow.backup")
     private val executor = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "benbow-backup").apply { isDaemon = true } }
@@ -186,6 +191,15 @@ class BackupJobs(
             log.error("Calendar backup failed", e)
             updateStatus { it.copy(calendarError = "${e::class.simpleName}: ${e.message}") }
         }
+        // Whatever happens outside the house never stops or fails the copies at home.
+        try {
+            offsite?.pass()
+        } catch (e: Exception) {
+            log.error("Copy outside the house failed", e)
+            updateStatus { it.copy(offsiteError = "${e::class.simpleName}: ${e.message}") }
+            return
+        }
+        updateStatus { it.copy(offsiteError = null) }
     }
 
     /** One pass of all jobs; returns true when a new snapshot was taken. */

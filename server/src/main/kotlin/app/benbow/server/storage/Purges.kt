@@ -466,6 +466,9 @@ class Purges(
         }
     }
 
+    /** The files deleted for good once their quarantine ended: the copy outside the house follows them (ADR-043). */
+    fun deletedForGood(): Set<String> = rows("deleted_at IS NOT NULL").mapTo(HashSet()) { it.sha256 }
+
     /** Files no entry references, placed thirty days ago or more, the heaviest first («Место»'s «Без записи»). */
     fun unreferenced(): List<UnreferencedFile> = db.locked { c ->
         val held = MediaRefs(readMediaEntries(c)).held

@@ -51,6 +51,10 @@ class OffsiteCryptoTest {
         assertNull(OffsiteKey.parse("hello"))
         assertNotEquals(key, OffsiteKey.generate())
         assertFalse(key.secret in key.toString(), "the secret isn't printed by accident")
+        val sha = "a".repeat(64)
+        assertEquals(key.mediaName(sha), key.mediaName(sha))
+        assertTrue(Regex("[0-9a-f]{64}").matches(key.mediaName(sha)) && key.mediaName(sha) != sha)
+        assertNotEquals(key.mediaName(sha), OffsiteKey.generate().mediaName(sha), "names depend on the key")
     }
 
     @Test
@@ -74,6 +78,7 @@ class OffsiteCryptoTest {
             assertEquals(sha(bytes), AgeFiles.encrypt(bytes, sealed, key))
             assertTrue(sealed.readBytes().copyOf(40).toString(Charsets.US_ASCII).startsWith("age-encryption.org/v1\n-> X25519 "))
             assertEquals(sha(bytes), AgeFiles.sha256(sealed, key))
+            assertEquals(AgeFiles.encryptedSize(size.toLong()), Files.size(sealed), "a pass knows a finished file by its size")
             val back = dir.resolve("f$size.bin")
             assertEquals(sha(bytes), AgeFiles.decrypt(sealed, back, key))
             assertContentEquals(bytes, back.readBytes())

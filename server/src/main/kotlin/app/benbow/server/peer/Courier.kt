@@ -1,5 +1,6 @@
 package app.benbow.server.peer
 
+import app.benbow.server.SERVER_VERSION
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import java.util.UUID
@@ -37,6 +38,9 @@ data class Round(
     val resent: Int = 0,
     val refused: Int = 0,
     val waiting: Int = 0,
+    /** Letters in a format newer than this server's, left in the mailbox until it is updated, and from whom. */
+    val newer: Int = 0,
+    val newerFrom: Set<String> = emptySet(),
 ) {
     /** Letters went one way or the other: a conversation may be going on. */
     val moved get() = received + acknowledged + sent + resent > 0
@@ -94,7 +98,7 @@ class Courier(
             val waiting = if (due.any { it.sentAt != null }) mailbox.subjects(folder) else emptySet()
             for (out in due) {
                 if (out.sentAt != null && out.letterId in waiting) continue // still there: the friend's server is away
-                val letter = Letter(out.letterId, out.seq, out.kind, out.text, sentAt = clock())
+                val letter = Letter(out.letterId, out.seq, out.kind, out.text, sentAt = clock(), server = SERVER_VERSION)
                 mailbox.append(folder, out.letterId, Letters.seal(me, contact.card, letter))
                 db.markSent(contact.id, out.seq, clock())
                 if (out.sentAt == null) sent++ else resent++
@@ -110,10 +114,13 @@ class Courier(
         var acknowledged = 0
         var refused = 0
         var waiting = 0
+        val newer = HashSet<String>()
+        var newerCount = 0
         for (item in mailbox.items(inbox)) {
             when (val opened = Letters.open(me, item.text) { contacts[it]?.card }) {
                 is Opened.Ok -> {
                     val from = opened.from.id
+                    opened.letter.server?.let { db.noteSeen(from, it, clock()) }
                     if (opened.letter.kind == Letter.ACK) {
                         acknowledged += db.acknowledge(from, opened.letter.acks, clock())
                     } else {
@@ -126,6 +133,11 @@ class Courier(
 
                 is Opened.Unknown -> waiting++
 
+                is Opened.Newer -> {
+                    newerCount++
+                    newer += opened.from
+                }
+
                 is Opened.Refused -> {
                     log.warn("Refused a letter in {}: {}", inbox, opened.reason)
                     refused++
@@ -135,13 +147,21 @@ class Courier(
         }
         for ((contact, seqs) in toAcknowledge) {
             val card = contacts.getValue(contact).card
-            val ack = Letter(UUID.randomUUID().toString(), 0, Letter.ACK, acks = seqs.sorted(), sentAt = clock())
+            val ack = Letter(UUID.randomUUID().toString(), 0, Letter.ACK, acks = seqs.sorted(), sentAt = clock(), server = SERVER_VERSION)
             val folder = folderOf(card)
             mailbox.ensureFolder(folder)
             mailbox.append(folder, ack.id, Letters.seal(me, card, ack))
         }
         if (done.isNotEmpty()) mailbox.delete(inbox, done)
-        return Round(received = received, acknowledged = acknowledged, refused = refused, waiting = waiting)
+        if (newerCount > 0) log.warn("{} letters in a newer format than this server's wait in {}: update it", newerCount, inbox)
+        return Round(
+            received = received,
+            acknowledged = acknowledged,
+            refused = refused,
+            waiting = waiting,
+            newer = newerCount,
+            newerFrom = newer,
+        )
     }
 
     /** A file's announcement (its body comes through Drive), or the friend's word that a file of ours arrived. */

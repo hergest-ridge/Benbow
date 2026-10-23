@@ -85,6 +85,7 @@ internal fun Route.adminRoutes(ctx: ServerContext) {
 
     mediaMoveRoutes(ctx)
     offsiteRoutes(ctx)
+    reportRoutes(ctx)
 
     post("/admin/mirror/off") {
         admin(ctx, "mirror-off#backups") { withContext(Dispatchers.IO) { ctx.backupJobs?.turnOffMirror() } }
@@ -204,7 +205,9 @@ private fun overview(ctx: ServerContext, admin: Boolean): String = buildString {
         append("<div class=\"banner info\">${icon("key")}<div>Управление сервером открыто только на этом компьютере: ")
         append("<code>https://localhost:${ctx.port}</code></div></div>")
     }
-    append("</div></section>")
+    append("</div>")
+    if (admin) append(reportCard())
+    append("</section>")
 }
 
 private fun devicesSection(ctx: ServerContext): String = buildString {

@@ -178,12 +178,38 @@ class PeerDatabase private constructor(private val connection: Connection) : Aut
         }
     }
 
-    fun mailSettings(): MailSettings? = transaction { c ->
-        val values = c.createStatement().use { st ->
+    fun mailSettings(): MailSettings? {
+        val values = settings()
+        val host = values["mail.host"] ?: return null
+        return MailSettings(
+            host,
+            values["mail.port"]?.toIntOrNull() ?: 993,
+            values["mail.user"].orEmpty(),
+            values["mail.password"].orEmpty(),
+        )
+    }
+
+    private fun settings(): Map<String, String> = transaction { c ->
+        c.createStatement().use { st ->
             st.executeQuery("SELECT key, value FROM settings").use { rs -> rs.all { getString(1) to getString(2) } }.toMap()
         }
-        val host = values["mail.host"] ?: return@transaction null
-        MailSettings(host, values["mail.port"]?.toIntOrNull() ?: 993, values["mail.user"].orEmpty(), values["mail.password"].orEmpty())
+    }
+
+    /** What a contact's server last said of itself (ADR-039, «Друзья»): its Benbow version, and when. */
+    data class Seen(val version: String, val at: Long)
+
+    /** Kept in [settings] (`seen.<contact>`): no schema step for one line per friend. */
+    fun noteSeen(contact: String, version: String, at: Long) = transaction { c ->
+        c.prepareStatement("INSERT OR REPLACE INTO settings(key, value) VALUES (?, ?)").use { st ->
+            st.setString(1, "seen.$contact")
+            st.setString(2, "${version.take(40)}|$at")
+            st.executeUpdate()
+        }
+    }
+
+    fun seen(contact: String): Seen? = settings()["seen.$contact"]?.let { value ->
+        val version = value.substringBeforeLast('|')
+        value.substringAfterLast('|').toLongOrNull()?.let { Seen(version, it) }
     }
 
     /** A blank [MailSettings.password] keeps the stored one, so the page never has to show it. */

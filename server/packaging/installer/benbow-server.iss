@@ -59,6 +59,7 @@ Filename: "{app}\Benbow.url"; Section: "InternetShortcut"; Key: "URL"; String: "
 
 [Icons]
 Name: "{autoprograms}\Benbow — сервер"; Filename: "{app}\Benbow.url"; IconFilename: "{app}\benbow.ico"
+Name: "{autoprograms}\Benbow — первые шаги"; Filename: "{app}\Первые шаги.txt"
 
 [UninstallDelete]
 Type: files; Name: "{app}\Benbow.url"

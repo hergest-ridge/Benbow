@@ -1,5 +1,6 @@
 package app.benbow.server.api
 
+import app.benbow.server.SERVER_VERSION
 import app.benbow.server.peer.Contact
 import app.benbow.server.peer.MailSettings
 import app.benbow.server.peer.PeerCard
@@ -145,7 +146,8 @@ internal fun linkInner(peers: PeerLink?): String = buildString {
 internal fun linkNeedsAttention(peers: PeerLink?): Boolean {
     if (peers == null) return true
     val folderGone = peers.db.driveFolder()?.let { !java.nio.file.Files.isDirectory(it) } ?: false
-    return peers.status is PeerLink.Status.Failed || folderGone
+    val newer = (peers.status as? PeerLink.Status.Online)?.lastRound?.newer ?: 0
+    return peers.status is PeerLink.Status.Failed || folderGone || newer > 0
 }
 
 private fun mailCard(peers: PeerLink): String = buildString {
@@ -155,7 +157,7 @@ private fun mailCard(peers: PeerLink): String = buildString {
         "<div class=\"card\"><div class=\"row\"><h3>${icon("mail")}Почтовый ящик</h3><span class=\"spacer\"></span>" +
             "${mailChip(status, settings)}</div>",
     )
-    append(mailDetails(status))
+    append(mailDetails(peers, status))
     val healthy = settings?.complete == true && (status is PeerLink.Status.Online || status is PeerLink.Status.Connecting)
     if (settings != null && settings.complete) append("<p><code>${esc(settings.host)}</code> · ${esc(settings.user)}</p>")
     append("<details class=\"edit\"${if (healthy) "" else " open"}><summary class=\"btn text\">${icon("edit")}Изменить</summary>")
@@ -183,7 +185,7 @@ private fun mailChip(status: PeerLink.Status, settings: MailSettings?): String =
     is PeerLink.Status.Failed -> chip("err", "error", if (status.retryAt == null) "не пустил" else "нет связи")
 }
 
-private fun mailDetails(status: PeerLink.Status): String = when (status) {
+private fun mailDetails(peers: PeerLink, status: PeerLink.Status): String = when (status) {
     PeerLink.Status.Off -> "<p class=\"muted\">Ящик не настроен: связь выключена.</p>"
 
     PeerLink.Status.Connecting -> ""
@@ -194,6 +196,14 @@ private fun mailDetails(status: PeerLink.Status): String = when (status) {
             append(
                 "<div class=\"banner info\">${icon("mail")}<div>" +
                     "В ящике ждут письма от серверов, которых нет в контактах: ${it.waiting}.</div></div>",
+            )
+        }
+        status.lastRound?.takeIf { it.newer > 0 }?.let { round ->
+            val names = round.newerFrom.map { id -> peers.db.contacts().firstOrNull { it.id == id }?.name ?: id.take(12) }
+            append(
+                "<div class=\"banner err\">${icon("error")}<div><b>Пришли письма от более новой версии Benbow</b> " +
+                    "(${esc(names.joinToString())}): ${round.newer}. Этот сервер их не понимает. Обновите его новым " +
+                    "установщиком: письма дождутся в ящике и прочитаются после обновления.</div></div>",
             )
         }
         status.lastRound?.takeIf { it.refused > 0 }?.let {
@@ -226,7 +236,7 @@ private fun friendCard(peers: PeerLink, contact: Contact, drive: Boolean): Strin
     )
     append(
         "<div class=\"body\"><div class=\"headline\">${esc(contact.name)}</div><div class=\"support mono\">" +
-            "отпечаток ${contact.card.fingerprint}</div></div>",
+            "отпечаток ${contact.card.fingerprint}</div><div class=\"support\">${esc(seenLine(peers, contact))}</div></div>",
     )
     append(
         postButton(
@@ -254,6 +264,13 @@ private fun friendCard(peers: PeerLink, contact: Contact, drive: Boolean): Strin
     append("</div>")
     if (!drive) append("<p class=\"hint\">Файлы пойдут, когда будет указана папка Google Диска.</p>")
     append("</div>")
+}
+
+/** The friend's server as its letters last said: «Benbow 0.14.1 · писал 23.10 14:08», or that it isn't known yet. */
+private fun seenLine(peers: PeerLink, contact: Contact): String {
+    val seen = peers.db.seen(contact.id) ?: return "версия сервера узнается из его письма (до 0.14.1 серверы её не пишут)"
+    val mine = if (seen.version == SERVER_VERSION) "та же, что здесь" else "здесь $SERVER_VERSION"
+    return "Benbow ${seen.version} ($mine) · последнее письмо ${stamp(seen.at)}"
 }
 
 /** Notes and files both ways, oldest first, as bubbles. */

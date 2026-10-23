@@ -1,6 +1,7 @@
 Benbow Server (Windows)
 
 Folder layout
+  Первые шаги.txt   a walk-through in Russian for whoever installs the server (also in the Start menu)
   runtime\          bundled Java runtime (no system Java needed)
   lib\              server jars
   web\              the web client (the app in a browser), served at https://<this PC>:8765/app/

@@ -27,6 +27,8 @@ data class Letter(
     /** For [ACK]: the numbers the sender of this letter has received and kept. */
     val acks: List<Long> = emptyList(),
     val sentAt: Long,
+    /** The sender's Benbow version (servers before 0.14.1 leave it out; older ones skip it): «Друзья» shows it. */
+    val server: String? = null,
 ) {
     companion object {
         const val NOTE = "note"
@@ -54,12 +56,22 @@ sealed interface Opened {
     /** From a server that isn't a contact (yet): left where it is until its card is added. */
     data class Unknown(val from: String) : Opened
 
+    /**
+     * In a format newer than this server knows (a friend updated first): left where it is until this one is updated,
+     * never refused and removed, so nothing goes round and nothing is lost.
+     */
+    data class Newer(val from: String, val version: Int) : Opened
+
     /** Addressed to someone else, forged, damaged or of a format this server doesn't know. */
     data class Refused(val reason: String) : Opened
 }
 
 object Letters {
-    private const val VERSION = 1
+    /**
+     * The envelope's and the letter's format. Optional fields and new kinds keep it (an older server keeps a letter of a
+     * kind it doesn't know in its inbox, for the code that will); anything an older server would misread raises it.
+     */
+    const val VERSION = 1
     private val json = Json { ignoreUnknownKeys = true }
 
     private val hpke: HpkeParameters = HpkeParameters.builder()
@@ -80,6 +92,7 @@ object Letters {
     fun open(me: PeerIdentity, text: String, contact: (String) -> PeerCard?): Opened {
         val envelope = runCatching { json.decodeFromString<Envelope>(text) }.getOrNull()
             ?: return Opened.Refused("not an envelope")
+        if (envelope.v > VERSION) return Opened.Newer(envelope.from, envelope.v)
         if (envelope.v != VERSION) return Opened.Refused("envelope version ${envelope.v}")
         if (envelope.to != me.card.id) return Opened.Refused("addressed to ${envelope.to}")
         val sender = contact(envelope.from) ?: return Opened.Unknown(envelope.from)

@@ -1,5 +1,6 @@
 package app.benbow.server.peer
 
+import app.benbow.server.SERVER_VERSION
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
@@ -198,5 +199,31 @@ class CourierTest {
         assertEquals(2, round.refused)
         assertEquals(0, box.count(max.inbox))
         assertTrue(max.received(anna).isEmpty())
+    }
+
+    @Test
+    fun aLetterInANewerFormatWaitsForTheUpdateInsteadOfGoingRound() {
+        meet()
+        box.ensureFolder(max.inbox)
+        val today = Letters.seal(anna.identity, max.identity.card, Letter("n", 1, Letter.NOTE, "из будущего", sentAt = now))
+        val tomorrow = today.replace("\"v\":${Letters.VERSION},", "\"v\":${Letters.VERSION + 1},")
+        box.put(max.inbox, tomorrow)
+        val round = max.courier.round()
+        assertEquals(1, round.newer)
+        assertEquals(setOf(anna.identity.card.id), round.newerFrom)
+        assertEquals(0, round.refused, "not refused, not removed")
+        assertEquals(1, box.count(max.inbox))
+        repeat(2) { max.courier.round() }
+        assertEquals(1, box.count(max.inbox), "it stays there round after round")
+    }
+
+    @Test
+    fun lettersSayTheSendersVersion() {
+        meet()
+        anna.note(max, "Привет")
+        exchange()
+        assertEquals(SERVER_VERSION, max.db.seen(anna.identity.card.id)?.version)
+        assertEquals(SERVER_VERSION, anna.db.seen(max.identity.card.id)?.version, "acknowledgements say it too")
+        assertEquals(null, anna.db.seen("someone-else"))
     }
 }

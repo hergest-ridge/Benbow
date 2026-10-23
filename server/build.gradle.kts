@@ -325,4 +325,3 @@ tasks.register<Sync>("release") {
         dir.resolve("SHA256SUMS.txt").writeText(sums)
     }
 }
-

@@ -301,3 +301,28 @@ tasks.register<Exec>("installer") {
         },
     )
 }
+
+// A release for the owner and for friends (ADR-044): `release/<version>/` at the repository's root, never in git:
+// setup.exe, the package as a folder (for the scripts), the memo, and SHA256SUMS.txt for what gets sent.
+tasks.register<Sync>("release") {
+    group = "distribution"
+    description = "release/<benbow.version>/: setup.exe, the server package folder, the memo and checksums."
+    dependsOn("installer")
+    val target = rootProject.layout.projectDirectory.dir("release").dir(benbowVersion)
+    from(layout.buildDirectory.dir("installer"))
+    from(layout.buildDirectory.dir("package")) { include("benbow-server/**") }
+    from(layout.projectDirectory.dir("packaging/windows")) { include("Первые шаги.txt") }
+    into(target)
+    doLast {
+        val dir = target.get().asFile
+        val sums = dir.walkTopDown()
+            .filter { it.isFile && ((it.extension == "exe" && it.parentFile == dir) || it.extension == "apk") }
+            .sortedBy { it.relativeTo(dir).path }
+            .joinToString("") { file ->
+                val sha = MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) }
+                "$sha  ${file.relativeTo(dir).invariantSeparatorsPath}\n"
+            }
+        dir.resolve("SHA256SUMS.txt").writeText(sums)
+    }
+}
+

@@ -40,3 +40,6 @@ Thumbs.db
 
 # Release signing key and its password (tools/create-release-key.ps1): never in git
 .benbow/
+
+# Releases built by `gradlew :server:release` (setup.exe, the package, checksums)
+/release/

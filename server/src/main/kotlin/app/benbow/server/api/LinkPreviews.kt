@@ -7,28 +7,37 @@ import app.benbow.core.text.PageResponse
 import app.benbow.server.storage.BlobStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.awt.Color
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
-import java.net.HttpURLConnection
+import java.net.ConnectException
 import java.net.IDN
 import java.net.Inet6Address
 import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.Proxy
+import java.net.Socket
+import java.net.SocketAddress
 import java.net.URI
 import java.net.URL
 import java.nio.charset.Charset
 import java.security.MessageDigest
+import java.util.concurrent.TimeUnit
 import javax.imageio.IIOImage
 import javax.imageio.ImageIO
 import javax.imageio.ImageWriteParam
+import javax.net.SocketFactory
 
 /**
  * Reads pages for the web client's link cards (ADR-038): the browser's page reaches nothing but this server (ADR-030).
- * Only public addresses: a paired device can't use the server to look into the home network. The page's picture is kept
- * as a JPEG blob, which the client then shows like any other.
+ * Only public addresses: a paired device can't use the server to look into the home network. Each address is checked
+ * twice: by name before every request, and as the socket connects, so a name that turns to a home address in between
+ * (DNS rebinding) gets nowhere. The page's picture is kept as a JPEG blob, which the client then shows like any other.
  */
 internal class LinkPreviews(private val blobs: BlobStore?) {
     suspend fun read(href: String, deviceId: String?): LinkPreviewInfo? = withContext(Dispatchers.IO) {
@@ -62,35 +71,68 @@ internal class LinkPreviews(private val blobs: BlobStore?) {
         private const val SIDE = 1024
         private const val AGENT = "Mozilla/5.0 (compatible; Benbow link preview; like TelegramBot and Twitterbot)"
 
+        // No proxy: the socket goes straight to the address it checks. A whole GET may take three timeouts, no more.
+        private val client =
+            OkHttpClient.Builder()
+                .socketFactory(PublicSockets)
+                .proxy(Proxy.NO_PROXY)
+                .followRedirects(false)
+                .connectTimeout(TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
+                .readTimeout(TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
+                .callTimeout(3L * TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                .build()
+
         /** Whether every address [url]'s host has is out on the internet (not this machine, the LAN or a link-local one). */
         fun isPublic(url: String): Boolean {
             val host = runCatching { URI(ascii(url)).host }.getOrNull()?.trim('[', ']') ?: return false
             val addresses = runCatching { InetAddress.getAllByName(host) }.getOrNull() ?: return false
-            return addresses.isNotEmpty() && addresses.none { a ->
-                a.isLoopbackAddress || a.isSiteLocalAddress || a.isLinkLocalAddress || a.isAnyLocalAddress || a.isMulticastAddress ||
-                    (a is Inet6Address && (a.address[0].toInt() and 0xFE) == 0xFC) || // unique local fc00::/7
-                    (a.address.size == 4 && a.address[0].toInt() == 100 && (a.address[1].toInt() and 0xC0) == 64) // CGNAT 100.64/10
+            return addresses.isNotEmpty() && addresses.all(::isPublicAddress)
+        }
+
+        private fun isPublicAddress(a: InetAddress): Boolean = !(
+            a.isLoopbackAddress || a.isSiteLocalAddress || a.isLinkLocalAddress || a.isAnyLocalAddress || a.isMulticastAddress ||
+                (a is Inet6Address && (a.address[0].toInt() and 0xFE) == 0xFC) || // unique local fc00::/7
+                (a.address.size == 4 && a.address[0].toInt() == 100 && (a.address[1].toInt() and 0xC0) == 64) // CGNAT 100.64/10
+            )
+
+        internal fun fetch(url: String, maxBytes: Int, accept: String): PageResponse {
+            val request =
+                Request.Builder()
+                    .url(ascii(url))
+                    .header("User-Agent", AGENT)
+                    .header("Accept", accept)
+                    .header("Accept-Language", "ru,en;q=0.8")
+                    .build()
+            client.newCall(request).execute().use { response ->
+                val body = response.body.byteStream().use { readAtMost(it, maxBytes) }
+                return PageResponse(response.code, response.header("Location"), response.header("Content-Type"), body)
             }
         }
 
-        private fun fetch(url: String, maxBytes: Int, accept: String): PageResponse {
-            val connection = URL(ascii(url)).openConnection() as HttpURLConnection
-            try {
-                connection.instanceFollowRedirects = false
-                connection.useCaches = false
-                connection.connectTimeout = TIMEOUT_MS
-                connection.readTimeout = TIMEOUT_MS
-                connection.setRequestProperty("User-Agent", AGENT)
-                connection.setRequestProperty("Accept", accept)
-                connection.setRequestProperty("Accept-Language", "ru,en;q=0.8")
-                val status = connection.responseCode
-                val body =
-                    (if (status >= 400) connection.errorStream else connection.inputStream)?.use { readAtMost(it, maxBytes) }
-                        ?: ByteArray(0)
-                return PageResponse(status, connection.getHeaderField("Location"), connection.contentType, body)
-            } finally {
-                connection.disconnect()
+        /** Sockets that connect only to public addresses, whatever the host's name said when it was checked. */
+        private object PublicSockets : SocketFactory() {
+            override fun createSocket(): Socket = object : Socket() {
+                override fun connect(endpoint: SocketAddress?, timeout: Int) {
+                    val address = (endpoint as? InetSocketAddress)?.address
+                    if (address == null || !isPublicAddress(address)) throw ConnectException("Not a public address: $endpoint")
+                    super.connect(endpoint, timeout)
+                }
             }
+
+            override fun createSocket(host: String, port: Int): Socket = createSocket(InetAddress.getByName(host), port)
+
+            override fun createSocket(host: String, port: Int, localHost: InetAddress?, localPort: Int): Socket =
+                createSocket(InetAddress.getByName(host), port, localHost, localPort)
+
+            override fun createSocket(host: InetAddress, port: Int): Socket = createSocket().apply {
+                connect(InetSocketAddress(host, port))
+            }
+
+            override fun createSocket(address: InetAddress, port: Int, localAddress: InetAddress?, localPort: Int): Socket =
+                createSocket().apply {
+                    bind(InetSocketAddress(localAddress, localPort))
+                    connect(InetSocketAddress(address, port))
+                }
         }
 
         private fun readAtMost(input: InputStream, max: Int): ByteArray {

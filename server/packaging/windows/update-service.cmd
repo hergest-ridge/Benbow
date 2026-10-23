@@ -19,6 +19,15 @@ if /I "%SRC%"=="%DEST%\" (
   echo Run this script from the new package folder, not from the installed copy.
   exit /b 1
 )
+rem robocopy /MIR deletes what the source lacks: both ends must be what they claim to be.
+if not exist "%SRC%lib\server.jar" (
+  echo This folder is not a Benbow Server package ^(no lib\server.jar^). Run the script from inside the package.
+  exit /b 1
+)
+if not exist "%DEST%\benbow-server-service.exe" (
+  echo "%DEST%" does not look like an installed Benbow Server; nothing was changed.
+  exit /b 1
+)
 
 echo Stopping Benbow Server...
 "%DEST%\benbow-server-service.exe" stop

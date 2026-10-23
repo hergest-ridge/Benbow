@@ -48,6 +48,7 @@ dependencies {
     implementation(project(":shared:core"))
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.netty)
+    implementation(platform(libs.netty.bom)) // Netty with its security fixes, ahead of Ktor's
     implementation(libs.ktor.server.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.ktor.network.tls.certificates)
@@ -65,6 +66,7 @@ dependencies {
     implementation(libs.zxing.core) // the QR code a phone scans to install the app (ADR-042, U4)
     implementation(libs.jagged.x25519) // age files for the copy outside the house (ADR-043)
     implementation(libs.jagged.scrypt) // key.age, the key sealed with the owner's passphrase
+    implementation(libs.okhttp) // link previews: its socket factory checks each address as it connects
 
     testImplementation(libs.kotlin.test)
     testImplementation(libs.ktor.server.test.host)

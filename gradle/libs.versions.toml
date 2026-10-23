@@ -22,6 +22,9 @@ jetbrains-lifecycle = "2.11.0"
 jetbrains-navigation3 = "1.1.2"
 kotlinx-datetime = "0.8.0"
 ktor = "3.6.0"
+# Above Ktor's own 4.2.17 (GHSA-hcvj-94mj-jp5c, GHSA-8352-h356-c9qh and the 4.2.19 advisories); drop once Ktor brings it.
+netty = "4.2.19.Final"
+okhttp = "5.5.0"
 kotlinx-coroutines = "1.11.0"
 kotlinx-serialization = "1.11.0"
 logback = "1.6.5"
@@ -81,6 +84,8 @@ kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-t
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 ktor-server-core = { module = "io.ktor:ktor-server-core", version.ref = "ktor" }
 ktor-server-netty = { module = "io.ktor:ktor-server-netty", version.ref = "ktor" }
+netty-bom = { module = "io.netty:netty-bom", version.ref = "netty" }
+okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 ktor-server-content-negotiation = { module = "io.ktor:ktor-server-content-negotiation", version.ref = "ktor" }
 ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
 ktor-server-test-host = { module = "io.ktor:ktor-server-test-host", version.ref = "ktor" }

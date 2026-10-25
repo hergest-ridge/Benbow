@@ -564,6 +564,72 @@ class BoardScreenTest {
     }
 
     @Test
+    fun aNoteGrowsOutOfItsCardAndBackIntoIt() = runDesktopComposeUiTest(width = 412, height = 860) {
+        // Owner, 0.15.0: the old sheet grew dark and empty, the note then appeared unscaled; closing showed the card's
+        // frame in the middle of the screen for a moment.
+        repo.createBoardNote(services.today(), JournalRepository.textBody("Раз, два, три."))
+        val id = repo.createBoardNote(services.today(), JournalRepository.textBody("Паста болоньезе\nлук, морковь, фарш"))
+        openBoard()
+        waitUntilAtLeastOneExists(hasText("Паста болоньезе"), 5_000)
+        val card = onNodeWithTag(id).fetchSemanticsNode().boundsInRoot
+        mainClock.autoAdvance = false
+        onNodeWithTag(id).performClick()
+        listOf(0L, 60L, 120L, 200L, 340L).forEachIndexed { i, at ->
+            mainClock.advanceTimeBy(if (i == 0) 16 else at - listOf(0L, 60L, 120L, 200L, 340L)[i - 1])
+            screenshot("board-22-open-$at")
+        }
+        mainClock.autoAdvance = true
+        waitUntilAtLeastOneExists(hasSetTextAction(), 5_000)
+        mainClock.autoAdvance = false
+        onNodeWithContentDescription("Назад").performClick()
+        listOf(16L, 100L, 200L, 300L).forEachIndexed { i, at ->
+            mainClock.advanceTimeBy(if (i == 0) 16 else at - listOf(16L, 100L, 200L, 300L)[i - 1])
+            screenshot("board-23-close-$at")
+        }
+        mainClock.autoAdvance = true
+        waitUntilDoesNotExist(hasSetTextAction(), 5_000)
+        assertEquals(card, onNodeWithTag(id).fetchSemanticsNode().boundsInRoot, "the card is back where it was")
+    }
+
+    @Test
+    fun choosingMovesNoCard() = runDesktopComposeUiTest(width = 1100, height = 900) {
+        // Owner, 0.15.0: the choosing bar and its marks moved every row down a little.
+        val (a, b) = listOf("Альфа", "Бета").map { repo.createBoardNote(services.today(), JournalRepository.textBody(it)) }
+        openBoard()
+        waitUntilAtLeastOneExists(hasText("Бета"), 5_000)
+        val top = { id: String -> onNodeWithTag(id).fetchSemanticsNode().boundsInRoot.top }
+        val before = top(a) to top(b)
+        onNodeWithTag(b).performTouchInput {
+            down(center)
+            advanceEventTime(800)
+            up()
+        }
+        waitUntilAtLeastOneExists(hasContentDescription("Выбрано: 1"), 5_000)
+        waitForIdle()
+        screenshot("board-21-choosing-wide")
+        assertEquals(before, top(a) to top(b))
+    }
+
+    @Test
+    fun everyPartOfTheBoardStartsFromTheLeft() = runDesktopComposeUiTest(width = 1100, height = 900) {
+        // Owner, 0.15.0: after a note was pinned, the one left in «Другие» stood in the third column.
+        val ids = listOf("Паста болоньезе", "Раз, два, три.", "Третья", "Четвёртая").map {
+            repo.createBoardNote(services.today(), JournalRepository.textBody(it))
+        }
+        openBoard()
+        waitUntilAtLeastOneExists(hasText("Четвёртая"), 5_000)
+        ids.drop(2).forEach { runBlocking { repo.moveToTrash(it) } }
+        repo.pinOnBoard(ids[0], true)
+        waitUntilAtLeastOneExists(hasText("Закреплённые"), 5_000)
+        waitUntilDoesNotExist(hasText("Четвёртая"), 5_000)
+        mainClock.advanceTimeBy(2_000)
+        waitForIdle()
+        screenshot("board-20-sections-from-left")
+        val left = { id: String -> onNodeWithTag(id).fetchSemanticsNode().boundsInRoot.left }
+        assertEquals(left(ids[0]), left(ids[1]), "«Другие» starts in the first column, under «Закреплённые»")
+    }
+
+    @Test
     fun anOpenNoteGoesToTheArchiveFromBesideItsPinWithAWayBack() = runDesktopComposeUiTest(width = 412, height = 860) {
         val id = repo.createBoardNote(services.today(), JournalRepository.textBody("Альфа"))
         openBoard()

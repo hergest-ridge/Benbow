@@ -728,6 +728,8 @@
     <string name="ago_half_year">Полгода назад</string>
     <string name="link_previews">Превью ссылок</string>
     <string name="link_previews_hint">Карточка ссылки один раз читает заголовок и картинку страницы, когда ссылку вставили. Сайт при этом видит запрос, как при открытии.</string>
+    <string name="media_opens_post">Клик по картинкам и видео открывает пост</string>
+    <string name="media_opens_post_hint">В ленте клик по вложению поста открывает сам пост, а не просмотр во весь экран.</string>
     <string name="picture_links">Не вставлять ссылки вложений</string>
     <string name="picture_links_hint">Картинка или гифка по ссылке ложится вложением под ссылкой. Включено — только вложение, без строки с адресом.</string>
     <string name="ticked_below">Отмеченные пункты — вниз</string>

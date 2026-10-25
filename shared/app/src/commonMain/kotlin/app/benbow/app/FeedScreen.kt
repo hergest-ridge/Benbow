@@ -496,7 +496,14 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
                                             onExpand = { expanded[id] = true },
                                             onOpen = { nav.open(Route.Editor(id, item.summary.day, readOnly = true)) },
                                             onComments = { nav.open(Route.Editor(id, item.summary.day, readOnly = true)) },
-                                            onOpenMedia = { nav.open(Route.Media(id, it.meta.id)) },
+                                            onOpenMedia = {
+                                                // The web's switch: a post's picture opens the post (owner).
+                                                if (appearance.mediaOpensPost) {
+                                                    nav.open(Route.Editor(id, item.summary.day, readOnly = true))
+                                                } else {
+                                                    nav.open(Route.Media(id, it.meta.id))
+                                                }
+                                            },
                                             glow = glowing == id,
                                             // The rows as they are when tapped: a moving window doesn't recompose the post.
                                             queue = { feedQueue(vm.rows.value.orEmpty(), id, gentle) },

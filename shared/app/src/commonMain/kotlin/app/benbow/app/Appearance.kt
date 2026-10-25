@@ -25,6 +25,8 @@ data class Appearance(
     val linkPreviews: Boolean = true,
     /** A link that is a picture brings it as an attachment under the link (ADR-045); off, the picture alone, no link. */
     val pictureLinks: Boolean = true,
+    /** In the feed, a tap on a post's picture or video opens the post, not the viewer (owner: the web's switch). */
+    val mediaOpensPost: Boolean = false,
     /** A list note's ticked boxes go under «Отмечено», as in Keep; off, they stay where they are, crossed out, as on paper. */
     val tickedBelow: Boolean = true,
 ) {
@@ -36,6 +38,7 @@ data class Appearance(
         settings.put(POST_MEDIA, postMedia.name)
         settings.put(LINK_PREVIEWS, linkPreviews.toString())
         settings.put(PICTURE_LINKS, pictureLinks.toString())
+        settings.put(MEDIA_OPENS_POST, mediaOpensPost.toString())
         settings.put(TICKED_BELOW, tickedBelow.toString())
     }
 
@@ -47,6 +50,7 @@ data class Appearance(
         private const val POST_MEDIA = "post.media"
         private const val LINK_PREVIEWS = "links.previews"
         private const val PICTURE_LINKS = "links.pictureLinks"
+        private const val MEDIA_OPENS_POST = "feed.mediaOpensPost"
         private const val TICKED_BELOW = "board.tickedBelow"
 
         internal fun load(settings: Settings) = Appearance(
@@ -57,6 +61,7 @@ data class Appearance(
             postMedia = PostMedia.entries.firstOrNull { it.name == settings.get(POST_MEDIA) } ?: PostMedia.Carousel,
             linkPreviews = settings.get(LINK_PREVIEWS) != "false",
             pictureLinks = settings.get(PICTURE_LINKS) != "false",
+            mediaOpensPost = settings.get(MEDIA_OPENS_POST) == "true",
             tickedBelow = settings.get(TICKED_BELOW) != "false",
         )
     }

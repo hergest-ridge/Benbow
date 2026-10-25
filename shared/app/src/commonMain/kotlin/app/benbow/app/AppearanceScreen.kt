@@ -41,6 +41,8 @@ import app.benbow.app.resources.feed_scrubber_hint
 import app.benbow.app.resources.feed_section
 import app.benbow.app.resources.link_previews
 import app.benbow.app.resources.link_previews_hint
+import app.benbow.app.resources.media_opens_post
+import app.benbow.app.resources.media_opens_post_hint
 import app.benbow.app.resources.palette
 import app.benbow.app.resources.palette_names
 import app.benbow.app.resources.picture_links
@@ -103,6 +105,22 @@ internal fun AppearanceScreen(services: AppServices, nav: Navigator) {
                     )
                 }
                 Switch(current.feedScrubber, { services.setAppearance(current.copy(feedScrubber = it)) }, modifier = Modifier.hand())
+            }
+            // The web's own (owner): a tap on a post's picture or video opens the post.
+            if (services.platform == "web") {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f).padding(end = 16.dp)) {
+                        Text(stringResource(Res.string.media_opens_post), style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            stringResource(Res.string.media_opens_post_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(current.mediaOpensPost, {
+                        services.setAppearance(current.copy(mediaOpensPost = it))
+                    }, modifier = Modifier.hand())
+                }
             }
             Title(stringResource(Res.string.post_section))
             Text(

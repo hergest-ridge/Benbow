@@ -46,6 +46,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.test.waitUntilAtLeastOneExists
 import androidx.compose.ui.test.waitUntilDoesNotExist
 import androidx.compose.ui.test.waitUntilExactlyOneExists
 import androidx.compose.ui.text.TextRange
@@ -1291,6 +1292,29 @@ class AppSmokeTest {
         waitUntilExactlyOneExists(hasText("3 / 3"), 5_000)
         onRoot().performTouchInput { drag(center, Offset(0f, height * 0.35f)) }
         waitUntilExactlyOneExists(hasText("Три снимка с моря"), 5_000) // back in the feed
+    }
+
+    @Test
+    fun withTheWebsSwitchAPostsPictureOpensThePost() = runDesktopComposeUiTest(width = 412, height = 860) {
+        services.setAppearance(services.appearance.value.copy(mediaOpensPost = true))
+        val entry = services.repo.createNote(services.today(), "Два снимка с моря")
+        runBlocking {
+            repeat(2) { i ->
+                val bytes = picture()
+                val image = ImageIO.read(bytes.inputStream())
+                services.attach({ entry }, { bytes.inputStream() }) {
+                    MediaProbe("image/jpeg", "IMG_$i.jpg", "image", image.width, image.height, preview = picture(512, 384))
+                }.join()
+            }
+        }
+        setContent { BenbowApp(services) }
+        waitUntilExactlyOneExists(hasText("Два снимка с моря"), 5_000)
+        onNodeWithText("Лента").click()
+        waitUntilExactlyOneExists(hasText("1/2"), 5_000)
+        onNodeWithContentDescription("Вложения").performTouchInput { click(center) }
+        // The post, not the viewer.
+        waitUntilAtLeastOneExists(hasContentDescription("Назад"), 5_000)
+        assertTrue(onAllNodes(hasText("1 / 2")).fetchSemanticsNodes().isEmpty(), "no viewer")
     }
 
     @Test

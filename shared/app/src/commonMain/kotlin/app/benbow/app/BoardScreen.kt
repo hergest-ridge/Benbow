@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
@@ -88,11 +89,13 @@ import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -201,7 +204,14 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
     val inJournal by remember(mode, words) {
         if (mode == SEARCH && words.isNotBlank()) services.repo.search(SearchQuery(words)).map { it.size } else flowOf(0)
     }.collectAsStateWithLifecycle(0)
-    val boardGrid = rememberLazyStaggeredGridState()
+    // The pinned notes changing (one pinned, the last unpinned) start the board's grid afresh where it was: a staggered
+    // grid keeps its notes in the columns it once gave them, and «Другие» began in the third (owner, 0.15.0).
+    val pinnedIds = data?.pinned?.mapTo(HashSet()) { it.id }
+    val lastGrid = remember { arrayOfNulls<LazyStaggeredGridState>(1) }
+    val boardGrid = remember(pinnedIds) {
+        val old = lastGrid[0]
+        LazyStaggeredGridState(old?.firstVisibleItemIndex ?: 0, old?.firstVisibleItemScrollOffset ?: 0).also { lastGrid[0] = it }
+    }
     val archiveGrid = rememberLazyStaggeredGridState()
     val searchGrid = rememberLazyStaggeredGridState()
     val grid = when (mode) {
@@ -278,6 +288,9 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
         }
     }
     val shown = sections.flatMap { it.notes }
+    // The open note's box wears its card's face near the card: the card as the board shows it now.
+    stage?.face = { id -> shown.firstOrNull { it.id == id } ?: data?.let { (it.pinned + it.others).firstOrNull { n -> n.id == id } } }
+    stage?.media = services.media
     val chosenNotes = { shown.filter { it.id in chosen } }
     val archive: (List<String>, Boolean) -> Unit = { ids, into ->
         services.scope.launch { ids.forEach { services.repo.archiveOnBoard(it, into) } }
@@ -713,6 +726,9 @@ internal fun ElsewhereHint(text: String, onClick: () -> Unit, modifier: Modifier
 
 private const val LIST_WIDTH = 640f
 
+/** The title bar's height, and the choosing bar's in its place. */
+private val BAR_HEIGHT = 60.dp
+
 private val GLIDE = spring(stiffness = Spring.StiffnessMediumLow, visibilityThreshold = IntOffset.VisibilityThreshold)
 
 private fun isNoteKey(key: Any) = key is String && !key.startsWith("h-")
@@ -776,7 +792,7 @@ private class BoardOrder {
 @Composable
 private fun BoardTop(list: Boolean, onSearch: () -> Unit, onArchive: () -> Unit, onToggle: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().statusBarsPadding().padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 4.dp),
+        Modifier.fillMaxWidth().statusBarsPadding().padding(start = 20.dp, end = 8.dp).height(BAR_HEIGHT),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(stringResource(Res.string.tab_board), Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall)
@@ -805,7 +821,8 @@ private fun ChoiceBar(
     onTrash: () -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().statusBarsPadding().padding(start = 8.dp, end = 8.dp, top = 4.dp),
+        // As tall as the title bar it stands in for: the cards never move (owner).
+        Modifier.fillMaxWidth().statusBarsPadding().padding(start = 8.dp, end = 8.dp).height(BAR_HEIGHT),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(onClear, Modifier.hand()) { Icon(Icons.Close, stringResource(Res.string.board_unchoose)) }
@@ -873,8 +890,10 @@ internal fun EmptyBoard(modifier: Modifier) {
     }
 }
 
-/** A card's place in the grid: blank while it is carried, held at its height while it is open as the editor. */
-@OptIn(ExperimentalSharedTransitionApi::class)
+/**
+ * A card's place in the grid: blank while it is carried, and while it is open as the editor (held at its height; the
+ * note's box grows from where it tells the stage it is).
+ */
 @Composable
 private fun NoteSlot(
     note: BoardNote,
@@ -893,7 +912,6 @@ private fun NoteSlot(
     val hover = remember { MutableInteractionSource() }
     val hovered by hover.collectIsHoveredAsState()
     val swiped = swipe.key == note.id
-    val shared = LocalBoardShared.current
     val open = stage?.holds(note.id) == true
     var height by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
@@ -901,8 +919,11 @@ private fun NoteSlot(
         modifier
             .then(if (open && height > 0) Modifier.height(with(density) { height.toDp() }) else Modifier)
             .onSizeChanged { if (!open) height = it.height }
-            .onGloballyPositioned { if (drag.key == note.id) drag.slot = drag.board?.localBoundingBoxOf(it, clipBounds = false) }
-            .alpha(if (drag.key == note.id) 0f else 1f)
+            .onGloballyPositioned {
+                stage?.place(note.id, it.boundsInRoot())
+                if (drag.key == note.id) drag.slot = drag.board?.localBoundingBoxOf(it, clipBounds = false)
+            }
+            .alpha(if (drag.key == note.id || open) 0f else 1f)
             .zIndex(if (swiped) 1f else 0f)
             .graphicsLayer {
                 if (swiped) {
@@ -911,34 +932,10 @@ private fun NoteSlot(
                 }
             }
             .hoverable(hover)
-            .testTag(note.id),
+            .testTag(note.id)
+            .then(if (open) Modifier.clearAndSetSemantics {} else Modifier),
     ) {
-        val click = Modifier.clip(CARD_SHAPE).hand().clickable { onOpen(note) }
-        if (shared == null) {
-            BoardCard(note, media, chosen, click, onTick = tick)
-        } else {
-            with(shared) {
-                AnimatedVisibility(!open, enter = HOLD_IN, exit = HOLD_OUT) {
-                    BoardCard(
-                        note,
-                        media,
-                        chosen,
-                        Modifier.sharedBounds(
-                            rememberSharedContentState(sheetKey(note.id)),
-                            this,
-                            enter = HOLD_IN,
-                            exit = HOLD_OUT,
-                            boundsTransform = SHEET,
-                            zIndexInOverlay = 0.5f,
-                            clipInOverlayDuringTransition = OverlayClip(CARD_SHAPE),
-                        ).then(click),
-                        Modifier.animateEnterExit(enter = WORDS_IN, exit = WORDS_OUT),
-                        tick,
-                        lined = !transition.isRunning,
-                    )
-                }
-            }
-        }
+        BoardCard(note, media, chosen, Modifier.clip(CARD_SHAPE).hand().clickable { onOpen(note) }, onTick = tick)
         // A chosen card wears its frame (Keep on a phone); with a mouse a mark on its corner chooses it, shown on hover,
         // on every card while choosing, checked on the chosen ones.
         if (!open && LocalPagerArrows.current && (chosen || hovered || choosing)) {
@@ -1034,48 +1031,16 @@ private fun DialOption(icon: ImageVector, label: String, onClick: () -> Unit) {
 }
 
 /**
- * The + button. A new note's sheet grows out of it; the button comes back at once, as it was (owner: as Keep's, no
- * animation of it on the way back; growing back into it, it stretched over the screen), so it takes part in the move
- * only at rest or leaving.
+ * The + button. A new note's box grows out of it (it tells the stage where it is); the button stays as it is (owner:
+ * as Keep's; growing back into it, the old sheet stretched over the screen).
  */
-@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun NewNoteButton(dial: Boolean, onClick: () -> Unit) {
     val stage = LocalBoardStage.current
-    val shared = LocalBoardShared.current
-    val out = stage?.open == true && stage.fresh
     val turn by animateFloatAsState(if (dial) 45f else 0f, tween(DIAL_MILLIS))
     val label = stringResource(if (dial) Res.string.board_dial_close else Res.string.board_new_note)
     val icon = Modifier.graphicsLayer { rotationZ = turn }
-    Box(Modifier.size(FAB_SIZE)) {
-        if (shared == null) {
-            Fab(onClick, Modifier, label, icon)
-        } else {
-            with(shared) {
-                AnimatedVisibility(!out, enter = EnterTransition.None, exit = QUICK_HOLD_OUT) {
-                    val moving = transition.isRunning && transition.targetState != EnterExitState.PostExit
-                    Fab(
-                        onClick,
-                        if (moving) {
-                            Modifier
-                        } else {
-                            Modifier.sharedBounds(
-                                rememberSharedContentState(sheetKey(null)),
-                                this,
-                                enter = EnterTransition.None,
-                                exit = QUICK_HOLD_OUT,
-                                boundsTransform = QUICK_SHEET,
-                                zIndexInOverlay = 0.5f,
-                                clipInOverlayDuringTransition = OverlayClip(FAB_SHAPE),
-                            )
-                        },
-                        label,
-                        Modifier.animateEnterExit(enter = EnterTransition.None, exit = WORDS_OUT).then(icon),
-                    )
-                }
-            }
-        }
-    }
+    Box(Modifier.size(FAB_SIZE).onGloballyPositioned { stage?.button = it.boundsInRoot() }) { Fab(onClick, Modifier, label, icon) }
 }
 
 private const val DIAL_MILLIS = 150

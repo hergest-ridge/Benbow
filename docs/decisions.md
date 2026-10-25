@@ -195,3 +195,9 @@ Owner and a friend, 2026-10-25. A link that is a picture (an image address, or a
 The editor's bar: one row that fits a phone (undo, redo, bold, italic, «Аа», «H», lists; indents only in a list), «Аа» and «H» open the rest above it; every tool names itself (and its keys) in a hint, on hover or a long press, which then doesn't press it.
 The trash groups its parts by when things went there (today, yesterday, this week, then months; none when ordered by weight); «Выбрать все» and a group's line choose at once, deleting for good still only through the held button.
 Rejected: the picture kept in its link card, shown whole (a second way to show a picture, outside the media library; tried and dropped before release); an mp4 for GIF sites (no inline looping video yet).
+
+## ADR-046: The owner's check of 0.15.0 (2026-10-25)
+A board note opens as a container transform, replacing ADR-040's shared sheet (owner: the sheet grew dark and empty, the note then appeared unscaled, its parts jumping, and closing flashed the card's frame mid-screen): one rounded box in the note's color goes from the card's place (cards and the + button tell the stage where they are) to the note's, and both faces scale with it, the card's fading out over the first third, the note's page, laid out once at full size, fading in after; closing plays back into the card wherever it is now, a new note closed empty fades where it is. No SharedTransitionLayout.
+Every part of the board starts from the left: a staggered grid keeps notes in the columns it once gave them, so the pinned notes changing start the grid afresh where it was. The choosing bar is as tall as the title bar.
+The web's «Клик по картинкам и видео открывает пост» (off by default): in the feed, a tap on a post's media opens the post instead of the viewer.
+The server now tells the browser a picture link's type, which 0.15.0 left out, so the web made a plain card of it.

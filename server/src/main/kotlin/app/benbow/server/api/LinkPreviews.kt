@@ -2,6 +2,7 @@ package app.benbow.server.api
 
 import app.benbow.core.api.LinkPreviewInfo
 import app.benbow.core.text.PageGet
+import app.benbow.core.text.PageRead
 import app.benbow.core.text.PageReader
 import app.benbow.core.text.PageResponse
 import app.benbow.server.storage.BlobStore
@@ -42,21 +43,7 @@ import javax.net.SocketFactory
 internal class LinkPreviews(private val blobs: BlobStore?) {
     suspend fun read(href: String, deviceId: String?): LinkPreviewInfo? = withContext(Dispatchers.IO) {
         val read = PageReader.read(href, Direct, ::decode, ::isPublic) ?: return@withContext null
-        // An address that is a picture keeps it as it came (a GIF stays a GIF), with its size; a page's picture is a JPEG.
-        read.own?.let { own ->
-            val image = keep(own.bytes, deviceId, own.mime) ?: return@let null
-            return@withContext LinkPreviewInfo(
-                read.url,
-                read.meta.title,
-                read.meta.description,
-                read.meta.site,
-                image,
-                own.width,
-                own.height,
-            )
-        }
-        val image = read.image?.let(::jpeg)?.let { keep(it, deviceId) }
-        LinkPreviewInfo(read.url, read.meta.title, read.meta.description, read.meta.site, image)
+        infoOf(read) { bytes, mime -> keep(bytes, deviceId, mime) }
     }
 
     private fun keep(bytes: ByteArray, deviceId: String?, mime: String = "image/jpeg"): String? {
@@ -192,6 +179,30 @@ internal class LinkPreviews(private val blobs: BlobStore?) {
 
         private fun decode(bytes: ByteArray, charset: String?): String =
             String(bytes, charset?.let { runCatching { Charset.forName(it) }.getOrNull() } ?: Charsets.UTF_8)
+
+        /**
+         * What the browser gets of [read]: an address that is a picture keeps it as it came (a GIF stays a GIF), with its
+         * type and size, for the browser to attach under the link (ADR-045); a page's picture is kept as a JPEG. [keep]
+         * stores bytes of a type and gives their SHA-256 (null: not kept).
+         */
+        internal fun infoOf(read: PageRead, keep: (ByteArray, String) -> String?): LinkPreviewInfo {
+            val own = read.own
+            val whole = own?.let { keep(it.bytes, it.mime) }
+            if (own != null && whole != null) {
+                return LinkPreviewInfo(
+                    read.url,
+                    read.meta.title,
+                    read.meta.description,
+                    read.meta.site,
+                    whole,
+                    width = own.width,
+                    height = own.height,
+                    mime = own.mime,
+                )
+            }
+            val image = read.image?.let(::jpeg)?.let { keep(it, "image/jpeg") }
+            return LinkPreviewInfo(read.url, read.meta.title, read.meta.description, read.meta.site, image)
+        }
 
         /** The picture as a JPEG at most [SIDE] px across (transparency on white), or null when it can't be read. */
         fun jpeg(image: ByteArray): ByteArray? = runCatching {

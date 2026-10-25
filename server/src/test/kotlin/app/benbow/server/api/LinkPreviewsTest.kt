@@ -1,5 +1,8 @@
 package app.benbow.server.api
 
+import app.benbow.core.text.PageMeta
+import app.benbow.core.text.PagePicture
+import app.benbow.core.text.PageRead
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import java.io.IOException
@@ -68,5 +71,20 @@ class LinkPreviewsTest {
         assertEquals(1024, image.width)
         assertEquals(537, image.height)
         assertEquals(null, LinkPreviews.jpeg(byteArrayOf(1, 2, 3)))
+    }
+
+    @Test
+    fun anAddressThatIsAPictureTellsTheBrowserItsTypeAndSize() {
+        // Owner, 0.15.0: a picture link came to the browser as a plain card, its type left out of the answer.
+        val gif = "GIF89a".encodeToByteArray() + byteArrayOf(0xE0.toByte(), 0x01, 0x0E, 0x01, 0, 0, 0)
+        val kept = ArrayList<String>()
+        val read = PageRead("https://x.org/cat.gif", PageMeta(), gif, PagePicture(gif, "image/gif", 480, 270))
+        val info = LinkPreviews.infoOf(read) { _, mime -> "a".repeat(64).also { kept += mime } }
+        assertEquals(Triple("image/gif", 480, 270), Triple(info.mime, info.width, info.height))
+        assertEquals(listOf("image/gif"), kept, "kept as it came, no JPEG made of it")
+        // Not kept: a plain card, and nothing claims to be the picture.
+        val plain = LinkPreviews.infoOf(read) { _, _ -> null }
+        assertEquals(null, plain.mime)
+        assertEquals(null, plain.image)
     }
 }

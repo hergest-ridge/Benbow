@@ -23,6 +23,8 @@ data class Appearance(
     val postMedia: PostMedia = PostMedia.Carousel,
     /** A link card reads its page once, as it goes in (ADR-038); off, cards show the address only. */
     val linkPreviews: Boolean = true,
+    /** A link that is a picture brings it as an attachment under the link (ADR-045); off, the picture alone, no link. */
+    val pictureLinks: Boolean = true,
     /** A list note's ticked boxes go under «Отмечено», as in Keep; off, they stay where they are, crossed out, as on paper. */
     val tickedBelow: Boolean = true,
 ) {
@@ -33,6 +35,7 @@ data class Appearance(
         settings.put(FEED_SCRUBBER, feedScrubber.toString())
         settings.put(POST_MEDIA, postMedia.name)
         settings.put(LINK_PREVIEWS, linkPreviews.toString())
+        settings.put(PICTURE_LINKS, pictureLinks.toString())
         settings.put(TICKED_BELOW, tickedBelow.toString())
     }
 
@@ -43,6 +46,7 @@ data class Appearance(
         private const val FEED_SCRUBBER = "feed.scrubber"
         private const val POST_MEDIA = "post.media"
         private const val LINK_PREVIEWS = "links.previews"
+        private const val PICTURE_LINKS = "links.pictureLinks"
         private const val TICKED_BELOW = "board.tickedBelow"
 
         internal fun load(settings: Settings) = Appearance(
@@ -52,6 +56,7 @@ data class Appearance(
             feedScrubber = settings.get(FEED_SCRUBBER) != "false",
             postMedia = PostMedia.entries.firstOrNull { it.name == settings.get(POST_MEDIA) } ?: PostMedia.Carousel,
             linkPreviews = settings.get(LINK_PREVIEWS) != "false",
+            pictureLinks = settings.get(PICTURE_LINKS) != "false",
             tickedBelow = settings.get(TICKED_BELOW) != "false",
         )
     }

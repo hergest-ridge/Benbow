@@ -135,10 +135,12 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -383,6 +385,30 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
         }
         if (cards.isEmpty()) return
         services.readCards(cards) { key, preview ->
+            val picture = preview?.picture
+            if (picture != null) {
+                // A link that is a picture (ADR-045): attached, and under its link (or alone) where the card was.
+                val keepLink = services.appearance.value.pictureLinks
+                if (withContext(ui) { alive && editor?.hasCard(key) == true }) {
+                    val ref = services.attachLinkPicture(ensureEntryId(), picture)
+                    // The picture takes the card's place once the entry knows it, so its height never drops in between.
+                    withTimeoutOrNull(KNOWN_MILLIS) {
+                        snapshotFlow { detail?.attachments.orEmpty().any { it.meta.id == ref } }.first { it }
+                    }
+                    val placed = withContext(ui) { alive && editor?.cardToPicture(key, ref, keepLink) == true }
+                    if (!placed) entryId?.let { services.placeStoredPicture(it, key, ref, keepLink) }
+                } else {
+                    val id = entryId ?: return@readCards
+                    if (services.storedCard(
+                            id,
+                            key,
+                        )
+                    ) {
+                        services.placeStoredPicture(id, key, services.attachLinkPicture(id, picture), keepLink)
+                    }
+                }
+                return@readCards
+            }
             val filled = withContext(ui) { alive && editor?.fillCard(key) { it.filled(preview, services.today()) } == true }
             if (!filled) entryId?.let { services.fillStoredCard(it, key, preview) }
         }
@@ -1048,6 +1074,9 @@ private val NOT_IN_FEED = setOf("comment", "system", "event", "reminder")
 
 /** A note's title is a heading of this level; one of any level read from elsewhere shows as its title too. */
 private const val TITLE_STYLE = "h3"
+
+/** How long a link's picture waits for the entry to know it before it takes its card's place anyway. */
+private const val KNOWN_MILLIS = 2_000L
 private val TITLE_STYLES = setOf("h1", "h2", "h3")
 
 /** Keep's «Название»: a field of its own, a heading's size; Enter goes on to the words under it. */

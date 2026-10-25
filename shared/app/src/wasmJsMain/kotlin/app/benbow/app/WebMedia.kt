@@ -40,8 +40,8 @@ internal fun AppServices.attachBrowserFile(entryId: suspend () -> String, file: 
     }
 }
 
-internal actual suspend fun coverJpeg(image: ByteArray): ByteArray? =
-    scaledJpeg(image.toUint8Array(), COVER_SIZE).await<JsAny?>()?.toByteArray()
+internal actual suspend fun coverJpeg(image: ByteArray, max: Int): ByteArray? =
+    scaledJpeg(image.toUint8Array(), max).await<JsAny?>()?.toByteArray()
 
 /** An image file's bytes drawn at most [max] px across and saved as a JPEG; null when the browser can't decode it. */
 private fun scaledJpeg(bytes: JsAny, max: Int): Promise<JsAny?> = js(

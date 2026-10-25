@@ -97,8 +97,11 @@ private suspend fun readTrack(file: LocalFile): Pair<TrackInfo, ByteArray?>? = t
     null
 }
 
-/** A sound's embedded cover as the attachment's preview: a JPEG at most [COVER_SIZE] px across, or null when it can't be read. */
-internal expect suspend fun coverJpeg(image: ByteArray): ByteArray?
+/**
+ * A sound's embedded cover as the attachment's preview: a JPEG at most [max] px across ([COVER_SIZE] by default), or null
+ * when it can't be read; a picture link's small preview too (ADR-045).
+ */
+internal expect suspend fun coverJpeg(image: ByteArray, max: Int = COVER_SIZE): ByteArray?
 
 /** Large enough for the player's cover across a phone (ADR-035); lists scale it down. */
 internal const val COVER_SIZE = 1024

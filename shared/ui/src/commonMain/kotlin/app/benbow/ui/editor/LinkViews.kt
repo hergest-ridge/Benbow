@@ -83,14 +83,17 @@ interface LinkHandler {
 
 val LocalLinkHandler = staticCompositionLocalOf<LinkHandler?> { null }
 
-/** How a card shows its picture: a small square, across the big look, or whole (a link that is a picture; a GIF moves). */
-enum class LinkPictureLook { Thumb, Large, Whole }
-
-/** Draws a card's picture (a blob's SHA-256) in [LinkPictureLook]. Null: cards show the site's letter. */
-val LocalLinkPicture = staticCompositionLocalOf<(@Composable (sha256: String, look: LinkPictureLook, modifier: Modifier) -> Unit)?> { null }
+/** Draws a card's picture (a blob's SHA-256); [large] is the big look. Null: cards show the site's letter. */
+val LocalLinkPicture = staticCompositionLocalOf<(@Composable (sha256: String, large: Boolean, modifier: Modifier) -> Unit)?> { null }
 
 /** Addresses whose pages are being read right now: their cards shimmer where the title will be. */
 val LocalLinkLoading = compositionLocalOf<Set<String>> { emptySet() }
+
+/** A picture on its way to an attachment (ADR-045): its size once its first bytes came, and whether it is a GIF. */
+data class PictureLoading(val width: Int? = null, val height: Int? = null, val gif: Boolean = false)
+
+/** Addresses surely being pictures on their way: their cards show the picture's place instead of a row. */
+val LocalPicturesComing = compositionLocalOf<Map<String, PictureLoading>> { emptyMap() }
 
 /** The app's [LinkHandler], or the platform's own browser and clipboard where there is none (previews, tests). */
 @Composable
@@ -194,19 +197,23 @@ fun DrawScope.drawPressedLink(layout: TextLayoutResult, link: MarkSpan, color: C
 // ---- cards ----
 
 /** How tall card [card] stands across [width], with a little air above and below. */
-fun linkCardHeight(card: Atom.LinkCard, width: Dp): Dp = when {
-    card.picture && card.pictureLike -> wholePictureHeight(card, width) + CARD_AIR
+fun linkCardHeight(card: Atom.LinkCard, width: Dp, coming: PictureLoading? = null): Dp = when {
+    coming != null -> comingHeight(coming, width) + CARD_AIR
     card.large && card.image != null -> largePictureHeight(width) + LARGE_TEXT + CARD_AIR
     else -> ROW_HEIGHT + CARD_AIR
 }
 
+/**
+ * A coming picture's place, as tall as the picture will stand in the text (the app's inline pictures: its own
+ * proportions once known, between 120 and 520 dp), so nothing jumps when it lands.
+ */
+private fun comingHeight(coming: PictureLoading, width: Dp): Dp {
+    val w = coming.width ?: 0
+    val h = coming.height ?: 0
+    return (if (w > 0 && h > 0) width * (h.toFloat() / w) else width * 0.66f).coerceIn(120.dp, 520.dp)
+}
+
 private fun largePictureHeight(width: Dp): Dp = (width / 1.91f).coerceIn(120.dp, 280.dp)
-
-/** A picture shown whole: at its own proportions across the card, never taller than [WHOLE_MAX] (then it fits inside). */
-private fun wholePictureHeight(card: Atom.LinkCard, width: Dp): Dp =
-    (width * (card.height!!.toFloat() / card.width!!)).coerceIn(48.dp, WHOLE_MAX)
-
-private val WHOLE_MAX = 520.dp
 
 private val ROW_HEIGHT = 72.dp
 private val LARGE_TEXT = 108.dp
@@ -225,6 +232,8 @@ fun LinkCardView(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
 ) {
+    // Surely a picture on its way: the picture's place, not a row (ADR-045).
+    LocalPicturesComing.current[card.href]?.let { return PictureComingView(card, it, modifier, selected, onClick) }
     val colors = MaterialTheme.colorScheme
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -245,25 +254,10 @@ fun LinkCardView(
             ),
     ) {
         val picture = LocalLinkPicture.current
-        if (card.picture && card.pictureLike && picture != null) {
-            // A link that is a picture (owner: GIFs by their links didn't show): the picture itself, its site on it.
-            Box(Modifier.fillMaxSize().background(colors.surfaceContainerHigh)) {
-                picture(card.image!!, LinkPictureLook.Whole, Modifier.fillMaxSize())
-                Text(
-                    card.site?.takeIf { it.isNotBlank() } ?: Links.host(card.href).ifEmpty { Links.display(card.href) },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)
-                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 7.dp, vertical = 2.dp),
-                )
-            }
-        } else if (card.large && card.image != null && picture != null) {
+        if (card.large && card.image != null && picture != null) {
             Column(Modifier.fillMaxSize()) {
                 Box(Modifier.fillMaxWidth().weight(1f).background(colors.surfaceContainerHigh)) {
-                    picture(card.image!!, LinkPictureLook.Large, Modifier.fillMaxSize())
+                    picture(card.image!!, true, Modifier.fillMaxSize())
                 }
                 Column(Modifier.fillMaxWidth().height(LARGE_TEXT).padding(horizontal = 12.dp, vertical = 8.dp)) {
                     CardWords(card, loading, titleLines = 2)
@@ -325,12 +319,12 @@ private fun CardWords(card: Atom.LinkCard, loading: Boolean, titleLines: Int) {
 
 /** The page's picture, or the site's first letter on a tint of its own. */
 @Composable
-private fun Thumb(card: Atom.LinkCard, picture: (@Composable (String, LinkPictureLook, Modifier) -> Unit)?, modifier: Modifier) {
+private fun Thumb(card: Atom.LinkCard, picture: (@Composable (String, Boolean, Modifier) -> Unit)?, modifier: Modifier) {
     val shape = RoundedCornerShape(8.dp)
     val image = card.image
     if (image != null && picture != null) {
         Box(modifier.clip(shape).background(MaterialTheme.colorScheme.surfaceContainerHigh)) {
-            picture(image, LinkPictureLook.Thumb, Modifier.fillMaxSize())
+            picture(image, false, Modifier.fillMaxSize())
         }
         return
     }

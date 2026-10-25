@@ -93,6 +93,21 @@ object Links {
         return if (bare.length <= SHORT) bare else bare.take(SHORT - 1).trimEnd('/', '-', '_', '.', '?', '&') + "…"
     }
 
+    /** A site whose pages are a GIF each (Giphy, Tenor): its link is the GIF (ADR-045). */
+    fun isGifSite(href: String): Boolean = host(href).let { host -> GIF_SITES.any { host == it || host.endsWith(".$it") } }
+
+    /**
+     * An address that is surely a picture before anything is read: a picture file's name at the end of its path, or a
+     * GIF site. Its card shows where the picture will be while it comes (ADR-045).
+     */
+    fun looksLikePicture(href: String): Boolean {
+        val path = href.substringAfter("://", "").substringAfter('/', "").substringBefore('?').substringBefore('#').lowercase()
+        return PICTURE_ENDS.any { path.endsWith(it) } || isGifSite(href)
+    }
+
+    private val GIF_SITES = setOf("giphy.com", "tenor.com")
+    private val PICTURE_ENDS = listOf(".gif", ".png", ".jpg", ".jpeg", ".webp")
+
     /** Percent escapes as the letters they stand for (Cyrillic paths read as words); left as is when not valid UTF-8. */
     private fun decodePercent(text: String): String {
         if ('%' !in text) return text

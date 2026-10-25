@@ -66,10 +66,9 @@ class PageMetaTest {
         assertEquals(listOf<Byte>(1, 2, 3), read.image?.toList())
         // A host the caller refuses is never asked.
         assertNull(
-            PageReader.read("https://short.ly/a", { url, _, _ -> pages.getValue(url) }, { b, _ -> b.decodeToString() }) {
-                "short.ly" !in
-                    it
-            },
+            PageReader.read("https://short.ly/a", { url, _, _ -> pages.getValue(url) }, { b, _ -> b.decodeToString() }, allowed = {
+                "short.ly" !in it
+            }),
         )
         assertEquals(3, seen.size)
     }
@@ -92,7 +91,10 @@ class PageMetaTest {
             "https://x.org/c.gif" to PageResponse(200, null, "image/gif", gif),
         )
         val get = PageGet { url, _, _ -> pages.getValue(url) }
-        val direct = PageReader.read("https://x.org/cat.gif", get, { b, _ -> b.decodeToString() })!!
+        val hints = ArrayList<PictureHint>()
+        val direct = PageReader.read("https://x.org/cat.gif", get, { b, _ -> b.decodeToString() }, onPicture = { hints += it })!!
+        // Told before the whole file comes, with the size its first bytes carry.
+        assertEquals(listOf(Triple("image/gif", 480, 270)), hints.map { Triple(it.mime, it.width, it.height) })
         assertEquals("image/gif", direct.own?.mime)
         assertEquals(480 to 270, direct.own?.let { it.width to it.height })
         assertEquals(gif.toList(), direct.own?.bytes?.toList(), "a GIF stays as it came")
@@ -100,7 +102,8 @@ class PageMetaTest {
         assertEquals("Cat", site.meta.title)
         assertEquals("image/gif", site.own?.mime)
         // Any other page with a GIF for its picture stays a page with a picture.
-        val post = PageReader.read("https://x.org/post", get, { b, _ -> b.decodeToString() })!!
+        val post = PageReader.read("https://x.org/post", get, { b, _ -> b.decodeToString() }, onPicture = { hints += it })!!
+        assertEquals(1, hints.size, "a page with a GIF for its picture is no picture on its way")
         assertNull(post.own)
         assertEquals(gif.toList(), post.image?.toList())
     }

@@ -79,8 +79,8 @@ internal fun desktopProbe(file: File): MediaProbe {
     )
 }
 
-internal actual suspend fun coverJpeg(image: ByteArray): ByteArray? = withContext(Dispatchers.IO) {
-    runCatching { ImageIO.read(ByteArrayInputStream(image)) }.getOrNull()?.let { jpegPreview(it, COVER_SIZE) }
+internal actual suspend fun coverJpeg(image: ByteArray, max: Int): ByteArray? = withContext(Dispatchers.IO) {
+    runCatching { ImageIO.read(ByteArrayInputStream(image)) }.getOrNull()?.let { jpegPreview(it, max) }
 }
 
 private fun jpegPreview(image: BufferedImage, max: Int = 512): ByteArray {

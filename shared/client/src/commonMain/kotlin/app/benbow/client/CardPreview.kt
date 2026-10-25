@@ -26,10 +26,6 @@ data class CardPreview(
     val inPlace: List<CardLine> = emptyList(),
     /** There is more than [inPlace] holds. */
     val inPlaceMore: Boolean = false,
-    /** The first link that is a picture, shown whole (its SHA-256): the card's picture when the note has none of its own. */
-    val picture: String? = null,
-    /** That picture's width to height. */
-    val pictureRatio: Float? = null,
 )
 
 /**
@@ -51,9 +47,7 @@ data class CardLine(
  * left out (ADR-031). Enough for Keep's card of some 26 rows of text; the card itself cuts what doesn't fit.
  */
 internal fun cardOf(document: Document): CardPreview {
-    // A link that is a picture is the card's picture, not a line of its words.
-    val pictures = document.blocks.filterIsInstance<LinkCardBlock>().filter { it.view == "picture" && it.image != null }
-    val blocks = document.blocks.filter { (it is TextBlock || it is LinkCardBlock || it is CodeBlock) && it !in pictures }
+    val blocks = document.blocks.filter { it is TextBlock || it is LinkCardBlock || it is CodeBlock }
     val first = blocks.firstOrNull() as? TextBlock
     val titled = first != null && first.listItem == null && first.style.startsWith("h")
     val body = if (titled) blocks.drop(1) else blocks
@@ -61,9 +55,7 @@ internal fun cardOf(document: Document): CardPreview {
     val (lines, more) = cardLines(body, withTicked = false)
     val (inPlace, inPlaceMore) = if (ticked > 0) cardLines(body, withTicked = true) else emptyList<CardLine>() to false
     val title = if (titled) text(first!!).replace('\n', ' ').trim().take(CARD_LINE) else ""
-    val picture = pictures.firstOrNull()
-    val ratio = picture?.let { p -> p.width?.let { w -> p.height?.takeIf { it > 0 }?.let { h -> w.toFloat() / h } } }
-    return CardPreview(title, lines, ticked, more, inPlace, inPlaceMore, picture?.image, ratio)
+    return CardPreview(title, lines, ticked, more, inPlace, inPlaceMore)
 }
 
 /** The card's lines of [blocks] and whether there is more: the ticked boxes left out, or [withTicked] in their places. */

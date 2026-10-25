@@ -38,9 +38,9 @@ open class AtomViews {
         }
     }
 
-    internal fun height(atom: Atom, width: Dp): Dp = when (atom) {
+    internal fun height(atom: Atom, width: Dp, coming: Map<String, PictureLoading> = emptyMap()): Dp = when (atom) {
         is Atom.Attachment -> pictureHeight(atom, width)
-        is Atom.LinkCard -> linkCardHeight(atom, width)
+        is Atom.LinkCard -> linkCardHeight(atom, width, coming[atom.href])
         is Atom.Divider -> 28.dp
         is Atom.Unknown -> 44.dp
     }

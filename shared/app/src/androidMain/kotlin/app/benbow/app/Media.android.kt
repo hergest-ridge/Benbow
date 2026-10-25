@@ -277,8 +277,8 @@ internal actual fun MediaPlayer(file: File, mime: String, modifier: Modifier) {
     AndroidView(factory = { PlayerView(it).apply { this.player = player } }, modifier = modifier.fillMaxSize())
 }
 
-internal actual suspend fun coverJpeg(image: ByteArray): ByteArray? = withContext(Dispatchers.Default) {
-    AndroidProbe.cover(image, COVER_SIZE)
+internal actual suspend fun coverJpeg(image: ByteArray, max: Int): ByteArray? = withContext(Dispatchers.Default) {
+    AndroidProbe.cover(image, max)
 }
 
 private fun uriFor(context: android.content.Context, file: File): Uri =

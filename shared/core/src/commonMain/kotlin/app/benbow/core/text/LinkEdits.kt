@@ -128,6 +128,20 @@ fun RichText.cardToText(index: Int, keys: BlockKeys): EditResult? {
     return EditResult(plain.replace(start, start + 1, words, setOf(Mark.Link(card.href)), keys), start + words.length)
 }
 
+/**
+ * A link that turned out to be a picture (ADR-045): card [index] becomes the link in the text (the short address) with
+ * the picture attachment [ref] on the line under it, or, without [keepLink], the picture alone in the card's place.
+ */
+fun RichText.cardToPicture(index: Int, ref: String, keepLink: Boolean, keys: BlockKeys): RichText? {
+    if (paragraphs.getOrNull(index)?.atom !is Atom.LinkCard) return null
+    val picture = Atom.Attachment(ref)
+    if (!keepLink) return withParagraph(index, paragraphs[index].copy(atom = picture))
+    val linked = cardToText(index, keys)?.text ?: return null
+    // Before the next line (no new empty line), or after the text when the link is the last line.
+    val at = if (index + 1 < linked.paragraphs.size) linked.paragraphStarts[index + 1] else linked.text.length
+    return linked.insertAtom(at, picture, keys).text
+}
+
 /** Paragraph [index]'s card with [change] applied (its look, what its page said), or null when it holds no card. */
 fun RichText.withCard(index: Int, change: (Atom.LinkCard) -> Atom.LinkCard): RichText? {
     val card = paragraphs.getOrNull(index)?.atom as? Atom.LinkCard ?: return null

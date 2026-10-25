@@ -23,6 +23,7 @@ import app.benbow.core.text.Paragraph
 import app.benbow.core.text.RichText
 import app.benbow.core.text.applyUserEdit
 import app.benbow.core.text.atomRemovedBy
+import app.benbow.core.text.cardToPicture
 import app.benbow.core.text.cardToText
 import app.benbow.core.text.insertAtom
 import app.benbow.core.text.linkAt
@@ -297,14 +298,29 @@ class EditorState(initial: RichText, private val keys: BlockKeys = BlockKeys()) 
     fun setCardLarge(key: String, large: Boolean) {
         val i = cardIndex(key) ?: return
         val before = model
-        commit(before, EditResult(before.withCard(i) { it.copy(large = large, picture = false) } ?: return, selection.min, selection.max))
+        commit(before, EditResult(before.withCard(i) { it.copy(large = large) } ?: return, selection.min, selection.max))
     }
 
-    /** A picture link's card as the picture itself or a row; undoable. */
-    fun setCardPicture(key: String, picture: Boolean) {
-        val i = cardIndex(key) ?: return
+    /** Whether card [key] is still in the text. */
+    fun hasCard(key: String): Boolean = cardIndex(key) != null
+
+    /**
+     * Card [key]'s address turned out to be a picture (ADR-045): the link in the text with picture [ref] under it, or the
+     * picture alone in its place without [keepLink]. Not an undo step, like a card filled: the paste was the edit. The
+     * cursor stays where it was among the words.
+     */
+    fun cardToPicture(key: String, ref: String, keepLink: Boolean): Boolean {
+        val i = cardIndex(key) ?: return false
         val before = model
-        commit(before, EditResult(before.withCard(i) { it.copy(picture = picture, large = false) } ?: return, selection.min, selection.max))
+        val after = before.cardToPicture(i, ref, keepLink, keys) ?: return false
+        val start = before.paragraphStarts[i]
+        val grown = after.text.length - before.text.length
+        fun moved(at: Int) = if (at > start) at + grown else at
+        val cursor = TextRange(moved(selection.start), moved(selection.end))
+        model = after
+        selectedAtom = null
+        textFieldState.edit { syncText(after.text, cursor, forceSelection = true) }
+        return true
     }
 
     /** Card [key] goes down to a link in the text (its title as the words); «Вернуть» brings the card back. */

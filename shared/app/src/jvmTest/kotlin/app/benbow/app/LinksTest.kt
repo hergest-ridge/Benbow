@@ -26,14 +26,19 @@ import androidx.compose.ui.test.waitUntilExactlyOneExists
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import app.benbow.client.JournalRepository
+import app.benbow.core.content.AttachmentBlock
 import app.benbow.core.content.DocumentCodec
 import app.benbow.core.content.LinkCardBlock
+import app.benbow.core.content.MarkDef
 import app.benbow.core.content.TextBlock
 import app.benbow.core.content.toDocument
 import app.benbow.core.text.Mark
 import app.benbow.core.text.buildRichText
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import java.awt.Color
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
@@ -114,26 +119,73 @@ class LinksTest {
     }
 
     @Test
-    fun anAddressThatIsAPictureShowsThePictureItselfAndAGifMoves() = runDesktopComposeUiTest(width = 412, height = 860) {
+    fun aPictureLinkShowsItsPlaceWhileItComesThenLandsAsAnAttachmentUnderTheLink() = runDesktopComposeUiTest(width = 412, height = 860) {
         val gif = animatedGif()
-        val kept = runBlocking { services.keepPicture(gif, "image/gif") }
-        services.pageReader = { LinkPreview(null, null, null, kept, 120, 80) }
+        val gate = CompletableDeferred<Unit>()
+        services.pageReader = { href ->
+            gate.await()
+            LinkPreview(null, null, null, null, services.storeLinkPicture(href, gif, "image/gif", 120, 80))
+        }
         val id = services.repo.createNote(services.today(), "Утро у моря")
         openForWriting("Утро у моря")
         onNode(hasSetTextAction()).performTextInputSelection(TextRange(11))
         onNode(hasSetTextAction()).performTextInput("\n")
         onNode(hasSetTextAction()).performTextInput("https://media.giphy.com/media/cat/giphy.gif")
-        waitUntil(timeoutMillis = 5_000) {
-            DocumentCodec.decode(body(id)).blocks.filterIsInstance<LinkCardBlock>().singleOrNull()?.fetched != null
+        // Surely a picture (its name says so): its place shows while it comes.
+        waitUntilAtLeastOneExists(hasText("Загружаю гифку…"), 5_000)
+        screenshot("92-picture-coming")
+        gate.complete(Unit)
+        waitUntil(timeoutMillis = 5_000) { DocumentCodec.decode(body(id)).blocks.any { it is AttachmentBlock } }
+        waitUntilDoesNotExist(hasText("Загружаю гифку…"), 5_000)
+        val blocks = DocumentCodec.decode(body(id)).blocks
+        assertTrue(blocks.none { it is LinkCardBlock }, "the card became its link")
+        val link = blocks.filterIsInstance<TextBlock>().single { block ->
+            block.markDefs.any {
+                (it as? MarkDef.Link)?.href ==
+                    "https://media.giphy.com/media/cat/giphy.gif"
+            }
         }
-        val card = DocumentCodec.decode(body(id)).blocks.filterIsInstance<LinkCardBlock>().single()
-        assertEquals("picture", card.view)
-        assertEquals(kept, card.image, "the GIF itself, as it came")
-        assertEquals(120 to 80, card.width to card.height)
-        // The picture with its site on it; the desktop plays its frames with Skia.
-        waitUntilAtLeastOneExists(hasText("media.giphy.com"), 5_000)
-        assertEquals(2, framesOf(gif)?.frameCount)
-        screenshot("92-picture-link")
+        assertEquals("media.giphy.com/media/cat/giphy.gif", link.children.joinToString("") { it.text })
+        val picture = blocks[blocks.indexOf(link) + 1] as AttachmentBlock
+        val attached = runBlocking { services.repo.entry(id).first()!! }.attachments.single { it.meta.id == picture.ref }.meta
+        assertEquals("image/gif", attached.mime, "the GIF as it came")
+        assertEquals(120 to 80, attached.width to attached.height)
+        assertEquals("giphy.gif", attached.name)
+        assertEquals(2, framesOf(gif)?.frameCount, "the desktop plays its frames with Skia")
+        waitForIdle()
+        screenshot("93-picture-landed")
+    }
+
+    @Test
+    fun withoutLinksAPictureLinkLeavesThePictureAlone() = runDesktopComposeUiTest(width = 412, height = 860) {
+        services.setAppearance(services.appearance.value.copy(pictureLinks = false))
+        services.pageReader =
+            { href -> LinkPreview(null, null, null, null, services.storeLinkPicture(href, animatedGif(), "image/gif", 120, 80)) }
+        val id = services.repo.createNote(services.today(), "Утро у моря")
+        openForWriting("Утро у моря")
+        onNode(hasSetTextAction()).performTextInputSelection(TextRange(11))
+        onNode(hasSetTextAction()).performTextInput("\n")
+        onNode(hasSetTextAction()).performTextInput("https://x.org/cat.gif")
+        waitUntil(timeoutMillis = 5_000) { DocumentCodec.decode(body(id)).blocks.any { it is AttachmentBlock } }
+        val blocks = DocumentCodec.decode(body(id)).blocks
+        assertTrue(blocks.none { it is LinkCardBlock })
+        assertTrue(blocks.filterIsInstance<TextBlock>().none { block -> block.markDefs.any { it is MarkDef.Link } }, "no link line")
+    }
+
+    @Test
+    fun aSharedPictureLinkLandsInTheStoredNote() {
+        services.pageReader =
+            { href -> LinkPreview(null, null, null, null, services.storeLinkPicture(href, animatedGif(), "image/gif", 120, 80)) }
+        val id = services.repo.createNote(services.today(), "https://x.org/cat.gif")
+        runBlocking {
+            services.readCardsOf(id).join()
+            withTimeout(5_000) {
+                while (DocumentCodec.decode(body(id)).blocks.none { it is AttachmentBlock }) delay(20)
+            }
+        }
+        val blocks = DocumentCodec.decode(body(id)).blocks
+        assertTrue(blocks.none { it is LinkCardBlock })
+        assertEquals(1, runBlocking { services.repo.entry(id).first()!! }.attachments.size)
     }
 
     @Test

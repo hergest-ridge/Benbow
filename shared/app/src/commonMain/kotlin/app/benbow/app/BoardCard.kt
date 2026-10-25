@@ -116,8 +116,7 @@ private fun CardWords(note: BoardNote, media: Media?, onTick: ((String, Boolean)
         }
     }
     val card = note.card
-    // The picture on top is one of the files, unless it is a link that is a picture.
-    val files = note.entry.mediaCount - if (picture != null && picture.sha256 == note.entry.cover) 1 else 0
+    val files = note.entry.mediaCount - if (picture != null) 1 else 0
     val tags = note.entry.tags
     if (card.title.isEmpty() && card.lines.isEmpty() && card.ticked == 0 && files <= 0 && tags.isEmpty() && !note.fromJournal) return
     // Ticked boxes in their places: a card made before there were such lines shows them as before.

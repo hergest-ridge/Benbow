@@ -43,6 +43,7 @@ import app.benbow.core.api.PurgeRequest
 import app.benbow.core.api.StorageReport
 import app.benbow.core.api.UnreferencedFile
 import app.benbow.core.media.AttachmentKey
+import app.benbow.ui.editor.PictureLoading
 import app.benbow.ui.editor.Removal
 import app.cash.sqldelight.db.SqlDriver
 import kotlinx.coroutines.CancellationException
@@ -238,6 +239,9 @@ class AppServices(
 
     /** Addresses whose pages are being read for their cards right now (they shimmer). */
     val linkLoading = MutableStateFlow<Set<String>>(emptySet())
+
+    /** Addresses surely being pictures on their way, with what is known of them: their cards show the picture's place. */
+    val picturesComing = MutableStateFlow<Map<String, PictureLoading>>(emptyMap())
 
     /** Pages asked for in this run, so a card isn't read twice at once or again after it failed now. */
     internal val triedPages: MutableSet<String> = HashSet()

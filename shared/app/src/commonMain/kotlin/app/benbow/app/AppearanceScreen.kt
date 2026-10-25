@@ -43,6 +43,8 @@ import app.benbow.app.resources.link_previews
 import app.benbow.app.resources.link_previews_hint
 import app.benbow.app.resources.palette
 import app.benbow.app.resources.palette_names
+import app.benbow.app.resources.picture_links
+import app.benbow.app.resources.picture_links_hint
 import app.benbow.app.resources.post_media
 import app.benbow.app.resources.post_media_names
 import app.benbow.app.resources.post_section
@@ -129,6 +131,18 @@ internal fun AppearanceScreen(services: AppServices, nav: Navigator) {
                     )
                 }
                 Switch(current.linkPreviews, { services.setAppearance(current.copy(linkPreviews = it)) }, modifier = Modifier.hand())
+            }
+            // Owner's words: on, a picture link brings the picture alone (ADR-045).
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f).padding(end = 16.dp)) {
+                    Text(stringResource(Res.string.picture_links), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        stringResource(Res.string.picture_links_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(!current.pictureLinks, { services.setAppearance(current.copy(pictureLinks = !it)) }, modifier = Modifier.hand())
             }
             Title(stringResource(Res.string.tab_board))
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {

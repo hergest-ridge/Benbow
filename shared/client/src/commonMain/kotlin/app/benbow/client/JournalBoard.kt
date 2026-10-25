@@ -144,17 +144,15 @@ private fun boardNote(
     card: String,
     attachments: String,
 ) = decodeFields(fields).let { f ->
-    val shown =
-        card.takeIf { it.isNotEmpty() }?.let { runCatching { ClientJson.decodeFromString(CardPreview.serializer(), it) }.getOrNull() }
-            ?: CardPreview()
     BoardNote(
         summaryOf(id, day, createdAt, title, preview, conflictHeads, mediaCount, cover, fields),
         rank = f[Board.RANK],
         pinned = f[Board.PIN] == "true",
         archived = f[Board.ARCHIVED] == "true",
-        card = shown,
-        picture = cover?.let { sha -> CardPicture(sha, coverRatio(decodeAttachments(attachments), sha)) }
-            ?: shown.picture?.let { CardPicture(it, shown.pictureRatio) },
+        card =
+        card.takeIf { it.isNotEmpty() }?.let { runCatching { ClientJson.decodeFromString(CardPreview.serializer(), it) }.getOrNull() }
+            ?: CardPreview(),
+        picture = cover?.let { sha -> CardPicture(sha, coverRatio(decodeAttachments(attachments), sha)) },
         kinds = decodeAttachments(attachments).values.filter { it.present }.mapTo(HashSet()) { it.meta.kind },
         fromJournal = Board.fromJournal(f),
     )

@@ -106,8 +106,12 @@ fun BenbowEditor(state: EditorState, modifier: Modifier = Modifier, readOnly: Bo
 private fun BoxScope.EditorBody(state: EditorState, readOnly: Boolean, atoms: AtomViews, width: Dp) {
     val colors = MaterialTheme.colorScheme
     val density = LocalDensity.current
-    val styles = remember(colors, atoms, width, density) {
-        EditorStyles(colors, dark = colors.background.luminance() < 0.5f, atomHeight = { with(density) { atoms.height(it, width).toSp() } })
+    // A picture link on its way stands as tall as the picture will (ADR-045).
+    val coming = LocalPicturesComing.current
+    val styles = remember(colors, atoms, width, density, coming) {
+        EditorStyles(colors, dark = colors.background.luminance() < 0.5f, atomHeight = {
+            with(density) { atoms.height(it, width, coming).toSp() }
+        })
     }
     val textStyle = MaterialTheme.typography.bodyLarge.copy(
         color = colors.onSurface,
@@ -347,7 +351,6 @@ private fun BoxScope.EditorBody(state: EditorState, readOnly: Boolean, atoms: At
                                 atom,
                                 onOpen = { links.open(Mark.Link(atom.href)) },
                                 onLarge = { state.setCardLarge(key, it) },
-                                onPicture = { state.setCardPicture(key, it) },
                                 onToText = { state.cardToText(key) },
                                 onEdit = { state.requestCardEdit(key) },
                                 onRemove = { state.removeAtom(key) },

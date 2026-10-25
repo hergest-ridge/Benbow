@@ -36,7 +36,8 @@
     <string name="link_entry">Запись</string>
     <string name="card_large">Крупно</string>
     <string name="card_row">Строкой</string>
-    <string name="card_picture">Картинкой</string>
+    <string name="picture_coming">Загружаю картинку…</string>
+    <string name="picture_coming_gif">Загружаю гифку…</string>
     <string name="card_to_text">В текст</string>
     <string name="card_remove">Удалить</string>
     <string name="home_greeting">Добро пожаловать в «Адмирал Бенбоу»</string>

@@ -177,8 +177,6 @@ object DocumentCodec {
                 block.description?.let { field("description", q(it)) }
                 block.site?.let { field("site", q(it)) }
                 block.image?.let { field("image", q(it)) }
-                block.width?.let { field("width", it.toString()) }
-                block.height?.let { field("height", it.toString()) }
                 block.view?.let { field("view", q(it)) }
                 block.fetched?.let { field("fetched", q(it)) }
             }
@@ -339,7 +337,7 @@ object DocumentCodec {
     }
 
     private fun decodeLinkCard(key: String, obj: JsonObject): LinkCardBlock {
-        obj.allow("_key", "_type", "href", "title", "description", "site", "image", "width", "height", "view", "fetched")
+        obj.allow("_key", "_type", "href", "title", "description", "site", "image", "view", "fetched")
         val href = (obj["href"] ?: unrecognized()).str().also { if (it.isBlank()) unrecognized() }
         return LinkCardBlock(
             key,
@@ -350,8 +348,6 @@ object DocumentCodec {
             image = obj["image"]?.str()?.also { if (!SHA256.matches(it)) unrecognized() },
             view = obj["view"]?.str()?.also { if (it != "row" && it !in CARD_VIEWS) unrecognized() },
             fetched = obj["fetched"]?.str()?.also { if (!DAY.matches(it)) unrecognized() },
-            width = obj["width"]?.int()?.also { if (it <= 0) unrecognized() },
-            height = obj["height"]?.int()?.also { if (it <= 0) unrecognized() },
         )
     }
 

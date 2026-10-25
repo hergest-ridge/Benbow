@@ -126,6 +126,42 @@ class LinksTest {
     }
 
     @Test
+    fun aPictureLinkBecomesItsLinkWithThePictureUnderItOrThePictureAlone() {
+        val doc = buildRichText(keys) { paragraph { text("Утро") } }
+            .type(4, "\n").text.type(5, "https://media.giphy.com/media/cat/giphy.gif").text
+        val index = doc.paragraphs.indexOfFirst { it.atom is Atom.LinkCard }
+        val linked = doc.cardToPicture(index, "pic", keepLink = true, keys)!!
+        assertEquals(
+            "Утро\nmedia.giphy.com/media/cat/giphy.gif\n$ATOM_CHAR\n",
+            linked.text,
+            "the line after the card stays the one to type on",
+        )
+        assertEquals(listOf(MarkSpan(Mark.Link("https://media.giphy.com/media/cat/giphy.gif"), 5, 40)), linked.marks)
+        assertEquals(Atom.Attachment("pic"), linked.paragraphs[index + 1].atom)
+        val alone = doc.cardToPicture(index, "pic", keepLink = false, keys)!!
+        assertEquals("Утро\n$ATOM_CHAR\n", alone.text)
+        assertEquals(Atom.Attachment("pic"), alone.paragraphs[index].atom)
+        // The card as the last line: the picture after it, with a line to type on.
+        val last = buildRichText(keys) { paragraph { text("a") } }.insertAtom(1, Atom.LinkCard("https://x.org/p.png"), keys).text
+        val trimmed = last.copy(text = last.text.dropLast(1), paragraphs = last.paragraphs.dropLast(1))
+        val after = trimmed.cardToPicture(trimmed.paragraphs.lastIndex, "p", keepLink = true, keys)!!
+        assertEquals("a\nx.org/p.png\n$ATOM_CHAR\n", after.text)
+        assertNull(text("no card").cardToPicture(0, "p", keepLink = true, keys))
+    }
+
+    @Test
+    fun picturesAreKnownByTheirNamesAndGifSites() {
+        assertTrue(Links.looksLikePicture("https://x.org/a/cat.GIF?w=1"))
+        assertTrue(Links.looksLikePicture("https://x.org/photo.jpeg#top"))
+        assertTrue(Links.looksLikePicture("https://giphy.com/gifs/cat-123"))
+        assertTrue(Links.looksLikePicture("https://tenor.com/view/cat-456"))
+        assertFalse(Links.looksLikePicture("https://x.org/gif-guide"))
+        assertFalse(Links.looksLikePicture("https://x.org/"))
+        assertTrue(Links.isGifSite("https://media.giphy.com/media/a/giphy.gif"))
+        assertFalse(Links.isGifSite("https://notgiphy.com/x"))
+    }
+
+    @Test
     fun aCardGoesDownToALinkInTheText() {
         val doc = buildRichText(keys) { paragraph { text("a") } }.insertAtom(1, Atom.LinkCard("https://x.org", title = "Маяки"), keys).text
         val index = doc.paragraphs.indexOfFirst { it.atom != null }

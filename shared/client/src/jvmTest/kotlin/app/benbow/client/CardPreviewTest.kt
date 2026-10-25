@@ -100,13 +100,4 @@ class CardPreviewTest {
         assertTrue(essay.more)
         assertTrue(essay.lines.single().text.length in 500..600, "${essay.lines.single().text.length}")
     }
-
-    @Test
-    fun aLinkThatIsAPictureIsTheCardsPictureNotALine() {
-        val gif = LinkCardBlock("g", "https://media.giphy.com/c.gif", image = "c".repeat(64), view = "picture", width = 480, height = 240)
-        val card = cardOf(Document(listOf(text("Котик"), gif, LinkCardBlock("l", "https://example.org/page", title = "Страница"))))
-        assertEquals("c".repeat(64), card.picture)
-        assertEquals(2f, card.pictureRatio)
-        assertEquals(listOf("Котик", "Страница"), card.lines.map { it.text })
-    }
 }

@@ -61,7 +61,8 @@ sealed interface Atom {
 
     /**
      * A link shown as a card (ADR-038) with what its page said when the link went in: [image] is the SHA-256 of a JPEG
-     * blob, [large] the big look (else a row), [fetched] the day the page was read (null: not yet).
+     * blob, [large] the big look (else a row), [fetched] the day the page was read (null: not yet). A link that is a
+     * picture keeps the picture itself as [image], [width] by [height] pixels; [picture] shows it whole («Картинкой»).
      */
     data class LinkCard(
         val href: String,
@@ -71,7 +72,13 @@ sealed interface Atom {
         val image: String? = null,
         val large: Boolean = false,
         val fetched: String? = null,
-    ) : Atom
+        val picture: Boolean = false,
+        val width: Int? = null,
+        val height: Int? = null,
+    ) : Atom {
+        /** It can be shown as a picture: its own picture's size is known. */
+        val pictureLike: Boolean get() = image != null && (width ?: 0) > 0 && (height ?: 0) > 0
+    }
 
     /** A block this build doesn't understand, kept verbatim (canonical JSON of the block). */
     data class Unknown(val json: String) : Atom

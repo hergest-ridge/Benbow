@@ -3,6 +3,7 @@ package app.benbow.app
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import app.benbow.client.ByteSource
 import app.benbow.client.LocalFile
 import app.benbow.client.byteSourceOf
@@ -135,3 +136,10 @@ internal expect fun Modifier.attachOnDrop(
 /** Plays a video or audio file, or offers to open it outside the app where there is no player. */
 @Composable
 internal expect fun MediaPlayer(file: LocalFile, mime: String, modifier: Modifier = Modifier)
+
+/**
+ * A picture file shown as it is; a GIF moves (owner: GIFs by their links didn't show). Android: Coil's animated decoder;
+ * the desktop and the browser: Skia plays the frames ([MovingFrames]).
+ */
+@Composable
+internal expect fun MovingPicture(file: LocalFile, modifier: Modifier, contentScale: ContentScale)

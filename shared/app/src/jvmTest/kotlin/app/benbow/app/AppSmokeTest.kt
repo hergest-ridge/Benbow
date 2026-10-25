@@ -1033,7 +1033,11 @@ class AppSmokeTest {
         }
         waitUntilExactlyOneExists(hasText("Похоже, сейчас непросто", substring = true), 5_000)
         screenshot("21-kindness")
-        onAllNodesWithText("Написать")[0].click()
+        // The kindness card's own «Написать» (on Sundays the week's review card has one too).
+        val hint = onNodeWithText("Похоже, сейчас непросто", substring = true).fetchSemanticsNode().boundsInRoot.top
+        val writes = onAllNodesWithText("Написать")
+        val below = writes.fetchSemanticsNodes().withIndex().filter { it.value.boundsInRoot.top > hint }.minBy { it.value.boundsInRoot.top }
+        writes[below.index].click()
         val question = Prompts.kindness(services.today())
         waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.journal().first().any { it.title == question } } }
     }

@@ -185,8 +185,9 @@ class MarkdownExporter(
         return result
     }
 
-    /** `[Title](address)` and, on the next line, what the page said about itself. */
+    /** `[Title](address)` and, on the next line, what the page said about itself; a link that is a picture as `![](address)`. */
     private fun linkCard(block: LinkCardBlock): String {
+        if (block.view == "picture") return "![${escape(block.title?.replace('\n', ' ').orEmpty())}](${destination(block.href)})"
         val title = block.title?.replace('\n', ' ')?.takeIf { it.isNotBlank() } ?: Links.display(block.href)
         val line = "[${escape(title)}](${destination(block.href)})"
         val about = listOfNotNull(block.description?.replace('\n', ' '), block.site).filter { it.isNotBlank() }.joinToString(" · ")

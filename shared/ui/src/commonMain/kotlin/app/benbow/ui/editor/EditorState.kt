@@ -297,7 +297,14 @@ class EditorState(initial: RichText, private val keys: BlockKeys = BlockKeys()) 
     fun setCardLarge(key: String, large: Boolean) {
         val i = cardIndex(key) ?: return
         val before = model
-        commit(before, EditResult(before.withCard(i) { it.copy(large = large) } ?: return, selection.min, selection.max))
+        commit(before, EditResult(before.withCard(i) { it.copy(large = large, picture = false) } ?: return, selection.min, selection.max))
+    }
+
+    /** A picture link's card as the picture itself or a row; undoable. */
+    fun setCardPicture(key: String, picture: Boolean) {
+        val i = cardIndex(key) ?: return
+        val before = model
+        commit(before, EditResult(before.withCard(i) { it.copy(picture = picture, large = false) } ?: return, selection.min, selection.max))
     }
 
     /** Card [key] goes down to a link in the text (its title as the words); «Вернуть» brings the card back. */

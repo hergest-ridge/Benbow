@@ -728,6 +728,9 @@
     <string name="ago_half_year">Полгода назад</string>
     <string name="link_previews">Превью ссылок</string>
     <string name="link_previews_hint">Карточка ссылки один раз читает заголовок и картинку страницы, когда ссылку вставили. Сайт при этом видит запрос, как при открытии.</string>
+    <string name="ticked_below">Отмеченные пункты — вниз</string>
+    <string name="ticked_below_hint">Как в Keep: под «Отмечено». Выключено — пункт остаётся на месте, зачёркнутым, как на бумаге.</string>
+    <string name="board_untick">Снять отметку</string>
     <string name="link_sheet_title">Ссылка</string>
     <string name="link_sheet_card">Карточка ссылки</string>
     <string name="link_tab_web">Адрес</string>
@@ -902,6 +905,11 @@
     <string name="storage_mirror_none">не настроен или не найден</string>
     <string name="storage_nothing">Пока пусто</string>
     <string name="trash_choose">Выбрать</string>
+    <string name="trash_choose_all">Выбрать все</string>
+    <string name="trash_choose_none">Снять выбор</string>
+    <string name="trash_group_today">Сегодня</string>
+    <string name="trash_group_yesterday">Вчера</string>
+    <string name="trash_group_this_week">На этой неделе</string>
     <string name="trash_purge">Удалить навсегда</string>
     <string name="purge_title">Удалить навсегда?</string>
     <plurals name="purge_summary">

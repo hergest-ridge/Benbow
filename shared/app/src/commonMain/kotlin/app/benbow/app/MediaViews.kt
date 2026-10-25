@@ -460,13 +460,19 @@ internal fun BestPicture(
 ) {
     val meta = attachment.meta
     if (meta.kind == "drawing") return DrawingPicture(media, attachment, modifier)
+    // A GIF moves once its original is on hand (its preview, or its first frame, shows meanwhile).
+    val gif = meta.kind == "image" && meta.mime == "image/gif"
     Box(modifier) {
         val preview by rememberMediaFile(media, attachment.visual)
         (preview as? MediaLoad.Ready)?.let { AsyncImage(it.file, null, Modifier.fillMaxSize(), contentScale = contentScale, alpha = alpha) }
-        if (!previewOnly && meta.kind == "image" && meta.previewSha256 != null) {
+        if (!previewOnly && meta.kind == "image" && (meta.previewSha256 != null || gif)) {
             val original by rememberMediaFile(media, meta.sha256)
             (original as? MediaLoad.Ready)?.let {
-                AsyncImage(it.file, null, Modifier.fillMaxSize(), contentScale = contentScale, alpha = alpha)
+                if (gif) {
+                    MovingPicture(it.file, Modifier.fillMaxSize(), contentScale)
+                } else {
+                    AsyncImage(it.file, null, Modifier.fillMaxSize(), contentScale = contentScale, alpha = alpha)
+                }
             }
         }
     }

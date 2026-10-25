@@ -66,6 +66,7 @@ import app.benbow.app.resources.Res
 import app.benbow.app.resources.attachments
 import app.benbow.app.resources.background
 import app.benbow.app.resources.background_none
+import app.benbow.app.resources.board_archive
 import app.benbow.app.resources.board_hide_boxes
 import app.benbow.app.resources.board_pin
 import app.benbow.app.resources.board_show_boxes
@@ -301,6 +302,14 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
 
     /** A note in the board's archive back on the board, in its place. */
     fun unarchive() = withEntry { repo.archiveOnBoard(it, false) }
+
+    /** The open note into the board's archive (Keep's button beside the pin), «Вернуть» on the snackbar. */
+    fun archive() {
+        commit()
+        val id = entryId ?: return
+        services.scope.launch { repo.archiveOnBoard(id, true) }
+        services.messages.tryEmit(AppMessage.BoardArchived(listOf(id)))
+    }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val commentCount = session.entryIdFlow.filterNotNull().flatMapLatest { repo.commentCount(it) }
@@ -674,6 +683,13 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                     if (pinned) Icons.Pin else Icons.PinOutline,
                                     stringResource(if (pinned) Res.string.board_unpin else Res.string.board_pin),
                                 )
+                            }
+                            // Into the archive and away, as the trash does (owner: no way to it from an open note).
+                            if (vm.entryId != null) {
+                                IconButton({
+                                    vm.archive()
+                                    nav.back()
+                                }, modifier = Modifier.hand()) { Icon(Icons.Archive, stringResource(Res.string.board_archive)) }
                             }
                         }
                     }

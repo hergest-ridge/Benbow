@@ -51,6 +51,17 @@ class CardPreviewTest {
         assertEquals("Продукты", card.title)
         assertEquals(listOf(CardLine("молоко", box = true, key = "k1"), CardLine("яйца", box = true, key = "k3")), card.lines)
         assertEquals(2, card.ticked)
+        // «Отмеченные — вниз» off: every box where it stands, the ticked ones ticked.
+        assertEquals(
+            listOf(
+                CardLine("молоко", box = true, key = "k1"),
+                CardLine("хлеб", box = true, key = "k2", checked = true),
+                CardLine("яйца", box = true, key = "k3"),
+                CardLine("сыр", box = true, key = "k4", checked = true),
+            ),
+            card.inPlace,
+        )
+        assertEquals(emptyList(), cardOf(Document(listOf(text("молоко", "check", false)))).inPlace, "nothing ticked: the lines as they are")
         // A list with no title: its first box is no title.
         assertEquals("", cardOf(Document(listOf(text("молоко", "check", false), text("хлеб", "check", false)))).title)
     }
@@ -88,5 +99,14 @@ class CardPreviewTest {
         val essay = cardOf(Document(listOf(text("слово ".repeat(500)))))
         assertTrue(essay.more)
         assertTrue(essay.lines.single().text.length in 500..600, "${essay.lines.single().text.length}")
+    }
+
+    @Test
+    fun aLinkThatIsAPictureIsTheCardsPictureNotALine() {
+        val gif = LinkCardBlock("g", "https://media.giphy.com/c.gif", image = "c".repeat(64), view = "picture", width = 480, height = 240)
+        val card = cardOf(Document(listOf(text("Котик"), gif, LinkCardBlock("l", "https://example.org/page", title = "Страница"))))
+        assertEquals("c".repeat(64), card.picture)
+        assertEquals(2f, card.pictureRatio)
+        assertEquals(listOf("Котик", "Страница"), card.lines.map { it.text })
     }
 }

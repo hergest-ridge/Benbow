@@ -25,6 +25,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -66,6 +67,8 @@ import app.benbow.app.resources.trash_calendar
 import app.benbow.app.resources.trash_calendar_item
 import app.benbow.app.resources.trash_category_item
 import app.benbow.app.resources.trash_choose
+import app.benbow.app.resources.trash_choose_all
+import app.benbow.app.resources.trash_choose_none
 import app.benbow.app.resources.trash_chosen_up_to
 import app.benbow.app.resources.trash_days_ago
 import app.benbow.app.resources.trash_empty
@@ -103,8 +106,12 @@ import app.benbow.client.trashItems
 import app.benbow.client.trashedTags
 import app.benbow.core.api.AttachmentRef
 import app.benbow.core.api.PurgeRequest
+import app.benbow.ui.Hinted
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringArrayResource
@@ -154,6 +161,11 @@ internal fun TrashScreen(services: AppServices, nav: Navigator) {
     // Everything waiting here with its kind, for the «Видео» helper (an entry holding a video counts).
     val waiting by remember { services.repo.trashItems() }.collectAsStateWithLifecycle(null)
     val toggle = { key: String -> chosen = if (key in chosen) chosen - key else chosen + key }
+    // Everything that can be chosen, for «Выбрать все» (owner): the journal's entries, the board's notes, the attachments.
+    val everything = remember(entries, notes, off) {
+        entries.orEmpty().map { "e:" + it.id }.toSet() + notes.map { "e:" + it.id } +
+            off.map { "a:" + it.entryId + "/" + it.attachment.meta.id }
+    }
     val stopChoosing = {
         choosing = false
         chosen = emptySet()
@@ -174,6 +186,13 @@ internal fun TrashScreen(services: AppServices, nav: Navigator) {
                 navigationIcon = { IconButton(stopChoosing, Modifier.hand()) { Icon(Icons.Close, stringResource(Res.string.cancel)) } },
                 title = { Text(stringResource(Res.string.library_chosen, chosen.size)) },
                 actions = {
+                    val all = everything.isNotEmpty() && chosen.containsAll(everything)
+                    val hint = stringResource(if (all) Res.string.trash_choose_none else Res.string.trash_choose_all)
+                    Hinted(hint) {
+                        IconButton({ chosen = if (all) emptySet() else everything }, Modifier.hand()) {
+                            Icon(Icons.SelectAll, hint, tint = if (all) MaterialTheme.colorScheme.primary else LocalContentColor.current)
+                        }
+                    }
                     IconButton({
                         val keys = chosen
                         services.scope.launch {
@@ -243,6 +262,19 @@ internal fun TrashScreen(services: AppServices, nav: Navigator) {
             choosing = true
         }
         val sections = listOf(items, notes, off).count { it.isNotEmpty() }
+        // By time, each part under its days (owner): today, yesterday, this week, then months; by weight, one run.
+        val zone = remember { TimeZone.currentSystemDefault() }
+        val thisYear = remember(now) { Instant.fromEpochMilliseconds(now).toLocalDateTime(zone).year }
+        val grouped = order != TrashOrder.Heaviest
+        fun <T> runs(list: List<T>, since: (T) -> Long?) = if (grouped) trashRuns(list, now, zone, since) else listOf(null to list)
+        val journalRuns = remember(journal, grouped) { runs(journal) { weight(it).since } }
+        val attachmentRuns = remember(attachments, grouped) { runs(attachments) { it.since } }
+        val boardRuns = remember(board, grouped) { runs(board) { weight(it).since } }
+        val groupHeader = @Composable { group: TrashGroup, bytes: Long, keys: List<String> ->
+            TrashGroupHeader(trashGroupLabel(group, thisYear), bytes, if (choosing) chosen.containsAll(keys) else null) {
+                chosen = if (chosen.containsAll(keys)) chosen - keys.toSet() else chosen + keys
+            }
+        }
         LazyColumn(Modifier.padding(padding).fillMaxSize()) {
             item {
                 Text(
@@ -295,41 +327,58 @@ internal fun TrashScreen(services: AppServices, nav: Navigator) {
                 }
             }
             if (items.isNotEmpty() && sections > 1) item(key = "journal") { TrashHeader(stringResource(Res.string.trash_journal)) }
-            items(journal, key = { it.id }) { entry ->
-                EntryCard(entry, onClick = { if (choosing) toggle("e:" + entry.id) else nav.open(Route.Editor(entry.id, entry.day)) }) {
-                    if (choosing) {
-                        ChoiceMark("e:" + entry.id in chosen, Modifier.padding(8.dp))
-                    } else {
-                        TrashedTrailing(weight(entry), now) { services.scope.launch { services.repo.restore(entry.id) } }
+            journalRuns.forEach { (group, run) ->
+                if (group != null) {
+                    item(key = "gj$group") { groupHeader(group, run.sumOf { weight(it).bytes }, run.map { "e:" + it.id }) }
+                }
+                items(run, key = { it.id }) { entry ->
+                    EntryCard(entry, onClick = { if (choosing) toggle("e:" + entry.id) else nav.open(Route.Editor(entry.id, entry.day)) }) {
+                        if (choosing) {
+                            ChoiceMark("e:" + entry.id in chosen, Modifier.padding(8.dp))
+                        } else {
+                            TrashedTrailing(weight(entry), now) { services.scope.launch { services.repo.restore(entry.id) } }
+                        }
                     }
                 }
             }
             if (off.isNotEmpty()) item(key = "attachments") { TrashHeader(stringResource(Res.string.trash_attachments)) }
-            items(attachments, key = { "a" + it.entryId + "/" + it.attachment.meta.id }) { item ->
-                val key = "a:" + item.entryId + "/" + item.attachment.meta.id
-                TakenOffRow(
-                    services,
-                    item,
-                    now,
-                    curtained = item.veil != null && gentle && item.postId !in opened,
-                    chosen = if (choosing) key in chosen else null,
-                    onReveal = { opened = opened + item.postId },
-                    onOpen = { if (choosing) toggle(key) else nav.open(Route.Editor(item.postId, item.day, readOnly = true)) },
-                    onLongPress = {
-                        choosing = true
-                        toggle(key)
-                    },
-                ) { services.scope.launch { services.repo.restoreAttachment(item.entryId, item.attachment.meta.id) } }
+            attachmentRuns.forEach { (group, run) ->
+                if (group != null) {
+                    item(key = "ga$group") {
+                        groupHeader(group, run.sumOf { it.size }, run.map { "a:" + it.entryId + "/" + it.attachment.meta.id })
+                    }
+                }
+                items(run, key = { "a" + it.entryId + "/" + it.attachment.meta.id }) { item ->
+                    val key = "a:" + item.entryId + "/" + item.attachment.meta.id
+                    TakenOffRow(
+                        services,
+                        item,
+                        now,
+                        curtained = item.veil != null && gentle && item.postId !in opened,
+                        chosen = if (choosing) key in chosen else null,
+                        onReveal = { opened = opened + item.postId },
+                        onOpen = { if (choosing) toggle(key) else nav.open(Route.Editor(item.postId, item.day, readOnly = true)) },
+                        onLongPress = {
+                            choosing = true
+                            toggle(key)
+                        },
+                    ) { services.scope.launch { services.repo.restoreAttachment(item.entryId, item.attachment.meta.id) } }
+                }
             }
             if (notes.isNotEmpty()) item(key = "board") { TrashHeader(stringResource(Res.string.trash_board)) }
-            items(board, key = { "n" + it.id }) { note ->
-                EntryCard(note, onClick = {
-                    if (choosing) toggle("e:" + note.id) else nav.open(Route.Editor(note.id, note.day, board = true))
-                }) {
-                    if (choosing) {
-                        ChoiceMark("e:" + note.id in chosen, Modifier.padding(8.dp))
-                    } else {
-                        TrashedTrailing(weight(note), now) { services.scope.launch { services.repo.restore(note.id) } }
+            boardRuns.forEach { (group, run) ->
+                if (group != null) {
+                    item(key = "gn$group") { groupHeader(group, run.sumOf { weight(it).bytes }, run.map { "e:" + it.id }) }
+                }
+                items(run, key = { "n" + it.id }) { note ->
+                    EntryCard(note, onClick = {
+                        if (choosing) toggle("e:" + note.id) else nav.open(Route.Editor(note.id, note.day, board = true))
+                    }) {
+                        if (choosing) {
+                            ChoiceMark("e:" + note.id in chosen, Modifier.padding(8.dp))
+                        } else {
+                            TrashedTrailing(weight(note), now) { services.scope.launch { services.repo.restore(note.id) } }
+                        }
                     }
                 }
             }

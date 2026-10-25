@@ -23,6 +23,7 @@ import app.benbow.core.text.Atom
 import app.benbow.core.text.Links
 import app.benbow.core.text.Mark
 import app.benbow.ui.editor.LinkHandler
+import app.benbow.ui.editor.LinkPictureLook
 import app.benbow.ui.editor.LocalLinkHandler
 import app.benbow.ui.editor.LocalLinkLoading
 import app.benbow.ui.editor.LocalLinkPicture
@@ -37,8 +38,18 @@ import kotlinx.coroutines.launch
  * Links in the app (ADR-038): where a tapped one opens, a card's picture, and reading a card's page once, as it goes in.
  */
 
-/** What a page said, ready for its card; [image] is a JPEG blob's SHA-256 that this device or the server keeps. */
-internal data class LinkPreview(val title: String?, val description: String?, val site: String?, val image: String?)
+/**
+ * What a page said, ready for its card; [image] is a JPEG blob's SHA-256 that this device or the server keeps. An
+ * address that is a picture gives the picture itself as [image], [width] by [height]: its card shows it whole.
+ */
+internal data class LinkPreview(
+    val title: String?,
+    val description: String?,
+    val site: String?,
+    val image: String?,
+    val width: Int? = null,
+    val height: Int? = null,
+)
 
 /** Reads [href]'s page for its card: the phone and the desktop directly, the browser through its server. Null: no page. */
 internal expect suspend fun readPage(services: AppServices, href: String): LinkPreview?
@@ -47,21 +58,40 @@ internal expect suspend fun readPage(services: AppServices, href: String): LinkP
 @Composable
 internal expect fun rememberOpenUrl(): (String) -> Unit
 
-/** Keeps a card's picture as a file of its own, uploaded and backed up like an attachment's preview. */
-internal suspend fun AppServices.keepPicture(jpeg: ByteArray): String {
-    val file = media.import(byteSourceOf(jpeg), "image/jpeg", "link.jpg", now())
+/**
+ * Keeps a card's picture as a file of its own, uploaded and backed up like an attachment's preview: a JPEG, or a picture
+ * link's file as the site gave it (a GIF stays a GIF).
+ */
+internal suspend fun AppServices.keepPicture(bytes: ByteArray, mime: String = "image/jpeg"): String {
+    val file = media.import(byteSourceOf(bytes), mime, "link." + pictureExtension(mime), now())
     repo.keepFile(file)
     return file.sha256
 }
 
-/** The card with what its page said; anything the card already has (a title written by hand) stays. */
-internal fun Atom.LinkCard.filled(preview: LinkPreview?, day: String): Atom.LinkCard = copy(
-    title = title ?: preview?.title,
-    description = description ?: preview?.description,
-    site = site ?: preview?.site,
-    image = image ?: preview?.image,
-    fetched = day,
-)
+internal fun pictureExtension(mime: String): String = when (mime) {
+    "image/gif" -> "gif"
+    "image/png" -> "png"
+    "image/webp" -> "webp"
+    else -> "jpg"
+}
+
+/**
+ * The card with what its page said; anything the card already has (a title written by hand) stays. A link that is a
+ * picture shows it whole («Картинкой», owner: GIFs by their links didn't show), unless the card already has a picture.
+ */
+internal fun Atom.LinkCard.filled(preview: LinkPreview?, day: String): Atom.LinkCard {
+    val own = preview?.takeIf { image == null && it.image != null && it.width != null && it.height != null }
+    return copy(
+        title = title ?: preview?.title,
+        description = description ?: preview?.description,
+        site = site ?: preview?.site,
+        image = image ?: preview?.image,
+        fetched = day,
+        picture = picture || (own != null && !large),
+        width = width ?: own?.width,
+        height = height ?: own?.height,
+    )
+}
 
 /**
  * Reads the pages of cards that haven't been read (once per run each), shimmering them meanwhile, and hands each result
@@ -94,8 +124,7 @@ internal fun AppServices.readCards(cards: List<Pair<String, Atom.LinkCard>>, fil
 internal fun AppServices.readCardsOf(id: String) = scope.launch {
     val body = repo.entry(id).first()?.body ?: return@launch
     val doc = runCatching { DocumentCodec.decode(body) }.getOrNull()?.takeIf { it.isEditable } ?: return@launch
-    val cards = doc.blocks.filterIsInstance<LinkCardBlock>().filter { it.fetched == null }
-        .map { it.key to Atom.LinkCard(it.href, it.title, it.description, it.site, it.image, it.view == "large", it.fetched) }
+    val cards = doc.blocks.filterIsInstance<LinkCardBlock>().filter { it.fetched == null }.map { it.key to it.atom() }
     readCards(cards) { key, preview -> fillStoredCard(id, key, preview) }
 }
 
@@ -106,19 +135,34 @@ internal fun AppServices.fillStoredCard(id: String, key: String, preview: LinkPr
         val doc = runCatching { DocumentCodec.decode(body) }.getOrNull()?.takeIf { it.isEditable } ?: return@reviseBody null
         val blocks = doc.blocks.map { block ->
             if (block !is LinkCardBlock || block.key != key || block.fetched != null) return@map block
-            val card = Atom.LinkCard(
-                block.href,
-                block.title,
-                block.description,
-                block.site,
-                block.image,
-                block.view == "large",
-            ).filled(preview, today())
-            block.copy(title = card.title, description = card.description, site = card.site, image = card.image, fetched = card.fetched)
+            val card = block.atom().filled(preview, today())
+            block.copy(
+                title = card.title,
+                description = card.description,
+                site = card.site,
+                image = card.image,
+                fetched = card.fetched,
+                view = if (card.picture) "picture" else block.view,
+                width = card.width,
+                height = card.height,
+            )
         }
         DocumentCodec.encode(Document(blocks, doc.version))
     }
 }
+
+private fun LinkCardBlock.atom() = Atom.LinkCard(
+    href,
+    title,
+    description,
+    site,
+    image,
+    view == "large",
+    fetched,
+    picture = view == "picture",
+    width = width,
+    height = height,
+)
 
 /**
  * Links for every screen: addresses open outside the app, entry links open the entry; a card's picture comes from the
@@ -152,7 +196,7 @@ internal fun ProvideLinks(services: AppServices, nav: Navigator, content: @Compo
     }
     val loading by services.linkLoading.collectAsStateWithLifecycle()
     val picture = remember(services) {
-        @Composable { sha256: String, large: Boolean, modifier: Modifier -> LinkPicture(services, sha256, large, modifier) }
+        @Composable { sha256: String, look: LinkPictureLook, modifier: Modifier -> LinkPicture(services, sha256, look, modifier) }
     }
     CompositionLocalProvider(
         LocalLinkHandler provides handler,
@@ -162,11 +206,16 @@ internal fun ProvideLinks(services: AppServices, nav: Navigator, content: @Compo
     )
 }
 
-/** A card's picture; a small square one (a site's icon) sits in the middle of the big look instead of being stretched. */
+/**
+ * A card's picture; a small square one (a site's icon) sits in the middle of the big look instead of being stretched.
+ * A link that is a picture shows it whole, and a GIF moves.
+ */
 @Composable
-private fun LinkPicture(services: AppServices, sha256: String, large: Boolean, modifier: Modifier) {
+private fun LinkPicture(services: AppServices, sha256: String, look: LinkPictureLook, modifier: Modifier) {
     val load by rememberMediaFile(services.media, sha256)
     val file = (load as? MediaLoad.Ready)?.file ?: return
+    if (look == LinkPictureLook.Whole) return MovingPicture(file, modifier, ContentScale.Fit)
+    val large = look == LinkPictureLook.Large
     var icon by remember(sha256) { mutableStateOf(false) }
     Box(modifier, contentAlignment = Alignment.Center) {
         AsyncImage(

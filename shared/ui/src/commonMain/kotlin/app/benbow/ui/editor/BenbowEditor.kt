@@ -347,6 +347,7 @@ private fun BoxScope.EditorBody(state: EditorState, readOnly: Boolean, atoms: At
                                 atom,
                                 onOpen = { links.open(Mark.Link(atom.href)) },
                                 onLarge = { state.setCardLarge(key, it) },
+                                onPicture = { state.setCardPicture(key, it) },
                                 onToText = { state.cardToText(key) },
                                 onEdit = { state.requestCardEdit(key) },
                                 onRemove = { state.removeAtom(key) },

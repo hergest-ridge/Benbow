@@ -15,6 +15,11 @@ import java.nio.charset.Charset
 /** The phone and the desktop read a card's page themselves (ADR-038): the server may be out of reach away from home. */
 internal actual suspend fun readPage(services: AppServices, href: String): LinkPreview? = withContext(Dispatchers.IO) {
     val read = PageReader.read(href, DirectGet, ::decodePage) ?: return@withContext null
+    // An address that is a picture keeps it as it came (a GIF stays a GIF); a page's picture becomes a JPEG.
+    read.own?.let { own ->
+        val kept = services.keepPicture(own.bytes, own.mime)
+        return@withContext LinkPreview(read.meta.title, read.meta.description, read.meta.site, kept, own.width, own.height)
+    }
     val jpeg = read.image?.let { coverJpeg(it) }
     LinkPreview(read.meta.title, read.meta.description, read.meta.site, jpeg?.let { services.keepPicture(it) })
 }

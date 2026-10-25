@@ -34,6 +34,11 @@ import app.benbow.core.text.Mark
 import app.benbow.core.text.buildRichText
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import java.awt.Color
+import java.awt.image.BufferedImage
+import java.io.ByteArrayOutputStream
+import javax.imageio.IIOImage
+import javax.imageio.ImageIO
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -85,6 +90,50 @@ class LinksTest {
         assertEquals("Хабр", card.site)
         waitUntilAtLeastOneExists(hasText("Как устроены маяки"), 5_000)
         screenshot("91-link-card")
+    }
+
+    /** A GIF of two frames, red then blue. */
+    private fun animatedGif(): ByteArray {
+        val out = ByteArrayOutputStream()
+        val writer = ImageIO.getImageWritersByFormatName("gif").next()
+        ImageIO.createImageOutputStream(out).use { stream ->
+            writer.output = stream
+            writer.prepareWriteSequence(null)
+            listOf(Color.RED, Color.BLUE).forEach { color ->
+                val image = BufferedImage(120, 80, BufferedImage.TYPE_INT_RGB)
+                image.createGraphics().apply {
+                    this.color = color
+                    fillRect(0, 0, 120, 80)
+                    dispose()
+                }
+                writer.writeToSequence(IIOImage(image, null, null), null)
+            }
+            writer.endWriteSequence()
+        }
+        return out.toByteArray()
+    }
+
+    @Test
+    fun anAddressThatIsAPictureShowsThePictureItselfAndAGifMoves() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val gif = animatedGif()
+        val kept = runBlocking { services.keepPicture(gif, "image/gif") }
+        services.pageReader = { LinkPreview(null, null, null, kept, 120, 80) }
+        val id = services.repo.createNote(services.today(), "Утро у моря")
+        openForWriting("Утро у моря")
+        onNode(hasSetTextAction()).performTextInputSelection(TextRange(11))
+        onNode(hasSetTextAction()).performTextInput("\n")
+        onNode(hasSetTextAction()).performTextInput("https://media.giphy.com/media/cat/giphy.gif")
+        waitUntil(timeoutMillis = 5_000) {
+            DocumentCodec.decode(body(id)).blocks.filterIsInstance<LinkCardBlock>().singleOrNull()?.fetched != null
+        }
+        val card = DocumentCodec.decode(body(id)).blocks.filterIsInstance<LinkCardBlock>().single()
+        assertEquals("picture", card.view)
+        assertEquals(kept, card.image, "the GIF itself, as it came")
+        assertEquals(120 to 80, card.width to card.height)
+        // The picture with its site on it; the desktop plays its frames with Skia.
+        waitUntilAtLeastOneExists(hasText("media.giphy.com"), 5_000)
+        assertEquals(2, framesOf(gif)?.frameCount)
+        screenshot("92-picture-link")
     }
 
     @Test
@@ -174,6 +223,7 @@ class LinksTest {
         val id = services.repo.createNote(services.today(), "Читал про маяки")
         openForWriting("Читал про маяки")
         onNode(hasSetTextAction()).performTextInputSelection(TextRange(10, 15)) // «маяки»
+        onNodeWithContentDescription("Текст", substring = true).click() // the link waits in «Аа»
         onNodeWithContentDescription("Ссылка").click()
         waitUntilExactlyOneExists(hasText("Адрес") and hasSetTextAction(), 5_000)
         onNode(hasText("Адрес") and hasSetTextAction()).performTextInput("ru.wikipedia.org/wiki/Маяк")

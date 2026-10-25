@@ -83,7 +83,18 @@ fun Document.toRichText(keys: BlockKeys = BlockKeys()): RichText {
 
             is LinkCardBlock -> atomParagraph(
                 block.key,
-                Atom.LinkCard(block.href, block.title, block.description, block.site, block.image, block.view == "large", block.fetched),
+                Atom.LinkCard(
+                    block.href,
+                    block.title,
+                    block.description,
+                    block.site,
+                    block.image,
+                    block.view == "large",
+                    block.fetched,
+                    picture = block.view == "picture",
+                    width = block.width,
+                    height = block.height,
+                ),
                 ::start,
                 text,
             )
@@ -101,8 +112,26 @@ private fun atomParagraph(key: String, atom: Atom, start: (Paragraph) -> Unit, t
 
 private fun Atom.toBlock(key: String): Block = when (this) {
     is Atom.Divider -> DividerBlock(key, variant)
+
     is Atom.Attachment -> AttachmentBlock(key, ref, width, caption)
-    is Atom.LinkCard -> LinkCardBlock(key, href, title, description, site, image, if (large) "large" else null, fetched)
+
+    is Atom.LinkCard -> LinkCardBlock(
+        key,
+        href,
+        title,
+        description,
+        site,
+        image,
+        when {
+            picture -> "picture"
+            large -> "large"
+            else -> null
+        },
+        fetched,
+        width,
+        height,
+    )
+
     is Atom.Unknown -> UnknownBlock(key, Json.parseToJsonElement(json).jsonObject)
 }
 

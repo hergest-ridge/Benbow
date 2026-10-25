@@ -349,10 +349,11 @@ internal fun BoardScreen(services: AppServices, nav: Navigator) {
             services.scope.launch { services.repo.placeOnBoard(id, to) }
         }
     }
-    // A box ticked right on its card: the note gets a revision with only that box changed (it moves to «Отмечено»).
-    val tick: (String, String) -> Unit = { id, key ->
-        haptic.performHapticFeedback(HapticFeedbackType.ToggleOn)
-        services.scope.launch { services.repo.tickOnBoard(id, key, true) }
+    // A box ticked right on its card: the note gets a revision with only that box changed (it moves to «Отмечено», or,
+    // with the ticked boxes kept in place, is crossed out there and can be unticked the same way).
+    val tick: (String, String, Boolean) -> Unit = { id, key, checked ->
+        haptic.performHapticFeedback(if (checked) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
+        services.scope.launch { services.repo.tickOnBoard(id, key, checked) }
     }
     val focus = remember { FocusRequester() }
     LaunchedEffect(chosen.isNotEmpty()) { if (chosen.isNotEmpty()) runCatching { focus.requestFocus() } }
@@ -884,10 +885,10 @@ private fun NoteSlot(
     choosing: Boolean,
     onOpen: (BoardNote) -> Unit,
     onChoose: (Any) -> Unit,
-    onTick: (String, String) -> Unit,
+    onTick: (String, String, Boolean) -> Unit,
     modifier: Modifier,
 ) {
-    val tick = if (choosing) null else { key: String -> onTick(note.id, key) }
+    val tick = if (choosing) null else { key: String, checked: Boolean -> onTick(note.id, key, checked) }
     val stage = LocalBoardStage.current
     val hover = remember { MutableInteractionSource() }
     val hovered by hover.collectIsHoveredAsState()

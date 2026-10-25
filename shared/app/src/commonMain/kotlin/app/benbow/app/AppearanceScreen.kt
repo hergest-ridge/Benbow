@@ -46,8 +46,11 @@ import app.benbow.app.resources.palette_names
 import app.benbow.app.resources.post_media
 import app.benbow.app.resources.post_media_names
 import app.benbow.app.resources.post_section
+import app.benbow.app.resources.tab_board
 import app.benbow.app.resources.theme_mode
 import app.benbow.app.resources.theme_modes
+import app.benbow.app.resources.ticked_below
+import app.benbow.app.resources.ticked_below_hint
 import app.benbow.ui.theme.ThemeMode
 import app.benbow.ui.theme.ThemePalette
 import app.benbow.ui.theme.isDark
@@ -126,6 +129,18 @@ internal fun AppearanceScreen(services: AppServices, nav: Navigator) {
                     )
                 }
                 Switch(current.linkPreviews, { services.setAppearance(current.copy(linkPreviews = it)) }, modifier = Modifier.hand())
+            }
+            Title(stringResource(Res.string.tab_board))
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f).padding(end = 16.dp)) {
+                    Text(stringResource(Res.string.ticked_below), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        stringResource(Res.string.ticked_below_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(current.tickedBelow, { services.setAppearance(current.copy(tickedBelow = it)) }, modifier = Modifier.hand())
             }
             Title(stringResource(Res.string.palette))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {

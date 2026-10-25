@@ -21,6 +21,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,6 +34,7 @@ import androidx.compose.ui.layout.Placeable
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.benbow.app.resources.Res
@@ -40,6 +42,7 @@ import app.benbow.app.resources.board_checked
 import app.benbow.app.resources.board_files
 import app.benbow.app.resources.board_from_journal
 import app.benbow.app.resources.board_tick
+import app.benbow.app.resources.board_untick
 import app.benbow.client.BoardNote
 import app.benbow.client.CardLine
 import app.benbow.client.Media
@@ -51,7 +54,8 @@ import kotlin.math.roundToInt
 /**
  * A note's card on the board (ADR-040), Keep-like: as wide as its column and as tall as its words, the note's color,
  * its picture on top at its own proportions (so the card has its height before the picture loads), a title only when
- * more follows it, its open boxes, how many are ticked, its tags. [words] lets the open note's sheet fade them alone.
+ * more follows it, its open boxes, how many are ticked (or, with [LocalTickedBelow] off, every box where it stands), its
+ * tags. [words] lets the open note's sheet fade them alone.
  */
 @Composable
 internal fun BoardCard(
@@ -60,8 +64,8 @@ internal fun BoardCard(
     chosen: Boolean,
     modifier: Modifier = Modifier,
     words: Modifier = Modifier,
-    /** Ticks an open box right on the card (its block's key); null: the boxes only show. */
-    onTick: ((String) -> Unit)? = null,
+    /** Ticks a box right on the card, or takes its tick off (its block's key, ticked or not); null: the boxes only show. */
+    onTick: ((String, Boolean) -> Unit)? = null,
     /** The card's thin line; none while its sheet moves (owner: lines moving with it look wrong). */
     lined: Boolean = true,
 ) {
@@ -93,8 +97,14 @@ internal fun boardCardColor(): Color {
 /** Rows of text a card shows at most (Keep's card: some 26, its title's included). */
 private const val CARD_ROWS = 26
 
+/**
+ * «Отмеченные пункты — вниз» (Ещё → Оформление, this device's): a list note's ticked boxes under «Отмечено», as in
+ * Keep, or where they stand, crossed out, as on paper. Cards and the list editor alike; the document never changes.
+ */
+internal val LocalTickedBelow = compositionLocalOf { true }
+
 @Composable
-private fun CardWords(note: BoardNote, media: Media?, onTick: ((String) -> Unit)?) {
+private fun CardWords(note: BoardNote, media: Media?, onTick: ((String, Boolean) -> Unit)?) {
     val picture = note.picture
     if (picture != null && media != null) {
         val load by rememberMediaFile(media, picture.sha256)
@@ -106,15 +116,26 @@ private fun CardWords(note: BoardNote, media: Media?, onTick: ((String) -> Unit)
         }
     }
     val card = note.card
-    val files = note.entry.mediaCount - if (picture != null) 1 else 0
+    // The picture on top is one of the files, unless it is a link that is a picture.
+    val files = note.entry.mediaCount - if (picture != null && picture.sha256 == note.entry.cover) 1 else 0
     val tags = note.entry.tags
     if (card.title.isEmpty() && card.lines.isEmpty() && card.ticked == 0 && files <= 0 && tags.isEmpty() && !note.fromJournal) return
+    // Ticked boxes in their places: a card made before there were such lines shows them as before.
+    val inPlace = !LocalTickedBelow.current && card.inPlace.isNotEmpty()
+    val lines = if (inPlace) card.inPlace else card.lines
     Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (card.title.isNotEmpty()) {
             Text(card.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
-        if (card.lines.isNotEmpty()) CardLines(card.lines, card.more, rows = if (card.title.isEmpty()) CARD_ROWS else CARD_ROWS - 2, onTick)
-        if (card.ticked > 0) {
+        if (lines.isNotEmpty()) {
+            CardLines(
+                lines,
+                if (inPlace) card.inPlaceMore else card.more,
+                rows = if (card.title.isEmpty()) CARD_ROWS else CARD_ROWS - 2,
+                onTick,
+            )
+        }
+        if (card.ticked > 0 && !inPlace) {
             Text(
                 stringResource(Res.string.board_checked, card.ticked),
                 style = MaterialTheme.typography.bodySmall,
@@ -148,7 +169,7 @@ private fun CardWords(note: BoardNote, media: Media?, onTick: ((String) -> Unit)
  * in "…" when there is more. Each line is measured in turn with the rows still left to it.
  */
 @Composable
-private fun CardLines(lines: List<CardLine>, more: Boolean, rows: Int, onTick: ((String) -> Unit)?) {
+private fun CardLines(lines: List<CardLine>, more: Boolean, rows: Int, onTick: ((String, Boolean) -> Unit)?) {
     val density = LocalDensity.current
     val style = MaterialTheme.typography.bodyMedium
     val row = with(density) { (style.lineHeight.takeIf { it.isSp } ?: (style.fontSize * 1.4f)).toPx() }
@@ -181,7 +202,7 @@ private fun CardLines(lines: List<CardLine>, more: Boolean, rows: Int, onTick: (
 }
 
 @Composable
-private fun CardLineRow(line: CardLine, last: Boolean, rows: Int, onTick: ((String) -> Unit)?) {
+private fun CardLineRow(line: CardLine, last: Boolean, rows: Int, onTick: ((String, Boolean) -> Unit)?) {
     val text = if (last) line.text + "…" else line.text
     val style = if (line.heading) {
         MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
@@ -192,19 +213,25 @@ private fun CardLineRow(line: CardLine, last: Boolean, rows: Int, onTick: ((Stri
         line.box -> Row(verticalAlignment = Alignment.Top) {
             val key = line.key
             val tick = if (onTick != null && key != null) {
-                Modifier.clip(CircleShape).hand().clickable { onTick(key) }
+                Modifier.clip(CircleShape).hand().clickable { onTick(key, !line.checked) }
             } else {
                 Modifier
             }
             Box(Modifier.offset((-4).dp, (-3).dp).size(28.dp).then(tick), contentAlignment = Alignment.Center) {
                 Icon(
-                    Icons.CheckBoxBlank,
-                    stringResource(Res.string.board_tick).takeIf { onTick != null },
+                    if (line.checked) Icons.CheckBox else Icons.CheckBoxBlank,
+                    stringResource(if (line.checked) Res.string.board_untick else Res.string.board_tick).takeIf { onTick != null },
                     Modifier.size(20.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text(text, style = style, maxLines = rows, overflow = TextOverflow.Ellipsis)
+            // A ticked box where it stands (LocalTickedBelow off): crossed out and quieter, as in the list editor.
+            val words = if (line.checked) {
+                style.copy(textDecoration = TextDecoration.LineThrough, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                style
+            }
+            Text(text, style = words, maxLines = rows, overflow = TextOverflow.Ellipsis)
         }
 
         line.bullet != null -> Row {

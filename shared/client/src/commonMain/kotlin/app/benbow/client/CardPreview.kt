@@ -1,5 +1,6 @@
 package app.benbow.client
 
+import app.benbow.core.content.Block
 import app.benbow.core.content.CodeBlock
 import app.benbow.core.content.Document
 import app.benbow.core.content.LinkCardBlock
@@ -11,6 +12,7 @@ import kotlinx.serialization.Serializable
  * What a note's card on the board shows (ADR-040), made on every write beside the title and preview, so the board
  * never parses a document. Keep-like: the title is the note's title (its first block when it is a heading, the
  * editor's «Название»), then the lines as written, a checklist's open boxes in their order, the ticked ones counted.
+ * With «Отмеченные — вниз» off the card shows [inPlace] instead: the ticked boxes where they stand, as on paper.
  */
 @Serializable
 data class CardPreview(
@@ -20,11 +22,19 @@ data class CardPreview(
     val ticked: Int = 0,
     /** There is more than [lines] holds: the card ends in an ellipsis. */
     val more: Boolean = false,
+    /** The lines with the ticked boxes in their places; empty while nothing is ticked (then they are [lines]). */
+    val inPlace: List<CardLine> = emptyList(),
+    /** There is more than [inPlace] holds. */
+    val inPlaceMore: Boolean = false,
+    /** The first link that is a picture, shown whole (its SHA-256): the card's picture when the note has none of its own. */
+    val picture: String? = null,
+    /** That picture's width to height. */
+    val pictureRatio: Float? = null,
 )
 
 /**
- * A line of a card: plain, an open box (with its block's [key], so the card can tick it), or a list item with its
- * [bullet] ("•", "2."); a [heading] reads bold.
+ * A line of a card: plain, a box (with its block's [key], so the card can tick it; [checked] only in
+ * [CardPreview.inPlace]), or a list item with its [bullet] ("•", "2."); a [heading] reads bold.
  */
 @Serializable
 data class CardLine(
@@ -33,6 +43,7 @@ data class CardLine(
     val bullet: String? = null,
     val heading: Boolean = false,
     val key: String? = null,
+    val checked: Boolean = false,
 )
 
 /**
@@ -40,21 +51,32 @@ data class CardLine(
  * left out (ADR-031). Enough for Keep's card of some 26 rows of text; the card itself cuts what doesn't fit.
  */
 internal fun cardOf(document: Document): CardPreview {
-    val blocks = document.blocks.filter { it is TextBlock || it is LinkCardBlock || it is CodeBlock }
+    // A link that is a picture is the card's picture, not a line of its words.
+    val pictures = document.blocks.filterIsInstance<LinkCardBlock>().filter { it.view == "picture" && it.image != null }
+    val blocks = document.blocks.filter { (it is TextBlock || it is LinkCardBlock || it is CodeBlock) && it !in pictures }
     val first = blocks.firstOrNull() as? TextBlock
     val titled = first != null && first.listItem == null && first.style.startsWith("h")
+    val body = if (titled) blocks.drop(1) else blocks
+    val ticked = body.count(::isTicked)
+    val (lines, more) = cardLines(body, withTicked = false)
+    val (inPlace, inPlaceMore) = if (ticked > 0) cardLines(body, withTicked = true) else emptyList<CardLine>() to false
+    val title = if (titled) text(first!!).replace('\n', ' ').trim().take(CARD_LINE) else ""
+    val picture = pictures.firstOrNull()
+    val ratio = picture?.let { p -> p.width?.let { w -> p.height?.takeIf { it > 0 }?.let { h -> w.toFloat() / h } } }
+    return CardPreview(title, lines, ticked, more, inPlace, inPlaceMore, picture?.image, ratio)
+}
+
+/** The card's lines of [blocks] and whether there is more: the ticked boxes left out, or [withTicked] in their places. */
+private fun cardLines(blocks: List<Block>, withTicked: Boolean): Pair<List<CardLine>, Boolean> {
     val lines = ArrayList<CardLine>()
-    var ticked = 0
     var more = false
     var number = 0
     var chars = 0
-    for (block in if (titled) blocks.drop(1) else blocks) {
+    for (block in blocks) {
         val item = (block as? TextBlock)?.listItem
         number = if (item == "number") number + 1 else 0
-        if (item == "check" && block is TextBlock && block.checked == true) {
-            ticked++
-            continue
-        }
+        val checked = isTicked(block)
+        if (checked && !withTicked) continue
         val bullet = when (item) {
             "bullet" -> "•"
             "number" -> "$number."
@@ -76,14 +98,17 @@ internal fun cardOf(document: Document): CardPreview {
                 bullet = bullet.takeIf { i == 0 },
                 heading = heading,
                 key = block.key.takeIf { box },
+                checked = checked && box,
             )
         }
     }
     // Blank lines read as the gaps they are, but never at the ends or two in a row.
     val tidy = lines.filterIndexed { i, line -> line.text.isNotBlank() || line.box || (i > 0 && lines[i - 1].text.isNotBlank()) }
         .dropWhile { it.text.isBlank() && !it.box }.dropLastWhile { it.text.isBlank() && !it.box }
-    return CardPreview(if (titled) text(first!!).replace('\n', ' ').trim().take(CARD_LINE) else "", tidy, ticked, more)
+    return tidy to more
 }
+
+private fun isTicked(block: Block): Boolean = block is TextBlock && block.listItem == "check" && block.checked == true
 
 private fun text(block: Any): String = when (block) {
     is TextBlock -> block.children.filter { SPOILER !in it.marks }.joinToString("") { it.text }

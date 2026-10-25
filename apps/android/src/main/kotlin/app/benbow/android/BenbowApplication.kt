@@ -11,6 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import app.benbow.android.asr.SandboxTranscriber
 import app.benbow.app.AndroidDictationMic
 import app.benbow.app.AppServices
+import app.benbow.app.installAndroidImages
 import app.benbow.app.mediaIn
 import app.benbow.client.KeystoreSecretBox
 import app.benbow.client.SecretBox
@@ -29,6 +30,7 @@ class BenbowApplication : Application() {
         super.onCreate()
         // The speech recognizer's sandbox (AsrService) starts this class too, with no permissions: it needs none of this.
         if (Process.isIsolated()) return
+        installAndroidImages(this)
         SecretBox.current = KeystoreSecretBox()
         AlarmReminderClock.createChannel(this)
         SyncWorker.schedulePeriodic(this)

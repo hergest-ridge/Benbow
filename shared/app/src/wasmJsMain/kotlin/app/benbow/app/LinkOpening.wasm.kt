@@ -12,7 +12,7 @@ private fun openTab(url: String): Unit = js("{ window.open(url, '_blank', 'noope
 /** The page reaches nothing but its server (ADR-030), so the server reads the page and keeps its picture. */
 internal actual suspend fun readPage(services: AppServices, href: String): LinkPreview? {
     val info = services.pages.preview(href)
-    return LinkPreview(info.title, info.description, info.site, info.image)
+    return LinkPreview(info.title, info.description, info.site, info.image, info.width, info.height)
 }
 
 /** A page may read the clipboard only on a paste (Firefox allows nothing else): the address field takes one. */

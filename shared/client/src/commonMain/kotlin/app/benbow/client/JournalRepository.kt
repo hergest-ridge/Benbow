@@ -893,7 +893,9 @@ internal fun summarize(body: String): Summary {
 
 private const val SPOILER = "spoiler"
 private const val SUMMARIES_KEY = "summaries.version"
-private const val SUMMARIES_VERSION = "6" // 3: board cards (ADR-040); 4: their boxes' keys; 5: titles from headings; 6: longer cards
+
+// 3: board cards (ADR-040); 4: their boxes' keys; 5: titles from headings; 6: longer cards; 7: ticked boxes in place
+private const val SUMMARIES_VERSION = "7"
 
 /** Runs of spaces as one (a hidden spoiler leaves two behind), trimmed. */
 private fun String.squeezed(): String = replace(Regex(" {2,}"), " ").trim()

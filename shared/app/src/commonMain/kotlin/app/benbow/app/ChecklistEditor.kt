@@ -81,7 +81,8 @@ import org.jetbrains.compose.resources.stringResource
 
 /**
  * A note on the board that is a list, Keep's way (ADR-040, K4): under its title (the note's own field), the open boxes in their order, each with a
- * handle to move it, «Пункт списка» under them, then the ticked ones folded under «Отмечено: N». Each box is a line of
+ * handle to move it, «Пункт списка» under them, then the ticked ones folded under «Отмечено: N» (with
+ * [LocalTickedBelow] off, every box where it stands, the ticked ones crossed out, as on paper). Each box is a line of
  * its own: Enter starts the next (splitting the words at the cursor, a pasted text one box a line), Backspace at a box's
  * start joins it to the one above, × takes it away. The document keeps its order whatever the boxes show as: ticking
  * changes only `checked`, so ticks from two devices merge. [onChange] gets the whole document after every change.
@@ -89,7 +90,9 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun ChecklistEditor(document: Document, onChange: (Document) -> Unit, modifier: Modifier = Modifier, focusFirst: Boolean = false) {
     val scope = rememberCoroutineScope()
-    val model = remember { ListModel(document, scope, onChange) }
+    val below = LocalTickedBelow.current
+    val model = remember { ListModel(document, scope, onChange, inPlace = !below) }
+    LaunchedEffect(below) { model.inPlace = !below }
     val list = rememberLazyListState()
     val haptic = LocalHapticFeedback.current
     val drag = remember(list, model) { RowDrag(list, model) { haptic.performHapticFeedback(HapticFeedbackType.SegmentTick) } }
@@ -101,9 +104,9 @@ internal fun ChecklistEditor(document: Document, onChange: (Document) -> Unit, m
         if (at == null) model.indexOf(key)?.let { list.scrollToItem(it) }
     }
     LazyColumn(modifier, state = list, contentPadding = PaddingValues(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 32.dp)) {
-        items(model.open, key = { it }) { key -> BoxRow(model, key, drag, Modifier.animateItem()) }
+        items(model.movable, key = { it }) { key -> BoxRow(model, key, drag, Modifier.animateItem()) }
         item("add") { AddRow(model) }
-        if (model.ticked.isNotEmpty()) {
+        if (!model.inPlace && model.ticked.isNotEmpty()) {
             item("ticked") { TickedHeader(model, Modifier.animateItem()) }
             if (!model.folded) items(model.ticked, key = { it }) { key -> BoxRow(model, key, null, Modifier.animateItem()) }
         }
@@ -131,7 +134,7 @@ private class BoxLine(val key: String, words: String, checked: Boolean, private 
 }
 
 @Stable
-private class ListModel(document: Document, private val scope: CoroutineScope, private val onChange: (Document) -> Unit) {
+private class ListModel(document: Document, private val scope: CoroutineScope, private val onChange: (Document) -> Unit, inPlace: Boolean) {
     private val keys = BlockKeys()
 
     /** Every block in the document's order; pictures (and a title from an older note) keep their places. */
@@ -150,12 +153,22 @@ private class ListModel(document: Document, private val scope: CoroutineScope, p
         }
     }
 
+    /** The ticked boxes stay where they are ([LocalTickedBelow] off): one run of boxes, no «Отмечено». */
+    var inPlace by mutableStateOf(inPlace)
+
     val open: List<String> get() = order.filter { rows[it]?.checked == false }
     val ticked: List<String> get() = order.filter { rows[it]?.checked == true }
 
+    /** The boxes above «Пункт списка», each with its handle: the open ones, or every box when they stay in place. */
+    val movable: List<String> get() = if (inPlace) order.filter { it in rows } else open
+
+    /** The run [key] joins, moves and hands its focus on in: [movable], or the ticked ones under «Отмечено». */
+    private fun runOf(key: String): List<String> = if (!inPlace && rows[key]?.checked == true) ticked else movable
+
     /** The box's place in the editor's list: the open boxes, «Пункт списка», the header, the ticked ones. */
     fun indexOf(key: String): Int? {
-        open.indexOf(key).takeIf { it >= 0 }?.let { return it }
+        movable.indexOf(key).takeIf { it >= 0 }?.let { return it }
+        if (inPlace) return null
         return ticked.indexOf(key).takeIf { it >= 0 && !folded }?.let { open.size + 2 + it }
     }
 
@@ -188,14 +201,14 @@ private class ListModel(document: Document, private val scope: CoroutineScope, p
     fun add() {
         val key = keys.next()
         rows[key] = BoxLine(key, "", false)
-        order.add(open.lastOrNull()?.let { order.indexOf(it) + 1 } ?: order.size, key)
+        order.add(movable.lastOrNull()?.let { order.indexOf(it) + 1 } ?: order.size, key)
         focusing = key to 0
         changed()
     }
 
     fun remove(key: String) {
-        val row = rows[key] ?: return
-        val part = if (row.checked) ticked else open
+        if (key !in rows) return
+        val part = runOf(key)
         val at = part.indexOf(key)
         val next = part.getOrNull(at - 1) ?: part.getOrNull(at + 1)
         order.remove(key)
@@ -207,7 +220,7 @@ private class ListModel(document: Document, private val scope: CoroutineScope, p
     /** Backspace at a box's start: its words join the box above it, the cursor where they meet. */
     fun join(key: String) {
         val row = rows[key] ?: return
-        val part = if (row.checked) ticked else open
+        val part = runOf(key)
         val above = part.getOrNull(part.indexOf(key) - 1)?.let { rows[it] } ?: return
         val at = above.field.text.length
         val words = row.field.text.toString()
@@ -248,9 +261,9 @@ private class RowDrag(private val list: LazyListState, private val model: ListMo
         top += dy
         val info = list.layoutInfo.visibleItemsInfo.firstOrNull { it.key == carried } ?: return
         val center = top + info.size / 2f
-        val open = model.open
+        val movable = model.movable
         val under = list.layoutInfo.visibleItemsInfo.firstOrNull {
-            it.key != carried && it.key in open && center >= it.offset && center < it.offset + it.size
+            it.key != carried && it.key in movable && center >= it.offset && center < it.offset + it.size
         }?.key
         if (under != over) over = null
         if (under == null || over != null) return

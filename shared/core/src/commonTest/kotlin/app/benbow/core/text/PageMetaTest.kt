@@ -75,6 +75,37 @@ class PageMetaTest {
     }
 
     @Test
+    fun anAddressThatIsAPictureOrAGifSitesPageGivesThePictureWhole() = runTest {
+        val gif = "GIF89a".encodeToByteArray() + byteArrayOf(0xE0.toByte(), 0x01, 0x0E, 0x01, 0, 0, 0)
+        val pages = mapOf(
+            "https://x.org/cat.gif" to PageResponse(200, null, "image/gif", gif),
+            "https://giphy.com/gifs/cat-123" to
+                PageResponse(
+                    200,
+                    null,
+                    "text/html",
+                    """<meta property="og:image" content="https://media.giphy.com/c.gif"><title>Cat</title>""".encodeToByteArray(),
+                ),
+            "https://media.giphy.com/c.gif" to PageResponse(200, null, "image/gif; charset=binary", gif),
+            "https://x.org/post" to
+                PageResponse(200, null, "text/html", """<meta property="og:image" content="https://x.org/c.gif">""".encodeToByteArray()),
+            "https://x.org/c.gif" to PageResponse(200, null, "image/gif", gif),
+        )
+        val get = PageGet { url, _, _ -> pages.getValue(url) }
+        val direct = PageReader.read("https://x.org/cat.gif", get, { b, _ -> b.decodeToString() })!!
+        assertEquals("image/gif", direct.own?.mime)
+        assertEquals(480 to 270, direct.own?.let { it.width to it.height })
+        assertEquals(gif.toList(), direct.own?.bytes?.toList(), "a GIF stays as it came")
+        val site = PageReader.read("https://giphy.com/gifs/cat-123", get, { b, _ -> b.decodeToString() })!!
+        assertEquals("Cat", site.meta.title)
+        assertEquals("image/gif", site.own?.mime)
+        // Any other page with a GIF for its picture stays a page with a picture.
+        val post = PageReader.read("https://x.org/post", get, { b, _ -> b.decodeToString() })!!
+        assertNull(post.own)
+        assertEquals(gif.toList(), post.image?.toList())
+    }
+
+    @Test
     fun endlessRedirectsGiveUp() = runTest {
         val loop = PageReader.read("https://a.org", { _, _, _ ->
             PageResponse(302, "https://a.org", null, ByteArray(0))

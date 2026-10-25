@@ -1,7 +1,8 @@
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 
 // Screens of the app (roadmap 2.4) on top of the offline-first client: Android, desktop and, the same code, the
-// browser (ADR-029). Platform pieces live in androidMain / jvmMain / wasmJsMain, JVM-only ones in src/jvmShared.
+// browser (ADR-029). Platform pieces live in androidMain / jvmMain / wasmJsMain, JVM-only ones in src/jvmShared, the
+// desktop and browser's Skia ones in src/skikoShared.
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.kmp.library)
@@ -42,6 +43,11 @@ kotlin {
         }
         jvmMain {
             kotlin.srcDir("src/jvmShared/kotlin")
+            kotlin.srcDir("src/skikoShared/kotlin")
+        }
+        // Skia's own pieces (a GIF's frames) for the desktop and the browser alike.
+        wasmJsMain {
+            kotlin.srcDir("src/skikoShared/kotlin")
         }
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
@@ -49,6 +55,7 @@ kotlin {
             implementation(libs.media3.exoplayer)
             implementation(libs.media3.ui)
             implementation(libs.androidx.exifinterface)
+            implementation(libs.coil.gif) // GIFs move (AnimatedImageDecoder); the desktop and the web play them with Skia
         }
         // Desktop: DWM calls that paint the Windows title bar in the app's colors.
         jvmMain.dependencies {

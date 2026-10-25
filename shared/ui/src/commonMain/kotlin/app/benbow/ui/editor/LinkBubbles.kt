@@ -36,6 +36,7 @@ import app.benbow.core.text.Links
 import app.benbow.core.text.Mark
 import app.benbow.ui.resources.Res
 import app.benbow.ui.resources.card_large
+import app.benbow.ui.resources.card_picture
 import app.benbow.ui.resources.card_remove
 import app.benbow.ui.resources.card_row
 import app.benbow.ui.resources.card_to_text
@@ -125,13 +126,21 @@ internal fun CardBubble(
     card: Atom.LinkCard,
     onOpen: () -> Unit,
     onLarge: (Boolean) -> Unit,
+    onPicture: (Boolean) -> Unit,
     onToText: () -> Unit,
     onEdit: () -> Unit,
     onRemove: () -> Unit,
 ) {
     BubbleSurface(scroll = true) {
         BubbleLabel(EditorIcons.OpenInNew, stringResource(Res.string.link_open), onOpen)
-        if (card.image != null) {
+        // A link that is a picture: the picture whole or a row; any other card: the big look or a row.
+        if (card.pictureLike) {
+            if (card.picture) {
+                BubbleLabel(EditorIcons.Row, stringResource(Res.string.card_row)) { onPicture(false) }
+            } else {
+                BubbleLabel(EditorIcons.Large, stringResource(Res.string.card_picture)) { onPicture(true) }
+            }
+        } else if (card.image != null) {
             if (card.large) {
                 BubbleLabel(EditorIcons.Row, stringResource(Res.string.card_row)) { onLarge(false) }
             } else {

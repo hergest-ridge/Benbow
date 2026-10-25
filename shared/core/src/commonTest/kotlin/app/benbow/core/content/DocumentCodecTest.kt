@@ -63,6 +63,26 @@ class DocumentCodecTest {
         val encoded = DocumentCodec.encode(doc)
         assertTrue("""{"_key":"c2","_type":"linkCard","href":"https://x.org/b"}""" in encoded)
         assertEquals(encoded, DocumentCodec.encode(DocumentCodec.decode(encoded)))
+        // A link that is a picture: the picture whole, with its size; a size of nothing is no card of ours.
+        val picture = """{"_key":"p1","_type":"linkCard","href":"https://x.org/c.gif","image":"${"c".repeat(64)}","width":480,""" +
+            """"height":270,"view":"picture","fetched":"2026-10-25"}"""
+        val pictures = DocumentCodec.decode(
+            """{"v":1,"blocks":[$picture,{"_key":"p2","_type":"linkCard","href":"https://x.org","width":0}]}""",
+        )
+        assertEquals(
+            LinkCardBlock(
+                "p1",
+                "https://x.org/c.gif",
+                image = "c".repeat(64),
+                view = "picture",
+                fetched = "2026-10-25",
+                width = 480,
+                height = 270,
+            ),
+            pictures.blocks[0],
+        )
+        assertIs<UnknownBlock>(pictures.blocks[1])
+        assertTrue(picture in DocumentCodec.encode(pictures), "written back as it came")
         // A row is the default look and isn't written.
         val row = DocumentCodec.decode(
             """{"v":1,"blocks":[{"_key":"c5","_type":"linkCard","href":"https://x.org","view":"row","title":""}]}""",

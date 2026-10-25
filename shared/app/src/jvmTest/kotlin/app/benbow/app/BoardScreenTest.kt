@@ -2,6 +2,7 @@ package app.benbow.app
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasContentDescription
@@ -26,6 +27,7 @@ import app.benbow.client.JournalRepository
 import app.benbow.client.Settings
 import app.benbow.client.archiveOnBoard
 import app.benbow.client.board
+import app.benbow.client.boardArchive
 import app.benbow.client.boardTrash
 import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.createBoardNote
@@ -559,6 +561,49 @@ class BoardScreenTest {
         onNodeWithContentDescription("Из архива").performClick()
         waitUntil(timeoutMillis = 5_000) { notes().others.map { it.id } == listOf(b) }
         waitUntilAtLeastOneExists(hasContentDescription("Закрепить"), 5_000)
+    }
+
+    @Test
+    fun anOpenNoteGoesToTheArchiveFromBesideItsPinWithAWayBack() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val id = repo.createBoardNote(services.today(), JournalRepository.textBody("Альфа"))
+        openBoard()
+        onNodeWithTag(id).performClick()
+        waitUntilAtLeastOneExists(hasContentDescription("В архив"), 5_000)
+        screenshot("board-17-archive-button")
+        onNodeWithContentDescription("В архив").performClick()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { repo.boardArchive().first() }.map { it.id } == listOf(id) }
+        waitUntilDoesNotExist(hasSetTextAction(), 5_000)
+        waitUntilAtLeastOneExists(hasText("Записка в архиве"), 5_000)
+        onNodeWithText("Вернуть").performClick()
+        waitUntil(timeoutMillis = 5_000) { notes().others.map { it.id } == listOf(id) }
+    }
+
+    @Test
+    fun tickedBoxesStayInPlaceWhenThisDeviceSaysSo() = runDesktopComposeUiTest(width = 412, height = 860) {
+        services.setAppearance(services.appearance.value.copy(tickedBelow = false))
+        fun box(key: String, words: String, checked: Boolean) =
+            TextBlock(key, listItem = "check", level = 1, checked = checked, children = listOf(Span(words)))
+        val body = Document(listOf(box("a", "молоко", true), box("b", "хлеб", false), box("c", "сыр", false)))
+        val id = repo.createBoardNote(services.today(), DocumentCodec.encode(body))
+        openBoard()
+        // The card: every box where it stands, the ticked one ticked, no «Отмечено».
+        waitUntilAtLeastOneExists(hasContentDescription("Снять отметку"), 5_000)
+        assertTrue(onAllNodes(hasText("Отмечено: 1")).fetchSemanticsNodes().isEmpty())
+        screenshot("board-18-ticked-in-place")
+        onAllNodes(hasContentDescription("Отметить"))[0].performClick()
+        waitUntil(timeoutMillis = 5_000) { notes().others.single().card.ticked == 2 }
+        assertEquals(listOf(true, true, false), notes().others.single().card.inPlace.map { it.checked })
+        onAllNodes(hasContentDescription("Снять отметку"))[0].performClick()
+        waitUntil(timeoutMillis = 5_000) { notes().others.single().card.ticked == 1 }
+        assertEquals(listOf(false, true, false), notes().others.single().card.inPlace.map { it.checked })
+
+        // The open note: one run of boxes, still in the document's order.
+        onNodeWithTag(id).performClick()
+        waitUntilAtLeastOneExists(hasText("Пункт списка"), 5_000)
+        assertTrue(onAllNodes(hasText("Отмечено: 1")).fetchSemanticsNodes().isEmpty())
+        val fields = onAllNodes(hasSetTextAction()).fetchSemanticsNodes().map { it.config[SemanticsProperties.EditableText].text }
+        assertEquals(listOf("молоко", "хлеб", "сыр"), fields.filter { it.isNotEmpty() })
+        screenshot("board-19-ticked-in-place-open")
     }
 
     @Test

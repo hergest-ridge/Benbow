@@ -2,6 +2,7 @@ package app.benbow.app
 
 import androidx.compose.material3.ColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.benbow.client.Settings
@@ -22,6 +23,8 @@ data class Appearance(
     val postMedia: PostMedia = PostMedia.Carousel,
     /** A link card reads its page once, as it goes in (ADR-038); off, cards show the address only. */
     val linkPreviews: Boolean = true,
+    /** A list note's ticked boxes go under «Отмечено», as in Keep; off, they stay where they are, crossed out, as on paper. */
+    val tickedBelow: Boolean = true,
 ) {
     internal fun save(settings: Settings) {
         settings.put(MODE, mode.name)
@@ -30,6 +33,7 @@ data class Appearance(
         settings.put(FEED_SCRUBBER, feedScrubber.toString())
         settings.put(POST_MEDIA, postMedia.name)
         settings.put(LINK_PREVIEWS, linkPreviews.toString())
+        settings.put(TICKED_BELOW, tickedBelow.toString())
     }
 
     companion object {
@@ -39,6 +43,7 @@ data class Appearance(
         private const val FEED_SCRUBBER = "feed.scrubber"
         private const val POST_MEDIA = "post.media"
         private const val LINK_PREVIEWS = "links.previews"
+        private const val TICKED_BELOW = "board.tickedBelow"
 
         internal fun load(settings: Settings) = Appearance(
             mode = ThemeMode.entries.firstOrNull { it.name == settings.get(MODE) } ?: ThemeMode.System,
@@ -47,6 +52,7 @@ data class Appearance(
             feedScrubber = settings.get(FEED_SCRUBBER) != "false",
             postMedia = PostMedia.entries.firstOrNull { it.name == settings.get(POST_MEDIA) } ?: PostMedia.Carousel,
             linkPreviews = settings.get(LINK_PREVIEWS) != "false",
+            tickedBelow = settings.get(TICKED_BELOW) != "false",
         )
     }
 }
@@ -63,5 +69,7 @@ internal expect fun rememberSystemColors(dark: Boolean): ColorScheme?
 fun AppTheme(services: AppServices, content: @Composable () -> Unit) {
     val appearance by services.appearance.collectAsStateWithLifecycle()
     val dark = appearance.mode.isDark()
-    BenbowTheme(darkTheme = dark, palette = appearance.palette, systemColors = rememberSystemColors(dark), content = content)
+    BenbowTheme(darkTheme = dark, palette = appearance.palette, systemColors = rememberSystemColors(dark)) {
+        CompositionLocalProvider(LocalTickedBelow provides appearance.tickedBelow, content = content)
+    }
 }

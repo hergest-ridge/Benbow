@@ -42,20 +42,48 @@ import javax.net.SocketFactory
 internal class LinkPreviews(private val blobs: BlobStore?) {
     suspend fun read(href: String, deviceId: String?): LinkPreviewInfo? = withContext(Dispatchers.IO) {
         val read = PageReader.read(href, Direct, ::decode, ::isPublic) ?: return@withContext null
+        // An address that is a picture keeps it as it came (a GIF stays a GIF), with its size; a page's picture is a JPEG.
+        read.own?.let { own ->
+            val image = keep(own.bytes, deviceId, own.mime) ?: return@let null
+            return@withContext LinkPreviewInfo(
+                read.url,
+                read.meta.title,
+                read.meta.description,
+                read.meta.site,
+                image,
+                own.width,
+                own.height,
+            )
+        }
         val image = read.image?.let(::jpeg)?.let { keep(it, deviceId) }
         LinkPreviewInfo(read.url, read.meta.title, read.meta.description, read.meta.site, image)
     }
 
-    private fun keep(jpeg: ByteArray, deviceId: String?): String? {
+    private fun keep(bytes: ByteArray, deviceId: String?, mime: String = "image/jpeg"): String? {
         val store = blobs ?: return null
-        val sha256 = MessageDigest.getInstance("SHA-256").digest(jpeg).joinToString("") { "%02x".format(it) }
+        val sha256 = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+        val name = "link." + when (mime) {
+            "image/gif" -> "gif"
+            "image/png" -> "png"
+            "image/webp" -> "webp"
+            else -> "jpg"
+        }
         return runCatching {
-            when (val start = store.start(sha256, jpeg.size.toLong(), "image/jpeg", "link.jpg", System.currentTimeMillis(), deviceId)) {
+            when (val start = store.start(sha256, bytes.size.toLong(), mime, name, System.currentTimeMillis(), deviceId)) {
                 is BlobStore.Start.Exists -> sha256
 
+                // A picture kept whole may be bigger than one chunk.
                 is BlobStore.Start.Upload -> {
-                    val rest = jpeg.copyOfRange(start.offset.toInt(), jpeg.size)
-                    sha256.takeIf { (store.append(start.id, start.offset, rest) as? BlobStore.Chunk.Accepted)?.blob != null }
+                    var offset = start.offset
+                    var done = false
+                    while (offset < bytes.size) {
+                        val end = minOf(bytes.size.toLong(), offset + BlobStore.MAX_CHUNK).toInt()
+                        val chunk =
+                            store.append(start.id, offset, bytes.copyOfRange(offset.toInt(), end)) as? BlobStore.Chunk.Accepted ?: break
+                        offset = chunk.offset
+                        done = chunk.blob != null
+                    }
+                    sha256.takeIf { done }
                 }
             }
         }.getOrNull()

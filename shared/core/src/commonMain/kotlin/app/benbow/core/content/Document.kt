@@ -48,7 +48,10 @@ data class DividerBlock(override val key: String, val variant: String? = null) :
 
 data class AttachmentBlock(override val key: String, val ref: String, val width: Double? = null, val caption: String? = null) : Block
 
-/** A link as a card (ADR-038): what its page said when the link went in; [image] is a JPEG blob's SHA-256. */
+/**
+ * A link as a card (ADR-038): what its page said when the link went in; [image] is a picture blob's SHA-256 (a JPEG, or,
+ * for a link that is a picture, the file as the site gave it, [width] by [height] pixels, shown whole in the `picture` view).
+ */
 data class LinkCardBlock(
     override val key: String,
     val href: String,
@@ -58,6 +61,8 @@ data class LinkCardBlock(
     val image: String? = null,
     val view: String? = null,
     val fetched: String? = null,
+    val width: Int? = null,
+    val height: Int? = null,
 ) : Block
 
 /** Anything this build doesn't understand, kept verbatim (unknown-content rule). */
@@ -74,7 +79,7 @@ internal val ALIGNS = setOf("start", "center", "end")
 internal val DECORATORS = setOf("strong", "em", "underline", "strike-through", "code", "spoiler")
 internal val SIZE_STEPS = setOf("small", "large", "xlarge")
 internal val DIVIDER_VARIANTS = setOf("line", "dots", "wave")
-internal val CARD_VIEWS = setOf("large")
+internal val CARD_VIEWS = setOf("large", "picture")
 internal val SHA256 = Regex("[0-9a-f]{64}")
 internal val DAY = Regex("""\d{4}-\d{2}-\d{2}""")
 

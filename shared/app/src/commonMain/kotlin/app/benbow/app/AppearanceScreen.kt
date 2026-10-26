@@ -39,10 +39,16 @@ import app.benbow.app.resources.feed_cards_hint
 import app.benbow.app.resources.feed_scrubber
 import app.benbow.app.resources.feed_scrubber_hint
 import app.benbow.app.resources.feed_section
+import app.benbow.app.resources.light_beyond_page
+import app.benbow.app.resources.light_beyond_page_hint
 import app.benbow.app.resources.link_previews
 import app.benbow.app.resources.link_previews_hint
+import app.benbow.app.resources.media_hover
+import app.benbow.app.resources.media_hover_hint
 import app.benbow.app.resources.media_opens_post
 import app.benbow.app.resources.media_opens_post_hint
+import app.benbow.app.resources.page_borders
+import app.benbow.app.resources.page_borders_hint
 import app.benbow.app.resources.palette
 import app.benbow.app.resources.palette_names
 import app.benbow.app.resources.picture_links
@@ -121,6 +127,17 @@ internal fun AppearanceScreen(services: AppServices, nav: Navigator) {
                         services.setAppearance(current.copy(mediaOpensPost = it))
                     }, modifier = Modifier.hand())
                 }
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f).padding(end = 16.dp)) {
+                        Text(stringResource(Res.string.media_hover), style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            stringResource(Res.string.media_hover_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(current.mediaHover, { services.setAppearance(current.copy(mediaHover = it)) }, modifier = Modifier.hand())
+                }
             }
             Title(stringResource(Res.string.post_section))
             Text(
@@ -161,6 +178,33 @@ internal fun AppearanceScreen(services: AppServices, nav: Navigator) {
                     )
                 }
                 Switch(!current.pictureLinks, { services.setAppearance(current.copy(pictureLinks = !it)) }, modifier = Modifier.hand())
+            }
+            // A wide window's open note (owner): its light over the whole right side, a line down each side.
+            if (services.platform != "android" || LocalWide.current) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f).padding(end = 16.dp)) {
+                        Text(stringResource(Res.string.light_beyond_page), style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            stringResource(Res.string.light_beyond_page_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(current.lightBeyondPage, {
+                        services.setAppearance(current.copy(lightBeyondPage = it))
+                    }, modifier = Modifier.hand())
+                }
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f).padding(end = 16.dp)) {
+                        Text(stringResource(Res.string.page_borders), style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            stringResource(Res.string.page_borders_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(current.pageBorders, { services.setAppearance(current.copy(pageBorders = it)) }, modifier = Modifier.hand())
+                }
             }
             Title(stringResource(Res.string.tab_board))
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {

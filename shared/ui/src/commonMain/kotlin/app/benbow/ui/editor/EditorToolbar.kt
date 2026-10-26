@@ -85,6 +85,7 @@ import app.benbow.ui.resources.tool_strike
 import app.benbow.ui.resources.tool_text_panel
 import app.benbow.ui.resources.tool_underline
 import app.benbow.ui.resources.tool_undo
+import app.benbow.ui.sideScroll
 import app.benbow.ui.theme.BenbowPalette
 import org.jetbrains.compose.resources.stringResource
 
@@ -264,7 +265,7 @@ private fun EditorState.cycleSize(marks: Set<Mark>) {
 private fun ToolRow(content: @Composable RowScope.() -> Unit) {
     val scroll = rememberScrollState()
     Row(
-        modifier = Modifier.fillMaxWidth().fadedEnds(scroll).horizontalScroll(scroll).padding(horizontal = 6.dp, vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth().fadedEnds(scroll).sideScroll(scroll).padding(horizontal = 6.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         content = content,
     )
@@ -385,7 +386,7 @@ private fun Divider() {
 private fun PaletteRow(picker: Picker, onPick: (String) -> Unit) {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     Row(
-        modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 6.dp),
+        modifier = Modifier.sideScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         BenbowPalette.tokens.forEach { token ->

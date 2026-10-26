@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AssistChip
@@ -36,6 +37,7 @@ import app.benbow.app.resources.tag_add
 import app.benbow.app.resources.tag_remove
 import app.benbow.app.resources.tags
 import app.benbow.client.TagRef
+import app.benbow.ui.mouseSwipe
 import org.jetbrains.compose.resources.stringResource
 
 /** -2 .. 2 as faces; words for feelings come later as tags of the "Emotions" category (ux.md#psychology). */
@@ -150,7 +152,10 @@ internal fun TagRibbon(tags: List<TagRef>, modifier: Modifier = Modifier) {
 /** Built-in templates to start a new, empty entry from; optional, one tap. */
 @Composable
 internal fun TemplateRow(onPick: (String) -> Unit) {
+    val swipeRow = rememberLazyListState()
     androidx.compose.foundation.lazy.LazyRow(
+        state = swipeRow,
+        modifier = Modifier.mouseSwipe(swipeRow),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {

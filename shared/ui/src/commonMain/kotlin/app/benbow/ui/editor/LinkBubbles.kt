@@ -44,6 +44,7 @@ import app.benbow.ui.resources.link_edit
 import app.benbow.ui.resources.link_entry
 import app.benbow.ui.resources.link_open
 import app.benbow.ui.resources.link_unlink
+import app.benbow.ui.sideScroll
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.roundToInt
 
@@ -153,7 +154,7 @@ private fun BubbleSurface(scroll: Boolean = false, content: @Composable () -> Un
         shadowElevation = 6.dp,
     ) {
         Row(
-            (if (scroll) Modifier.horizontalScroll(rememberScrollState()) else Modifier).padding(4.dp),
+            (if (scroll) Modifier.sideScroll(rememberScrollState()) else Modifier).padding(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) { content() }
     }

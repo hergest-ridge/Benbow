@@ -77,6 +77,8 @@ import app.benbow.app.resources.media_previous
 import app.benbow.client.LocalFile
 import app.benbow.client.Media
 import app.benbow.core.sync.AttachmentState
+import app.benbow.ui.mouseSwipe
+import app.benbow.ui.sideScroll
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
@@ -118,7 +120,13 @@ internal val AttachmentState.visual: String? get() = meta.previewSha256 ?: meta.
 internal fun MediaThumb(media: Media, attachment: AttachmentState, size: Dp, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Box(
-        Modifier.size(size).clip(RoundedCornerShape(12.dp)).background(colors.surfaceContainerHigh).hand().clickable(onClick = onClick)
+        Modifier.size(
+            size,
+        ).clip(
+            RoundedCornerShape(12.dp),
+        ).background(
+            colors.surfaceContainerHigh,
+        ).hand().clickable(interactionSource = null, indication = mediaIndication(), onClick = onClick)
             .semantics { contentDescription = attachment.meta.name ?: attachment.meta.kind },
         contentAlignment = Alignment.Center,
     ) {
@@ -185,7 +193,7 @@ internal fun AttachmentStrip(
     val haptics = LocalHapticFeedback.current
     val inText = stringResource(Res.string.in_text)
     Row(
-        Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+        Modifier.sideScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(GAP),
     ) {
         fixed.forEach { attachment ->
@@ -411,9 +419,23 @@ private fun MediaCarouselFrame(
     Box(
         modifier.clip(shape).background(MaterialTheme.colorScheme.surfaceContainerHigh).semantics { contentDescription = label },
     ) {
-        HorizontalPager(pager, key = { current.value[it].meta.id }, modifier = Modifier.fillMaxSize()) { page ->
+        // In a wide window the next picture peeks in at the right edge (owner: with a mouse nothing told there were more),
+        // and a mouse drags the pages.
+        val peek = LocalWide.current && items.size > 1
+        HorizontalPager(
+            pager,
+            contentPadding = PaddingValues(end = if (peek) PEEK else 0.dp),
+            pageSpacing = if (peek) 6.dp else 0.dp,
+            key = { current.value[it].meta.id },
+            modifier = Modifier.fillMaxSize().mouseSwipe(pager),
+        ) { page ->
             val item = current.value[page]
-            Box(Modifier.fillMaxSize().hand().clickable { onOpen(item) }, contentAlignment = Alignment.Center) {
+            Box(
+                Modifier.fillMaxSize().hand().clickable(interactionSource = null, indication = mediaIndication()) {
+                    onOpen(item)
+                },
+                contentAlignment = Alignment.Center,
+            ) {
                 FittedPicture(media, item, carousel = ratio)
                 if (item.meta.kind == "video") {
                     PlayBadge()
@@ -436,6 +458,9 @@ private fun MediaCarouselFrame(
         }
     }
 }
+
+/** How much of the next picture shows beside the current one in a wide window. */
+private val PEEK = 36.dp
 
 @Composable
 private fun Chip(text: String, modifier: Modifier = Modifier) {

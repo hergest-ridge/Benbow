@@ -79,6 +79,7 @@ import app.benbow.core.ink.InkStroke
 import app.benbow.core.ink.InkStrokeBuilder
 import app.benbow.core.ink.InkSvg
 import app.benbow.core.ink.InkTool
+import app.benbow.ui.sideScroll
 import app.benbow.ui.theme.BenbowPalette
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -385,7 +386,7 @@ private fun Toolbar(vm: DrawingViewModel) {
                 TextButton(vm::moreRoom, modifier = Modifier.hand()) { Text(stringResource(Res.string.drawing_more_room)) }
             }
             Row(
-                Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 4.dp),
+                Modifier.sideScroll(rememberScrollState()).padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 (listOf(InkDrawing.INK) + BenbowPalette.tokens).forEach { token ->

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -33,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.benbow.core.audio.TrackTags
 import app.benbow.core.sync.AttachmentState
+import app.benbow.ui.mouseSwipe
 import coil3.compose.AsyncImage
 
 /**
@@ -145,7 +147,13 @@ private fun AlbumGrid(services: AppServices, items: List<AttachmentState>, onOpe
 /** Large thumbnails in a row, each in its own shape: one or two in view without scrolling. */
 @Composable
 private fun LargeStrip(services: AppServices, items: List<AttachmentState>, onOpen: (AttachmentState) -> Unit) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(0.dp)) {
+    val swipeRow = rememberLazyListState()
+    LazyRow(
+        state = swipeRow,
+        modifier = Modifier.mouseSwipe(swipeRow),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(0.dp),
+    ) {
         items(items, key = { it.meta.id }) { item ->
             Tile(
                 services,
@@ -160,7 +168,9 @@ private fun LargeStrip(services: AppServices, items: List<AttachmentState>, onOp
 @Composable
 private fun Tile(services: AppServices, item: AttachmentState, modifier: Modifier, more: Int = 0, onOpen: (AttachmentState) -> Unit) {
     Box(
-        modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh).hand().clickable {
+        modifier.background(
+            MaterialTheme.colorScheme.surfaceContainerHigh,
+        ).hand().clickable(interactionSource = null, indication = mediaIndication()) {
             onOpen(item)
         },
         contentAlignment = Alignment.Center,

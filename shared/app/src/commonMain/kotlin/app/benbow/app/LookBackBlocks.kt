@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -41,6 +42,7 @@ import app.benbow.app.resources.years_ago
 import app.benbow.client.EntrySummary
 import app.benbow.client.HomeBlock
 import app.benbow.client.Media
+import app.benbow.ui.mouseSwipe
 import coil3.compose.AsyncImage
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
@@ -64,7 +66,13 @@ internal fun agoLabel(monthsAgo: Int): String = when (monthsAgo) {
 internal fun OnThisDayStrip(items: List<LookBack>, media: Media, onOpen: (EntrySummary) -> Unit) {
     Column {
         BlockTitle(stringResource(Res.string.home_on_this_day))
-        LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        val swipeRow = rememberLazyListState()
+        LazyRow(
+            state = swipeRow,
+            modifier = Modifier.mouseSwipe(swipeRow),
+            contentPadding = PaddingValues(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             items(items, key = { it.entry.id }) { item ->
                 val entry = item.entry
                 val paper = swatch(entry.background) ?: MaterialTheme.colorScheme.surfaceContainerLow
@@ -101,9 +109,17 @@ internal fun OnThisDayPager(items: List<LookBack>, media: Media, onOpen: (EntryS
     Column {
         BlockTitle(stringResource(Res.string.home_on_this_day))
         Box {
-            HorizontalPager(pager, contentPadding = PaddingValues(horizontal = 12.dp), pageSpacing = 8.dp, key = {
-                items[it].entry.id
-            }) { page ->
+            HorizontalPager(
+                pager,
+                contentPadding = PaddingValues(
+                    horizontal = 12.dp,
+                ),
+                pageSpacing = 8.dp,
+                modifier = Modifier.mouseSwipe(pager),
+                key = {
+                    items[it].entry.id
+                },
+            ) { page ->
                 val item = items[page]
                 val entry = item.entry
                 val paper = swatch(entry.background) ?: MaterialTheme.colorScheme.surfaceContainerLow

@@ -94,6 +94,7 @@ import app.benbow.client.calendar.defaultCalendarColor
 import app.benbow.core.calendar.CalendarExport
 import app.benbow.core.calendar.CalendarKind
 import app.benbow.core.calendar.MY_CALENDAR
+import app.benbow.ui.mouseSwipe
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -366,7 +367,7 @@ internal fun CalendarScreen(services: AppServices, nav: Navigator) {
                 HorizontalPager(
                     pager,
                     beyondViewportPageCount = 1,
-                    modifier = Modifier.fillMaxWidth().clipToBounds().gridHeight(pager, cell),
+                    modifier = Modifier.mouseSwipe(pager).fillMaxWidth().clipToBounds().gridHeight(pager, cell),
                 ) { page ->
                     val pageMonth = monthOfPage(page)
                     val marks by remember(pageMonth) { vm.marks(pageMonth) }.collectAsStateWithLifecycle(vm.kept(pageMonth))

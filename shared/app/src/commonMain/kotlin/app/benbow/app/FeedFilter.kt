@@ -45,6 +45,7 @@ import app.benbow.client.FeedKey
 import app.benbow.client.TagRef
 import app.benbow.client.TagRegistry
 import app.benbow.client.Veil
+import app.benbow.ui.sideScroll
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -99,7 +100,7 @@ internal class FeedChoices(val years: List<String>, val categories: List<String>
 internal fun FeedFilterRow(filter: FeedFilter, onChange: (FeedFilter) -> Unit, modifier: Modifier = Modifier) {
     val registry = LocalTags.current
     Row(
-        modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
+        modifier.fillMaxWidth().sideScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

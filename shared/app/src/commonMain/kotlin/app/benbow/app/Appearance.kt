@@ -3,6 +3,7 @@ package app.benbow.app
 import androidx.compose.material3.ColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.benbow.client.Settings
@@ -29,6 +30,12 @@ data class Appearance(
     val mediaOpensPost: Boolean = false,
     /** A list note's ticked boxes go under «Отмечено», as in Keep; off, they stay where they are, crossed out, as on paper. */
     val tickedBelow: Boolean = true,
+    /** The web's: pictures, videos and galleries light up under the pointer (owner: off, they don't). */
+    val mediaHover: Boolean = false,
+    /** A wide window's open note: its light spreads over the whole right side, not only the note (owner: on). */
+    val lightBeyondPage: Boolean = true,
+    /** A wide window's open note: a thin line down each side, like the feed's edge (owner: on). */
+    val pageBorders: Boolean = true,
 ) {
     internal fun save(settings: Settings) {
         settings.put(MODE, mode.name)
@@ -40,6 +47,9 @@ data class Appearance(
         settings.put(PICTURE_LINKS, pictureLinks.toString())
         settings.put(MEDIA_OPENS_POST, mediaOpensPost.toString())
         settings.put(TICKED_BELOW, tickedBelow.toString())
+        settings.put(MEDIA_HOVER, mediaHover.toString())
+        settings.put(LIGHT_BEYOND_PAGE, lightBeyondPage.toString())
+        settings.put(PAGE_BORDERS, pageBorders.toString())
     }
 
     companion object {
@@ -52,6 +62,9 @@ data class Appearance(
         private const val PICTURE_LINKS = "links.pictureLinks"
         private const val MEDIA_OPENS_POST = "feed.mediaOpensPost"
         private const val TICKED_BELOW = "board.tickedBelow"
+        private const val MEDIA_HOVER = "media.hover"
+        private const val LIGHT_BEYOND_PAGE = "post.lightBeyondPage"
+        private const val PAGE_BORDERS = "post.borders"
 
         internal fun load(settings: Settings) = Appearance(
             mode = ThemeMode.entries.firstOrNull { it.name == settings.get(MODE) } ?: ThemeMode.System,
@@ -63,9 +76,15 @@ data class Appearance(
             pictureLinks = settings.get(PICTURE_LINKS) != "false",
             mediaOpensPost = settings.get(MEDIA_OPENS_POST) == "true",
             tickedBelow = settings.get(TICKED_BELOW) != "false",
+            mediaHover = settings.get(MEDIA_HOVER) == "true",
+            lightBeyondPage = settings.get(LIGHT_BEYOND_PAGE) != "false",
+            pageBorders = settings.get(PAGE_BORDERS) != "false",
         )
     }
 }
+
+/** This device's appearance, for what draws without the services at hand (the list and entry panes). */
+internal val LocalAppearance = compositionLocalOf { Appearance() }
 
 /** Pictures not placed in a post's text, when it's read: one swipeable card, an album grid, or large thumbnails. */
 enum class PostMedia { Carousel, Grid, Strip }
@@ -80,6 +99,12 @@ fun AppTheme(services: AppServices, content: @Composable () -> Unit) {
     val appearance by services.appearance.collectAsStateWithLifecycle()
     val dark = appearance.mode.isDark()
     BenbowTheme(darkTheme = dark, palette = appearance.palette, systemColors = rememberSystemColors(dark)) {
-        CompositionLocalProvider(LocalTickedBelow provides appearance.tickedBelow, content = content)
+        CompositionLocalProvider(
+            LocalAppearance provides appearance,
+            LocalTickedBelow provides appearance.tickedBelow,
+            // Only the web has the switch; desktop and phones keep the hover they had.
+            LocalMediaHover provides (appearance.mediaHover || services.platform != "web"),
+            content = content,
+        )
     }
 }

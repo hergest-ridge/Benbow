@@ -87,6 +87,7 @@ import app.benbow.client.Media
 import app.benbow.client.Veil
 import app.benbow.client.library
 import app.benbow.core.media.AttachmentKey
+import app.benbow.ui.sideScroll
 import coil3.compose.AsyncImage
 import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
@@ -184,7 +185,7 @@ internal fun LibraryScreen(services: AppServices, nav: Navigator) {
     }) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
             Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+                Modifier.fillMaxWidth().sideScroll(rememberScrollState()).padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

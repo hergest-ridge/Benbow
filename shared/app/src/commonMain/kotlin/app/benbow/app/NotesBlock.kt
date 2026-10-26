@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -25,6 +26,7 @@ import app.benbow.app.resources.block_notes
 import app.benbow.client.BlockSize
 import app.benbow.client.BoardNote
 import app.benbow.client.Media
+import app.benbow.ui.mouseSwipe
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -66,7 +68,13 @@ internal fun NotesBlock(
                 }
             }
         } else {
-            LazyRow(contentPadding = PaddingValues(end = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val swipeRow = rememberLazyListState()
+            LazyRow(
+                state = swipeRow,
+                modifier = Modifier.mouseSwipe(swipeRow),
+                contentPadding = PaddingValues(end = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 items(notes, key = { it.id }) { BoardCard(it, media, false, Modifier.width(168.dp).then(open(it))) }
             }
         }

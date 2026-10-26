@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -87,6 +88,7 @@ import app.benbow.client.TagUsage
 import app.benbow.client.tagName
 import app.benbow.client.tagRegistry
 import app.benbow.client.tags
+import app.benbow.ui.mouseSwipe
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
@@ -448,7 +450,13 @@ private fun CreateRow(
         val options =
             listOf<Pair<String?, String>>(null to stringResource(Res.string.tags_uncategorized)) +
                 registry.categories.map { it.id to it.name }
-        LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        val swipeRow = rememberLazyListState()
+        LazyRow(
+            state = swipeRow,
+            modifier = Modifier.mouseSwipe(swipeRow),
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
             items(options, key = { it.first ?: "" }) { (id, label) ->
                 FilterChip(
                     selected = category == id,

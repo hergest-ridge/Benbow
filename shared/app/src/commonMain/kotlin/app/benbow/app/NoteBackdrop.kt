@@ -137,7 +137,16 @@ internal fun NoteBackdrop(
  * note's id) lays patterns and the scrapbook out the same on every device. An empty look adds nothing.
  */
 @Composable
-internal fun noteBackdrop(look: NoteLook?, base: Color, ink: Color, seed: Int, muted: Boolean = false, moving: Boolean = false): Modifier {
+internal fun noteBackdrop(
+    look: NoteLook?,
+    base: Color,
+    ink: Color,
+    seed: Int,
+    muted: Boolean = false,
+    moving: Boolean = false,
+    /** Where its lights are laid out, read as it draws: the pane around it in a wide window (PaneGlow); null, itself. */
+    lightFrame: (() -> LightFrame?)? = null,
+): Modifier {
     if (look == null || look.isEmpty) return Modifier
     val dark = base.luminance() < 0.5f
     val scatter = look.scatter.mapNotNull { path -> key(path) { lookPicture("tabler/$path")?.let { rememberVectorPainter(it) } } }
@@ -155,7 +164,7 @@ internal fun noteBackdrop(look: NoteLook?, base: Color, ink: Color, seed: Int, m
     val paperPhoto = look.paperPhoto?.let { lookPhoto("paper/$it.jpg") }
     val wallpaper = look.wallpaper?.let { lookPhoto("morris/$it.jpg") }
     val strength = if (muted) MUTED else 1f
-    return remember(look, base, ink, seed, strength, drift, scatter, tile, tilePainter, paperPhoto, wallpaper) {
+    return remember(look, base, ink, seed, strength, drift, scatter, tile, tilePainter, paperPhoto, wallpaper, lightFrame) {
         Modifier.drawWithCache {
             val layers = Layers(look, base, ink, dark, seed, size, scatter.size, 1.dp.toPx())
             val tiles = if (tile != null && tilePainter != null) tileBrush(tile, tilePainter, layers.tileTone) else null
@@ -173,7 +182,7 @@ internal fun noteBackdrop(look: NoteLook?, base: Color, ink: Color, seed: Int, m
                     )
                 }
                 if (look.motion == "drift") layers.drift(this, drift?.value ?: STILL, strength)
-                layers.lights(this, strength)
+                drawLights(look.lights, dark, ink, strength, lightFrame?.invoke())
                 layers.paper(this, strength)
                 layers.pattern(this, strength, scatter)
                 tiles?.let { drawRect(it, alpha = layers.calm(layers.tileTone, 0.55f, strength).alpha) }
@@ -350,19 +359,6 @@ private class Layers(
         }
     }
 
-    /** Lights fall from the edge at their angle across the note, like a lens's glow (owner: each note its own light). */
-    fun lights(scope: DrawScope, strength: Float) = with(scope) {
-        look.lights.forEach { light ->
-            val a = light.angle / 180f * PI.toFloat()
-            val center = Offset(size.width / 2 + cos(a) * size.width * 0.6f, size.height / 2 + sin(a) * size.height * 0.6f)
-            val glow = (BenbowPalette.text(light.tone, dark) ?: ink).copy(alpha = LIGHT_ALPHA[light.strength.coerceIn(1, 3) - 1] * strength)
-            drawRect(
-                Brush.radialGradient(listOf(glow, Color.Transparent), center = center, radius = unit * 0.85f),
-                blendMode = if (dark) BlendMode.Screen else BlendMode.SrcOver,
-            )
-        }
-    }
-
     /** A slow gradient drifting across the note: [phase] 0..1. */
     fun drift(scope: DrawScope, phase: Float, strength: Float) = with(scope) {
         val a = tone("purple").copy(alpha = 0.35f * strength)
@@ -387,6 +383,30 @@ private class Layers(
     fun calm(color: Color, alpha: Float, strength: Float): Color {
         val step = sqrt(((color.red - base.red).pow(2) + (color.green - base.green).pow(2) + (color.blue - base.blue).pow(2)) / 3f)
         return color.copy(alpha = min(alpha, CALM / step.coerceAtLeast(0.001f)) * strength)
+    }
+}
+
+/** Where lights are laid out: across [area] (the pane in a wide window), the note's own top left at [at] within it. */
+internal class LightFrame(val area: Size, val at: Offset)
+
+/**
+ * Lights fall from the edge at their angle across the note, like a lens's glow (owner: each note its own light). With a
+ * [frame] they fall across the pane around the note instead, drawn here where they cross the note: the pane draws
+ * the same over its margins (PaneGlow), so the light runs on unbroken over the note's edges.
+ */
+internal fun DrawScope.drawLights(lights: List<LookLight>, dark: Boolean, ink: Color, strength: Float, frame: LightFrame? = null) {
+    val area = frame?.area?.takeIf { it.width > 0f && it.height > 0f }
+    val box = area ?: size
+    val at = frame?.takeIf { area != null }?.at ?: Offset.Zero
+    val unit = max(box.width, box.height)
+    lights.forEach { light ->
+        val a = light.angle / 180f * PI.toFloat()
+        val center = Offset(box.width / 2 + cos(a) * box.width * 0.6f, box.height / 2 + sin(a) * box.height * 0.6f) - at
+        val glow = (BenbowPalette.text(light.tone, dark) ?: ink).copy(alpha = LIGHT_ALPHA[light.strength.coerceIn(1, 3) - 1] * strength)
+        drawRect(
+            Brush.radialGradient(listOf(glow, Color.Transparent), center = center, radius = unit * 0.85f),
+            blendMode = if (dark) BlendMode.Screen else BlendMode.SrcOver,
+        )
     }
 }
 

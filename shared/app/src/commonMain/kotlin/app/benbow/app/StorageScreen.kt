@@ -119,6 +119,7 @@ import app.benbow.core.api.StorageMonth
 import app.benbow.core.api.StorageReport
 import app.benbow.core.api.StorageState
 import app.benbow.core.api.UnreferencedFile
+import app.benbow.ui.mouseSwipe
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -393,7 +394,7 @@ private fun MonthsCard(months: List<StorageMonth>) {
         val names = stringArrayResource(Res.array.months_nominative)
         Text(sizeLabel(top), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         val list = rememberLazyListState(initialFirstVisibleItemIndex = all.lastIndex.coerceAtLeast(0))
-        LazyRow(state = list, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+        LazyRow(state = list, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.mouseSwipe(list).fillMaxWidth()) {
             itemsIndexed(all, key = { _, month -> month.month }) { index, month ->
                 val number = month.month.drop(5).toIntOrNull() ?: 1
                 val label = names.getOrNull(number - 1)?.take(3)?.lowercase().orEmpty()

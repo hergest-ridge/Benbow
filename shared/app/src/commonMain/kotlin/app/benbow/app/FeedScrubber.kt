@@ -1,7 +1,9 @@
 package app.benbow.app
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -23,6 +25,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -194,9 +198,18 @@ internal fun FeedScrubber(
         }
 
         // The years along the track and the month beside the thumb, while it is held or hovered: each on its own
-        // backing, so they read over pictures too.
+        // backing, so they read over pictures too. They fade in and out (owner: they popped up and went too sharply),
+        // fading out where they last were.
         val telling = dragging ?: hovered
-        if (telling != null) {
+        var told by remember { mutableStateOf<Float?>(null) }
+        SideEffect { if (telling != null) told = telling }
+        val tellAlpha by animateFloatAsState(
+            if (telling != null) 1f else 0f,
+            tween(if (telling != null) TELL_IN_MILLIS else TELL_OUT_MILLIS, easing = FastOutSlowInEasing),
+            label = "telling",
+        )
+        val shownAt = telling ?: told
+        if (shownAt != null && tellAlpha > 0f) {
             var lastY = -1_000f
             val gap = with(density) { 20.dp.toPx() }
             index.years.forEach { (year, at) ->
@@ -208,7 +221,8 @@ internal fun FeedScrubber(
                     color = colors.surfaceContainerHighest.copy(alpha = 0.92f),
                     shadowElevation = 1.dp,
                     modifier = Modifier.align(Alignment.TopEnd).padding(end = strip + 2.dp)
-                        .offset { IntOffset(0, (y - 9.dp.toPx()).roundToInt()) },
+                        .offset { IntOffset(0, (y - 9.dp.toPx()).roundToInt()) }
+                        .graphicsLayer { alpha = tellAlpha },
                 ) {
                     Text(
                         year,
@@ -218,16 +232,17 @@ internal fun FeedScrubber(
                     )
                 }
             }
-            val y = telling * travel + thumbHeight / 2
+            val y = shownAt * travel + thumbHeight / 2
             Surface(
                 shape = RoundedCornerShape(50),
                 color = colors.primaryContainer,
                 shadowElevation = 2.dp,
                 modifier = Modifier.align(Alignment.TopEnd).padding(end = strip + 44.dp)
-                    .offset { IntOffset(0, (y - 18.dp.toPx()).roundToInt()) },
+                    .offset { IntOffset(0, (y - 18.dp.toPx()).roundToInt()) }
+                    .graphicsLayer { alpha = tellAlpha },
             ) {
                 Text(
-                    monthTitle(index.monthOf[index.posAt(telling)], withYear = true).orEmpty(),
+                    monthTitle(index.monthOf[index.posAt(shownAt)], withYear = true).orEmpty(),
                     style = MaterialTheme.typography.titleSmall,
                     color = colors.onPrimaryContainer,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
@@ -263,8 +278,8 @@ internal fun FeedScrubber(
                 AnimatedVisibility(
                     telling != null,
                     Modifier.align(Alignment.TopCenter).fillMaxHeight(),
-                    enter = fadeIn(),
-                    exit = fadeOut(),
+                    enter = fadeIn(tween(TELL_IN_MILLIS, easing = FastOutSlowInEasing)),
+                    exit = fadeOut(tween(TELL_OUT_MILLIS, easing = FastOutSlowInEasing)),
                 ) {
                     Box(
                         Modifier.fillMaxHeight().width(if (mouse) 6.dp else 2.dp)
@@ -312,4 +327,8 @@ private const val MIN_POSTS = 50
 private const val HIDE_AFTER_MILLIS = 600L
 private const val SHOW_MILLIS = 120
 private const val FADE_MILLIS = 200
+
+// The track, the years and the month under the pointer: in gently, out a little slower.
+private const val TELL_IN_MILLIS = 220
+private const val TELL_OUT_MILLIS = 360
 private val THUMB_HEIGHT = 48.dp

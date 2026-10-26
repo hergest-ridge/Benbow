@@ -7,6 +7,7 @@
 4. **Low friction.** Capture in under 3 seconds. Metadata is optional and can always be added later.
 5. **Forgiving.** Undo everywhere, trash instead of delete, version history, input that never gets lost.
 6. **Calm.** Warm, paper-like, unhurried. No guilt mechanics, no noisy badges.
+7. **Every input.** What a finger swipes, a mouse drags: every horizontal row, strip and pager takes `Modifier.mouseSwipe(state)` (or `sideScroll` for a plain scrolling row), new ones too (ADR-048).
 
 ## Navigation (phone)
 Bottom bar: **Главная · Лента · Календарь · Поиск · Ещё**. The quick-capture composer lives on Home only. "Ещё" (Mihon-style "More") holds the rest: server and sync, reminders, tags, trash, later settings; planned (7.18, ADR-041): «Медиатека» as an item of its own near the top.

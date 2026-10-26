@@ -25,6 +25,9 @@ kotlin {
             // Color emoji served by our own server (OFL, docs/licenses/NotoColorEmoji-OFL.txt): without them Compose
             // fetches the glyphs from fonts.gstatic.com.
             implementation(npm("@fontsource/noto-color-emoji", "5.3.1"))
+            // Symbols the UI font lacks (★ in a link card's title, arrows, shapes, dingbats): Noto Sans Symbols 2 (OFL,
+            // docs/licenses/NotoSansSymbols2-OFL.txt), its symbols and math slices; desktop and Android have the system's.
+            implementation(npm("@fontsource/noto-sans-symbols-2", "5.3.0"))
         }
     }
 }
@@ -33,11 +36,13 @@ kotlin {
 // also carry an SVG table, which Skia picks and can't draw (the emoji come out blank), so it is left out here: each
 // WOFF (zlib tables) becomes a plain TrueType file without it.
 val emojiFonts = tasks.register("emojiFonts") {
-    description = "Noto Color Emoji slices without their SVG table, for the web client."
+    description = "Noto Color Emoji slices without their SVG table, and Noto Sans Symbols 2's slices, for the web client."
     dependsOn(":kotlinWasmNpmInstall")
     val source = rootProject.layout.buildDirectory.dir("wasm/node_modules/@fontsource/noto-color-emoji/files")
+    val symbols = rootProject.layout.buildDirectory.dir("wasm/node_modules/@fontsource/noto-sans-symbols-2/files")
     val output = layout.buildDirectory.dir("emoji-fonts")
     inputs.files(source.map { dir -> dir.asFileTree.matching { include("noto-color-emoji-?-400-normal.woff") } })
+    inputs.files(symbols.map { dir -> dir.asFileTree.matching { include("noto-sans-symbols-2-*-400-normal.woff") } })
     outputs.dir(output)
     doLast {
         fun ttfWithoutSvg(woff: ByteArray): ByteArray {
@@ -88,6 +93,10 @@ val emojiFonts = tasks.register("emojiFonts") {
         for (i in 0..9) {
             val woff = source.get().file("noto-color-emoji-$i-400-normal.woff").asFile.readBytes()
             dir.resolve("noto-color-emoji-$i.ttf").writeBytes(ttfWithoutSvg(woff))
+        }
+        for (slice in listOf("symbols", "math")) {
+            val woff = symbols.get().file("noto-sans-symbols-2-$slice-400-normal.woff").asFile.readBytes()
+            dir.resolve("noto-sans-symbols-2-$slice.ttf").writeBytes(ttfWithoutSvg(woff))
         }
     }
 }

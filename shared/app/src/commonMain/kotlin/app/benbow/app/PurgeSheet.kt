@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -72,6 +73,7 @@ import app.benbow.core.api.PurgeDone
 import app.benbow.core.api.PurgePreview
 import app.benbow.core.api.PurgeRequest
 import app.benbow.core.api.StorageKind
+import app.benbow.ui.mouseSwipe
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -186,7 +188,12 @@ private fun PlanSummary(services: AppServices, plan: PurgePreview, changed: Bool
             style = MaterialTheme.typography.titleMedium,
         )
         // What goes, as this device has it: pictures it holds, a sign for the rest (nothing is downloaded to be deleted).
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        val swipeRow = rememberLazyListState()
+        LazyRow(
+            state = swipeRow,
+            modifier = Modifier.mouseSwipe(swipeRow),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
             items(plan.files.take(STRIP), key = { it.sha256 }) { file ->
                 Box(
                     Modifier.size(56.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh)

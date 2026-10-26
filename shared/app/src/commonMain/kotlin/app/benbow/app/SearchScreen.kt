@@ -56,6 +56,7 @@ import app.benbow.client.SearchQuery
 import app.benbow.client.TagRef
 import app.benbow.client.searchBoard
 import app.benbow.client.tags
+import app.benbow.ui.mouseSwipe
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -136,7 +137,13 @@ internal fun SearchScreen(services: AppServices, nav: Navigator) {
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
-            LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            val swipeRow = rememberLazyListState()
+            LazyRow(
+                state = swipeRow,
+                modifier = Modifier.mouseSwipe(swipeRow),
+                contentPadding = PaddingValues(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
                 item {
                     FilterChip(query.favorites, {
                         vm.edit { it.copy(favorites = !it.favorites) }

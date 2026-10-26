@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
@@ -58,6 +59,7 @@ import app.benbow.client.ByteSource
 import app.benbow.client.IoDispatcher
 import app.benbow.client.JournalRepository
 import app.benbow.client.createBoardNote
+import app.benbow.ui.mouseSwipe
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.joinAll
@@ -220,7 +222,12 @@ fun QuickCapture(services: AppServices, shared: SharedContent, onClose: () -> Un
 @Composable
 private fun SharedFiles(files: List<SharedFile>) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        val swipeRow = rememberLazyListState()
+        LazyRow(
+            state = swipeRow,
+            modifier = Modifier.mouseSwipe(swipeRow),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             items(files) { file ->
                 val shape = RoundedCornerShape(12.dp)
                 if (file.thumbnail != null && kindOf(file.mime) == "image") {

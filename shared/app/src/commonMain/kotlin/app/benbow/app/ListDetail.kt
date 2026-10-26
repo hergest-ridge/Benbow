@@ -25,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,9 +33,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -126,11 +132,36 @@ private class ListDetailScene(
         }
     }
 
+    /**
+     * The entry on the right, at a readable width: the open note's light over the whole side (PaneGlow) and a line down
+     * each side of it, like the list's edge (owner), each as set in «Оформление».
+     */
     @Composable
     private fun RowScope.Detail() {
-        Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.TopCenter) {
-            Box(Modifier.widthIn(max = READABLE).fillMaxHeight()) {
-                if (detail == null) empty() else detail.Content()
+        val appearance = LocalAppearance.current
+        val glow = remember { PaneGlow() }
+        val ink = MaterialTheme.colorScheme.onSurface
+        val line = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        BoxWithConstraints(
+            Modifier.weight(1f).fillMaxHeight()
+                .onGloballyPositioned { glow.bounds = it.boundsInWindow() }
+                .drawBehind { if (appearance.lightBeyondPage) drawLights(glow.lights, glow.dark, ink, 1f) },
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            val framed = appearance.pageBorders && detail != null && maxWidth > READABLE
+            Box(
+                Modifier.widthIn(max = READABLE).fillMaxHeight().drawWithContent {
+                    drawContent()
+                    if (framed) {
+                        val px = 1.dp.toPx()
+                        drawLine(line, Offset(px / 2, 0f), Offset(px / 2, size.height), px)
+                        drawLine(line, Offset(size.width - px / 2, 0f), Offset(size.width - px / 2, size.height), px)
+                    }
+                },
+            ) {
+                CompositionLocalProvider(LocalPaneGlow provides glow.takeIf { appearance.lightBeyondPage }) {
+                    if (detail == null) empty() else detail.Content()
+                }
             }
         }
     }

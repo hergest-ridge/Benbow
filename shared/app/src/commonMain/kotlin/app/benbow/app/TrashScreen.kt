@@ -107,6 +107,7 @@ import app.benbow.client.trashedTags
 import app.benbow.core.api.AttachmentRef
 import app.benbow.core.api.PurgeRequest
 import app.benbow.ui.Hinted
+import app.benbow.ui.sideScroll
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Instant
@@ -294,13 +295,13 @@ internal fun TrashScreen(services: AppServices, nav: Navigator) {
                                 modifier = Modifier.padding(horizontal = 8.dp),
                             )
                         }
-                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(Modifier.sideScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             TrashOrder.entries.forEach { value ->
                                 FilterChip(order == value, { order = value }, { Text(stringResource(value.label)) }, Modifier.hand())
                             }
                         }
                         // Helpers (ADR-041): each chooses at once; nothing final happens before the sheet's held button.
-                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(Modifier.sideScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             val old = now - OLD_MILLIS
                             val helper = @Composable { label: StringResource, keys: () -> Set<String> ->
                                 val found = keys()

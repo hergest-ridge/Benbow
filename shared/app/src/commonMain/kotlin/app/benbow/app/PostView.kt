@@ -1,5 +1,6 @@
 package app.benbow.app
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +27,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.contentDescription
@@ -43,6 +46,7 @@ import app.benbow.client.placedIn
 import app.benbow.ui.editor.AtomViews
 import app.benbow.ui.editor.BenbowEditor
 import app.benbow.ui.editor.EditorState
+import app.benbow.ui.sideScroll
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
@@ -62,6 +66,8 @@ internal fun PostView(
     onReact: (String, Boolean) -> Unit,
     ribbon: Boolean,
     pictures: AtomViews,
+    /** The comment field, in the thread (a wide window); null when it is the screen's bar at the foot. */
+    commentField: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val scroll = rememberScrollState()
@@ -111,42 +117,50 @@ internal fun PostView(
         )
         Reactions(detail.reactions, onReact, Modifier.padding(horizontal = 16.dp))
         HorizontalDivider(Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
-        val count = comments?.size ?: 0
-        Text(
-            if (count > 0) stringResource(Res.string.comments_count, count) else stringResource(Res.string.comments),
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 6.dp),
-        )
-        if (comments?.isEmpty() == true) {
+        // The thread on a slightly darker strip, apart from the note (owner); in a wide window its field is in it too.
+        val shade = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) THREAD_SHADE_DARK else THREAD_SHADE_LIGHT
+        Column(Modifier.fillMaxWidth().background(Color.Black.copy(alpha = shade)).padding(bottom = 16.dp)) {
+            val count = comments?.size ?: 0
             Text(
-                stringResource(Res.string.comments_empty),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                if (count > 0) stringResource(Res.string.comments_count, count) else stringResource(Res.string.comments),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 6.dp),
             )
-        }
-        comments.orEmpty().forEach { comment ->
-            Surface(
-                onClick = { onOpenComment(comment) },
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).hand(),
-            ) {
-                Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    CommentText(comment)
-                    CommentMedia(services, comment) { onOpenCommentMedia(comment.summary.id, it) }
-                    Text(
-                        dateTimeLabel(comment.summary.createdAt),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+            if (comments?.isEmpty() == true) {
+                Text(
+                    stringResource(Res.string.comments_empty),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                )
+            }
+            comments.orEmpty().forEach { comment ->
+                Surface(
+                    onClick = { onOpenComment(comment) },
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).hand(),
+                ) {
+                    Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        CommentText(comment)
+                        CommentMedia(services, comment) { onOpenCommentMedia(comment.summary.id, it) }
+                        Text(
+                            dateTimeLabel(comment.summary.createdAt),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
+            if (commentField != null) Box(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) { commentField() }
         }
-        Box(Modifier.padding(bottom = 16.dp))
     }
 }
+
+// The thread's strip over the note: a shade of black, a little more on a dark page.
+private const val THREAD_SHADE_DARK = 0.2f
+private const val THREAD_SHADE_LIGHT = 0.045f
 
 /** Chosen reactions (tap to take one back) and a button for the rest. */
 @Composable
@@ -207,7 +221,7 @@ internal fun CommentMedia(services: AppServices, comment: Comment, onOpen: (atta
         )
     }
     if (rest.isEmpty()) return
-    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    Row(Modifier.sideScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         rest.forEach { attachment -> MediaThumb(services.media, attachment, third) { onOpen(attachment.meta.id) } }
     }
 }

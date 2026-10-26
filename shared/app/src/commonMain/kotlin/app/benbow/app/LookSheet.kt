@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -57,6 +58,7 @@ import app.benbow.app.resources.look_scraps
 import app.benbow.app.resources.look_shuffle
 import app.benbow.app.resources.look_title
 import app.benbow.client.LookFields
+import app.benbow.ui.mouseSwipe
 import org.jetbrains.compose.resources.StringArrayResource
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringArrayResource
@@ -182,7 +184,13 @@ private fun Layer(
     // A scrapbook stays chosen when shuffled ("tape.7" is still "tape").
     val chosenKind = if (layer == LookLayer.Scrap) NoteLooks.scrapOf(chosen).first else chosen
     val choices = NoteLooks.choices(layer)
-    LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    val swipeRow = rememberLazyListState()
+    LazyRow(
+        state = swipeRow,
+        modifier = Modifier.mouseSwipe(swipeRow),
+        contentPadding = PaddingValues(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
         item { Choice(stringResource(Res.string.look_none), chosen == null, base, Modifier) { onLook(mapOf(layer.field to null)) } }
         itemsIndexed(choices) { i, token ->
             val drawn = if (layer == LookLayer.Scrap && token == chosenKind) chosen!! else token

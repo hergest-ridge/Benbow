@@ -62,6 +62,7 @@ import app.benbow.client.EntryDetail
 import app.benbow.client.library
 import app.benbow.core.media.AttachmentKey
 import app.benbow.core.sync.AttachmentState
+import app.benbow.ui.mouseSwipe
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringArrayResource
@@ -196,7 +197,7 @@ private fun MediaPager(
             userScrollEnabled = !zoomed,
             beyondViewportPageCount = 1,
             key = { items[it].key },
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().then(if (zoomed) Modifier else Modifier.mouseSwipe(pager)),
         ) { page ->
             val item = items[page]
             val active = page == pager.currentPage

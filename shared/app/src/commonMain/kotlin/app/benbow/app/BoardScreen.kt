@@ -163,6 +163,7 @@ import app.benbow.client.pinOnBoard
 import app.benbow.client.placeOnBoard
 import app.benbow.client.searchBoard
 import app.benbow.client.tickOnBoard
+import app.benbow.ui.sideScroll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flowOf
@@ -659,7 +660,7 @@ private fun FilterRow(found: List<BoardNote>, filter: BoardFilter, onFilter: (Bo
     val colors = found.mapNotNull { it.entry.background }.distinct().let { present -> SWATCHES.filter { it in present } }
     val tags = found.flatMap { it.entry.tags }.distinctBy { it.id }
     Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
+        Modifier.fillMaxWidth().sideScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

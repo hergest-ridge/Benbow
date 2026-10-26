@@ -76,12 +76,19 @@ internal fun DayHeader(day: String) {
 }
 
 @Composable
-internal fun QuickNoteBar(services: AppServices, onSend: (String) -> Unit, onNewEntry: (() -> Unit)? = null, hint: String? = null) {
+internal fun QuickNoteBar(
+    services: AppServices,
+    onSend: (String) -> Unit,
+    onNewEntry: (() -> Unit)? = null,
+    hint: String? = null,
+    /** Inside a thread (a wide window's post), not a bar at the foot: no backing of its own, no system insets. */
+    inline: Boolean = false,
+) {
     var text by rememberSaveable { mutableStateOf("") }
     val dictation = rememberFieldDictation({ text }) { text = it }
-    Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
+    Surface(color = if (inline) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer) {
         Row(
-            Modifier.navigationBarsPadding().imePadding().padding(horizontal = 8.dp, vertical = 6.dp),
+            (if (inline) Modifier else Modifier.navigationBarsPadding().imePadding()).padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
             TextField(

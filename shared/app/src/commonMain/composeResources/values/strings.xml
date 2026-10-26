@@ -729,6 +729,12 @@
     <string name="link_previews_hint">Карточка ссылки один раз читает заголовок и картинку страницы, когда ссылку вставили. Сайт при этом видит запрос, как при открытии.</string>
     <string name="media_opens_post">Клик по картинкам и видео открывает пост</string>
     <string name="media_opens_post_hint">В ленте клик по вложению поста открывает сам пост, а не просмотр во весь экран.</string>
+    <string name="media_hover">Подсветка вложений при наведении</string>
+    <string name="media_hover_hint">Картинки, видео и галереи подсвечиваются под курсором, в ленте и в записи. Кнопки и ссылки подсвечиваются всегда.</string>
+    <string name="light_beyond_page">Свет записки на всю область</string>
+    <string name="light_beyond_page_hint">В широком окне свет из оформления записки разливается на всё место справа от ленты, а не только на саму записку.</string>
+    <string name="page_borders">Рамка открытой записки</string>
+    <string name="page_borders_hint">В широком окне открытая запись обведена по бокам тонкой линией, как край ленты.</string>
     <string name="picture_links">Не вставлять ссылки вложений</string>
     <string name="picture_links_hint">Картинка или гифка по ссылке ложится вложением под ссылкой. Включено — только вложение, без строки с адресом.</string>
     <string name="ticked_below">Отмеченные пункты — вниз</string>

@@ -50,7 +50,12 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -655,19 +660,44 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
         vm.entryId?.let { nav.open(Route.History(it)) }
     }
 
+    // The note's look over the whole page, bars and all, as its color is, in full and moving (ADR-047). Beside a list in a
+    // wide window its light falls across the whole right side (PaneGlow): the page tells the pane its lights, and lays
+    // its own out in the pane's place.
+    val page = noteColor ?: if (route.board) boardCardColor() else MaterialTheme.colorScheme.background
+    val glow = LocalPaneGlow.current
+    var pageAt by remember { mutableStateOf(Offset.Zero) }
+    if (glow != null && detail != null) {
+        val lights = remember(detail.look) { NoteLooks.look(detail.look).lights }
+        val dark = page.luminance() < 0.5f
+        DisposableEffect(glow, detail.id, lights, dark) {
+            glow.show(detail.id, lights, dark)
+            onDispose { glow.hide(detail.id) }
+        }
+    }
+    val backdrop = detail?.let { entry ->
+        entryBackdrop(entry.id, entry.look, page, muted = false, moving = true, lightFrame = glow?.let { g -> { g.frameAt(pageAt) } })
+    } ?: Modifier
+    val looked = backdrop != Modifier
+    val wide = LocalWide.current
+
     Scaffold(
         // Files dragged in from the desktop are attached like picked ones.
         modifier = Modifier.attachOnDrop(services, vm::ensureEntryId, onHover = { dropping = it }, onLink = { href ->
             vm.editor?.takeIf { !vm.reading }?.insertAtom(Atom.LinkCard(href), atEnd = !editorFocused)
-        }),
-        // A note on the board: its card's color, the sheet it grew from (ADR-040).
-        containerColor = noteColor ?: if (route.board) boardCardColor() else MaterialTheme.colorScheme.background,
+        }).onGloballyPositioned { pageAt = it.positionInWindow() }.then(backdrop),
+        // A note on the board: its card's color, the sheet it grew from (ADR-040). With a look, the look draws it.
+        containerColor = if (looked) Color.Transparent else page,
         // A color outside the scheme has no content color of its own: the page's words and icons, as on the card.
         contentColor = MaterialTheme.colorScheme.onSurface,
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = noteColor ?: if (route.board) boardCardColor() else MaterialTheme.colorScheme.surface,
+                    containerColor = if (looked) {
+                        Color.Transparent
+                    } else {
+                        noteColor
+                            ?: if (route.board) boardCardColor() else MaterialTheme.colorScheme.surface
+                    },
                 ),
                 navigationIcon = {
                     BackButton {
@@ -871,7 +901,8 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                     // A post on a phone has no tab bar, so it shows what plays itself (wide windows have the app's strip).
                     val openPlayer = LocalOpenPlayer.current
                     if (!LocalWide.current && openPlayer != null) MiniPlayer(services, openPlayer, bottomInset = false)
-                    QuickNoteBar(services, onSend = vm::comment, hint = stringResource(Res.string.comment_hint))
+                    // In a wide window the field is in the thread, under the comments (owner).
+                    if (!wide) QuickNoteBar(services, onSend = vm::comment, hint = stringResource(Res.string.comment_hint))
                 }
             } else if (editor != null) {
                 Column(Modifier.navigationBarsPadding().imePadding()) {
@@ -887,10 +918,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
             }
         },
     ) { padding ->
-        // The note's look behind its words, in full and moving (ADR-047); the bars keep the plain color.
-        val page = noteColor ?: if (route.board) boardCardColor() else MaterialTheme.colorScheme.background
-        val backdrop = detail?.let { entryBackdrop(it.id, it.look, page, muted = false, moving = true) } ?: Modifier
-        Column(Modifier.padding(padding).fillMaxSize().then(backdrop)) {
+        Column(Modifier.padding(padding).fillMaxSize()) {
             if (detail?.conflictHeads?.isNotEmpty() == true) {
                 Banner(
                     stringResource(Res.string.conflict_banner),
@@ -947,6 +975,11 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                     onReact = vm::react,
                     ribbon = ribbon,
                     pictures = pictures,
+                    commentField = if (wide) {
+                        { QuickNoteBar(services, onSend = vm::comment, hint = stringResource(Res.string.comment_hint), inline = true) }
+                    } else {
+                        null
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
                 return@Column

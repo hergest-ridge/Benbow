@@ -19,9 +19,16 @@ import kotlin.random.Random
  * lists, [moving] in the open note. Pass no look while the entry is behind a curtain (Бережно).
  */
 @Composable
-internal fun entryBackdrop(id: String, look: Map<String, String>, base: Color, muted: Boolean, moving: Boolean = false): Modifier {
+internal fun entryBackdrop(
+    id: String,
+    look: Map<String, String>,
+    base: Color,
+    muted: Boolean,
+    moving: Boolean = false,
+    lightFrame: (() -> LightFrame?)? = null,
+): Modifier {
     val drawn = remember(look) { NoteLooks.look(look) }
-    return noteBackdrop(drawn, base, MaterialTheme.colorScheme.onSurface, id.hashCode(), muted, moving)
+    return noteBackdrop(drawn, base, MaterialTheme.colorScheme.onSurface, id.hashCode(), muted, moving, lightFrame)
 }
 
 /** The layers «Оформление записки» sets, by their field's name (`look_<field>`, LookFields). */

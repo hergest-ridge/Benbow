@@ -67,11 +67,15 @@ internal fun OnThisDayStrip(items: List<LookBack>, media: Media, onOpen: (EntryS
         LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(items, key = { it.entry.id }) { item ->
                 val entry = item.entry
+                val paper = swatch(entry.background) ?: MaterialTheme.colorScheme.surfaceContainerLow
+                // The color and the look are drawn under the card (a Surface would paint over the look).
                 Surface(
                     onClick = { onOpen(entry) },
                     shape = RoundedCornerShape(16.dp),
-                    color = swatch(entry.background) ?: MaterialTheme.colorScheme.surfaceContainerLow,
-                    modifier = Modifier.width(200.dp).padding(vertical = 4.dp).hand(),
+                    color = Color.Transparent,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.width(200.dp).padding(vertical = 4.dp).hand().clip(RoundedCornerShape(16.dp)).background(paper)
+                        .then(entryBackdrop(entry.id, entry.look, paper, muted = true)),
                 ) {
                     Column {
                         entry.cover?.let { cover -> Picture(media, cover, Modifier.fillMaxWidth().height(112.dp)) }
@@ -105,6 +109,7 @@ internal fun OnThisDayPager(items: List<LookBack>, media: Media, onOpen: (EntryS
                 val paper = swatch(entry.background) ?: MaterialTheme.colorScheme.surfaceContainerLow
                 Box(
                     Modifier.fillMaxWidth().aspectRatio(4f / 3f).clip(RoundedCornerShape(16.dp)).background(paper)
+                        .then(entryBackdrop(entry.id, entry.look, paper, muted = true))
                         .clickable { onOpen(entry) }.hand(),
                 ) {
                     val cover = entry.cover

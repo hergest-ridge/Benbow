@@ -68,6 +68,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -630,6 +631,12 @@ private fun FeedPost(
     var opened by remember(entry.id) { mutableStateOf(false) }
     val curtained = entry.curtained(LocalGentle.current) && !opened
     val tint = if (curtained) null else swatch(entry.background)
+    val backdrop = entryBackdrop(
+        entry.id,
+        if (curtained) emptyMap() else entry.look,
+        tint ?: if (cards) colors.surfaceContainerLow else colors.background,
+        muted = true,
+    )
     val open = Modifier.hand().combinedClickable(onClick = { if (curtained) opened = true else onOpen() }, onLongClick = { picking = true })
     val shown = LocalOpenEntry.current == entry.id // open beside the feed (a wide window)
     Box(
@@ -642,11 +649,14 @@ private fun FeedPost(
         ),
     ) {
         if (cards) {
+            // The color and the look are drawn under the post (a Surface would paint over the look).
             Surface(
-                color = tint ?: colors.surfaceContainerLow,
+                color = Color.Transparent,
+                contentColor = colors.onSurface,
                 shape = RoundedCornerShape(18.dp),
                 border = if (shown) BorderStroke(2.dp, colors.primary) else null,
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).then(glowing).then(open),
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(tint ?: colors.surfaceContainerLow)
+                    .then(backdrop).then(glowing).then(open),
             ) {
                 Revealing(curtained, entry) {
                     Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -656,7 +666,7 @@ private fun FeedPost(
                 }
             }
         } else {
-            Column(Modifier.fillMaxWidth().background(tint ?: colors.background).then(glowing).then(open)) {
+            Column(Modifier.fillMaxWidth().background(tint ?: colors.background).then(backdrop).then(glowing).then(open)) {
                 Revealing(curtained, entry, Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
                     Column {
                         if (item.media.isNotEmpty()) MediaCarousel(services.media, item.media, onOpenMedia, rounded = false)

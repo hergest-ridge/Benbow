@@ -120,6 +120,7 @@ internal fun EntryTile(entry: EntrySummary, media: Media, modifier: Modifier, on
     val paper = (if (curtained) null else swatch(entry.background)) ?: colors.surfaceContainerHigh
     Box(
         modifier.clip(RoundedCornerShape(8.dp)).background(paper)
+            .then(entryBackdrop(entry.id, if (curtained) emptyMap() else entry.look, paper, muted = true))
             .then(if (onClick != null) Modifier.clickable(onClick = onClick).hand() else Modifier),
     ) {
         val cover = entry.cover

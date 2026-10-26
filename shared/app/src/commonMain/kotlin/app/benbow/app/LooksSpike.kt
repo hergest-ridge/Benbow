@@ -37,7 +37,7 @@ import androidx.compose.ui.unit.dp
 /*
  * «Облик записки (проба)» (ADR-047, 7.20 L0): made-up notes in every layer of a look, for the owner and a friend to
  * choose by eye, the feed's muted look and motion switchable. Only where AppServices.labs is on. The texts are made up
- * and live here, not in the strings: the screen goes away with L1.
+ * and live here, not in the strings: the screen stays while styles and sets are still being tuned (owner), then goes.
  */
 
 /** A made-up note in one look; [taped] is a picture under `looks/pictures` and how it is held (`TapedPicture`). */

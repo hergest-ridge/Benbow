@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
@@ -100,12 +101,18 @@ internal data class NoteLook(
     val lights: List<LookLight> = emptyList(),
     val motion: String? = null,
     val scrap: String? = null,
+    /** How many times «Перемешать» laid the scrapbook out anew. */
+    val scrapShuffle: Int = 0,
 )
 
+/** Nothing to draw over the note's color. */
+internal val NoteLook.isEmpty: Boolean get() = this == NO_LOOK
+
+private val NO_LOOK = NoteLook()
+
 /**
- * [content] over [look] on [base]: the layers behind, the picture under the words. [muted] is the feed's look (owner:
- * quieter there); [moving] lets motion run (only the open note, never with reduced motion); [seed] lays out patterns
- * the same way every time for one note.
+ * [content] over [look] on [base]: the layers behind, the picture under the words (the spike's cards; the app's own
+ * places put [noteBackdrop] on their surfaces).
  */
 @Composable
 internal fun NoteBackdrop(
@@ -118,28 +125,42 @@ internal fun NoteBackdrop(
     moving: Boolean = false,
     content: @Composable BoxScope.() -> Unit,
 ) {
+    Box(modifier.then(noteBackdrop(look, base, ink, seed, muted, moving))) {
+        if (look.art.isNotEmpty()) Art(look, ink, muted, seed)
+        content()
+    }
+}
+
+/**
+ * [look] drawn behind whatever the modifier holds, over [base]: [muted] in lists (owner: quieter there), [moving] lets
+ * motion run (the open note only, never with the system's reduced motion; it redraws without recomposing), [seed] (the
+ * note's id) lays patterns and the scrapbook out the same on every device. An empty look adds nothing.
+ */
+@Composable
+internal fun noteBackdrop(look: NoteLook?, base: Color, ink: Color, seed: Int, muted: Boolean = false, moving: Boolean = false): Modifier {
+    if (look == null || look.isEmpty) return Modifier
     val dark = base.luminance() < 0.5f
     val scatter = look.scatter.mapNotNull { path -> key(path) { lookPicture("tabler/$path")?.let { rememberVectorPainter(it) } } }
-    val drift = if (look.motion == "drift" && moving) {
+    val drift: State<Float>? = if (look.motion == "drift" && moving && !reducedMotion()) {
         rememberInfiniteTransition().animateFloat(
             0f,
             1f,
             infiniteRepeatable(tween(DRIFT_MILLIS, easing = LinearEasing), RepeatMode.Reverse),
-        ).value
+        )
     } else {
-        0.35f
+        null
     }
     val tile = look.tile?.let { name -> key(name) { lookPicture("hero/$name") } }
     val tilePainter = tile?.let { rememberVectorPainter(it) }
     val paperPhoto = look.paperPhoto?.let { lookPhoto("paper/$it.jpg") }
     val wallpaper = look.wallpaper?.let { lookPhoto("morris/$it.jpg") }
     val strength = if (muted) MUTED else 1f
-    Box(
-        modifier.drawWithCache {
+    return remember(look, base, ink, seed, strength, drift, scatter, tile, tilePainter, paperPhoto, wallpaper) {
+        Modifier.drawWithCache {
             val layers = Layers(look, base, ink, dark, seed, size, scatter.size, 1.dp.toPx())
             val tiles = if (tile != null && tilePainter != null) tileBrush(tile, tilePainter, layers.tileTone) else null
             val papers = paperPhoto?.let { ShaderBrush(ImageShader(it, TileMode.Repeated, TileMode.Repeated)) }
-            val scrapbook = look.scrap?.let { Scrapbook(it, seed, size, base, ink, dark, 1.dp.toPx()) }
+            val scrapbook = look.scrap?.let { Scrapbook(it, seed + look.scrapShuffle * SHUFFLE_STEP, size, base, ink, dark, 1.dp.toPx()) }
             onDrawBehind {
                 drawRect(base)
                 wallpaper?.let { faded(it, dark, strength) }
@@ -151,19 +172,20 @@ internal fun NoteBackdrop(
                         blendMode = if (dark) BlendMode.Softlight else BlendMode.Multiply,
                     )
                 }
-                if (look.motion == "drift") layers.drift(this, drift, strength)
+                if (look.motion == "drift") layers.drift(this, drift?.value ?: STILL, strength)
                 layers.lights(this, strength)
                 layers.paper(this, strength)
                 layers.pattern(this, strength, scatter)
                 tiles?.let { drawRect(it, alpha = layers.calm(layers.tileTone, 0.55f, strength).alpha) }
                 scrapbook?.draw(this, strength)
             }
-        },
-    ) {
-        if (look.art.isNotEmpty()) Art(look, ink, muted, seed)
-        content()
+        }
     }
 }
+
+/** The system asks for less motion (Android's «Remove animations», the browser's reduced motion): the drift stands still. */
+@Composable
+internal expect fun reducedMotion(): Boolean
 
 /** The look's paths and points for one size, built once; [pattern]'s scattered pictures come drawn from painters. */
 private class Layers(
@@ -461,6 +483,12 @@ private const val MUTED = 0.5f
 private const val CALM = 0.12f
 private val LIGHT_ALPHA = listOf(0.18f, 0.3f, 0.45f)
 private const val DRIFT_MILLIS = 9_000
+
+// Where the drift stands when it doesn't move (lists, reduced motion).
+private const val STILL = 0.35f
+
+// A prime, so each «Перемешать» lays the scrapbook out far from the last.
+private const val SHUFFLE_STEP = 7919
 private val EDGE_SIZE: Dp = 40.dp
 private val SCATTER_SIZE: Dp = 26.dp
 

@@ -21,6 +21,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.isPopup
 import androidx.compose.ui.test.isRoot
@@ -1116,7 +1117,7 @@ class AppSmokeTest {
     }
 
     @Test
-    fun aNoteTakesAKeepColor() = runDesktopComposeUiTest(width = 412, height = 860) {
+    fun aNoteTakesAColorAndALook() = runDesktopComposeUiTest(width = 412, height = 860) {
         val id = services.repo.createNote(services.today(), "Список покупок\nхлеб, молоко")
         services.repo.createNote(services.today(), "Без цвета")
         setContent { BenbowApp(services) }
@@ -1124,14 +1125,27 @@ class AppSmokeTest {
         onNodeWithText("Список покупок").click()
         waitUntilExactlyOneExists(hasContentDescription("Меню"), 5_000)
         onNodeWithContentDescription("Меню").click()
-        onNodeWithText("Фон").click()
+        // «Оформление записки» (ADR-047): the color, then layers of the look, each saved as it is picked.
+        onNodeWithText("Оформление записки").click()
         onNodeWithContentDescription("Мятный").click()
         waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.entry(id).first()?.background == "mint" } }
+        onNodeWithContentDescription("Линейка").click()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.entry(id).first()?.look?.get("paper") == "lines" } }
+        onNodeWithContentDescription("Скотч").click()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.entry(id).first()?.look?.get("scrap") == "tape" } }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Перемешать") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("Перемешать").click()
+        waitUntil(timeoutMillis = 5_000) {
+            runBlocking { services.repo.entry(id).first()?.look?.get("scrap")?.startsWith("tape.") == true }
+        }
         waitForIdle()
-        screenshot("31-note-color")
+        screenshot("31-note-look")
+        onNodeWithText("Скрапбук").performScrollTo()
+        waitForIdle()
+        screenshot("31-note-look-2")
         onNodeWithContentDescription("Назад").click()
         waitUntilExactlyOneExists(hasText("Без цвета"), 5_000)
-        screenshot("32-home-note-color")
+        screenshot("32-home-note-look")
     }
 
     @Test

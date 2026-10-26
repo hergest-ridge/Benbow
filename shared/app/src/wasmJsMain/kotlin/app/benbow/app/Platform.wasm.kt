@@ -31,6 +31,12 @@ internal actual val pageServer: String? = pageOrigin()
 @Composable
 internal actual fun rememberSystemColors(dark: Boolean): ColorScheme? = null
 
+/** The browser's reduced motion (prefers-reduced-motion), read once. */
+@Composable
+internal actual fun reducedMotion(): Boolean = remember { prefersReducedMotion() }
+
+private fun prefersReducedMotion(): Boolean = js("window.matchMedia('(prefers-reduced-motion: reduce)').matches")
+
 /** No owner check in the browser (for now). */
 @Composable
 internal actual fun rememberDeviceAuth(): DeviceAuth? = null

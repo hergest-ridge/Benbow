@@ -64,7 +64,6 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.attachments
-import app.benbow.app.resources.background
 import app.benbow.app.resources.background_none
 import app.benbow.app.resources.board_archive
 import app.benbow.app.resources.board_hide_boxes
@@ -91,6 +90,7 @@ import app.benbow.app.resources.favorite_add
 import app.benbow.app.resources.favorite_remove
 import app.benbow.app.resources.history
 import app.benbow.app.resources.in_trash_banner
+import app.benbow.app.resources.look_title
 import app.benbow.app.resources.menu
 import app.benbow.app.resources.move_to_trash
 import app.benbow.app.resources.pin
@@ -113,6 +113,7 @@ import app.benbow.client.createTag
 import app.benbow.client.effectiveVeil
 import app.benbow.client.pinOnBoard
 import app.benbow.client.removeTag
+import app.benbow.client.setLook
 import app.benbow.core.board.Board
 import app.benbow.core.content.Checklists
 import app.benbow.core.content.Document
@@ -342,6 +343,8 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
     fun moveAttachment(id: String, after: String?, before: String?) = withEntry { repo.moveAttachment(it, id, after, before) }
 
     fun setBackground(color: String?) = withEntry { repo.setBackground(it, color) }
+
+    fun setLook(layers: Map<String, String?>) = withEntry { repo.setLook(it, layers) }
 
     fun addTag(tagId: String, name: String) = withEntry { repo.addTag(it, name, tagId) }
 
@@ -810,7 +813,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                     menu = false
                                     if (!share(vm.markdown())) vm.copied()
                                 }, modifier = Modifier.hand())
-                                DropdownMenuItem(text = { Text(stringResource(Res.string.background)) }, onClick = {
+                                DropdownMenuItem(text = { Text(stringResource(Res.string.look_title)) }, onClick = {
                                     menu = false
                                     pickingBackground = true
                                 }, modifier = Modifier.hand())
@@ -884,7 +887,10 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
             }
         },
     ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize()) {
+        // The note's look behind its words, in full and moving (ADR-047); the bars keep the plain color.
+        val page = noteColor ?: if (route.board) boardCardColor() else MaterialTheme.colorScheme.background
+        val backdrop = detail?.let { entryBackdrop(it.id, it.look, page, muted = false, moving = true) } ?: Modifier
+        Column(Modifier.padding(padding).fillMaxSize().then(backdrop)) {
             if (detail?.conflictHeads?.isNotEmpty() == true) {
                 Banner(
                     stringResource(Res.string.conflict_banner),
@@ -916,14 +922,16 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                 }, onDismiss = { postponing = false })
             }
             if (pickingBackground) {
-                SwatchPicker(
-                    selected = detail?.background,
-                    noneLabel = stringResource(Res.string.background_none),
-                    onPick = {
-                        vm.setBackground(it)
-                        pickingBackground = false
-                    },
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                val words = remember { vm.plainText() }
+                LookSheet(
+                    id = detail?.id.orEmpty(),
+                    words = words,
+                    color = detail?.background,
+                    look = detail?.look.orEmpty(),
+                    page = if (route.board) boardCardColor() else MaterialTheme.colorScheme.background,
+                    onColor = vm::setBackground,
+                    onLook = vm::setLook,
+                    onDismiss = { pickingBackground = false },
                 )
             }
             if (vm.reading && editor != null && detail != null && !vm.broken) {

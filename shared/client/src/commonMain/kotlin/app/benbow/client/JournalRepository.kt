@@ -68,6 +68,8 @@ data class EntrySummary(
     val tagIds: List<String> = emptyList(),
     /** A Keep-like note color, one of [SWATCHES]; null = the theme's own. */
     val background: String? = null,
+    /** The note's look by layer (ADR-047, [LookFields]): tokens the app draws over [background]. */
+    val look: Map<String, String> = emptyMap(),
     /** Бережно (ADR-031): what it shows as, its own mark (set by hand), and what the rules alone would give. */
     val veil: Veil? = null,
     val ownVeil: Veil? = null,
@@ -163,6 +165,9 @@ data class EntryDetail(
     val parentId: String? get() = fields[PARENT_FIELD]
     val mood: Int? get() = fields[MOOD_FIELD]?.toIntOrNull()
     val background: String? get() = fields[BACKGROUND_FIELD]?.takeIf { it in SWATCHES }
+
+    /** The note's look by layer (ADR-047, [LookFields]). */
+    val look: Map<String, String> get() = LookFields.of(fields)
 
     /** Бережно: the entry's own mark (set by hand); the rules may add theirs ([GentleRules.ruled]). */
     val ownVeil: Veil? get() = Veil.of(fields[VEIL_FIELD])
@@ -846,6 +851,7 @@ internal fun summaryOf(
         tags = tagsOf(f),
         tagIds = tagsOf(f).map { it.id },
         background = f[BACKGROUND_FIELD]?.takeIf { it in SWATCHES },
+        look = LookFields.of(f),
         veil = effectiveVeil(Veil.of(f[VEIL_FIELD]), null),
         ownVeil = Veil.of(f[VEIL_FIELD]),
         until = f[VEIL_UNTIL_FIELD],

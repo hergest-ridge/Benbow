@@ -77,6 +77,7 @@ internal fun BoardCard(
     }
     Column(
         modifier.fillMaxWidth().clip(CARD_SHAPE).background(color ?: boardCardColor())
+            .then(entryBackdrop(note.entry.id, note.entry.look, color ?: boardCardColor(), muted = true))
             .border(if (chosen) 2.dp else 1.dp, outline, CARD_SHAPE),
     ) {
         Column(words.fillMaxWidth()) { CardWords(note, media, onTick) }

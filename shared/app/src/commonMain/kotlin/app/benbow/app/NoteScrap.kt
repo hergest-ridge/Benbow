@@ -62,6 +62,10 @@ internal class Scrapbook(
     private val px: Float,
 ) {
     private val random = Random(seed)
+
+    // Tears and teeth draw from a random of their own: how many points a torn line takes depends on its length, the
+    // note's size, so the picks above (tones, kinds, places) stay the same on a card and on the open page.
+    private val jags = Random(seed xor JAGS)
     private val tapes = mutableListOf<Tape>()
     private val scraps = mutableListOf<Scrap>()
     private var stamp: Stamp? = null
@@ -78,10 +82,12 @@ internal class Scrapbook(
 
             "scraps" -> {
                 scraps += bigScrap()
+                // A strip of kraft over the top right, as long as a torn strip is, however wide the note.
+                val stripWidth = min(box.width * 0.46f, STRIP_WIDTH * px)
                 val strip = scrap(
-                    Offset(box.width * 0.8f, box.height * 0.14f),
+                    Offset(box.width - stripWidth * 0.43f, min(box.height * 0.14f, 28 * px)),
                     random.sign() * (7f + random.nextFloat() * 6f),
-                    box.width * 0.46f,
+                    stripWidth,
                     28 * px,
                     KRAFT,
                     tornBottom = true,
@@ -95,6 +101,7 @@ internal class Scrapbook(
                     base,
                     dark,
                     px,
+                    jags,
                 )
             }
 
@@ -119,11 +126,18 @@ internal class Scrapbook(
                     base,
                     dark,
                     px,
+                    jags,
                 )
                 stamp = stamp()
             }
         }
     }
+
+    /** Its tones (tapes, stamp, thread), for tests: the same whatever the note's size. */
+    internal fun tones(): List<Color> = tapes.flatMap { listOf(it.color, it.accent) } + listOfNotNull(stamp?.tone) + thread
+
+    /** Its scraps' sizes, for tests. */
+    internal fun scrapSizes(): List<Size> = scraps.map { Size(it.w, it.h) }
 
     fun draw(scope: DrawScope, strength: Float) = with(scope) {
         torn?.let {
@@ -164,23 +178,30 @@ internal class Scrapbook(
             3 -> Offset(inset, box.height - inset) to 45f + tilt
             else -> Offset(box.width * (0.35f + random.nextFloat() * 0.3f), 3 * px) to tilt * 0.8f
         }
-        return random.tape(at, angle, length, thickness, base, dark, px)
+        return random.tape(at, angle, length, thickness, base, dark, px, jags)
     }
 
-    /** A large scrap under the lower words: graph, lined or cream paper, its top torn. */
-    private fun bigScrap(): Scrap = scrap(
-        Offset(box.width * 0.56f, box.height * 0.8f),
-        random.sign() * (1.5f + random.nextFloat() * 3f),
-        box.width * 0.8f,
-        box.height * 0.42f,
-        listOf(GRAPH, LINED, CREAM)[random.nextInt(3)],
-        tornBottom = false,
-    )
+    /**
+     * A large scrap under the lower words, graph, lined or cream paper with its top torn, in the lower right: a share of a
+     * card, but no larger than a torn-off half page on a wide one (owner: on the web's open note it grew huge).
+     */
+    private fun bigScrap(): Scrap {
+        val w = min(box.width * 0.8f, BIG_SCRAP_WIDTH * px)
+        val h = min(box.height * 0.42f, BIG_SCRAP_HEIGHT * px)
+        return scrap(
+            Offset(box.width - w * 0.55f, box.height - h * 0.45f),
+            random.sign() * (1.5f + random.nextFloat() * 3f),
+            w,
+            h,
+            listOf(GRAPH, LINED, CREAM)[random.nextInt(3)],
+            tornBottom = false,
+        )
+    }
 
     private fun scrap(at: Offset, angle: Float, w: Float, h: Float, kind: Int, tornBottom: Boolean): Scrap {
-        val top = random.tornEdge(-w / 2, w / 2, -h / 2, px)
+        val top = jags.tornEdge(-w / 2, w / 2, -h / 2, px)
         val bottom = if (tornBottom) {
-            random.tornEdge(-w / 2, w / 2, h / 2, px).asReversed()
+            jags.tornEdge(-w / 2, w / 2, h / 2, px).asReversed()
         } else {
             listOf(
                 Offset(w / 2, h / 2),
@@ -197,8 +218,8 @@ internal class Scrapbook(
         }
         val fibers = if (kind == KRAFT) {
             List(28) {
-                val a = Offset((random.nextFloat() - 0.5f) * w, (random.nextFloat() - 0.5f) * h)
-                a to a + Offset((random.nextFloat() - 0.5f) * 10 * px, (random.nextFloat() - 0.5f) * 3 * px)
+                val a = Offset((jags.nextFloat() - 0.5f) * w, (jags.nextFloat() - 0.5f) * h)
+                a to a + Offset((jags.nextFloat() - 0.5f) * 10 * px, (jags.nextFloat() - 0.5f) * 3 * px)
             }
         } else {
             emptyList()
@@ -260,7 +281,7 @@ internal class Scrapbook(
 
     /** The note's top torn off: the page underneath shows above a ragged line. */
     private fun torn(): Torn {
-        val edge = random.tornEdge(0f, box.width, 8 * px, px)
+        val edge = jags.tornEdge(0f, box.width, 8 * px, px)
         val under = Path().apply {
             moveTo(0f, 0f)
             lineTo(box.width, 0f)
@@ -390,10 +411,11 @@ internal fun TapedPicture(path: String, style: String, seed: Int, base: Color, m
         modifier.rotate(turn).drawWithCache {
             val px = 1.dp.toPx()
             val random = Random(seed + 1)
+            val jags = Random(seed xor JAGS)
             val tapes = when (style) {
                 "tape" -> listOf(
-                    random.tape(Offset(2 * px, 2 * px), -42f + random.nextFloat() * 8f, 50 * px, 16 * px, base, dark, px),
-                    random.tape(Offset(size.width - 2 * px, 2 * px), 42f - random.nextFloat() * 8f, 50 * px, 16 * px, base, dark, px),
+                    random.tape(Offset(2 * px, 2 * px), -42f + random.nextFloat() * 8f, 50 * px, 16 * px, base, dark, px, jags),
+                    random.tape(Offset(size.width - 2 * px, 2 * px), 42f - random.nextFloat() * 8f, 50 * px, 16 * px, base, dark, px, jags),
                 )
 
                 "strip", "polaroid" -> listOf(
@@ -405,6 +427,7 @@ internal fun TapedPicture(path: String, style: String, seed: Int, base: Color, m
                         base,
                         dark,
                         px,
+                        jags,
                     ),
                 )
 
@@ -480,7 +503,17 @@ private class Stamp(
 private class Torn(val under: Path, val rim: Path)
 
 /** Tape in one of the palette's tones, pale over a light note and deep over a dark one, with one of four prints. */
-private fun Random.tape(at: Offset, angle: Float, length: Float, thickness: Float, base: Color, dark: Boolean, px: Float): Tape {
+private fun Random.tape(
+    at: Offset,
+    angle: Float,
+    length: Float,
+    thickness: Float,
+    base: Color,
+    dark: Boolean,
+    px: Float,
+    /** Where its torn ends' teeth come from (see Scrapbook's jags). */
+    jags: Random,
+): Tape {
     val tone = BenbowPalette.text(TAPE_TONES[nextInt(TAPE_TONES.size)], dark) ?: Color.Gray
     val color = if (dark) lerp(tone, base, 0.45f) else lerp(tone, Color.White, 0.55f)
     val accent = when {
@@ -488,7 +521,7 @@ private fun Random.tape(at: Offset, angle: Float, length: Float, thickness: Floa
         nextBoolean() -> Color.White
         else -> lerp(tone, Color.White, 0.1f)
     }
-    return Tape(at, angle, tapeOutline(length, thickness, px), length, thickness, color, accent, nextInt(4))
+    return Tape(at, angle, jags.tapeOutline(length, thickness, px), length, thickness, color, accent, nextInt(4))
 }
 
 /** A strip with both ends torn by hand: small teeth in and out. */
@@ -616,6 +649,14 @@ private const val KRAFT = 2
 private const val CREAM = 3
 private val PAPERS = listOf(Color(0xFFFAFAF5), Color(0xFFFFFDF4), Color(0xFFD8BB90), Color(0xFFF3E7CF))
 private const val TOP = 4
+
+// Sets the tears' random apart from the picks' (any odd constant will do).
+private const val JAGS = 0x5f3759df
+
+// The big scrap and the kraft strip at most, in dp: a torn-off half page, a torn strip.
+private const val BIG_SCRAP_WIDTH = 300f
+private const val BIG_SCRAP_HEIGHT = 150f
+private const val STRIP_WIDTH = 180f
 private val CORNER_PAIRS = listOf(listOf(0, 1), listOf(0, 2), listOf(TOP, 2), listOf(1, 3))
 private val TAPE_TONES = listOf("pink", "yellow", "teal", "blue", "orange", "purple", "green")
 private val STAMP_TONES = listOf("teal", "blue", "red", "green", "purple")

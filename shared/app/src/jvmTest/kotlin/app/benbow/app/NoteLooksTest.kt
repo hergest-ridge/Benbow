@@ -1,5 +1,7 @@
 package app.benbow.app
 
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
@@ -73,6 +75,21 @@ class NoteLooksTest {
         val shuffled = NoteLooks.shuffled("collage.3")
         assertEquals("collage", NoteLooks.scrapOf(shuffled).first)
         assertEquals(7 * 7919, NoteLooks.look(mapOf("scrap" to "tape.7")).scrapShuffle * 7919, "the shuffle reaches the drawing")
+    }
+
+    @Test
+    fun aScrapbookKeepsItsTonesAtEverySizeAndItsScrapsStaySmall() {
+        val paper = Color(0xFFE9E3D4)
+        val ink = Color(0xFF1D1B18)
+        for (kind in NoteLooks.scraps) {
+            for (seed in listOf(1, 7, 42, -3)) {
+                val card = Scrapbook(kind, seed, Size(380f, 390f), paper, ink, dark = false, px = 2f)
+                val page = Scrapbook(kind, seed, Size(1600f, 2400f), paper, ink, dark = false, px = 2f)
+                assertEquals(card.tones(), page.tones(), "$kind $seed: the same tones on a card and on the open page")
+            }
+        }
+        val wide = Scrapbook("scraps", 7, Size(2560f, 2880f), paper, ink, dark = false, px = 2f)
+        assertTrue(wide.scrapSizes().all { it.width <= 600f && it.height <= 300f }, "no poster of a scrap: ${wide.scrapSizes()}")
     }
 
     @Test

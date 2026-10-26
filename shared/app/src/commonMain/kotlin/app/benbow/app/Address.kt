@@ -37,6 +37,8 @@ internal fun Route.path(): String = when (this) {
 
     Route.Trash -> "trash"
 
+    Route.LooksSpike -> "looks"
+
     Route.Library, is Route.LibraryMedia -> "media"
 
     Route.Storage -> "space"

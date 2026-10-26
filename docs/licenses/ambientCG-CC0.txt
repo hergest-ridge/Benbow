@@ -1,0 +1,8 @@
+ambientCG, https://ambientcg.com — all assets under Creative Commons CC0 1.0 Universal
+(https://docs.ambientcg.com/license/); no credit required, the raw files may be included in a project.
+
+Used in the note-look spike (ADR-047, 7.20 L0), shared/app/src/commonMain/composeResources/files/looks/paper, each the
+Color map of the 1K-JPG download scaled to 512 x 512:
+- paper001.jpg   Paper 001 (white)            https://ambientcg.com/a/Paper001
+- paper003.jpg   Paper 003 (creased, white)   https://ambientcg.com/a/Paper003
+- paper006.jpg   Paper 006 (beige)            https://ambientcg.com/a/Paper006

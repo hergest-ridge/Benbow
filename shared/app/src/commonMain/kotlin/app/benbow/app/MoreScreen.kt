@@ -102,6 +102,8 @@ private fun MoreList(services: AppServices, nav: Navigator) {
         MoreItem(Icons.Leaf, stringResource(Res.string.gentle), stringResource(Res.string.more_gentle)) { nav.open(Route.Gentle) }
         MoreItem(Icons.Delete, stringResource(Res.string.trash), stringResource(Res.string.more_trash)) { nav.open(Route.Trash) }
         MoreItem(Icons.Download, stringResource(Res.string.export), stringResource(Res.string.more_export)) { nav.open(Route.Export) }
+        // The note-look spike (ADR-047, 7.20 L0): dev and bench builds, the web dev server, BENBOW_LABS=1 on desktop.
+        if (services.labs) MoreItem(Icons.Brush, "Облик записки (проба)", "Бумага, узоры, свет, рисунки") { nav.open(Route.LooksSpike) }
         if (services.platform == "desktop" || services.platform == "web") {
             MoreItem(
                 Icons.Keyboard,

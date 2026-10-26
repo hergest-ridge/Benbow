@@ -195,6 +195,9 @@ internal sealed interface Route {
 
     data object Trash : Route
 
+    /** «Облик записки (проба)» (ADR-047, 7.20 L0), in [AppServices.labs] builds only. */
+    data object LooksSpike : Route
+
     /** «Ещё → Медиатека» (ADR-041): every attachment shown in an entry. */
     data object Library : Route
 
@@ -775,6 +778,7 @@ private fun Screens(
             entry<Route.Tag> { TagPage(services, nav, it) }
             entry<Route.Reminders> { RemindersScreen(services, nav, it) }
             entry<Route.Trash> { TrashScreen(services, nav) }
+            entry<Route.LooksSpike> { LooksSpikeScreen(nav) }
             entry<Route.Library> { LibraryScreen(services, nav) }
             entry<Route.Storage> { StorageScreen(services, nav) }
             entry<Route.CalendarImport> { CalendarImportScreen(services, nav) }

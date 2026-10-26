@@ -1,0 +1,15 @@
+The Metropolitan Museum of Art, Open Access (https://www.metmuseum.org/about-the-met/policies-and-documents/open-access):
+images of public-domain works, free to copy, modify and distribute, even commercially, without permission or fee
+(CC0 1.0). Each object below is marked isPublicDomain in the Met's collection API.
+
+Used in the note-look spike (ADR-047, 7.20 L0), shared/app/src/commonMain/composeResources/files/looks/morris, each a
+square crop of the web image scaled to 480 x 480 (edges with the maker's name left out):
+- willow-bough.jpg   William Morris, "Willow Bough", wallpaper, 1887       https://www.metmuseum.org/art/collection/search/384022
+- marigold.jpg       William Morris, "Marigold", wallpaper, 1875           https://www.metmuseum.org/art/collection/search/384018
+- daisy.jpg          William Morris, "Daisy", wallpaper, 1864              https://www.metmuseum.org/art/collection/search/384017
+- fruit.jpg          William Morris, "Fruit (or Pomegranate)", ca. 1866    https://www.metmuseum.org/art/collection/search/365338
+
+Pictures for the taped-picture samples, shared/app/src/commonMain/composeResources/files/looks/pictures, each the web
+image with its frame cropped off, scaled to 480 px wide:
+- wheat-field.jpg    Vincent van Gogh, "Wheat Field with Cypresses", 1889                    https://www.metmuseum.org/art/collection/search/436535
+- great-wave.jpg     Katsushika Hokusai, "Under the Wave off Kanagawa" (The Great Wave), ca. 1830-32   https://www.metmuseum.org/art/collection/search/45434

@@ -1,0 +1,11 @@
+Openclipart (https://openclipart.org): every work is dedicated to the public domain under Creative Commons Zero
+(CC0 1.0, https://creativecommons.org/publicdomain/zero/1.0/). No attribution is required; the authors are named here
+as a courtesy. Used in the note-look spike (ADR-047, 7.20 L0), shared/app/src/commonMain/composeResources/files/looks/openclipart:
+
+- swallow-silhouette.svg      "Swallow Silhouette", GDJ             https://openclipart.org/detail/253051
+- perched-bird.svg            "Perched Bird Silhouette"             https://openclipart.org/detail/292888
+- cherry-blossoms.svg         "Cherry Blossoms", GDJ                https://openclipart.org/detail/254453
+- branch-flowers-leaves.svg   "Branch With Flowers And Leaves Silhouette"  https://openclipart.org/detail/281294
+- cute-bird-outline.svg       "Cute Bird Outline"                   https://openclipart.org/detail/305395
+- simple-compass-rose.svg     "Simple Compass Rose", SeriousTux     https://openclipart.org/detail/159247
+- vintage-compass-rose.svg    "Vintage compass rose", liftarn       https://openclipart.org/detail/319582

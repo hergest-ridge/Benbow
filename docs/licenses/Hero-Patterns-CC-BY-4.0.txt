@@ -1,0 +1,9 @@
+Hero Patterns by Steve Schoger, https://heropatterns.com
+Licensed under Creative Commons Attribution 4.0 International (CC BY 4.0), https://creativecommons.org/licenses/by/4.0/
+
+Used in the note-look spike (ADR-047, 7.20 L0), shared/app/src/commonMain/composeResources/files/looks/hero:
+autumn, bamboo, bubbles, endless-clouds, formal-invitation, four-point-stars, glamorous, graph-paper, kiwi, leaf,
+lines-in-motion, moroccan, overlapping-circles, polka-dots, rain, texture, topography, wallpaper, wiggle.
+
+Changes: the SVGs were taken as text from the hero-patterns npm package 2.1.0 (its wrapper code by Alec Lomas, MIT),
+with the fill set to black at full opacity; the app tints and fades them to each note's color when it draws them.

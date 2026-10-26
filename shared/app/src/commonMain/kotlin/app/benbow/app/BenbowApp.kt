@@ -626,9 +626,9 @@ private fun AppFrame(
         val wide = maxWidth >= WIDE
         val twoPane = maxWidth >= TWO_PANE
         Row(Modifier.fillMaxSize()) {
-            // Beside an open entry the list stays, and so does the rail, the viewer and drawing too: they take the rest of the
-            // window (owner: the rail going as the viewer opened jerked the feed and the post aside half a second first).
-            if (wide && (tabs || (twoPane && top != null))) {
+            // Beside an open entry the list stays, and so does the rail; the viewer and drawing take the whole window (owner:
+            // no rail in full screen).
+            if (wide && (tabs || (twoPane && top != null && !top.fullWindow))) {
                 NavigationRail {
                     Spacer(Modifier.height(8.dp))
                     TABS.forEach { tab ->

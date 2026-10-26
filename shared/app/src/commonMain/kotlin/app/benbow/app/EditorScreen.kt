@@ -36,6 +36,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -667,15 +668,41 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     val glow = LocalPaneGlow.current
     var pageAt by remember { mutableStateOf(Offset.Zero) }
     if (glow != null && detail != null) {
-        val lights = remember(detail.look) { NoteLooks.look(detail.look).lights }
+        val drawn = remember(detail.look) { NoteLooks.look(detail.look) }
+        val drift = drawn.motion == "drift"
         val dark = page.luminance() < 0.5f
-        DisposableEffect(glow, detail.id, lights, dark) {
-            glow.show(detail.id, lights, dark)
+        DisposableEffect(glow, detail.id, drawn.lights, drift, dark) {
+            glow.show(detail.id, drawn.lights, drift, dark)
             onDispose { glow.hide(detail.id) }
         }
     }
+    // The paper goes up with the words (owner: «эффект бумаги»), unless «Статичный фон»: reading, the whole post
+    // scrolls; writing, the words under the title and tags.
+    val readScroll = rememberScrollState()
+    val writeScroll = rememberScrollState()
+    var wordsTop by remember { mutableFloatStateOf(0f) }
+    var wordsHeight by remember { mutableFloatStateOf(0f) }
+    val words = if (vm.reading) readScroll else writeScroll
+    val still = LocalAppearance.current.staticBackdrop
+    val paperScroll = PaperScroll(
+        offset = { if (still) 0f else words.value.toFloat() },
+        length = { if (still) 0f else wordsTop + wordsHeight + words.maxValue },
+        top = { wordsTop },
+    )
+    val measureWords = Modifier.onGloballyPositioned {
+        wordsTop = it.positionInWindow().y - pageAt.y
+        wordsHeight = it.size.height.toFloat()
+    }
     val backdrop = detail?.let { entry ->
-        entryBackdrop(entry.id, entry.look, page, muted = false, moving = true, lightFrame = glow?.let { g -> { g.frameAt(pageAt) } })
+        entryBackdrop(
+            entry.id,
+            entry.look,
+            page,
+            muted = false,
+            moving = true,
+            lightFrame = glow?.let { g -> { g.frameAt(pageAt) } },
+            paperScroll = paperScroll,
+        )
     } ?: Modifier
     val looked = backdrop != Modifier
     val wide = LocalWide.current
@@ -760,6 +787,12 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                             tint = if (favorite) MaterialTheme.colorScheme.primary else LocalContentColor.current,
                         )
                     }
+                    // «Оформление записки» beside the star while writing (owner); reading, the note is only read.
+                    if (!vm.reading) {
+                        IconButton({ pickingBackground = true }, modifier = Modifier.hand()) {
+                            Icon(Icons.Palette, stringResource(Res.string.look_title))
+                        }
+                    }
                     if (vm.entryId != null) {
                         Box {
                             IconButton({ menu = true }, modifier = Modifier.hand()) { Icon(Icons.More, stringResource(Res.string.menu)) }
@@ -842,10 +875,6 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                 DropdownMenuItem(text = { Text(stringResource(Res.string.share)) }, onClick = {
                                     menu = false
                                     if (!share(vm.markdown())) vm.copied()
-                                }, modifier = Modifier.hand())
-                                DropdownMenuItem(text = { Text(stringResource(Res.string.look_title)) }, onClick = {
-                                    menu = false
-                                    pickingBackground = true
                                 }, modifier = Modifier.hand())
                                 val ruled = detail?.let { gentleRules.ruled(it.day, it.tagIds) }
                                 VeilMenuItems(
@@ -975,12 +1004,13 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                     onReact = vm::react,
                     ribbon = ribbon,
                     pictures = pictures,
+                    scroll = readScroll,
                     commentField = if (wide) {
                         { QuickNoteBar(services, onSend = vm::comment, hint = stringResource(Res.string.comment_hint), inline = true) }
                     } else {
                         null
                     },
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().then(measureWords),
                 )
                 return@Column
             }
@@ -1054,7 +1084,8 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                 .fillMaxSize()
                                 .onFocusChanged { editorFocused = it.hasFocus }
                                 .focusRequester(focus)
-                                .verticalScroll(rememberScrollState())
+                                .then(measureWords)
+                                .verticalScroll(writeScroll)
                                 .padding(horizontal = 20.dp, vertical = 12.dp)
                                 .fillMaxWidth(),
                         )

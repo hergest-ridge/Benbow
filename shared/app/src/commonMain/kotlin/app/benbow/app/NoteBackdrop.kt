@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
@@ -57,6 +58,7 @@ import app.benbow.ui.theme.BenbowPalette
 import kotlin.math.PI
 import kotlin.math.ceil
 import kotlin.math.cos
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
@@ -144,13 +146,18 @@ internal fun noteBackdrop(
     seed: Int,
     muted: Boolean = false,
     moving: Boolean = false,
-    /** Where its lights are laid out, read as it draws: the pane around it in a wide window (PaneGlow); null, itself. */
+    /**
+     * Where its light and motion are laid out, read as it draws: the pane around it in a wide window (PaneGlow, which
+     * also runs the motion, so both move as one); null, itself.
+     */
     lightFrame: (() -> LightFrame?)? = null,
+    /** Where its words are on the page and how they scroll (null: a card, laid out on itself). */
+    paperScroll: PaperScroll? = null,
 ): Modifier {
     if (look == null || look.isEmpty) return Modifier
     val dark = base.luminance() < 0.5f
     val scatter = look.scatter.mapNotNull { path -> key(path) { lookPicture("tabler/$path")?.let { rememberVectorPainter(it) } } }
-    val drift: State<Float>? = if (look.motion == "drift" && moving && !reducedMotion()) {
+    val drift: State<Float>? = if (look.motion == "drift" && moving && lightFrame == null && !reducedMotion()) {
         rememberInfiniteTransition().animateFloat(
             0f,
             1f,
@@ -164,33 +171,56 @@ internal fun noteBackdrop(
     val paperPhoto = look.paperPhoto?.let { lookPhoto("paper/$it.jpg") }
     val wallpaper = look.wallpaper?.let { lookPhoto("morris/$it.jpg") }
     val strength = if (muted) MUTED else 1f
-    return remember(look, base, ink, seed, strength, drift, scatter, tile, tilePainter, paperPhoto, wallpaper, lightFrame) {
+    return remember(look, base, ink, seed, strength, drift, scatter, tile, tilePainter, paperPhoto, wallpaper, lightFrame, paperScroll) {
         Modifier.drawWithCache {
             val layers = Layers(look, base, ink, dark, seed, size, scatter.size, 1.dp.toPx())
             val tiles = if (tile != null && tilePainter != null) tileBrush(tile, tilePainter, layers.tileTone) else null
             val papers = paperPhoto?.let { ShaderBrush(ImageShader(it, TileMode.Repeated, TileMode.Repeated)) }
-            val scrapbook = look.scrap?.let { Scrapbook(it, seed + look.scrapShuffle * SHUFFLE_STEP, size, base, ink, dark, 1.dp.toPx()) }
+            // The whole sheet the words are on, from where they start (under the page's bar): the scrapbook's top pieces
+            // at its top, clear of the bar's buttons, the bottom ones at its end.
+            val top = paperScroll?.top?.invoke() ?: 0f
+            val sheet = Size(size.width, max(size.height, paperScroll?.length?.invoke() ?: 0f) - top)
+            val scrapbook = look.scrap?.let { Scrapbook(it, seed + look.scrapShuffle * SHUFFLE_STEP, sheet, base, ink, dark, 1.dp.toPx()) }
             onDrawBehind {
+                // Paper, patterns and the scrapbook go up with the words (owner: «эффект бумаги»); light and motion
+                // stay, as light does.
+                val shift = paperScroll?.offset?.invoke() ?: 0f
                 drawRect(base)
-                wallpaper?.let { faded(it, dark, strength) }
+                wallpaper?.let { faded(it, dark, strength, shift) }
                 // A photographed paper's grain over the note's color: multiplied in light, softly in the dark.
                 papers?.let {
-                    drawRect(
-                        it,
-                        alpha = (if (dark) 0.55f else 0.9f) * strength,
-                        blendMode = if (dark) BlendMode.Softlight else BlendMode.Multiply,
-                    )
+                    translate(0f, -shift) {
+                        drawRect(
+                            it,
+                            topLeft = Offset(0f, shift),
+                            size = size,
+                            alpha = (if (dark) 0.55f else 0.9f) * strength,
+                            blendMode = if (dark) BlendMode.Softlight else BlendMode.Multiply,
+                        )
+                    }
                 }
-                if (look.motion == "drift") layers.drift(this, drift?.value ?: STILL, strength)
-                drawLights(look.lights, dark, ink, strength, lightFrame?.invoke())
-                layers.paper(this, strength)
-                layers.pattern(this, strength, scatter)
-                tiles?.let { drawRect(it, alpha = layers.calm(layers.tileTone, 0.55f, strength).alpha) }
-                scrapbook?.draw(this, strength)
+                val frame = lightFrame?.invoke()
+                if (look.motion == "drift") drawDrift(frame?.phase ?: drift?.value ?: STILL, dark, ink, strength, frame)
+                drawLights(look.lights, dark, ink, strength, frame)
+                layers.paper(this, strength, shift)
+                layers.pattern(this, strength, scatter, shift)
+                tiles?.let {
+                    translate(0f, -shift) {
+                        drawRect(it, topLeft = Offset(0f, shift), size = size, alpha = layers.calm(layers.tileTone, 0.55f, strength).alpha)
+                    }
+                }
+                scrapbook?.let { translate(0f, top - shift) { it.draw(this, strength) } }
             }
         }
     }
 }
+
+/**
+ * Where a note's words are on its page, read as it draws: [top] where they start (under the page's bar), [offset] how
+ * far they have scrolled (0 with «Статичный фон»), [length] how tall the whole sheet is from the page's top (where they
+ * start, their height and how far they can scroll; 0 when it stays).
+ */
+internal class PaperScroll(val offset: () -> Float, val length: () -> Float, val top: () -> Float = { 0f })
 
 /** The system asks for less motion (Android's «Remove animations», the browser's reduced motion): the drift stands still. */
 @Composable
@@ -217,7 +247,6 @@ private class Layers(
     /** A designer's pattern in the page's ink, a little stronger than [faint] (its lines are thin). */
     val tileTone: Color = lerp(base, ink, if (dark) 0.34f else 0.26f)
 
-    private val dots: List<Offset> = if (look.paper == "dots") grid(DOT_STEP * px) else emptyList()
     private val shapes: List<Shape> = when (look.pattern) {
         "circles" -> List(14) { Shape(random.point(), random.nextFloat() * 0.09f + 0.02f, 0f, random.nextInt(3)) }
 
@@ -244,18 +273,6 @@ private class Layers(
 
     private fun Random.point() = Offset(nextFloat() * box.width, nextFloat() * box.height)
 
-    private fun grid(step: Float): List<Offset> = buildList {
-        var y = step / 2
-        while (y < box.height) {
-            var x = step / 2
-            while (x < box.width) {
-                add(Offset(x, y))
-                x += step
-            }
-            y += step
-        }
-    }
-
     private fun wavePaths(): List<Path> = List(6) { i ->
         Path().apply {
             val y0 = box.height * (i + 0.5f) / 6f
@@ -269,16 +286,31 @@ private class Layers(
         }
     }
 
-    fun paper(scope: DrawScope, strength: Float) = with(scope) {
+    /** The paper's marks, gone up by [shift] with the words: only the rows in view are drawn. */
+    fun paper(scope: DrawScope, strength: Float, shift: Float = 0f) = with(scope) {
         val line = faint.copy(alpha = faint.alpha * strength)
         when (look.paper) {
-            "dots" -> dots.forEach { drawCircle(line, DOT_RADIUS * px, it) }
+            "dots" -> {
+                val step = DOT_STEP * px
+                var y = step / 2 - shift % step
+                while (y < size.height) {
+                    var x = step / 2
+                    while (x < size.width) {
+                        drawCircle(line, DOT_RADIUS * px, Offset(x, y))
+                        x += step
+                    }
+                    y += step
+                }
+            }
 
             "lines" -> {
-                var y = LINE_TOP * px
+                val step = LINE_STEP * px
+                // The first line a little way down the sheet, then one every step.
+                var y = LINE_TOP * px - shift
+                if (y < 0f) y += ceil(-y / step) * step
                 while (y < size.height) {
                     drawLine(line, Offset(0f, y), Offset(size.width, y), px)
-                    y += LINE_STEP * px
+                    y += step
                 }
                 // A notebook's margin, in a rose that keeps to the note's key.
                 val margin = (BenbowPalette.text("red", dark) ?: ink).copy(alpha = 0.28f * strength)
@@ -286,21 +318,22 @@ private class Layers(
             }
 
             "grid" -> {
-                var x = GRID_STEP * px
+                val step = GRID_STEP * px
+                var x = step
                 while (x < size.width) {
                     drawLine(line.copy(alpha = line.alpha * 0.7f), Offset(x, 0f), Offset(x, size.height), 1f)
-                    x += GRID_STEP * px
+                    x += step
                 }
-                var y = GRID_STEP * px
+                var y = step - shift % step
                 while (y < size.height) {
                     drawLine(line.copy(alpha = line.alpha * 0.7f), Offset(0f, y), Offset(size.width, y), 1f)
-                    y += GRID_STEP * px
+                    y += step
                 }
             }
 
             "parchment" -> {
                 val warm = BenbowPalette.text("brown", dark) ?: ink
-                blots.forEach { drawCircle(warm.copy(alpha = 0.05f * strength), it.size * unit, it.at) }
+                banded(shift) { blots.forEach { drawCircle(warm.copy(alpha = 0.05f * strength), it.size * unit, it.at) } }
                 drawRect(
                     Brush.radialGradient(
                         listOf(Color.Transparent, warm.copy(alpha = 0.22f * strength)),
@@ -312,7 +345,23 @@ private class Layers(
         }
     }
 
-    fun pattern(scope: DrawScope, strength: Float, painters: List<VectorPainter>) = with(scope) {
+    /**
+     * [draw] laid out over one screen of the note, gone up by [shift] and repeated below as it goes: random shapes for
+     * a sheet of any length, a screen's worth at a time.
+     */
+    private fun DrawScope.banded(shift: Float, draw: DrawScope.() -> Unit) {
+        val band = box.height
+        if (shift == 0f || band <= 0f) return draw()
+        val into = shift % band
+        translate(0f, -into, draw)
+        translate(0f, band - into, draw)
+    }
+
+    fun pattern(scope: DrawScope, strength: Float, painters: List<VectorPainter>, shift: Float = 0f) = with(scope) {
+        banded(shift) { shapes(strength, painters) }
+    }
+
+    private fun DrawScope.shapes(strength: Float, painters: List<VectorPainter>) {
         val tones = listOf(faint, lerp(base, ink, if (dark) 0.24f else 0.18f), tone("pink"))
         when (look.pattern) {
             "circles" -> shapes.forEach {
@@ -359,20 +408,6 @@ private class Layers(
         }
     }
 
-    /** A slow gradient drifting across the note: [phase] 0..1. */
-    fun drift(scope: DrawScope, phase: Float, strength: Float) = with(scope) {
-        val a = tone("purple").copy(alpha = 0.35f * strength)
-        val b = tone("teal").copy(alpha = 0.3f * strength)
-        val shift = size.width * (phase - 0.5f)
-        drawRect(
-            Brush.linearGradient(
-                listOf(a, Color.Transparent, b),
-                start = Offset(shift, 0f),
-                end = Offset(size.width + shift, size.height),
-            ),
-        )
-    }
-
     private fun tone(token: String) = BenbowPalette.text(token, dark) ?: ink
 
     /**
@@ -387,7 +422,7 @@ private class Layers(
 }
 
 /** Where lights are laid out: across [area] (the pane in a wide window), the note's own top left at [at] within it. */
-internal class LightFrame(val area: Size, val at: Offset)
+internal class LightFrame(val area: Size, val at: Offset, val phase: Float? = null)
 
 /**
  * Lights fall from the edge at their angle across the note, like a lens's glow (owner: each note its own light). With a
@@ -408,6 +443,27 @@ internal fun DrawScope.drawLights(lights: List<LookLight>, dark: Boolean, ink: C
             blendMode = if (dark) BlendMode.Screen else BlendMode.SrcOver,
         )
     }
+}
+
+/**
+ * A slow gradient drifting across the note, [phase] 0..1; with a [frame], across the pane around it, at the pane's phase
+ * (PaneGlow), so the note and its margins move as one.
+ */
+internal fun DrawScope.drawDrift(phase: Float, dark: Boolean, ink: Color, strength: Float, frame: LightFrame? = null) {
+    val area = frame?.area?.takeIf { it.width > 0f && it.height > 0f }
+    val box = area ?: size
+    val at = frame?.takeIf { area != null }?.at ?: Offset.Zero
+    val a = (BenbowPalette.text("purple", dark) ?: ink).copy(alpha = 0.35f * strength)
+    val b = (BenbowPalette.text("teal", dark) ?: ink).copy(alpha = 0.3f * strength)
+    val shift = box.width * (phase - 0.5f)
+    drawRect(
+        Brush.linearGradient(
+            listOf(a, Color.Transparent, b),
+            start = Offset(shift, 0f) - at,
+            end =
+            Offset(box.width + shift, box.height) - at,
+        ),
+    )
 }
 
 /** A shape of a pattern: where it is, how big (a share of the note's longer side), its turn and which of its kinds. */
@@ -502,10 +558,10 @@ private const val MUTED = 0.5f
 // The most a pattern's marks may stand out from the note's color (a share of the full black-to-white step).
 private const val CALM = 0.12f
 private val LIGHT_ALPHA = listOf(0.18f, 0.3f, 0.45f)
-private const val DRIFT_MILLIS = 9_000
+internal const val DRIFT_MILLIS = 9_000
 
 // Where the drift stands when it doesn't move (lists, reduced motion).
-private const val STILL = 0.35f
+internal const val STILL = 0.35f
 
 // A prime, so each «Перемешать» lays the scrapbook out far from the last.
 private const val SHUFFLE_STEP = 7919
@@ -526,15 +582,31 @@ private fun CacheDrawScope.tileBrush(vector: ImageVector, painter: VectorPainter
     return ShaderBrush(ImageShader(bitmap, TileMode.Repeated, TileMode.Repeated))
 }
 
-/** An old wallpaper print covering the note, faded so the words read: multiplied into a light color, dim in the dark. */
-private fun DrawScope.faded(image: ImageBitmap, dark: Boolean, strength: Float) {
-    val scale = max(size.width / image.width, size.height / image.height)
-    val shown = IntSize((image.width * scale).roundToInt(), (image.height * scale).roundToInt())
-    drawImage(
-        image,
-        dstOffset = IntOffset(((size.width - shown.width) / 2).roundToInt(), ((size.height - shown.height) / 2).roundToInt()),
-        dstSize = shown,
-        alpha = (if (dark) 0.2f else 0.32f) * strength,
-        blendMode = if (dark) BlendMode.SrcOver else BlendMode.Multiply,
-    )
+/**
+ * An old wallpaper print covering the note, faded so the words read: multiplied into a light color, dim in the dark.
+ * Gone up by [shift] with the words, it goes on below, every other print turned over so the joins meet.
+ */
+private fun DrawScope.faded(image: ImageBitmap, dark: Boolean, strength: Float, shift: Float = 0f) {
+    val zoom = max(size.width / image.width, size.height / image.height)
+    val shown = IntSize((image.width * zoom).roundToInt(), (image.height * zoom).roundToInt())
+    val left = ((size.width - shown.width) / 2).roundToInt()
+    val alpha = (if (dark) 0.2f else 0.32f) * strength
+    val blend = if (dark) BlendMode.SrcOver else BlendMode.Multiply
+    val height = shown.height.toFloat().coerceAtLeast(1f)
+    // Centred as it lies still; the print in view first, then the ones below it.
+    val origin = (size.height - height) / 2
+    var k = floor((shift - origin) / height).toInt()
+    var top = origin + k * height - shift
+    while (top < size.height) {
+        val at = IntOffset(left, top.roundToInt())
+        if ((k and 1) == 0) {
+            drawImage(image, dstOffset = at, dstSize = shown, alpha = alpha, blendMode = blend)
+        } else {
+            scale(1f, -1f, pivot = Offset(0f, top + height / 2)) {
+                drawImage(image, dstOffset = at, dstSize = shown, alpha = alpha, blendMode = blend)
+            }
+        }
+        top += height
+        k++
+    }
 }

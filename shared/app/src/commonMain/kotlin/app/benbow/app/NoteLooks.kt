@@ -26,9 +26,10 @@ internal fun entryBackdrop(
     muted: Boolean,
     moving: Boolean = false,
     lightFrame: (() -> LightFrame?)? = null,
+    paperScroll: PaperScroll? = null,
 ): Modifier {
     val drawn = remember(look) { NoteLooks.look(look) }
-    return noteBackdrop(drawn, base, MaterialTheme.colorScheme.onSurface, id.hashCode(), muted, moving, lightFrame)
+    return noteBackdrop(drawn, base, MaterialTheme.colorScheme.onSurface, id.hashCode(), muted, moving, lightFrame, paperScroll)
 }
 
 /** The layers «Оформление записки» sets, by their field's name (`look_<field>`, LookFields). */

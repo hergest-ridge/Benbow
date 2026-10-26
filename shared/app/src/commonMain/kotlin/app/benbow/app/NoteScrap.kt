@@ -149,7 +149,7 @@ internal class Scrapbook(
             drawRoundRect(
                 thread.copy(alpha = 0.55f * strength),
                 Offset(inset, inset),
-                Size(size.width - 2 * inset, size.height - 2 * inset),
+                Size(box.width - 2 * inset, box.height - 2 * inset),
                 CornerRadius(7 * px),
                 style = Stroke(1.5f * px, cap = StrokeCap.Round, pathEffect = dashes),
             )

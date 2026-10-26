@@ -219,3 +219,9 @@ The rail stays while the viewer or a drawing is open: it went at once, before th
 The feed's track, years and month fade in and out on hover instead of popping.
 A wide window's open note: «Свет записки на всю область» (on) lays the note's lights over the whole right side (PaneGlow: the pane draws them in its margins, the note the same under its words), «Рамка открытой записки» (on) draws a line down each side like the list's edge; the look covers the whole page, top bar included, as the note's color does.
 The thread sits on a slightly darker strip; in a wide window the comment field is in it, under the comments, not at the screen's foot.
+
+## ADR-049: The owner's check of 0.16.1 (2026-10-26)
+«Свет записки на всю область» covers the note's motion too (the drift, what the owner calls its dynamic light): the pane runs the drift's one animation and the note reads its phase through its LightFrame, so the note and its margins move as one.
+«Оформление записки» is an icon beside the star while writing, out of the menu; reading, there is none.
+The viewer and a drawing take the whole window again, without the rail (owner); the jump of the screens under it as the rail goes stays, for a fix of its own.
+A note's paper, patterns, prints and scrapbook go up with its words as they scroll, «эффект бумаги» (owner); «Статичный фон» (Ещё → Оформление, off) keeps them still. Light and motion always stay. The paper is drawn for the rows in view, patterns over one screen repeated as it goes, a print repeated below with every other one turned over; the scrapbook's sheet starts where the words start, under the page's bar, so nothing of it hides the bar's buttons, and ends where they end.

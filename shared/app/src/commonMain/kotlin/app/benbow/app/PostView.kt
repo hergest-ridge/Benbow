@@ -1,5 +1,6 @@
 package app.benbow.app
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -68,9 +69,10 @@ internal fun PostView(
     pictures: AtomViews,
     /** The comment field, in the thread (a wide window); null when it is the screen's bar at the foot. */
     commentField: (@Composable () -> Unit)? = null,
+    /** Its scroll, held by the screen: the note's paper goes up with it. */
+    scroll: ScrollState = rememberScrollState(),
     modifier: Modifier = Modifier,
 ) {
-    val scroll = rememberScrollState()
     Column(
         modifier.pageScrolling(
             scroll,

@@ -36,6 +36,8 @@ data class Appearance(
     val lightBeyondPage: Boolean = true,
     /** A wide window's open note: a thin line down each side, like the feed's edge (owner: on). */
     val pageBorders: Boolean = true,
+    /** A note's paper, patterns and scrapbook stay put as its words scroll (owner: off, they go with the words, like paper). */
+    val staticBackdrop: Boolean = false,
 ) {
     internal fun save(settings: Settings) {
         settings.put(MODE, mode.name)
@@ -50,6 +52,7 @@ data class Appearance(
         settings.put(MEDIA_HOVER, mediaHover.toString())
         settings.put(LIGHT_BEYOND_PAGE, lightBeyondPage.toString())
         settings.put(PAGE_BORDERS, pageBorders.toString())
+        settings.put(STATIC_BACKDROP, staticBackdrop.toString())
     }
 
     companion object {
@@ -65,6 +68,7 @@ data class Appearance(
         private const val MEDIA_HOVER = "media.hover"
         private const val LIGHT_BEYOND_PAGE = "post.lightBeyondPage"
         private const val PAGE_BORDERS = "post.borders"
+        private const val STATIC_BACKDROP = "post.staticBackdrop"
 
         internal fun load(settings: Settings) = Appearance(
             mode = ThemeMode.entries.firstOrNull { it.name == settings.get(MODE) } ?: ThemeMode.System,
@@ -79,6 +83,7 @@ data class Appearance(
             mediaHover = settings.get(MEDIA_HOVER) == "true",
             lightBeyondPage = settings.get(LIGHT_BEYOND_PAGE) != "false",
             pageBorders = settings.get(PAGE_BORDERS) != "false",
+            staticBackdrop = settings.get(STATIC_BACKDROP) == "true",
         )
     }
 }

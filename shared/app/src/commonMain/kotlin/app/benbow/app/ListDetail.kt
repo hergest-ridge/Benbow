@@ -1,5 +1,11 @@
 package app.benbow.app
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
@@ -142,10 +148,25 @@ private class ListDetailScene(
         val glow = remember { PaneGlow() }
         val ink = MaterialTheme.colorScheme.onSurface
         val line = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        // The note's motion runs here, for the margins and the note alike (it reads this phase through its frame).
+        val phase = if (appearance.lightBeyondPage && glow.drift && !reducedMotion()) {
+            rememberInfiniteTransition().animateFloat(
+                0f,
+                1f,
+                infiniteRepeatable(tween(DRIFT_MILLIS, easing = LinearEasing), RepeatMode.Reverse),
+            )
+        } else {
+            null
+        }
+        glow.phase = phase
         BoxWithConstraints(
             Modifier.weight(1f).fillMaxHeight()
                 .onGloballyPositioned { glow.bounds = it.boundsInWindow() }
-                .drawBehind { if (appearance.lightBeyondPage) drawLights(glow.lights, glow.dark, ink, 1f) },
+                .drawBehind {
+                    if (!appearance.lightBeyondPage) return@drawBehind
+                    if (glow.drift) drawDrift(phase?.value ?: STILL, glow.dark, ink, 1f)
+                    drawLights(glow.lights, glow.dark, ink, 1f)
+                },
             contentAlignment = Alignment.TopCenter,
         ) {
             val framed = appearance.pageBorders && detail != null && maxWidth > READABLE

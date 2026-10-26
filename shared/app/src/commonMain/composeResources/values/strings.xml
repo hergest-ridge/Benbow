@@ -735,6 +735,8 @@
     <string name="light_beyond_page_hint">В широком окне свет из оформления записки разливается на всё место справа от ленты, а не только на саму записку.</string>
     <string name="page_borders">Рамка открытой записки</string>
     <string name="page_borders_hint">В широком окне открытая запись обведена по бокам тонкой линией, как край ленты.</string>
+    <string name="static_backdrop">Статичный фон</string>
+    <string name="static_backdrop_hint">Бумага, узоры и скрапбук записки стоят на месте, а не едут вместе с текстом при прокрутке.</string>
     <string name="picture_links">Не вставлять ссылки вложений</string>
     <string name="picture_links_hint">Картинка или гифка по ссылке ложится вложением под ссылкой. Включено — только вложение, без строки с адресом.</string>
     <string name="ticked_below">Отмеченные пункты — вниз</string>

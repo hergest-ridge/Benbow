@@ -56,6 +56,8 @@ import app.benbow.app.resources.picture_links_hint
 import app.benbow.app.resources.post_media
 import app.benbow.app.resources.post_media_names
 import app.benbow.app.resources.post_section
+import app.benbow.app.resources.static_backdrop
+import app.benbow.app.resources.static_backdrop_hint
 import app.benbow.app.resources.tab_board
 import app.benbow.app.resources.theme_mode
 import app.benbow.app.resources.theme_modes
@@ -178,6 +180,18 @@ internal fun AppearanceScreen(services: AppServices, nav: Navigator) {
                     )
                 }
                 Switch(!current.pictureLinks, { services.setAppearance(current.copy(pictureLinks = !it)) }, modifier = Modifier.hand())
+            }
+            // A note's paper goes up with its words unless this is on (owner).
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f).padding(end = 16.dp)) {
+                    Text(stringResource(Res.string.static_backdrop), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        stringResource(Res.string.static_backdrop_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(current.staticBackdrop, { services.setAppearance(current.copy(staticBackdrop = it)) }, modifier = Modifier.hand())
             }
             // A wide window's open note (owner): its light over the whole right side, a line down each side.
             if (services.platform != "android" || LocalWide.current) {

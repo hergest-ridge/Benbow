@@ -3,9 +3,12 @@ package app.benbow.app
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runDesktopComposeUiTest
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.waitUntilAtLeastOneExists
 import app.benbow.client.setLook
 import kotlinx.coroutines.delay
@@ -78,6 +81,23 @@ class NoteLooksTest {
     }
 
     @Test
+    fun aLookInAWideWindowFillsTheRightSide() = runDesktopComposeUiTest(width = 1600, height = 900) {
+        val services = feedTestServices()
+        services.setAppearance(services.appearance.value.copy(mode = app.benbow.ui.theme.ThemeMode.Dark))
+        val today = services.today()
+        val sea = services.repo.createNote(today, "Утро у моря\nПроснулась раньше будильника. Чай на балконе, чайки.")
+        services.repo.setBackground(sea, "dusk")
+        services.repo.setLook(sea, mapOf("paper" to "grid", "motion" to "drift", "light" to "315 orange 3;135 teal 2", "scrap" to "stamp"))
+        setContent { BenbowApp(services) }
+        onAllNodesWithText("Лента")[0].click()
+        waitUntilAtLeastOneExists(hasText("Утро у моря", substring = true), 5_000)
+        onAllNodesWithText("Утро у моря", substring = true)[0].click()
+        waitUntilAtLeastOneExists(hasText("Проснулась раньше", substring = true), 5_000)
+        waitForIdle()
+        screenshot("looks-pane-wide")
+    }
+
+    @Test
     fun aScrapbookKeepsItsTonesAtEverySizeAndItsScrapsStaySmall() {
         val paper = Color(0xFFE9E3D4)
         val ink = Color(0xFF1D1B18)
@@ -102,7 +122,8 @@ class NoteLooksTest {
                 val today = services.today()
                 val sea = services.repo.createNote(
                     today,
-                    "Утро у моря\nПроснулась раньше будильника. Чай на балконе, чайки, ветер пахнет водорослями.",
+                    "Утро у моря\nПроснулась раньше будильника. Чай на балконе, чайки, ветер пахнет водорослями." +
+                        (1..30).joinToString("") { "\nСтрока $it: море, ветер, чайки." },
                 )
                 services.repo.setBackground(sea, "fog")
                 services.repo.setLook(sea, mapOf("paper" to "lines", "scrap" to "tape", "light" to "45 blue 2"))
@@ -120,6 +141,10 @@ class NoteLooksTest {
                 waitUntilAtLeastOneExists(hasText("Проснулась раньше", substring = true), 5_000)
                 waitForIdle()
                 screenshot("looks-l1-note-$theme")
+                // The paper goes up with the words (owner): the lines and the tape move, the light stays.
+                onAllNodes(hasScrollAction())[0].performTouchInput { swipeUp(startY = bottom * 0.8f, endY = bottom * 0.3f) }
+                waitForIdle()
+                screenshot("looks-l1-note-scrolled-$theme")
             }
         }
     }

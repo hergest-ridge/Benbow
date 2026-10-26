@@ -1123,10 +1123,14 @@ class AppSmokeTest {
         setContent { BenbowApp(services) }
         waitUntilExactlyOneExists(hasText("Список покупок"), 5_000)
         onNodeWithText("Список покупок").click()
+        // A note opens to be read; the look is chosen while writing.
         waitUntilExactlyOneExists(hasContentDescription("Меню"), 5_000)
         onNodeWithContentDescription("Меню").click()
-        // «Оформление записки» (ADR-047): the color, then layers of the look, each saved as it is picked.
-        onNodeWithText("Оформление записки").click()
+        onNodeWithText("Редактировать").click()
+        // «Оформление записки» (ADR-047, ADR-049: an icon beside the star while writing): the color, then layers of the
+        // look, each saved as it is picked.
+        waitUntilExactlyOneExists(hasContentDescription("Оформление записки"), 5_000)
+        onNodeWithContentDescription("Оформление записки").click()
         onNodeWithContentDescription("Мятный").click()
         waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.entry(id).first()?.background == "mint" } }
         onNodeWithContentDescription("Линейка").click()

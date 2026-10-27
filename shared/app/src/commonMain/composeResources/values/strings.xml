@@ -841,6 +841,12 @@
     <string name="trackers_day_start">начала</string>
     <string name="trackers_day_end">окончания (сон)</string>
     <string name="trackers_timer_one">Один таймер за раз</string>
+    <string name="trackers_timer_start">Запустить таймер</string>
+    <string name="trackers_timer_stop">Остановить таймер</string>
+    <string name="trackers_week">Неделя</string>
+    <string name="trackers_span_add">Добавить отрезок</string>
+    <string name="trackers_span_remove">Убрать отрезок</string>
+    <string name="trackers_spans_empty">Времени за этот день пока нет.</string>
     <string name="trash_trackers">Трекеры</string>
     <string name="trash_tracker_item">Трекер «%1$s»</string>
     <string name="board_as_list">Списком</string>

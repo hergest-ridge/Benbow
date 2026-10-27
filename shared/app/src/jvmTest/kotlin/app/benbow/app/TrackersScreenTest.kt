@@ -105,6 +105,33 @@ class TrackersScreenTest {
     }
 
     @Test
+    fun aTimerRunsFromItsHeaderAndADaysSpansAreTypedByHand() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val services = labsServices("android")
+        val today = services.today()
+        val id = services.trackers.createTracker(TrackerPresets.time.tracker, TrackerPresets.time.columns)
+        fun work() = runBlocking { services.trackers.columns(id).first() }.first()
+        fun spans() = runBlocking { services.trackers.spans(listOf(work().id), today, today).first() }
+        setContent { TrackerSheetScreen(services, Navigator(mutableStateListOf(Route.TrackerSheet(id))), id, back = true) }
+        val timer = "timer:" + work().id
+        waitUntilAtLeastOneExists(hasTestTag(timer), 5_000)
+        onNodeWithTag(timer).click()
+        waitUntil(timeoutMillis = 5_000) { work().running != null }
+        waitUntilAtLeastOneExists(hasContentDescription("Остановить таймер"), 5_000)
+        screenshot("trackers-10-timer")
+        onNodeWithTag(timer).click()
+        waitUntil(timeoutMillis = 5_000) { work().running == null && spans().size == 1 }
+
+        onNodeWithTag(TrackerCells.id(work().id, today)).performSemanticsAction(SemanticsActions.OnLongClick)
+        waitUntilAtLeastOneExists(hasText("Добавить отрезок"), 5_000)
+        onNodeWithText("Добавить отрезок").click()
+        waitUntilAtLeastOneExists(hasTestTag("span-start:1"), 5_000)
+        screenshot("trackers-11-spans")
+        onNodeWithText("Сохранить").click()
+        waitUntil(timeoutMillis = 5_000) { spans().size == 2 }
+        assertTrue(spans().any { it[SpanField.START] == "${today}T09:00:00" && it[SpanField.END] == "${today}T10:00:00" })
+    }
+
+    @Test
     fun aWideWindowHasATabWithTheListBesideTheSheetAndTheTrashGivesItBack() = runDesktopComposeUiTest(width = 1280, height = 800) {
         val services = labsServices("desktop")
         services.trackers.createTracker(TrackerPresets.habits.tracker, TrackerPresets.habits.columns)

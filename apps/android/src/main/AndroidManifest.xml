@@ -133,6 +133,11 @@
             </intent-filter>
         </receiver>
 
+        <!-- «Стоп» in a tracker's timer notification (ADR-050). -->
+        <receiver
+            android:name=".TimerStopReceiver"
+            android:exported="false" />
+
         <receiver
             android:name=".ReminderReceiver"
             android:exported="false">

@@ -181,6 +181,21 @@ class TrackerClientTest {
     }
 
     @Test
+    fun runningTimersAreListedUntilStopped() = runTest {
+        val repo = TrackerRepository(calendarDb(), now)
+        val tracker = repo.createTracker(mapOf(TrackerField.NAME to "Время"), listOf(column("Работа", "time"), column("Чтение", "time")))
+        val (work, reading) = repo.columns(tracker).first().map { it.id }
+        assertEquals(emptyList(), repo.runningColumns().first())
+        repo.startTimer(reading, "${day}T09:00:00")
+        assertEquals(listOf(reading), repo.runningColumns().first().map { it.id })
+        repo.updateColumn(reading, mapOf(ColumnField.ARCHIVED to "true"))
+        assertEquals(emptyList(), repo.runningColumns().first(), "an archived column's timer waits unseen")
+        repo.startTimer(work, "${day}T10:00:00")
+        repo.stopTimer(work, "${day}T11:00:00")
+        assertEquals(emptyList(), repo.runningColumns().first())
+    }
+
+    @Test
     fun startingAnotherTimerOfAOneAtATimeTrackerStopsTheFirst() = runTest {
         val repo = TrackerRepository(calendarDb(), now)
         val tracker = repo.createTracker(

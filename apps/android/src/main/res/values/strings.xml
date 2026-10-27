@@ -9,5 +9,7 @@
     <string name="shortcut_note">Заметка</string>
     <string name="shortcut_entry">Запись</string>
     <string name="tile_note">Заметка</string>
+    <string name="timers_channel">Таймеры трекеров</string>
+    <string name="timer_stop">Стоп</string>
     <string name="widget_description">Сегодня, вопрос дня и запись в одно касание</string>
 </resources>

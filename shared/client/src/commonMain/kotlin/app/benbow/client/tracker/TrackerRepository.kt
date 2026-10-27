@@ -52,6 +52,13 @@ class TrackerRepository(
             rows.map(::record).filter { !it.deleted }.sortedWith(TrackerRecord.byRank).map(::TrackerColumn)
         }
 
+    /** Columns whose timer runs, on any tracker; outside the trash and the archive (a notification, a widget). */
+    fun runningColumns(): Flow<List<TrackerColumn>> = q.trackerRecords(TrackerKind.COLUMN).asFlow().mapToList(context).map { rows ->
+        rows.map(::record).filter { !it.deleted && it[ColumnField.ARCHIVED] != "true" && it[ColumnField.RUNNING] != null }
+            .sortedWith(TrackerRecord.byRank)
+            .map(::TrackerColumn)
+    }
+
     /** The cells of [columns] on [fromDay]..[toDay]. */
     fun cells(columns: Collection<String>, fromDay: String, toDay: String): Flow<List<TrackerRecord>> =
         q.trackerCellsBetween(columns = columns, fromDay = fromDay, toDay = toDay).asFlow().mapToList(context).map { rows ->

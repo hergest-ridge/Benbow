@@ -184,39 +184,46 @@ internal sealed interface SpanEdit {
 }
 
 /**
- * A tap on the hour from [start] on the sleep sheet: an empty hour joins the span that ends or starts beside it (both:
- * they become one), else becomes a span of its own; a painted hour is taken out of its span (its first or last hour
- * shortens it, one in the middle splits it in two, a span of that hour alone goes to the trash). Dragging along a row
- * and minutes come with B6.
+ * A tap on the hour from [start] on the sleep sheet: a painted hour is taken out of its span ([eraseSpans]), an empty one
+ * joins the spans beside it or becomes one of its own ([paintSpans]).
  */
 internal fun hourTap(spans: List<TrackerRecord>, start: LocalDateTime): List<SpanEdit> {
     val from = seconds(start)
-    val to = from + HOUR
-    val live = bounds(spans)
-    live.firstOrNull { (_, b) -> b.first < to && b.second > from }?.let { (span, b) ->
+    return if (covered(spans, start)) eraseSpans(spans, from, from + HOUR) else paintSpans(spans, from, from + HOUR)
+}
+
+/**
+ * The edits that make [from]..[to] (seconds, floating) painted: spans it overlaps or touches become one, the first of
+ * them stretched over all and the others to the trash; none: a span of its own. Nothing when it is painted already.
+ */
+internal fun paintSpans(spans: List<TrackerRecord>, from: Long, to: Long): List<SpanEdit> {
+    val touching = bounds(spans).filter { (_, b) -> b.first <= to && b.second >= from }.sortedBy { (_, b) -> b.first }
+    val first = touching.firstOrNull() ?: return listOf(SpanEdit.Add(timeText(from), timeText(to)))
+    val start = minOf(from, touching.minOf { (_, b) -> b.first })
+    val end = maxOf(to, touching.maxOf { (_, b) -> b.second })
+    val (span, b) = first
+    val fields = buildMap {
+        if (start != b.first) put(SpanField.START, timeText(start))
+        if (end != b.second) put(SpanField.END, timeText(end))
+    }
+    return listOfNotNull(fields.takeIf { it.isNotEmpty() }?.let { SpanEdit.Change(span.id, it) }) +
+        touching.drop(1).map { (other, _) -> SpanEdit.Trash(other.id) }
+}
+
+/**
+ * The edits that take [from]..[to] (seconds) out of the spans: one inside it goes to the trash, one over an end is
+ * shortened, one around it is split in two.
+ */
+internal fun eraseSpans(spans: List<TrackerRecord>, from: Long, to: Long): List<SpanEdit> =
+    bounds(spans).filter { (_, b) -> b.first < to && b.second > from }.flatMap { (span, b) ->
         val (s, e) = b
-        return when {
+        when {
             s >= from && e <= to -> listOf(SpanEdit.Trash(span.id))
             s >= from -> listOf(SpanEdit.Change(span.id, mapOf(SpanField.START to timeText(to))))
             e <= to -> listOf(SpanEdit.Change(span.id, mapOf(SpanField.END to timeText(from))))
             else -> listOf(SpanEdit.Change(span.id, mapOf(SpanField.END to timeText(from))), SpanEdit.Add(timeText(to), timeText(e)))
         }
     }
-    val before = live.firstOrNull { (_, b) -> b.second == from }
-    val after = live.firstOrNull { (_, b) -> b.first == to }
-    return when {
-        before != null && after != null -> listOf(
-            SpanEdit.Change(before.first.id, mapOf(SpanField.END to timeText(after.second.second))),
-            SpanEdit.Trash(after.first.id),
-        )
-
-        before != null -> listOf(SpanEdit.Change(before.first.id, mapOf(SpanField.END to timeText(to))))
-
-        after != null -> listOf(SpanEdit.Change(after.first.id, mapOf(SpanField.START to timeText(from))))
-
-        else -> listOf(SpanEdit.Add(timeText(from), timeText(to)))
-    }
-}
 
 /** Spans outside the trash that have an end, with their start and end in seconds. */
 private fun bounds(spans: List<TrackerRecord>): List<Pair<TrackerRecord, Pair<Long, Long>>> =
@@ -229,7 +236,7 @@ private fun bounds(spans: List<TrackerRecord>): List<Pair<TrackerRecord, Pair<Lo
 private fun parseTime(text: String): LocalDateTime? = runCatching { LocalDateTime.parse(text) }.getOrNull()
 
 /** Floating local times counted as if in UTC: no zone, no daylight saving (ADR-028). */
-private fun seconds(time: LocalDateTime): Long = time.toInstant(TimeZone.UTC).epochSeconds
+internal fun seconds(time: LocalDateTime): Long = time.toInstant(TimeZone.UTC).epochSeconds
 
 /** "YYYY-MM-DDTHH:MM:SS", as spans keep their times. */
 internal fun timeText(seconds: Long): String {
@@ -238,4 +245,4 @@ internal fun timeText(seconds: Long): String {
     return "${time.date}T${two(time.hour)}:${two(time.minute)}:${two(time.second)}"
 }
 
-private const val HOUR = 3600L
+internal const val HOUR = 3600L

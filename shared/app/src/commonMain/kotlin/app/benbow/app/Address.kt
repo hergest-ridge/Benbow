@@ -14,7 +14,7 @@ internal fun Route.path(): String = when (this) {
 
     Route.Board -> "notes"
 
-    Route.Trackers -> "trackers"
+    Route.Trackers, is Route.TrackerSheet -> "trackers"
 
     Route.Search -> "search"
 

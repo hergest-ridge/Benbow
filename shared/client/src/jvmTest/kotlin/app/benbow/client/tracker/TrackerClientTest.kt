@@ -10,6 +10,7 @@ import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.core.calendar.CalendarProtocol
 import app.benbow.core.tracker.CellField
 import app.benbow.core.tracker.ColumnField
+import app.benbow.core.tracker.SpanField
 import app.benbow.core.tracker.TrackerCells
 import app.benbow.core.tracker.TrackerExport
 import app.benbow.core.tracker.TrackerField
@@ -88,6 +89,29 @@ class TrackerClientTest {
         assertEquals(1, repo.spans(listOf(sleep), "2026-10-26", "2026-10-26").first().size, "over midnight: on both days")
         assertEquals(1, repo.spans(listOf(sleep), day, day).first().size)
         assertEquals(0, repo.spans(listOf(sleep), "2026-10-28", "2026-10-30").first().size)
+    }
+
+    @Test
+    fun writesTogetherLandAllOrNone() = runTest {
+        val repo = TrackerRepository(calendarDb(), now)
+        val tracker = repo.createTracker(mapOf(TrackerField.NAME to "Сон"), listOf(column("Сон", "time")))
+        val sleep = repo.columns(tracker).first().single().id
+        val night = repo.addSpan(sleep, "2026-10-26T23:00:00", "2026-10-27T07:00:00")
+        val awake = runCatching {
+            repo.together {
+                updateSpan(night, mapOf(SpanField.END to "2026-10-27T03:00:00"))
+                error("the app went away between the two")
+            }
+        }
+        assertTrue(awake.isFailure)
+        assertEquals(listOf("2026-10-27T07:00:00"), repo.spans(listOf(sleep), day, day).first().map { it[SpanField.END] })
+
+        repo.together {
+            updateSpan(night, mapOf(SpanField.END to "2026-10-27T03:00:00"))
+            addSpan(sleep, "2026-10-27T04:00:00", "2026-10-27T07:00:00")
+        }
+        val ends = repo.spans(listOf(sleep), day, day).first().map { it[SpanField.END] }
+        assertEquals(setOf("2026-10-27T03:00:00", "2026-10-27T07:00:00"), ends.toSet())
     }
 
     @Test

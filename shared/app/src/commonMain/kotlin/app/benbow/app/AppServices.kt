@@ -175,6 +175,9 @@ sealed interface AppMessage {
 
     /** Something left the text in one tap or key (ADR-038: a card, a picture, a link); "Вернуть" undoes it there. */
     data class TextRemoved(val removal: Removal) : AppMessage
+
+    /** A tracker went to the trash with its columns and marks (ADR-050); "Вернуть" brings it all back. */
+    data class TrackerTrashed(val id: String, val name: String) : AppMessage
 }
 
 /**
@@ -201,7 +204,7 @@ class AppServices(
     audio: AudioEngine = SilentAudio(),
     /** Updating this app from its server (ADR-042, U2); Android only. */
     updater: AppUpdater? = null,
-    /** Unfinished work shows: dev and bench builds and dev runs, never the owner's app (now: the trackers' spike, ADR-050). */
+    /** Unfinished work shows: dev and bench builds and dev runs, never the owner's app (now: trackers, ADR-050). */
     val labs: Boolean = false,
 ) {
     val scope = CoroutineScope(SupervisorJob() + IoDispatcher)

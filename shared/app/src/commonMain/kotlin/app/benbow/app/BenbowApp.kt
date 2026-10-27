@@ -120,6 +120,7 @@ import app.benbow.app.resources.tab_trackers
 import app.benbow.app.resources.tag_trashed
 import app.benbow.app.resources.tags_merged
 import app.benbow.app.resources.tags_trashed
+import app.benbow.app.resources.tracker_trashed
 import app.benbow.app.resources.transcript_removed
 import app.benbow.app.resources.veil_undo
 import app.benbow.app.resources.veiled_curtain
@@ -184,8 +185,11 @@ internal sealed interface Route {
     /** Notes beside the journal, Keep-like (ADR-040). */
     data object Board : Route
 
-    /** Trackers (ADR-050): a tab on the web and the desktop, a page from «Ещё» on a phone; for now the B0 spike. */
+    /** Trackers (ADR-050): a tab on the web and the desktop, a page from «Ещё» on a phone. */
     data object Trackers : Route
+
+    /** A tracker's sheet as a page of its own, where the window is too narrow for it beside the list. */
+    data class TrackerSheet(val trackerId: String) : Route
 
     data class Comments(val entryId: String) : Route
 
@@ -504,6 +508,15 @@ private fun AppRoot(services: AppServices) {
                     if (result == SnackbarResult.ActionPerformed) services.removalBack.emit(message.removal)
                 }
 
+                is AppMessage.TrackerTrashed -> {
+                    val result = snackbar.showSnackbar(
+                        getString(Res.string.tracker_trashed, message.name),
+                        getString(Res.string.veil_undo),
+                        duration = SnackbarDuration.Long,
+                    )
+                    if (result == SnackbarResult.ActionPerformed) services.trackers.restore(message.id)
+                }
+
                 is AppMessage.MovedToBoard -> {
                     val text = message.ids.singleOrNull()?.let { getString(Res.string.moved_to_board) }
                         ?: getString(Res.string.moved_to_board_many, message.ids.size)
@@ -788,6 +801,9 @@ private fun Screens(
             // A sheet wants the window, as the board does; a tab only where trackers have one (ADR-050).
             entry<Route.Trackers>(metadata = if (services.trackersTab) TAB + FULL_WINDOW else emptyMap()) {
                 TrackersScreen(services, nav, tab = services.trackersTab)
+            }
+            entry<Route.TrackerSheet>(metadata = if (services.trackersTab) FULL_WINDOW else emptyMap()) {
+                TrackerSheetScreen(services, nav, it.trackerId, back = true)
             }
             entry<Route.More>(metadata = TAB) { MoreScreen(services, listNav) }
             entry<Route.Comments> { CommentsScreen(services, nav, it) }

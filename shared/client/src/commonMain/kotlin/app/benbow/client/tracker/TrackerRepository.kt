@@ -150,6 +150,9 @@ class TrackerRepository(
 
     fun moveSpanToTrash(id: String) = put(TrackerKind.SPAN, id, mapOf(SpanField.DELETED to "true"))
 
+    /** Writes that belong together (a night split in two) in one transaction: all of them land, or none. */
+    fun together(writes: TrackerRepository.() -> Unit) = db.transaction { writes() }
+
     /** Every tracker outside the trash as files readable without the app, for the archive (`trackers/` in the ZIP). */
     fun exportFiles(): List<TrackerExport.File> = db.trackerExportFiles()
 

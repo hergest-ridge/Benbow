@@ -161,15 +161,17 @@ class FeedNavigationTest {
     @Test
     fun theScrubberGoesWhereItIsDraggedOrClickedAndCanBeTurnedOff() = runDesktopComposeUiTest(width = 412, height = 860) {
         val today = LocalDate.parse(services.today())
-        repeat(POSTS) { i -> services.repo.createNote(today.minus(i / 2, DateTimeUnit.DAY).toString(), "Запись ${POSTS - 1 - i}") }
+        // A post a day for 600 days: the feed always reaches back past a new year, whatever today is.
+        repeat(POSTS) { i -> services.repo.createNote(today.minus(i, DateTimeUnit.DAY).toString(), "Запись ${POSTS - 1 - i}") }
         setContent { BenbowApp(services) }
         onNodeWithText("Лента").click()
         waitUntil(timeoutMillis = 5_000) { shownPosts().contains(POSTS - 1) }
 
-        // Hovering the track tells the month there and marks the years along it.
+        // Hovering the track tells the month there and marks the years along it (an earlier year's mark too close to
+        // this year's at the top, in the first days of January, gives way to the one before it).
         onRoot().performMouseInput { moveTo(Offset(406f, 600f)) }
         waitUntil(timeoutMillis = 3_000) {
-            onAllNodes(hasText(today.minus(1, DateTimeUnit.YEAR).year.toString())).fetchSemanticsNodes().isNotEmpty()
+            (1..2).any { back -> onAllNodes(hasText("${today.year - back}")).fetchSemanticsNodes().isNotEmpty() }
         }
         screenshot("83-feed-scrubber-hover")
 

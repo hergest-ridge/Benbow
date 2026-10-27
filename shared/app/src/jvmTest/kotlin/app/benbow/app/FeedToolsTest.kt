@@ -38,6 +38,13 @@ class FeedToolsTest {
         val today = LocalDate.parse(services.today())
         val oldest = today.minus((POSTS - 1) / 2, DateTimeUnit.DAY)
         val oldestMonth = oldest.toString().substring(5, 7).toInt() - 1
+        // The posts of the oldest month are the lowest numbers, however many days of it the feed reaches (a month
+        // cut short in the past, or a whole January when today is late October).
+        val oldestMonthPosts = (0 until POSTS).count { i ->
+            today.minus(i / 2, DateTimeUnit.DAY).let { it.year == oldest.year && it.month == oldest.month }
+        }
+        // A month's title has its year only when it isn't this year's.
+        val oldestTitle = MONTH_NAMES[oldestMonth] + if (oldest.year != today.year) " ${oldest.year}" else ""
         setContent { BenbowApp(services) }
         onNodeWithText("Лента").click()
         waitUntil(timeoutMillis = 5_000) { shownPosts().contains(POSTS - 1) }
@@ -48,10 +55,10 @@ class FeedToolsTest {
         onNode(hasText("Год назад") and hasClickAction()).assertIsNotEnabled() // the journal is younger than a year
         screenshot("84-feed-jump")
         onNode(hasText(MONTH_NAMES[oldestMonth].take(3)) and hasClickAction() and isEnabled()).click()
-        waitUntil(timeoutMillis = 5_000) { shownPosts().any { it < 30 } }
+        waitUntil(timeoutMillis = 5_000) { shownPosts().any { it < oldestMonthPosts } }
 
         // A month's title opens it too; «Сегодня» goes back.
-        onAllNodes(hasText("${MONTH_NAMES[oldestMonth]} ${oldest.year}", substring = true) and hasClickAction()).onFirst().click()
+        onAllNodes(hasText(oldestTitle, substring = true) and hasClickAction()).onFirst().click()
         waitUntilAtLeastOneExists(hasText("Сегодня") and hasClickAction(), 5_000)
         onNode(hasText("Сегодня") and hasClickAction()).click()
         waitUntil(timeoutMillis = 5_000) { shownPosts().contains(POSTS - 1) }

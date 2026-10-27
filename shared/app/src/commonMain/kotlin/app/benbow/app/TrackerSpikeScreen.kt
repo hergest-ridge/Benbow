@@ -46,7 +46,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -60,6 +59,7 @@ import app.benbow.app.resources.previous
 import app.benbow.app.resources.today
 import app.benbow.app.resources.trackers_figures_hide
 import app.benbow.app.resources.trackers_figures_show
+import app.benbow.app.resources.trackers_look
 import app.benbow.app.resources.trackers_spike
 import app.benbow.app.resources.trackers_total
 import app.benbow.app.resources.weekdays_short
@@ -89,6 +89,7 @@ internal fun TrackersScreen(services: AppServices, nav: Navigator, tab: Boolean)
     var sheets by remember { mutableStateOf(spikeSheets(today)) }
     var chosen by rememberSaveable { mutableIntStateOf(0) }
     var hidden by remember { mutableStateOf(emptySet<String>()) }
+    var looking by remember { mutableStateOf(false) }
     val sheet = sheets[chosen]
     val figures = sheet.tracker.id !in hidden
     val pager = rememberPagerState(initialPage = pageOf(today)) { MONTH_PAGES }
@@ -97,6 +98,7 @@ internal fun TrackersScreen(services: AppServices, nav: Navigator, tab: Boolean)
     val change: ((SpikeSheet) -> SpikeSheet) -> Unit = { edit ->
         sheets = sheets.map { if (it.tracker.id == sheet.tracker.id) edit(it) else it }
     }
+    val page = MaterialTheme.colorScheme.surfaceVariant
     Scaffold(topBar = {
         TopAppBar(
             navigationIcon = { if (!tab) BackButton(nav::back) },
@@ -109,6 +111,7 @@ internal fun TrackersScreen(services: AppServices, nav: Navigator, tab: Boolean)
                         TodayIcon(today.day, stringResource(Res.string.today))
                     }
                 }
+                IconButton({ looking = true }, modifier = Modifier.hand()) { Icon(Icons.Palette, stringResource(Res.string.trackers_look)) }
                 IconButton({ hidden = if (figures) hidden + sheet.tracker.id else hidden - sheet.tracker.id }, modifier = Modifier.hand()) {
                     Icon(
                         if (figures) Icons.Eye else Icons.EyeOff,
@@ -145,22 +148,40 @@ internal fun TrackersScreen(services: AppServices, nav: Navigator, tab: Boolean)
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
             )
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-                // The tracker's paper (a Keep swatch, as a note's background), as wide as a page of a notebook.
+                // The tracker's own look, as a note's (its color and layers, ADR-047), drawn muted so the marks stay the
+                // main thing; as wide as a page of a notebook.
+                val base = swatch(sheet.tracker.color) ?: page
                 Column(
                     Modifier.widthIn(max = if (sheet.tracker.columns.any { it.type == SpikeType.Time }) WIDE_SHEET else SHEET)
                         .fillMaxSize()
                         .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 8.dp)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(swatch(sheet.tracker.paper) ?: MaterialTheme.colorScheme.surfaceVariant),
+                        .background(base)
+                        .then(entryBackdrop(sheet.tracker.id, sheet.tracker.look, base, muted = true, moving = true)),
                 ) {
                     SheetHeader(sheet.tracker, figures)
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    HorizontalPager(pager, beyondViewportPageCount = 1, modifier = Modifier.weight(1f).fillMaxWidth()) { page ->
-                        MonthSheet(sheet, monthOfPage(page), today, figures, change)
+                    HorizontalPager(pager, beyondViewportPageCount = 1, modifier = Modifier.weight(1f).fillMaxWidth()) { at ->
+                        MonthSheet(sheet, monthOfPage(at), today, figures, change)
                     }
                 }
             }
         }
+    }
+    if (looking) {
+        val tracker = sheet.tracker
+        LookSheet(
+            id = tracker.id,
+            words = listOfNotNull(iconEmoji(tracker.icon), tracker.name).joinToString(" ") + "\n" +
+                tracker.columns.joinToString(" · ") { it.name },
+            color = tracker.color,
+            look = tracker.look,
+            page = page,
+            onColor = { color -> change { it.copy(tracker = it.tracker.copy(color = color)) } },
+            onLook = { layers -> change { it.copy(tracker = it.tracker.withLook(layers)) } },
+            onDismiss = { looking = false },
+            title = Res.string.trackers_look,
+        )
     }
 }
 
@@ -244,7 +265,7 @@ private fun DayRow(
     Column {
         Row(
             Modifier.fillMaxWidth().height(ROW_HEIGHT)
-                .then(if (day == today) Modifier.background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f)) else Modifier)
+                .then(if (day == today) Modifier.background(MaterialTheme.colorScheme.onSurface.copy(alpha = TODAY_ALPHA)) else Modifier)
                 .padding(horizontal = SIDE)
                 .alpha(if (future) FUTURE_ALPHA else 1f),
             verticalAlignment = Alignment.CenterVertically,
@@ -325,42 +346,41 @@ private fun Cell(
     val colors = MaterialTheme.colorScheme
     val dark = colors.background.luminance() < 0.5f
     val ink = BenbowPalette.text(column.color, dark) ?: colors.primary
-    val onInk = if (dark) Color.Black else Color.White
     val shape = RoundedCornerShape(CELL_CORNER)
     val fill = column.fill(value)
     Box(
         modifier.fillMaxHeight()
             .padding(CELL_GAP)
             .clip(shape)
-            .border(1.dp, colors.outline.copy(alpha = 0.18f), shape)
+            .border(1.dp, colors.outline.copy(alpha = FRAME_ALPHA), shape)
             .then(if (enabled) Modifier.hand().combinedClickable(onClick = onTap, onLongClick = onClear) else Modifier)
             .testTag(cellId(column, day)),
         contentAlignment = Alignment.Center,
     ) {
         when (column.type) {
-            SpikeType.Check -> if (value != null) Box(Modifier.fillMaxSize().background(ink.copy(alpha = 0.85f)))
+            SpikeType.Check -> if (value != null) Box(Modifier.fillMaxSize().background(ink.copy(alpha = MARK_ALPHA)))
 
             SpikeType.Count -> {
                 if (fill > 0f) {
                     Box(
                         Modifier.align(Alignment.BottomCenter).fillMaxWidth().fillMaxHeight(fill)
-                            .background(ink.copy(alpha = if (fill >= 1f) 0.85f else 0.3f)),
+                            .background(ink.copy(alpha = if (fill >= 1f) MARK_ALPHA else PART_ALPHA)),
                     )
                 }
                 if (figures && value != null) {
-                    Text(value, color = if (fill >= 1f) onInk else colors.onSurface, style = MaterialTheme.typography.labelMedium)
+                    Text(value, color = colors.onSurface, style = MaterialTheme.typography.labelMedium)
                 }
             }
 
             SpikeType.Scale -> {
-                if (value != null) Box(Modifier.fillMaxSize().background(ink.copy(alpha = 0.15f + 0.7f * fill)))
+                if (value != null) Box(Modifier.fillMaxSize().background(ink.copy(alpha = PART_ALPHA + (MARK_ALPHA - PART_ALPHA) * fill)))
                 if (figures && value != null) {
-                    Text(value, color = if (fill > 0.6f) onInk else colors.onSurface, style = MaterialTheme.typography.labelMedium)
+                    Text(value, color = colors.onSurface, style = MaterialTheme.typography.labelMedium)
                 }
             }
 
             SpikeType.Choice -> column.options.find { it.id == value }?.let { option ->
-                Box(Modifier.fillMaxSize().background((BenbowPalette.text(option.color, dark) ?: ink).copy(alpha = 0.3f)))
+                Box(Modifier.fillMaxSize().background((BenbowPalette.text(option.color, dark) ?: ink).copy(alpha = PART_ALPHA)))
                 Text(option.emoji, fontSize = 16.sp)
             }
 
@@ -397,7 +417,7 @@ private fun HourCell(
                 Modifier.fillMaxWidth().fillMaxHeight(0.56f)
                     .padding(start = if (start) 1.dp else 0.dp, end = if (end) 1.dp else 0.dp)
                     .background(
-                        ink.copy(alpha = 0.8f),
+                        ink.copy(alpha = MARK_ALPHA),
                         RoundedCornerShape(
                             topStart = round(start),
                             topEnd = round(end),
@@ -407,7 +427,7 @@ private fun HourCell(
                     ),
             )
         } else {
-            Box(Modifier.size(3.dp).background(colors.outline.copy(alpha = 0.35f), CircleShape))
+            Box(Modifier.size(3.dp).background(colors.outline.copy(alpha = DOT_ALPHA), CircleShape))
         }
     }
 }
@@ -417,7 +437,7 @@ private fun HourCell(
 private fun TotalsRow(sheet: SpikeSheet, days: List<LocalDate>) {
     Row(
         Modifier.fillMaxWidth().height(TOTALS_HEIGHT)
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = FOOT_ALPHA))
             .padding(horizontal = SIDE),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -457,6 +477,18 @@ private val WIDE_SHEET = 960.dp
 /** An hour of the sleep sheet is half as wide as a column. */
 private const val HOUR_WEIGHT = 0.5f
 private const val FUTURE_ALPHA = 0.35f
+
+/**
+ * How strongly marks lie on the paper (owner: calmer than the first spike's 0.85): a full mark, a part of one (a count
+ * on its way to the goal, the lowest rating, a choice's tint), a cell's frame, an empty hour's dot, today's line and
+ * the foot of the month.
+ */
+private const val MARK_ALPHA = 0.5f
+private const val PART_ALPHA = 0.18f
+private const val FRAME_ALPHA = 0.1f
+private const val DOT_ALPHA = 0.25f
+private const val TODAY_ALPHA = 0.05f
+private const val FOOT_ALPHA = 0.04f
 
 /** Rows above today when a month opens on it. */
 private const val TODAY_ABOVE = 4

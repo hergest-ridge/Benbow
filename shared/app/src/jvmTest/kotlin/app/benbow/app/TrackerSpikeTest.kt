@@ -50,6 +50,10 @@ class TrackerSpikeTest {
         onAllNodesWithText("Итого").assertCountEquals(0)
         assertEquals(emptyList(), texts(cellId(water, today)), "the count shows as its fill alone")
         screenshot("trackers-02-quiet")
+
+        onNodeWithContentDescription("Оформление трекера").click()
+        waitUntilAtLeastOneExists(hasText("Оформление трекера"), 5_000) // the note's look sheet, for this tracker
+        screenshot("trackers-05-look")
     }
 
     @Test

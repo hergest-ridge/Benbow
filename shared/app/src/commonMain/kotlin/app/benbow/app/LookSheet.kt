@@ -81,13 +81,15 @@ internal fun LookSheet(
     onColor: (String?) -> Unit,
     onLook: (Map<String, String?>) -> Unit,
     onDismiss: () -> Unit,
+    /** «Оформление трекера» for a tracker's sheet (ADR-050), which takes the same look. */
+    title: StringResource = Res.string.look_title,
 ) {
     val base = swatch(color) ?: page
     // Opened whole: the note on top and every row under it (half open, only its color would show).
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
             Text(
-                stringResource(Res.string.look_title),
+                stringResource(title),
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(horizontal = 20.dp),
             )

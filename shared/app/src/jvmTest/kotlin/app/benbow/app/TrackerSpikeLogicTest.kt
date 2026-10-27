@@ -78,6 +78,15 @@ class TrackerSpikeLogicTest {
     }
 
     @Test
+    fun aTrackerTakesANotesLookLayerByLayer() {
+        val tracker = SPIKE_HABITS.withLook(mapOf("pattern" to "waves", "light" to "45 blue 2"))
+        assertEquals(mapOf("paper" to "dots", "pattern" to "waves", "light" to "45 blue 2"), tracker.look)
+        val plain = tracker.withLook(mapOf("paper" to null))
+        assertEquals(mapOf("pattern" to "waves", "light" to "45 blue 2"), plain.look, "null takes a layer off")
+        assertEquals("sand", tracker.color, "its color stays")
+    }
+
+    @Test
     fun figuresReadAsRussianWritesThem() {
         assertEquals("3,4", decimal(3.36))
         assertEquals("4", decimal(4.0))

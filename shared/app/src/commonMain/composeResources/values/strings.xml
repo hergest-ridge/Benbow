@@ -771,6 +771,7 @@
     <string name="trackers_figures_hide">Скрыть цифры</string>
     <string name="trackers_figures_show">Показать цифры</string>
     <string name="trackers_total">Итого</string>
+    <string name="trackers_look">Оформление трекера</string>
     <string name="board_as_list">Списком</string>
     <string name="board_as_grid">Сеткой</string>
     <string name="board_files">Вложений: %1$d</string>

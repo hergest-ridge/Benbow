@@ -35,8 +35,22 @@ internal data class SpikeColumn(
     val hours: List<Int> = emptyList(),
 )
 
-/** A tracker: its name and icon, its paper (a Keep swatch, as a note's background) and its columns. */
-internal data class SpikeTracker(val id: String, val name: String, val icon: String, val paper: String, val columns: List<SpikeColumn>)
+/**
+ * A tracker: its name, icon and columns, and its own look as a note has (ADR-047): [color] a Keep swatch (null: the
+ * page's own) and [look] its layers' tokens by field (paper, pattern, light, motion, scrap).
+ */
+internal data class SpikeTracker(
+    val id: String,
+    val name: String,
+    val icon: String,
+    val columns: List<SpikeColumn>,
+    val color: String? = null,
+    val look: Map<String, String> = emptyMap(),
+) {
+    /** «Оформление трекера»: layers set at once, null taking one off, as a note's look is set. */
+    fun withLook(layers: Map<String, String?>): SpikeTracker =
+        copy(look = layers.entries.fold(look) { all, (layer, token) -> if (token == null) all - layer else all + (layer to token) })
+}
 
 /** The emoji of an `emoji:` icon token; other schemes (a hand-drawn set) come later and give none here. */
 internal fun iconEmoji(icon: String): String? = if (icon.startsWith(EMOJI)) icon.removePrefix(EMOJI).ifEmpty { null } else null
@@ -167,7 +181,6 @@ internal val SPIKE_HABITS = SpikeTracker(
     "habits",
     "Привычки",
     "emoji:🌱",
-    "sand",
     listOf(
         SpikeColumn("stretch", "Зарядка", "Зарядка", "emoji:🧘", "green", SpikeType.Check),
         SpikeColumn("walk", "Прогулка", "Прогулка", "emoji:🚶", "teal", SpikeType.Check),
@@ -177,6 +190,8 @@ internal val SPIKE_HABITS = SpikeTracker(
         SpikeColumn("energy", "Энергия", "Энергия", "emoji:🔋", "yellow", SpikeType.Scale),
         SpikeColumn("day", "Какой был день", "День", "emoji:🌈", "gray", SpikeType.Choice, options = DAY_OPTIONS),
     ),
+    color = "sand",
+    look = mapOf("paper" to "dots"),
 )
 
 /** The sleep sheet: days × the night's hours, from nine in the evening to ten in the morning, and how it went. */
@@ -184,7 +199,6 @@ internal val SPIKE_SLEEP = SpikeTracker(
     "sleep",
     "Сон",
     "emoji:😴",
-    "fog",
     listOf(
         SpikeColumn(
             "sleep",
@@ -197,6 +211,7 @@ internal val SPIKE_SLEEP = SpikeTracker(
         ),
         SpikeColumn("rest", "Как спалось", "Как", "emoji:💤", "green", SpikeType.Choice, options = REST_OPTIONS),
     ),
+    color = "fog",
 )
 
 /** The spike's trackers, marked at random (the same every run) from three months back to [today]; today is left blank. */

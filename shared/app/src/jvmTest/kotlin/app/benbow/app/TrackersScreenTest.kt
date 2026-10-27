@@ -228,6 +228,39 @@ class TrackersScreenTest {
     }
 
     @Test
+    fun aWidgetReadsTodayAndTicksChecksAndCounts() = runBlocking {
+        val services = labsServices("android")
+        val id = services.trackers.createTracker(TrackerPresets.habits.tracker, TrackerPresets.habits.columns)
+        val ids = services.trackers.columns(id).first().map { it.id }
+        val (stretch, water) = ids[0] to ids[3]
+        services.tickToday(stretch)
+        services.tickToday(water)
+        services.tickToday(water)
+        val today = services.trackersToday().single()
+        assertEquals("🌱 Привычки", today.title)
+        assertEquals(listOf(true, false, false, true), today.marks.take(4).map { it.marked })
+        assertEquals("💧 2", today.marks[3].text)
+        assertEquals(listOf(true, true, true, true, true, false), today.marks.map { it.tickable }, "checks and counts tick")
+        services.tickToday(stretch)
+        assertEquals(false, services.trackersToday().single().marks[0].marked, "a second tap takes it off")
+        assertEquals(emptyList(), feedTestServices().trackersToday(), "the owner's app shows none")
+    }
+
+    @Test
+    fun tenColumnsFitTheMonthAndTheYear() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val services = labsServices("android")
+        val columns = (1..10).map { mapOf("name" to "Колонка $it", "type" to "check", "icon" to "emoji:🌱", "color" to "green") }
+        val id = services.trackers.createTracker(mapOf("name" to "Десять"), columns)
+        val first = runBlocking { services.trackers.columns(id).first() }.first().id
+        setContent { TrackerSheetScreen(services, Navigator(mutableStateListOf(Route.TrackerSheet(id))), id, back = true) }
+        waitUntilAtLeastOneExists(hasText("Итого"), 5_000)
+        screenshot("trackers-16-ten")
+        onNodeWithText("Год").click()
+        waitUntilAtLeastOneExists(hasTestTag("year:$first"), 5_000)
+        screenshot("trackers-17-ten-year")
+    }
+
+    @Test
     fun theOwnersAppShowsNoTrackers() = runDesktopComposeUiTest(width = 1280, height = 800) {
         setContent { BenbowApp(feedTestServices()) }
         waitForIdle()

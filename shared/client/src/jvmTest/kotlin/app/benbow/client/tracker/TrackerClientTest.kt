@@ -57,6 +57,8 @@ class TrackerClientTest {
         repo.addColumn(habits, column("Чтение", "check"))
         assertEquals(listOf("Привычки", "Сон"), repo.trackers().first().map { it[TrackerField.NAME] })
         assertEquals(listOf("Зарядка", "Вода", "Чтение"), repo.columns(habits).first().map { it.name })
+        assertEquals("Вода", repo.column(repo.columns(habits).first()[1].id)?.name)
+        assertNull(repo.column("none"))
 
         repo.moveToTrash(sleep)
         assertEquals(listOf("Привычки"), repo.trackers().first().map { it[TrackerField.NAME] })

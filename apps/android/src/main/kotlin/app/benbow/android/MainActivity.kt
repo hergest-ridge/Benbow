@@ -51,6 +51,8 @@ class MainActivity : ComponentActivity() {
 
             AndroidAppUpdater.ACTION_UPDATE -> services.launch.value = AppLaunch.Update
 
+            ACTION_OPEN_TRACKERS -> services.launch.value = AppLaunch.Trackers
+
             // "Открыть с помощью" on an .ics file: its import preview (7.3d).
             Intent.ACTION_VIEW -> intent.data?.let { uri ->
                 services.importCalendarFile(displayName(uri) ?: "calendar.ics") {
@@ -64,5 +66,6 @@ class MainActivity : ComponentActivity() {
         super.onStop()
         SyncWorker.scheduleSoon(this)
         BenbowWidget.refresh(this, services)
+        if (services.labs) TrackerWidget.refresh(this, services)
     }
 }

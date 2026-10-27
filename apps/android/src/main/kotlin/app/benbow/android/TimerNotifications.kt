@@ -12,6 +12,7 @@ import android.content.pm.PackageManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.glance.appwidget.updateAll
 import app.benbow.app.AppServices
 import app.benbow.app.RunningTimer
 import app.benbow.app.runningTimers
@@ -34,7 +35,12 @@ internal object TimerNotifications {
     fun start(context: Context, services: AppServices) {
         val channel = NotificationChannel(CHANNEL, context.getString(R.string.timers_channel), NotificationManager.IMPORTANCE_LOW)
         context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-        services.scope.launch { services.runningTimers().collect { show(context, it) } }
+        services.scope.launch {
+            services.runningTimers().collect {
+                show(context, it)
+                TrackerWidget().updateAll(context) // its «Стоп» comes and goes with the timer
+            }
+        }
     }
 
     fun cancel(context: Context, column: String) = NotificationManagerCompat.from(context).cancel(TAG + column, ID)
@@ -54,7 +60,7 @@ internal object TimerNotifications {
         val open = PendingIntent.getActivity(
             context,
             0,
-            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            BenbowWidget.appIntent(context, ACTION_OPEN_TRACKERS),
             PendingIntent.FLAG_IMMUTABLE,
         )
         val stop = PendingIntent.getBroadcast(

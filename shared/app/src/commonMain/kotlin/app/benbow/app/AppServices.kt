@@ -80,7 +80,7 @@ fun interface SpeechModelFactory {
 data class Attached(val entryId: String, val attachmentId: String, val kind: String)
 
 /** Where the app should go when something outside opens it (a launcher shortcut, the widget, an .ics file). */
-enum class AppLaunch { NewEntry, AnswerPrompt, CalendarImport, Update }
+enum class AppLaunch { NewEntry, AnswerPrompt, CalendarImport, Update, Trackers }
 
 /** The archive export, which runs in the app scope so leaving the screen doesn't stop it. */
 sealed interface ExportState {

@@ -52,6 +52,10 @@ class TrackerRepository(
             rows.map(::record).filter { !it.deleted }.sortedWith(TrackerRecord.byRank).map(::TrackerColumn)
         }
 
+    /** One column as it is now; null when there is none or it is in the trash. */
+    fun column(id: String): TrackerColumn? =
+        q.selectTrackerRecord(TrackerKind.COLUMN, id).executeAsOneOrNull()?.let(::record)?.takeIf { !it.deleted }?.let(::TrackerColumn)
+
     /** Columns whose timer runs, on any tracker; outside the trash and the archive (a notification, a widget). */
     fun runningColumns(): Flow<List<TrackerColumn>> = q.trackerRecords(TrackerKind.COLUMN).asFlow().mapToList(context).map { rows ->
         rows.map(::record).filter { !it.deleted && it[ColumnField.ARCHIVED] != "true" && it[ColumnField.RUNNING] != null }

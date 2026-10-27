@@ -121,6 +121,20 @@
                 android:resource="@xml/benbow_widget" />
         </receiver>
 
+        <!-- Trackers' widget (ADR-050): off here, turned on at start in builds where trackers show. -->
+        <receiver
+            android:name=".TrackerWidgetReceiver"
+            android:enabled="false"
+            android:exported="true"
+            android:label="@string/tracker_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/tracker_widget" />
+        </receiver>
+
         <receiver
             android:name=".InstallReceiver"
             android:exported="false" />

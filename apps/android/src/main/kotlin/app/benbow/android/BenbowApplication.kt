@@ -62,7 +62,13 @@ class BenbowApplication : Application() {
             audio = audio,
             updater = AndroidAppUpdater(this),
             labs = packageName != "app.benbow", // the dev and bench builds show unfinished work, the owner's app never
-        ).also { if (it.labs) TimerNotifications.start(this, it) } // trackers' running timers (ADR-050)
+        ).also {
+            // Trackers (ADR-050) where they show: their widget can be picked, their running timers are notifications.
+            if (it.labs) {
+                TrackerWidget.enable(this, true)
+                TimerNotifications.start(this, it)
+            }
+        }
     }
 
     private fun durableDriver(schema: SqlSchema<QueryResult.Value<Unit>>, name: String): AndroidSqliteDriver {

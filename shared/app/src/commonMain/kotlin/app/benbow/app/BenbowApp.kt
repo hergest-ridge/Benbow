@@ -372,6 +372,14 @@ private fun AppRoot(services: AppServices) {
 
                 // The update's notification (ADR-042): «Ещё», where «Обновить» is the first line.
                 AppLaunch.Update -> nav.selectTab(Route.More)
+
+                // A tracker's timer notification or widget (ADR-050): the trackers, a tab or a page from «Ещё».
+                AppLaunch.Trackers -> if (services.trackersTab) {
+                    nav.selectTab(Route.Trackers)
+                } else if (services.trackersShown) {
+                    nav.selectTab(Route.More)
+                    nav.open(Route.Trackers)
+                }
             }
         }
     }

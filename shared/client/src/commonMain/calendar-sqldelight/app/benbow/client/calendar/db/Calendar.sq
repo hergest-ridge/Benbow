@@ -25,6 +25,24 @@ CREATE TABLE event (
 
 CREATE INDEX event_by_days ON event(start_day, end_day);
 
+-- Trackers' records (ADR-050): trackers, their columns, a day's cells and spans of time, LWW per field like events.
+CREATE TABLE tracker_record (
+    kind TEXT NOT NULL,
+    id TEXT NOT NULL,
+    fields TEXT NOT NULL DEFAULT '{}',
+    field_clocks TEXT NOT NULL DEFAULT '{}',
+    -- Derived from fields on every write: a column's tracker, a cell's or a span's column; a cell's day, a span's first
+    -- and last day.
+    owner TEXT,
+    day TEXT,
+    end_day TEXT,
+    deleted INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (kind, id)
+);
+
+CREATE INDEX tracker_record_by_owner ON tracker_record(kind, owner, day);
+
 CREATE TABLE outbox (
     seq INTEGER PRIMARY KEY AUTOINCREMENT,
     op_id TEXT NOT NULL UNIQUE,
@@ -87,12 +105,49 @@ SELECT calendar, COUNT(*) AS events FROM event WHERE deleted = 0 GROUP BY calend
 allCalendars:
 SELECT * FROM calendar;
 
+selectTrackerRecord:
+SELECT * FROM tracker_record WHERE kind = ? AND id = ?;
+
+upsertTrackerRecord:
+INSERT INTO tracker_record(kind, id, fields, field_clocks, owner, day, end_day, deleted, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(kind, id) DO UPDATE SET
+    fields = excluded.fields,
+    field_clocks = excluded.field_clocks,
+    owner = excluded.owner,
+    day = excluded.day,
+    end_day = excluded.end_day,
+    deleted = excluded.deleted,
+    updated_at = excluded.updated_at;
+
+-- Every record of a kind, the trash included.
+trackerRecords:
+SELECT * FROM tracker_record WHERE kind = ?;
+
+allTrackerRecords:
+SELECT * FROM tracker_record;
+
+-- Records of a kind under :owners (columns of trackers, cells and spans of columns), the trash included.
+trackerRecordsOf:
+SELECT * FROM tracker_record WHERE kind = :kind AND owner IN :owners;
+
+-- The cells of :columns on :fromDay..:toDay.
+trackerCellsBetween:
+SELECT * FROM tracker_record WHERE kind = 'cell' AND owner IN :columns AND day >= :fromDay AND day <= :toDay;
+
+-- The spans of :columns on any day of :fromDay..:toDay (one over midnight is on both of its days), outside the trash.
+trackerSpansBetween:
+SELECT * FROM tracker_record
+WHERE kind = 'span' AND owner IN :columns AND deleted = 0 AND day <= :toDay AND end_day >= :fromDay
+ORDER BY day, id;
+
 eventCount:
 SELECT COUNT(*) FROM event;
 
 clearRecords {
     DELETE FROM event;
     DELETE FROM calendar;
+    DELETE FROM tracker_record;
 }
 
 enqueue:
@@ -100,6 +155,10 @@ INSERT INTO outbox(op_id, kind, record_id, op, created_at) VALUES (?, ?, ?, ?, ?
 
 pendingOps:
 SELECT * FROM outbox WHERE state = 'pending' ORDER BY seq LIMIT ?;
+
+-- Pending ops of the kinds the server takes (ADR-050: an older server takes no trackers' ops, so they wait).
+pendingOpsOf:
+SELECT * FROM outbox WHERE state = 'pending' AND kind IN :kinds ORDER BY seq LIMIT :limit;
 
 acknowledge:
 DELETE FROM outbox WHERE op_id = ? AND state = 'pending';
@@ -112,6 +171,9 @@ SELECT COUNT(*) FROM outbox WHERE kind = ? AND record_id = ? AND state = 'pendin
 
 pendingCount:
 SELECT COUNT(*) FROM outbox WHERE state = 'pending';
+
+pendingCountOf:
+SELECT COUNT(*) FROM outbox WHERE state = 'pending' AND kind IN ?;
 
 rejectedCount:
 SELECT COUNT(*) FROM outbox WHERE state = 'rejected';

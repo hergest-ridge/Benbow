@@ -1,16 +1,16 @@
 package app.benbow.client.calendar
 
-import app.benbow.client.ClientJson
 import app.benbow.client.PairingException
 import app.benbow.client.RejectedOp
 import app.benbow.client.calendar.db.CalendarDb
+import app.benbow.client.tracker.trackerExportFiles
 import app.benbow.core.calendar.CalendarExport
 import app.benbow.core.calendar.CalendarField
 import app.benbow.core.calendar.CalendarKind
-import app.benbow.core.calendar.CalendarOp
 import app.benbow.core.calendar.EventField
 import app.benbow.core.calendar.MY_CALENDAR
 import app.benbow.core.calendar.MY_CALENDAR_NAME
+import app.benbow.core.tracker.TrackerExport
 import app.benbow.core.uuidV7
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
@@ -137,6 +137,9 @@ class CalendarRepository(
         now,
     )
 
+    /** The trackers, which live in this file too (ADR-050), as files for the archive: `trackers/` in the ZIP. */
+    fun trackerFiles(): List<TrackerExport.File> = db.trackerExportFiles()
+
     /** One calendar as an `.ics` file named [name]: what it shows, in floating local times. */
     fun exportIcs(calendar: CalendarItem, name: String, now: Long): String = CalendarExport.ics(
         name,
@@ -219,13 +222,7 @@ class CalendarRepository(
         }
     }
 
-    private fun putInTransaction(kind: String, id: String, fields: Map<String, String?>) {
-        val hlc = CalendarClock(db, now).next()
-        val (values, clocks) = db.recordState(kind, id)
-        db.storeRecord(kind, id, values + fields, clocks + fields.mapValues { hlc }, now())
-        val op = CalendarOp(uuidV7(now()), kind, id, fields, hlc)
-        q.enqueue(op.opId, kind, id, ClientJson.encodeToString(CalendarOp.serializer(), op), now())
-    }
+    private fun putInTransaction(kind: String, id: String, fields: Map<String, String?>) = db.putRecord(kind, id, fields, now)
 
     fun pendingCount(): Flow<Long> = q.pendingCount().asFlow().mapToOne(context)
 

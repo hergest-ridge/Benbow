@@ -16,7 +16,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 sealed interface CalendarSyncResult {
-    data class Done(val pushed: Int, val pulled: Int, val rejected: Int) : CalendarSyncResult
+    /** [held]: ops of kinds the server doesn't take yet (trackers' ops to a server before ADR-050), waiting here. */
+    data class Done(val pushed: Int, val pulled: Int, val rejected: Int, val held: Int = 0) : CalendarSyncResult
 
     /** The server has no calendar store (older than 0.6.0, or its file didn't open): events wait on this device. */
     data object Unsupported : CalendarSyncResult
@@ -45,11 +46,13 @@ class CalendarSync(private val db: CalendarDb, private val now: () -> Long) {
             if (info.storeId != connection.storeId) return CalendarSyncResult.WrongServer
             val server = info.calendar ?: return CalendarSyncResult.Unsupported
             if (server.protocol != CalendarProtocol.VERSION) return CalendarSyncResult.Incompatible(server.protocol)
+            // A server before trackers names no kinds: it takes calendars and events (ADR-050).
+            val kinds = server.kinds.ifEmpty { CalendarKind.all.toList() }.toSet()
             val store = get(STORE)
             if (store != null && store != connection.storeId) return CalendarSyncResult.WrongServer
             val epoch = get(EPOCH)?.toLongOrNull()
             val restored = epoch != null && (epoch != server.epoch || server.cursor < cursor())
-            val healed = if (restored) repushAll(api) else 0
+            val healed = if (restored) repushAll(api, kinds) else 0
             if (store == null || restored) {
                 db.transaction {
                     q.putValue(STORE, connection.storeId)
@@ -57,8 +60,9 @@ class CalendarSync(private val db: CalendarDb, private val now: () -> Long) {
                     q.putValue(CURSOR, "0") // change numbers of a restored store were reused: pull everything
                 }
             }
-            val (pushed, rejected) = pushAll(api)
-            CalendarSyncResult.Done(healed + pushed, pullAll(api), rejected)
+            val (pushed, rejected) = pushAll(api, kinds)
+            val held = q.pendingCount().executeAsOne() - q.pendingCountOf(kinds).executeAsOne()
+            CalendarSyncResult.Done(healed + pushed, pullAll(api), rejected, held.toInt())
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -68,11 +72,12 @@ class CalendarSync(private val db: CalendarDb, private val now: () -> Long) {
 
     /**
      * The calendar store went back in time: every value this device holds goes back with its original clock, one op
-     * per record and clock. Last-writer-wins keeps whatever the server has that is newer.
+     * per record and clock, of the [kinds] the server takes. Last-writer-wins keeps whatever the server has that is newer.
      */
-    private suspend fun repushAll(api: BenbowApi): Int {
+    private suspend fun repushAll(api: BenbowApi, kinds: Set<String>): Int {
         val records = q.allEvents().executeAsList().map { Triple(CalendarKind.EVENT, it.id, it.fields to it.field_clocks) } +
-            q.allCalendars().executeAsList().map { Triple(CalendarKind.CALENDAR, it.id, it.fields to it.field_clocks) }
+            q.allCalendars().executeAsList().map { Triple(CalendarKind.CALENDAR, it.id, it.fields to it.field_clocks) } +
+            q.allTrackerRecords().executeAsList().filter { it.kind in kinds }.map { Triple(it.kind, it.id, it.fields to it.field_clocks) }
         val ops = records.flatMap { (kind, id, state) ->
             val values = ClientJson.decodeFromString(valuesSerializer, state.first)
             ClientJson.decodeFromString(clocksSerializer, state.second).entries.groupBy({ it.value }, { it.key }).map { (hlc, fields) ->
@@ -93,11 +98,12 @@ class CalendarSync(private val db: CalendarDb, private val now: () -> Long) {
         return ops.size
     }
 
-    private suspend fun pushAll(api: BenbowApi): Pair<Int, Int> {
+    /** Pushes the pending ops of the [kinds] the server takes; the others stay queued for a server that takes them. */
+    private suspend fun pushAll(api: BenbowApi, kinds: Set<String>): Pair<Int, Int> {
         var pushed = 0
         var rejected = 0
         while (true) {
-            val batch = q.pendingOps(BATCH.toLong()).executeAsList()
+            val batch = q.pendingOpsOf(kinds, BATCH.toLong()).executeAsList()
             if (batch.isEmpty()) return pushed to rejected
             val results = api.calendarPush(batch.map { ClientJson.decodeFromString(CalendarOp.serializer(), it.op) }).results
             db.transaction {

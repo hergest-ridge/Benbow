@@ -36,6 +36,7 @@ import app.benbow.client.db.BenbowDb
 import app.benbow.client.moveToBoard
 import app.benbow.client.moveToJournal
 import app.benbow.client.removeAttachments
+import app.benbow.client.tracker.TrackerRepository
 import app.benbow.client.upcoming
 import app.benbow.core.api.PurgeDone
 import app.benbow.core.api.PurgePreview
@@ -255,6 +256,9 @@ class AppServices(
     private val engine = SyncEngine(db, apis, now)
     private val calendarDb = CalendarDb(calendarDriver)
     val calendar = CalendarRepository(calendarDb, now)
+
+    /** Trackers (ADR-050): their records live in the calendar's file and sync on its channel. */
+    val trackers = TrackerRepository(calendarDb, now)
     private val calendarSync = CalendarSync(calendarDb, now)
 
     /** Reading and importing a calendar file (7.3d). */

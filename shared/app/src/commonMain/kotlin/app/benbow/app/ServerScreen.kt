@@ -66,6 +66,7 @@ import app.benbow.app.resources.server_port
 import app.benbow.app.resources.server_rejected_hint
 import app.benbow.app.resources.server_rejected_title
 import app.benbow.app.resources.server_sync_now
+import app.benbow.app.resources.server_trackers_held
 import app.benbow.app.resources.server_version
 import app.benbow.app.resources.server_web_code
 import app.benbow.app.resources.server_web_intro
@@ -318,6 +319,11 @@ private fun Paired(services: AppServices, vm: ServerViewModel, connection: Conne
             stringResource(Res.string.server_calendar_problem, last.reason),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+
+        // Trackers' changes wait on this device for a server that keeps them (ADR-050).
+        is CalendarSyncResult.Done -> if (last.held > 0) {
+            Text(stringResource(Res.string.server_trackers_held, last.held), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
 
         else -> {}
     }

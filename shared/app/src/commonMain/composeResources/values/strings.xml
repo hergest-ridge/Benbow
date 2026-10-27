@@ -579,6 +579,7 @@
     <string name="server_incompatible">Версии приложения и сервера несовместимы. Обновите то, что старее; изменения ждут на устройстве.</string>
     <string name="server_calendar_unsupported">Сервер пока без календаря: события ждут на устройстве, пока его не обновят.</string>
     <string name="server_calendar_problem">Календарь не синхронизировался: %1$s</string>
+    <string name="server_trackers_held">Сервер пока без трекеров: их изменения (%1$d) ждут на устройстве, пока его не обновят.</string>
     <string name="server_rejected_title">Сервер не принял изменения</string>
     <string name="server_rejected_hint">Они сохранены на устройстве. Повторите после обновления сервера.</string>
     <string name="server_forget">Отключить сервер</string>

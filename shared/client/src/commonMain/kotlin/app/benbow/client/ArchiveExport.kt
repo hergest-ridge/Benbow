@@ -9,6 +9,7 @@ import app.benbow.core.sync.AttachmentState
 import app.benbow.core.sync.EntryState
 import app.benbow.core.sync.Hlc
 import app.benbow.core.sync.LwwValue
+import app.benbow.core.tracker.TrackerExport
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import kotlin.time.Clock
@@ -104,6 +105,9 @@ class ArchiveExport(
                 zip.text(TagBook.MARKDOWN_FILE, TagBook.markdown(book))
                 val calendars = calendar?.exportFiles(now()).orEmpty()
                 calendars.forEach { zip.text("calendars/" + it.name, it.text) }
+                // Trackers, a folder each under trackers/ (ADR-050); they live in the calendar's file.
+                val trackers = calendar?.trackerFiles().orEmpty()
+                trackers.forEach { zip.text(it.path, it.text) }
                 zip.text(
                     "README.md",
                     readme(
@@ -115,6 +119,7 @@ class ArchiveExport(
                         calendars.count {
                             it.name.endsWith(".ics")
                         },
+                        trackers.count { it.path.endsWith("/" + TrackerExport.JSON_FILE) },
                     ),
                 )
             }
@@ -131,29 +136,40 @@ class ArchiveExport(
         return (name.substring(0, dot) + "-" + a.meta.sha256.take(8) + name.substring(dot)).also { taken.add(it.lowercase()) }
     }
 
-    private fun readme(today: String, entries: Int, files: Int, withMedia: Boolean, missing: List<AttachmentState>, calendars: Int) =
-        buildString {
-            appendLine("# Benbow export, $today")
-            appendLine()
-            appendLine("Every entry is a Markdown file under `entries/YEAR/MONTH/` with its metadata in the front matter, plus a `.json`")
-            appendLine("file next to it with the exact text (Benbow Document, docs/content-format.md) and metadata. Pictures and files")
-            appendLine("are under `media/` and linked from the notes. Nothing here needs the app to be read.")
-            appendLine("Tags and tag categories, with their colors, descriptions, merges and trash, are in `tags.md` (to read) and")
-            appendLine("`tags.json` (for programs); notes name their tags in their front matter.")
-            appendLine()
-            appendLine("- Entries: $entries")
-            appendLine("- Files: $files" + if (withMedia) "" else " (exported without files)")
-            if (calendars > 0) {
-                appendLine(
-                    "- Calendars: $calendars, one `.ics` each under `calendars/` (any calendar app opens them; times are local, as written);",
-                )
-                appendLine("  `calendars/calendar.json` has every calendar and event as stored, deleted ones included")
-            }
-            if (missing.isNotEmpty()) {
-                appendLine()
-                appendLine("## Not included (${missing.size})")
-                appendLine("These were neither on the device nor reachable on the server at export time; the server still keeps them.")
-                missing.forEach { appendLine("- ${it.meta.name ?: it.meta.kind} (${it.meta.sha256})") }
-            }
+    private fun readme(
+        today: String,
+        entries: Int,
+        files: Int,
+        withMedia: Boolean,
+        missing: List<AttachmentState>,
+        calendars: Int,
+        trackers: Int,
+    ) = buildString {
+        appendLine("# Benbow export, $today")
+        appendLine()
+        appendLine("Every entry is a Markdown file under `entries/YEAR/MONTH/` with its metadata in the front matter, plus a `.json`")
+        appendLine("file next to it with the exact text (Benbow Document, docs/content-format.md) and metadata. Pictures and files")
+        appendLine("are under `media/` and linked from the notes. Nothing here needs the app to be read.")
+        appendLine("Tags and tag categories, with their colors, descriptions, merges and trash, are in `tags.md` (to read) and")
+        appendLine("`tags.json` (for programs); notes name their tags in their front matter.")
+        appendLine()
+        appendLine("- Entries: $entries")
+        appendLine("- Files: $files" + if (withMedia) "" else " (exported without files)")
+        if (calendars > 0) {
+            appendLine(
+                "- Calendars: $calendars, one `.ics` each under `calendars/` (any calendar app opens them; times are local, as written);",
+            )
+            appendLine("  `calendars/calendar.json` has every calendar and event as stored, deleted ones included")
         }
+        if (trackers > 0) {
+            appendLine("- Trackers: $trackers, a folder each under `trackers/`: a CSV per year (for Excel: `;` between values, a")
+            appendLine("  decimal comma), `spans.csv` with the times, and `tracker.json` with everything as stored")
+        }
+        if (missing.isNotEmpty()) {
+            appendLine()
+            appendLine("## Not included (${missing.size})")
+            appendLine("These were neither on the device nor reachable on the server at export time; the server still keeps them.")
+            missing.forEach { appendLine("- ${it.meta.name ?: it.meta.kind} (${it.meta.sha256})") }
+        }
+    }
 }

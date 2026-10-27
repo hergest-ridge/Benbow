@@ -36,6 +36,9 @@ internal class FakeServer(val storeId: String = "store-1", val epoch: Long = 1, 
 
     /** The calendar store (ADR-027); off = a server older than 0.6.0. */
     var calendarOn = true
+
+    /** The kinds its calendar store takes (ADR-050); none = a server before trackers. */
+    var calendarKinds = CalendarProtocol.KINDS.sorted()
     val calendarStore = InMemoryCalendarStore()
     val calendarRules = CalendarRules(calendarStore)
     val calendarLog = mutableListOf<CalendarOp>()
@@ -96,6 +99,7 @@ internal class FakeApi(var server: FakeServer, var serverStore: String = server.
                 CalendarProtocol.VERSION,
                 server.calendarEpoch,
                 server.calendarStore.changesSince(0, Int.MAX_VALUE).lastOrNull()?.seq ?: 0,
+                server.calendarKinds,
             )
         } else {
             null

@@ -27,7 +27,7 @@ class AddressTest {
         assertEquals(Link.Entry(id, comments = true), linkOf("/entry/$id/comments"))
         assertEquals(Link.Page(Route.Server), linkOf("server"))
         assertEquals(Link.NewEntry, linkOf("/new"))
-        for (route in listOf(Route.Feed, Route.Search, Route.More, Route.Trash, Route.Export, Route.Appearance)) {
+        for (route in listOf(Route.Feed, Route.Search, Route.Trackers, Route.More, Route.Trash, Route.Export, Route.Appearance)) {
             assertEquals(route, linkOf(route.path()).let { (it as? Link.Tab)?.route ?: (it as? Link.Page)?.route }, "$route")
         }
     }

@@ -116,6 +116,7 @@ import app.benbow.app.resources.tab_feed
 import app.benbow.app.resources.tab_home
 import app.benbow.app.resources.tab_more
 import app.benbow.app.resources.tab_search
+import app.benbow.app.resources.tab_trackers
 import app.benbow.app.resources.tag_trashed
 import app.benbow.app.resources.tags_merged
 import app.benbow.app.resources.tags_trashed
@@ -182,6 +183,9 @@ internal sealed interface Route {
 
     /** Notes beside the journal, Keep-like (ADR-040). */
     data object Board : Route
+
+    /** Trackers (ADR-050): a tab on the web and the desktop, a page from «Ещё» on a phone; for now the B0 spike. */
+    data object Trackers : Route
 
     data class Comments(val entryId: String) : Route
 
@@ -277,6 +281,12 @@ private val TABS = listOf(
     Tab(Route.More, Res.string.tab_more, Icons.MoreHoriz),
 )
 
+private val TRACKERS_TAB = Tab(Route.Trackers, Res.string.tab_trackers, Icons.Trackers)
+
+/** The tabs here: «Трекеры» after «Записки» on the web and the desktop (ADR-050); a phone keeps them in «Ещё». */
+private fun tabsOf(services: AppServices): List<Tab> =
+    if (services.trackersTab) TABS.flatMap { if (it.route == Route.Board) listOf(it, TRACKERS_TAB) else listOf(it) } else TABS
+
 /** Tabs switch in place; screens on top fade in over the one below and fade away on Back (ux.md#motion). */
 private val TAB = mapOf("benbow.tab" to true)
 
@@ -321,7 +331,7 @@ private fun AppRoot(services: AppServices) {
     val scope = rememberCoroutineScope()
     PlatformAddress(backStack, nav) { link ->
         when (link) {
-            is Link.Tab -> nav.selectTab(link.route)
+            is Link.Tab -> nav.selectTab(link.route.takeIf { it != Route.Trackers || services.trackersTab } ?: Route.Home)
 
             is Link.Page -> {
                 nav.selectTab(Route.More)
@@ -365,7 +375,7 @@ private fun AppRoot(services: AppServices) {
                 Shortcut.NewEntry -> nav.open(Route.Editor(null, services.today(), opened = services.now()))
                 Shortcut.Search -> nav.selectTab(Route.Search)
                 Shortcut.Back -> nav.back()
-                is Shortcut.Tab -> TABS.getOrNull(shortcut.index)?.let { nav.selectTab(it.route) }
+                is Shortcut.Tab -> tabsOf(services).getOrNull(shortcut.index)?.let { nav.selectTab(it.route) }
                 Shortcut.Save -> Unit // the open editor takes it
             }
         }
@@ -600,8 +610,10 @@ private fun AppFrame(
     // screens above see the keyboard's inset minus the bar, so a composer still sits right on the keyboard.
     // Wide windows (desktop, tablets): a rail on the left and the screens centred at a readable width. The tree keeps
     // the same shape in both, so resizing across the line never rebuilds the screens.
+    val tabList = remember(services) { tabsOf(services) }
+    val tabRoutes = remember(tabList) { TAB_ROUTES + tabList.map { it.route } }
     val top = backStack.lastOrNull()
-    val tabs = top in TAB_ROUTES
+    val tabs = top in tabRoutes
     val haptic = LocalHapticFeedback.current
     // A long press on the Feed tab flips Бережно (ADR-031): out of sight, but a moment away.
     val flipGentle: () -> Unit = remember(services, haptic) {
@@ -614,7 +626,7 @@ private fun AppFrame(
     }
 
     fun Tab.press() = Modifier.hand().then(if (route == Route.Feed) Modifier.longPress(flipGentle) else Modifier)
-    val current = backStack.lastOrNull { it in TAB_ROUTES }
+    val current = backStack.lastOrNull { it in tabRoutes }
     var barHeight by remember { mutableIntStateOf(0) }
     val bar = with(LocalDensity.current) { barHeight.toDp() }
     // The mini-player (ADR-035) sits on the tab bar, or at the foot of a wide window; it opens the player screen.
@@ -631,7 +643,7 @@ private fun AppFrame(
             if (wide && (tabs || (twoPane && top != null && !top.fullWindow))) {
                 NavigationRail {
                     Spacer(Modifier.height(8.dp))
-                    TABS.forEach { tab ->
+                    tabList.forEach { tab ->
                         val label = stringResource(tab.label)
                         NavigationRailItem(
                             selected = current == tab.route,
@@ -679,7 +691,7 @@ private fun AppFrame(
                 }
                 if (bottomBar) {
                     ShortNavigationBar(Modifier.onSizeChanged { barHeight = it.height }) {
-                        TABS.forEach { tab ->
+                        tabList.forEach { tab ->
                             val label = stringResource(tab.label)
                             ShortNavigationBarItem(
                                 selected = top == tab.route,
@@ -773,6 +785,10 @@ private fun Screens(
             entry<Route.Calendar>(metadata = TAB) { CalendarScreen(services, listNav) }
             // A grid wants the window, not a list's pane; a note opens on it in the board's own scene (ADR-040).
             entry<Route.Board>(metadata = TAB + FULL_WINDOW + mapOf(BOARD_ENTRY to true)) { BoardScreen(services, listNav) }
+            // A sheet wants the window, as the board does; a tab only where trackers have one (ADR-050).
+            entry<Route.Trackers>(metadata = if (services.trackersTab) TAB + FULL_WINDOW else emptyMap()) {
+                TrackersScreen(services, nav, tab = services.trackersTab)
+            }
             entry<Route.More>(metadata = TAB) { MoreScreen(services, listNav) }
             entry<Route.Comments> { CommentsScreen(services, nav, it) }
             entry<Route.Tags> { TagsScreen(services, nav) }

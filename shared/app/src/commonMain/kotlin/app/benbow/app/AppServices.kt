@@ -200,7 +200,7 @@ class AppServices(
     audio: AudioEngine = SilentAudio(),
     /** Updating this app from its server (ADR-042, U2); Android only. */
     updater: AppUpdater? = null,
-    /** Unfinished work shows: dev and bench builds and dev runs, never the owner's app (nothing behind it right now). */
+    /** Unfinished work shows: dev and bench builds and dev runs, never the owner's app (now: the trackers' spike, ADR-050). */
     val labs: Boolean = false,
 ) {
     val scope = CoroutineScope(SupervisorJob() + IoDispatcher)

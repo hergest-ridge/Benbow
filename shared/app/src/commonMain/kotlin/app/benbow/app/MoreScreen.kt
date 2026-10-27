@@ -44,6 +44,7 @@ import app.benbow.app.resources.more_shortcuts
 import app.benbow.app.resources.more_shortcuts_web
 import app.benbow.app.resources.more_tagline
 import app.benbow.app.resources.more_tags
+import app.benbow.app.resources.more_trackers
 import app.benbow.app.resources.more_trash
 import app.benbow.app.resources.palette_names
 import app.benbow.app.resources.reminders
@@ -53,6 +54,7 @@ import app.benbow.app.resources.speech_more_missing
 import app.benbow.app.resources.speech_more_ready
 import app.benbow.app.resources.speech_title
 import app.benbow.app.resources.tab_search
+import app.benbow.app.resources.tab_trackers
 import app.benbow.app.resources.tags
 import app.benbow.app.resources.trash
 import app.benbow.client.SpeechModel
@@ -85,6 +87,12 @@ private fun MoreList(services: AppServices, nav: Navigator) {
         // Поиск gave its tab to «Записки» for now (ADR-040).
         MoreItem(Icons.Search, stringResource(Res.string.tab_search), stringResource(Res.string.more_search)) { nav.open(Route.Search) }
         MoreItem(Icons.Gallery, stringResource(Res.string.library), stringResource(Res.string.more_library)) { nav.open(Route.Library) }
+        // A phone's way to the trackers (ADR-050); the web and the desktop have a tab.
+        if (services.trackersShown && !services.trackersTab) {
+            MoreItem(Icons.Trackers, stringResource(Res.string.tab_trackers), stringResource(Res.string.more_trackers)) {
+                nav.open(Route.Trackers)
+            }
+        }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         val look = syncLook(status)
         MoreItem(Icons.Server, stringResource(Res.string.server), look?.label, look?.tone) { nav.open(Route.Server) }

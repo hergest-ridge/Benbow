@@ -531,7 +531,7 @@ private const val TITLE_FADE_MILLIS = 150
 
 /** «Сегодня»: a calendar page with today's number, as calendar apps draw it; shown once away from today. */
 @Composable
-private fun TodayIcon(day: Int, label: String) {
+internal fun TodayIcon(day: Int, label: String) {
     val color = LocalContentColor.current
     Box(
         Modifier.size(22.dp).border(1.5.dp, color, RoundedCornerShape(5.dp)).clearAndSetSemantics { contentDescription = label },

@@ -2,6 +2,7 @@ package app.benbow.server.backup
 
 import app.benbow.core.content.TagBook
 import app.benbow.core.content.TagNames
+import app.benbow.core.tracker.TrackerExport
 import app.benbow.server.PURGE_JOURNAL
 import app.benbow.server.ServerConfig
 import app.benbow.server.calendar.CalendarDatabase
@@ -264,8 +265,8 @@ class BackupJobs(
     }
 
     /**
-     * The calendar's pass: a verified snapshot when it changed, pruning, its copy to `<mirror>/calendar`, and the
-     * `.ics` files in `export/calendars` (ADR-028).
+     * The calendar's pass: a verified snapshot when it changed, pruning, its copy to `<mirror>/calendar`, the `.ics`
+     * files in `export/calendars` (ADR-028) and the trackers' files in `export/trackers` (ADR-050).
      */
     fun runCalendar(now: Long = System.currentTimeMillis(), reason: String = "scheduled"): Boolean {
         val store = calendar ?: return false
@@ -280,6 +281,7 @@ class BackupJobs(
         val t = target
         if (t != null && t.folder.check() == MirrorFolder.State.Ready) copySnapshots(backups, t.path, "calendar", "calendar/manifest.json")
         if (CalendarMirror(dataDir.resolve("export").resolve("calendars")).update(store)) log.info("Calendar mirror written")
+        if (TrackerMirror(dataDir.resolve("export").resolve(TrackerExport.FOLDER)).update(store)) log.info("Tracker mirror written")
         updateStatus { it.copy(calendarSnapshotAt = backups.history().lastOrNull()?.createdAt, calendarError = null) }
         return taken != null
     }

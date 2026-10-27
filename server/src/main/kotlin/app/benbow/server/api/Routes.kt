@@ -169,7 +169,9 @@ fun Application.benbowModule(ctx: ServerContext) {
                         ctx.db.epoch,
                         Migrations.SCHEMA_VERSION,
                         ctx.db.latestCursor(),
-                        ctx.calendar?.let { CalendarInfo(CalendarProtocol.VERSION, it.epoch, it.latestCursor()) },
+                        ctx.calendar?.let {
+                            CalendarInfo(CalendarProtocol.VERSION, it.epoch, it.latestCursor(), CalendarProtocol.KINDS.sorted())
+                        },
                         ctx.app?.info,
                     ),
                 )

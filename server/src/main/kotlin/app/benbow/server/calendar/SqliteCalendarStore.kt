@@ -3,6 +3,8 @@ package app.benbow.server.calendar
 import app.benbow.core.calendar.CalendarChange
 import app.benbow.core.calendar.CalendarRecord
 import app.benbow.core.calendar.CalendarStore
+import app.benbow.core.calendar.FieldHistory
+import app.benbow.core.sync.Hlc
 import app.benbow.core.sync.LwwValue
 import app.benbow.core.sync.OpResult
 import app.benbow.core.sync.OpStatus
@@ -56,6 +58,34 @@ class SqliteCalendarStore(private val db: CalendarDatabase, private val deviceId
             st.executeUpdate()
         }
         Unit
+    }
+
+    override fun appendHistory(entry: FieldHistory) = query { c ->
+        c.prepareStatement("INSERT INTO field_history(kind, record_id, field, value, hlc, at) VALUES (?, ?, ?, ?, ?, ?)").use { st ->
+            st.setString(1, entry.kind)
+            st.setString(2, entry.id)
+            st.setString(3, entry.field)
+            st.setString(4, entry.value)
+            st.setString(5, Json.encodeToString(entry.hlc))
+            st.setLong(6, System.currentTimeMillis())
+            st.executeUpdate()
+        }
+        Unit
+    }
+
+    override fun history(kind: String, id: String): List<FieldHistory> = query { c ->
+        c.prepareStatement("SELECT field, value, hlc FROM field_history WHERE kind = ? AND record_id = ? ORDER BY seq").use { st ->
+            st.setString(1, kind)
+            st.setString(2, id)
+            st.executeQuery().use { rs ->
+                buildList {
+                    while (rs.next()) {
+                        val hlc = Json.decodeFromString<Hlc>(rs.getString(3))
+                        add(FieldHistory(kind, id, rs.getString(1), rs.getString(2), hlc))
+                    }
+                }
+            }
+        }
     }
 
     /** Every record, for the mirror. */

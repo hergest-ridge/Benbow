@@ -23,6 +23,7 @@ import io.kotest.property.checkAll
 import kotlinx.coroutines.test.runTest
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.sql.DriverManager
 import kotlin.io.path.exists
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.name
@@ -95,6 +96,55 @@ class CalendarStoreTest {
         assertEquals(2, db.backups!!.history().size, "the journal still got its snapshot")
         assertEquals(1, mirror.resolve("calendar").listDirectoryEntries("*.sqlite").size, "the journal's run keeps the calendar's copies")
         db.close()
+    }
+
+    @Test
+    fun aValueReplacedOrComingInOlderStaysInTheHistoryOfTheFile() {
+        val storeId = Database.open(dir, "test").use { it.storeId }
+        CalendarDatabase.open(dir, "test", storeId).use { calendar ->
+            val rules = CalendarRules(SqliteCalendarStore(calendar))
+            rules.push(listOf(event("o1", "Врач", 1), event("o2", "Стоматолог", 3), event("o3", "Окулист", 2)))
+        }
+        CalendarDatabase.open(dir, "test", storeId).use { calendar ->
+            val store = SqliteCalendarStore(calendar)
+            assertEquals("Стоматолог", store.record(CalendarKind.EVENT, "e1")?.fields?.getValue("title")?.value)
+            assertEquals(
+                listOf("Врач" to Hlc(1, 0, "phone"), "Окулист" to Hlc(2, 0, "phone")),
+                store.history(CalendarKind.EVENT, "e1").map { it.value to it.hlc },
+                "the replaced title and the one that came in older, the unchanged start not at all",
+            )
+        }
+    }
+
+    @Test
+    fun aCalendarFileOfSchemaOneGetsItsHistoryAfterASnapshot() {
+        val storeId = Database.open(dir, "0.16.2").use { it.storeId }
+        // The file as servers up to 0.16.2 leave it (schema 1), holding one event.
+        DriverManager.getConnection("jdbc:sqlite:${dir.resolve("db/calendar.sqlite")}").use { c ->
+            c.createStatement().use { st ->
+                listOf(
+                    "CREATE TABLE store_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+                    "INSERT INTO store_meta(key, value) VALUES ('store_id', '$storeId'), ('epoch', '3'), ('created_at', '1'), " +
+                        "('server_version', '0.16.2')",
+                    "CREATE TABLE records (kind TEXT NOT NULL, id TEXT NOT NULL, fields TEXT NOT NULL DEFAULT '{}', " +
+                        "updated_at INTEGER NOT NULL, PRIMARY KEY (kind, id))",
+                    "CREATE TABLE applied_ops (op_id TEXT PRIMARY KEY, status TEXT NOT NULL, message TEXT, device_id TEXT, applied_at INTEGER NOT NULL)",
+                    "CREATE TABLE change_log (seq INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, record_id TEXT NOT NULL, at INTEGER NOT NULL)",
+                    """INSERT INTO records VALUES ('event', 'e1', '{"title":{"value":"Врач","hlc":{"wall":1,"counter":0,"node":"phone"}}}', 1)""",
+                    "INSERT INTO change_log(kind, record_id, at) VALUES ('event', 'e1', 1)",
+                    "PRAGMA user_version = 1",
+                ).forEach(st::execute)
+            }
+        }
+        CalendarDatabase.open(dir, "0.17.0", storeId).use { calendar ->
+            assertEquals(3, calendar.epoch, "the same store and epoch")
+            val store = SqliteCalendarStore(calendar)
+            assertEquals("Врач", store.record(CalendarKind.EVENT, "e1")?.fields?.getValue("title")?.value)
+            CalendarRules(store).push(listOf(event("o2", "Стоматолог", 5)))
+            assertEquals(listOf("Врач"), store.history(CalendarKind.EVENT, "e1").map { it.value })
+        }
+        val snapshots = dir.resolve("backups/calendar").listDirectoryEntries("*.sqlite").map { it.name }
+        assertTrue(snapshots.any { "pre-migration-v1" in it }, "a verified snapshot first: $snapshots")
     }
 
     @Test

@@ -110,7 +110,7 @@ class CalendarDatabase private constructor(private val connection: Connection, v
 
 /** Forward-only schema steps of the calendar file, tracked by `PRAGMA user_version` (S10). */
 internal object CalendarMigrations {
-    const val SCHEMA_VERSION = 1
+    const val SCHEMA_VERSION = 2
 
     private fun steps(storeId: String): List<List<String>> = listOf(
         // 1: identity, records (calendars and events as LWW fields), sync bookkeeping
@@ -133,6 +133,19 @@ internal object CalendarMigrations {
                 applied_at INTEGER NOT NULL
             )""",
             "CREATE TABLE change_log (seq INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, record_id TEXT NOT NULL, at INTEGER NOT NULL)",
+        ),
+        // 2: every value a newer one replaced, or that came in older than the one there (ADR-050), kept for good
+        listOf(
+            """CREATE TABLE field_history (
+                seq INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind TEXT NOT NULL,
+                record_id TEXT NOT NULL,
+                field TEXT NOT NULL,
+                value TEXT,
+                hlc TEXT NOT NULL,
+                at INTEGER NOT NULL
+            )""",
+            "CREATE INDEX field_history_by_record ON field_history(kind, record_id)",
         ),
     )
 

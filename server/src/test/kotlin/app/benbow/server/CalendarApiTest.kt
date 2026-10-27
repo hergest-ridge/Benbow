@@ -11,6 +11,7 @@ import app.benbow.core.calendar.CalendarPullResponse
 import app.benbow.core.calendar.CalendarPushRequest
 import app.benbow.core.sync.Hlc
 import app.benbow.core.sync.OpStatus
+import app.benbow.core.tracker.TrackerKind
 import app.benbow.server.api.ServerContext
 import app.benbow.server.api.benbowModule
 import app.benbow.server.calendar.CalendarDatabase
@@ -70,6 +71,26 @@ class CalendarApiTest {
         val info = client.get("/api/v1/info").body<ServerInfo>()
         assertEquals(pull.nextCursor, info.calendar?.cursor)
         assertEquals(0L, info.cursor, "the journal's change log saw nothing")
+    }
+
+    @Test
+    fun theStoreSaysItKeepsTrackersAndTakesTheirOps() = withServer { ctx, client ->
+        val token = client.pair(ctx)
+        val kinds = client.get("/api/v1/info").body<ServerInfo>().calendar?.kinds.orEmpty()
+        assertEquals(listOf("calendar", "cell", "column", "event", "span", "tracker"), kinds)
+        val cell = CalendarOp(
+            "op-c",
+            TrackerKind.CELL,
+            "walk:2026-10-27",
+            mapOf("column" to "walk", "day" to "2026-10-27", "value" to "true"),
+            Hlc(2, 0, "phone"),
+        )
+        val push = client.post("/api/v1/calendar/push") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(CalendarPushRequest(CalendarProtocol.VERSION, listOf(cell)))
+        }.body<PushResponse>()
+        assertEquals(listOf(OpStatus.Applied), push.results.map { it.status })
     }
 
     @Test

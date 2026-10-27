@@ -6,19 +6,21 @@ import app.benbow.core.calendar.CalendarOp
 import app.benbow.core.calendar.CalendarRecord
 import app.benbow.core.calendar.CalendarRules
 import app.benbow.core.calendar.CalendarStore
+import app.benbow.core.calendar.FieldHistory
 import app.benbow.core.sync.Hlc
 import app.benbow.core.sync.HlcClock
 import app.benbow.core.sync.OpResult
 import app.benbow.core.sync.OpStatus
+import app.benbow.core.tracker.TrackerKind
 import kotlin.random.Random
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
  * Deterministic simulation of the calendar channel (ADR-027), runnable against any [CalendarStore]: devices
- * with drifting clocks write the same few records while requests and responses get lost. Invariants: no op is
- * applied twice, nothing is rejected, every field ends with the value of its latest write (by HLC) and every
- * device converges to the server.
+ * with drifting clocks write the same few records (calendars, events and trackers' cells, ADR-050) while requests and
+ * responses get lost. Invariants: no op is applied twice, nothing is rejected, every field ends with the value of its
+ * latest write (by HLC), every value written is that or in the store's history, and every device converges.
  */
 class CalendarSimulation(private val storeFactory: () -> CalendarStore) {
     val outcomes = HashMap<OpStatus, Int>()
@@ -52,6 +54,14 @@ class CalendarSimulation(private val storeFactory: () -> CalendarStore) {
             assertEquals(expected.second, stored?.value, "$key keeps its latest write (seed $seed)")
             assertEquals(expected.first, stored?.hlc)
         }
+        // Nothing written is discarded: what doesn't show is in the history (ADR-050).
+        for (op in written) {
+            for ((field, value) in op.fields) {
+                val shown = store.record(op.kind, op.id)?.fields?.get(field)?.value == value
+                val kept = store.history(op.kind, op.id).any { it.field == field && it.value == value }
+                assertTrue(shown || kept, "${op.kind} ${op.id} $field = $value kept (seed $seed)")
+            }
+        }
         for (change in store.changesSince(0, Int.MAX_VALUE).distinctBy { it.kind to it.id }) {
             val record = store.record(change.kind, change.id)!!
             for (c in clients) {
@@ -78,7 +88,7 @@ class CalendarSimulation(private val storeFactory: () -> CalendarStore) {
         /** Writes one or two fields of one of a few records every device shares, so writes collide. */
         fun put(): CalendarOp {
             time += rnd.nextLong(-50, 100) // drifting clock
-            val kind = if (rnd.nextInt(4) == 0) CalendarKind.CALENDAR else CalendarKind.EVENT
+            val kind = KINDS[rnd.nextInt(KINDS.size)]
             val id = "$kind-${rnd.nextInt(4)}"
             val fields = FIELDS.shuffled(rnd).take(1 + rnd.nextInt(2)).associateWith {
                 if (rnd.nextInt(6) ==
@@ -123,6 +133,7 @@ class CalendarSimulation(private val storeFactory: () -> CalendarStore) {
 
         private companion object {
             val FIELDS = listOf("title", "start", "deleted")
+            val KINDS = listOf(CalendarKind.CALENDAR, CalendarKind.EVENT, CalendarKind.EVENT, TrackerKind.CELL)
         }
     }
 }
@@ -139,6 +150,7 @@ private class CountingCalendarStore(private val delegate: CalendarStore) : Calen
 /** Reference in-memory [CalendarStore] with the same contract the server's SQLite store must meet. */
 class InMemoryCalendarStore : CalendarStore {
     private val records = LinkedHashMap<Pair<String, String>, CalendarRecord>()
+    private val history = ArrayList<FieldHistory>()
     private val applied = HashMap<String, OpResult>()
     private val changes = ArrayList<CalendarChange>()
 
@@ -151,6 +163,10 @@ class InMemoryCalendarStore : CalendarStore {
     override fun putRecord(record: CalendarRecord) {
         records[record.kind to record.id] = record
     }
+    override fun appendHistory(entry: FieldHistory) {
+        history += entry
+    }
+    override fun history(kind: String, id: String) = history.filter { it.kind == kind && it.id == id }
     override fun appendChange(kind: String, id: String): Long {
         val seq = changes.size + 1L
         changes += CalendarChange(seq, kind, id)

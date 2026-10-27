@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -17,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -30,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.menu
+import app.benbow.app.resources.months_genitive
 import app.benbow.app.resources.move_to_trash
 import app.benbow.app.resources.next
 import app.benbow.app.resources.previous
@@ -51,6 +55,9 @@ import app.benbow.app.resources.trackers_figures_show
 import app.benbow.app.resources.trackers_look
 import app.benbow.app.resources.trackers_setup
 import app.benbow.app.resources.trackers_unarchive
+import app.benbow.app.resources.trackers_view_month
+import app.benbow.app.resources.trackers_view_week
+import app.benbow.app.resources.trackers_view_year
 import app.benbow.app.resources.untitled
 import app.benbow.app.resources.weekdays_short
 import app.benbow.client.LookFields
@@ -69,6 +76,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.isoDayNumber
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -99,9 +107,25 @@ internal fun TrackerSheetScreen(services: AppServices, nav: Navigator, trackerId
     var looking by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     val pager = rememberPagerState(initialPage = pageOf(today)) { MONTH_PAGES }
+    val weeks = rememberPagerState(initialPage = WEEK_ORIGIN) { WEEK_PAGES }
+    val years = rememberPagerState(initialPage = YEAR_ORIGIN) { YEAR_PAGES }
+    // Where it opens is the tracker's own (`view`, on every device); a tap on a year's day looks at its month here only.
+    var view by remember(trackerId, tracker != null) { mutableStateOf(SheetView.of(tracker?.get(TrackerField.VIEW))) }
+    var yearColumn by rememberSaveable(trackerId) { mutableStateOf<String?>(null) }
+    val active = when (view) {
+        SheetView.Month -> pager
+        SheetView.Week -> weeks
+        SheetView.Year -> years
+    }
+    val todayPage = when (view) {
+        SheetView.Month -> pageOf(today)
+        SheetView.Week -> WEEK_ORIGIN
+        SheetView.Year -> YEAR_ORIGIN
+    }
     val scope = rememberCoroutineScope()
     val shownMonth = monthOfPage(pager.currentPage)
     val page = MaterialTheme.colorScheme.surfaceVariant
+    val months = stringArrayResource(Res.array.months_genitive)
     Scaffold(topBar = {
         TopAppBar(
             navigationIcon = { if (back) BackButton(nav::back) },
@@ -109,7 +133,11 @@ internal fun TrackerSheetScreen(services: AppServices, nav: Navigator, trackerId
                 Column {
                     Text(tracker?.let { trackerTitle(it, untitled) }.orEmpty(), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
-                        monthTitle(shownMonth.toString().take(7), withYear = true).orEmpty(),
+                        when (view) {
+                            SheetView.Month -> monthTitle(shownMonth.toString().take(7), withYear = true).orEmpty()
+                            SheetView.Week -> weekTitle(weekOfPage(today, weeks.currentPage), months)
+                            SheetView.Year -> "${yearOfPage(today, years.currentPage)}"
+                        },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         style = MaterialTheme.typography.labelMedium,
@@ -118,8 +146,8 @@ internal fun TrackerSheetScreen(services: AppServices, nav: Navigator, trackerId
             },
             actions = {
                 if (tracker != null) {
-                    if (shownMonth != LocalDate(today.year, today.month, 1)) {
-                        IconButton({ scope.launch { pager.animateScrollToPage(pageOf(today)) } }, modifier = Modifier.hand()) {
+                    if (active.currentPage != todayPage) {
+                        IconButton({ scope.launch { active.animateScrollToPage(todayPage) } }, modifier = Modifier.hand()) {
                             TodayIcon(today.day, stringResource(Res.string.today))
                         }
                     }
@@ -137,10 +165,10 @@ internal fun TrackerSheetScreen(services: AppServices, nav: Navigator, trackerId
                     // A mouse can't swipe (desktop, web), as in the calendar.
                     if (LocalPagerArrows.current) {
                         IconButton({
-                            scope.launch { pager.animateScrollToPage(pager.currentPage - 1) }
+                            scope.launch { active.animateScrollToPage(active.currentPage - 1) }
                         }, modifier = Modifier.hand()) { Icon(Icons.ChevronLeft, stringResource(Res.string.previous)) }
                         IconButton({
-                            scope.launch { pager.animateScrollToPage(pager.currentPage + 1) }
+                            scope.launch { active.animateScrollToPage(active.currentPage + 1) }
                         }, modifier = Modifier.hand()) { Icon(Icons.ChevronRight, stringResource(Res.string.next)) }
                     }
                     Box {
@@ -188,23 +216,61 @@ internal fun TrackerSheetScreen(services: AppServices, nav: Navigator, trackerId
                 }
             }
         } else if (tracker != null && columns != null) {
-            Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+            Column(Modifier.padding(padding).fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+                // The month, a week or a year; choosing one makes it where the tracker opens.
+                Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SheetView.entries.forEach { each ->
+                        FilterChip(view == each, {
+                            view = each
+                            write { updateTracker(trackerId, mapOf(TrackerField.VIEW to each.token)) }
+                        }, { Text(stringResource(each.label)) }, modifier = Modifier.hand())
+                    }
+                }
                 // The tracker's own look, as a note's (its color and layers, ADR-047), drawn muted so the marks stay the
                 // main thing; as wide as a page of a notebook.
                 val base = swatch(tracker[TrackerField.BACKGROUND]) ?: page
                 val look = remember(tracker) { LookFields.of(tracker.fields) }
+                val wide = view == SheetView.Month && columns.any { it.sheetHours != null }
                 Column(
-                    Modifier.widthIn(max = if (columns.any { it.sheetHours != null }) SheetSizes.WIDE_SHEET else SheetSizes.SHEET)
+                    Modifier.widthIn(max = if (wide) SheetSizes.WIDE_SHEET else SheetSizes.SHEET)
                         .fillMaxSize()
                         .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 8.dp)
                         .clip(RoundedCornerShape(16.dp))
                         .background(base)
                         .then(entryBackdrop(tracker.id, look, base, muted = true, moving = true)),
                 ) {
-                    SheetHeader(columns, figures, write)
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    HorizontalPager(pager, beyondViewportPageCount = 1, modifier = Modifier.weight(1f).fillMaxWidth()) { at ->
-                        MonthPage(services, columns, monthOfPage(at), today, figures, write)
+                    when (view) {
+                        SheetView.Month -> {
+                            SheetHeader(columns, figures, write)
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                            HorizontalPager(pager, beyondViewportPageCount = 1, modifier = Modifier.weight(1f).fillMaxWidth()) { at ->
+                                MonthPage(services, columns, monthOfPage(at), today, figures, write)
+                            }
+                        }
+
+                        SheetView.Week -> HorizontalPager(
+                            weeks,
+                            beyondViewportPageCount = 1,
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                        ) { at ->
+                            WeekPage(services, columns, weekOfPage(today, at), today, figures, write)
+                        }
+
+                        SheetView.Year -> HorizontalPager(years, modifier = Modifier.weight(1f).fillMaxWidth()) { at ->
+                            YearPage(
+                                services,
+                                columns,
+                                yearColumn,
+                                yearOfPage(today, at),
+                                today,
+                                figures,
+                                onChoose = { yearColumn = it },
+                                onMonth = { month ->
+                                    view = SheetView.Month
+                                    scope.launch { pager.scrollToPage(pageOf(month)) }
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -278,4 +344,10 @@ internal fun MonthPage(
 }
 
 /** `figures` when the eye has hidden them. */
-private const val FIGURES_HIDDEN = "hidden"
+internal const val FIGURES_HIDDEN = "hidden"
+
+internal val SheetView.label: StringResource get() = when (this) {
+    SheetView.Month -> Res.string.trackers_view_month
+    SheetView.Week -> Res.string.trackers_view_week
+    SheetView.Year -> Res.string.trackers_view_year
+}

@@ -228,12 +228,12 @@ internal fun eraseSpans(spans: List<TrackerRecord>, from: Long, to: Long): List<
 /** Spans outside the trash that have an end, with their start and end in seconds. */
 private fun bounds(spans: List<TrackerRecord>): List<Pair<TrackerRecord, Pair<Long, Long>>> =
     spans.filter { !it.deleted }.mapNotNull { span ->
-        val start = span[SpanField.START]?.let(::parseTime) ?: return@mapNotNull null
-        val end = span[SpanField.END]?.let(::parseTime) ?: return@mapNotNull null
+        val start = span[SpanField.START]?.let(::parseLocal) ?: return@mapNotNull null
+        val end = span[SpanField.END]?.let(::parseLocal) ?: return@mapNotNull null
         span to (seconds(start) to seconds(end))
     }
 
-private fun parseTime(text: String): LocalDateTime? = runCatching { LocalDateTime.parse(text) }.getOrNull()
+private fun parseLocal(text: String): LocalDateTime? = runCatching { LocalDateTime.parse(text) }.getOrNull()
 
 /** Floating local times counted as if in UTC: no zone, no daylight saving (ADR-028). */
 internal fun seconds(time: LocalDateTime): Long = time.toInstant(TimeZone.UTC).epochSeconds

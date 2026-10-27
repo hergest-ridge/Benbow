@@ -50,6 +50,12 @@ enum class HomeBlockType(val value: String, val sizes: List<BlockSize>, val once
 
     /** A tag's entries as a small gallery (config [HomeBlock.TAG], [HomeBlock.ORDER]). */
     Tag("tag", listOf(BlockSize.M, BlockSize.S, BlockSize.L), once = false),
+
+    /** The way to the trackers (ADR-050): each with today's marks (M), or their emoji (S). */
+    Trackers("trackers", listOf(BlockSize.M, BlockSize.S)),
+
+    /** One tracker (config [HomeBlock.TRACKER]): today's marks to tick (S), its week (M), its month (L). */
+    Tracker("tracker", listOf(BlockSize.S, BlockSize.M, BlockSize.L), once = false),
     ;
 
     companion object {
@@ -84,6 +90,9 @@ data class HomeBlock(
         const val TAG = "tag"
         const val ORDER = "order"
         const val RANDOM = "random"
+
+        /** A tracker block's tracker (its id). */
+        const val TRACKER = "tracker"
 
         /** A stats block's figures, comma-separated [StatFigure] values (see [figures]). */
         const val FIGURES = "figures"

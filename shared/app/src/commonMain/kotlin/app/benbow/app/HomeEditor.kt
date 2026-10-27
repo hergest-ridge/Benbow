@@ -30,8 +30,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.LookaheadScope
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.block_checkin
 import app.benbow.app.resources.block_checkin_about
@@ -72,6 +75,10 @@ import app.benbow.app.resources.block_tag_empty
 import app.benbow.app.resources.block_tag_named
 import app.benbow.app.resources.block_today
 import app.benbow.app.resources.block_today_about
+import app.benbow.app.resources.block_tracker
+import app.benbow.app.resources.block_tracker_about
+import app.benbow.app.resources.block_trackers
+import app.benbow.app.resources.block_trackers_about
 import app.benbow.app.resources.cancel
 import app.benbow.app.resources.figure_days
 import app.benbow.app.resources.figure_moments
@@ -101,7 +108,9 @@ import app.benbow.app.resources.home_tag_change
 import app.benbow.app.resources.home_tag_newest
 import app.benbow.app.resources.home_tag_pick
 import app.benbow.app.resources.home_tag_random
+import app.benbow.app.resources.home_tracker_change
 import app.benbow.app.resources.tag_picker_done
+import app.benbow.app.resources.untitled
 import app.benbow.app.resources.veil_undo
 import app.benbow.client.BlockSize
 import app.benbow.client.HomeBlock
@@ -114,6 +123,7 @@ import app.benbow.client.addable
 import app.benbow.client.figureCount
 import app.benbow.client.figures
 import app.benbow.client.packHome
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.getString
@@ -130,6 +140,8 @@ internal val HomeBlockType.title: StringResource get() = when (this) {
     HomeBlockType.Stats -> Res.string.block_stats
     HomeBlockType.Notes -> Res.string.block_notes
     HomeBlockType.Tag -> Res.string.block_tag
+    HomeBlockType.Trackers -> Res.string.block_trackers
+    HomeBlockType.Tracker -> Res.string.block_tracker
 }
 
 private val HomeBlockType.about: StringResource get() = when (this) {
@@ -143,6 +155,8 @@ private val HomeBlockType.about: StringResource get() = when (this) {
     HomeBlockType.Stats -> Res.string.block_stats_about
     HomeBlockType.Notes -> Res.string.block_notes_about
     HomeBlockType.Tag -> Res.string.block_tag_about
+    HomeBlockType.Trackers -> Res.string.block_trackers_about
+    HomeBlockType.Tracker -> Res.string.block_tracker_about
 }
 
 /** When a block that has nothing to show now (and so isn't on Home) comes up. */
@@ -157,16 +171,23 @@ private val HomeBlockType.whenEmpty: StringResource get() = when (this) {
     else -> about
 }
 
-/** A block's name in the editor: a tag block goes by its tag. */
+/** A block's name in the editor: a tag block goes by its tag, a tracker's by the tracker. */
 @Composable
 private fun blockName(block: HomeBlock): String {
     val tag = block.config[HomeBlock.TAG]
-    return if (block.kind == HomeBlockType.Tag && tag != null) {
-        LocalTags.current.name(TagRef(tag, tag))
-    } else {
-        block.kind?.let { stringResource(it.title) }.orEmpty()
+    val tracker = block.config[HomeBlock.TRACKER]
+    return when {
+        block.kind == HomeBlockType.Tag && tag != null -> LocalTags.current.name(TagRef(tag, tag))
+
+        block.kind == HomeBlockType.Tracker && tracker != null -> LocalTrackerTitles.current[tracker]
+            ?: stringResource(HomeBlockType.Tracker.title)
+
+        else -> block.kind?.let { stringResource(it.title) }.orEmpty()
     }
 }
+
+/** Trackers' titles by id, for tracker blocks' names in the editor (ADR-050). */
+private val LocalTrackerTitles = compositionLocalOf { emptyMap<String, String>() }
 
 private val StatFigure.label: StringResource get() = when (this) {
     StatFigure.Days -> Res.string.figure_days
@@ -199,6 +220,14 @@ internal fun HomeEditor(services: AppServices, start: HomeLayout, home: HomeStat
 
     /** The tag picker for a tag block: its id, or "" for a new one. */
     var pickingTag by remember { mutableStateOf<String?>(null) }
+
+    /** The same for a tracker block (ADR-050), offered only where trackers show. */
+    var pickingTracker by remember { mutableStateOf<String?>(null) }
+    val trackers by remember {
+        if (services.trackersShown) services.trackers.trackers() else flowOf(emptyList())
+    }.collectAsStateWithLifecycle(emptyList())
+    val untitled = stringResource(Res.string.untitled)
+    val trackerTitles = trackers.filter { !it.archived }.associate { it.id to trackerTitle(it, untitled) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     fun offerUndo(text: suspend () -> String, undo: () -> Unit) {
@@ -208,72 +237,97 @@ internal fun HomeEditor(services: AppServices, start: HomeLayout, home: HomeStat
             if (result == SnackbarResult.ActionPerformed) undo()
         }
     }
-    PickerFrame(onDismiss) {
-        Box(Modifier.fillMaxSize()) {
-            Column(
-                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        stringResource(Res.string.home_editor_title),
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onDismiss, modifier = Modifier.hand()) { Text(stringResource(Res.string.tag_picker_done)) }
-                }
-                Text(
-                    stringResource(Res.string.home_editor_hint),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Schematic(layout, home, selected, columns) { selected = it }
-                val drawn = layout.blocks.filter { it.blockSize != null }
-                drawn.indexOfFirst { it.id == selected }.takeIf { it >= 0 }?.let { at ->
-                    val block = drawn[at]
-                    val name = blockName(block)
-                    BlockTools(
-                        block,
-                        name,
-                        empty = !home.shows(block),
-                        canUp = at > 0,
-                        canDown = at < drawn.lastIndex,
-                        onMove = { editor.move(block.id, it) },
-                        onResize = { editor.resize(block.id, it) },
-                        onConfigure = { key, value -> editor.configure(block.id, key, value) },
-                        onPickTag = { pickingTag = block.id },
-                        onRemove = {
-                            val (removed, place) = editor.remove(block.id) ?: return@BlockTools
-                            selected = null
-                            offerUndo({ getString(Res.string.home_removed, name) }) { editor.put(removed, place) }
-                        },
-                    )
-                }
-                val addable = layout.addable()
-                if (adding && addable.isNotEmpty()) {
-                    Catalog(addable, onPick = { kind ->
-                        if (kind == HomeBlockType.Tag) {
-                            pickingTag = ""
-                        } else {
-                            selected = editor.add(kind, after = selected).id
-                            adding = false
-                        }
-                    }, onCancel = { adding = false })
-                } else if (addable.isNotEmpty()) {
-                    OutlinedButton({ adding = true }, modifier = Modifier.fillMaxWidth().hand()) {
-                        Text(stringResource(Res.string.home_block_add))
+    CompositionLocalProvider(LocalTrackerTitles provides trackerTitles) {
+        PickerFrame(onDismiss) {
+            Box(Modifier.fillMaxSize()) {
+                Column(
+                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            stringResource(Res.string.home_editor_title),
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onDismiss, modifier = Modifier.hand()) { Text(stringResource(Res.string.tag_picker_done)) }
                     }
+                    Text(
+                        stringResource(Res.string.home_editor_hint),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Schematic(layout, home, selected, columns) { selected = it }
+                    val drawn = layout.blocks.filter { it.blockSize != null }
+                    drawn.indexOfFirst { it.id == selected }.takeIf { it >= 0 }?.let { at ->
+                        val block = drawn[at]
+                        val name = blockName(block)
+                        BlockTools(
+                            block,
+                            name,
+                            empty = !home.shows(block),
+                            canUp = at > 0,
+                            canDown = at < drawn.lastIndex,
+                            onMove = { editor.move(block.id, it) },
+                            onResize = { editor.resize(block.id, it) },
+                            onConfigure = { key, value -> editor.configure(block.id, key, value) },
+                            onPickTag = { pickingTag = block.id },
+                            onPickTracker = { pickingTracker = block.id },
+                            onRemove = {
+                                val (removed, place) = editor.remove(block.id) ?: return@BlockTools
+                                selected = null
+                                offerUndo({ getString(Res.string.home_removed, name) }) { editor.put(removed, place) }
+                            },
+                        )
+                    }
+                    // A tracker's blocks only where trackers show, one per tracker only once there is one (ADR-050).
+                    val addable = layout.addable().filter { kind ->
+                        when (kind) {
+                            HomeBlockType.Trackers -> services.trackersShown
+                            HomeBlockType.Tracker -> trackerTitles.isNotEmpty()
+                            else -> true
+                        }
+                    }
+                    if (adding && addable.isNotEmpty()) {
+                        Catalog(addable, onPick = { kind ->
+                            when (kind) {
+                                HomeBlockType.Tag -> pickingTag = ""
+
+                                HomeBlockType.Tracker -> pickingTracker = ""
+
+                                else -> {
+                                    selected = editor.add(kind, after = selected).id
+                                    adding = false
+                                }
+                            }
+                        }, onCancel = { adding = false })
+                    } else if (addable.isNotEmpty()) {
+                        OutlinedButton({ adding = true }, modifier = Modifier.fillMaxWidth().hand()) {
+                            Text(stringResource(Res.string.home_block_add))
+                        }
+                    }
+                    if (layout.custom) {
+                        TextButton({
+                            val before = editor.reset()
+                            selected = null
+                            offerUndo({ getString(Res.string.home_reset_done) }) { editor.restore(before) }
+                        }, modifier = Modifier.align(Alignment.CenterHorizontally).hand()) { Text(stringResource(Res.string.home_reset)) }
+                    }
+                    Spacer(Modifier.height(56.dp)) // room for the snackbar over the last button
                 }
-                if (layout.custom) {
-                    TextButton({
-                        val before = editor.reset()
-                        selected = null
-                        offerUndo({ getString(Res.string.home_reset_done) }) { editor.restore(before) }
-                    }, modifier = Modifier.align(Alignment.CenterHorizontally).hand()) { Text(stringResource(Res.string.home_reset)) }
-                }
-                Spacer(Modifier.height(56.dp)) // room for the snackbar over the last button
+                SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
             }
-            SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
+        }
+    }
+    pickingTracker?.let { target ->
+        TrackerPickDialog(trackerTitles, onDismiss = { pickingTracker = null }) { id ->
+            if (target.isEmpty()) {
+                selected = editor.add(HomeBlockType.Tracker, after = selected, config = mapOf(HomeBlock.TRACKER to id)).id
+                adding = false
+            } else {
+                editor.configure(target, HomeBlock.TRACKER, id)
+            }
+            pickingTracker = null
         }
     }
     pickingTag?.let { target ->
@@ -380,6 +434,7 @@ private fun BlockTools(
     onResize: (BlockSize) -> Unit,
     onConfigure: (key: String, value: String?) -> Unit,
     onPickTag: () -> Unit,
+    onPickTracker: () -> Unit,
     onRemove: () -> Unit,
 ) {
     val kind = block.kind ?: return
@@ -418,6 +473,9 @@ private fun BlockTools(
                     )
                 }
                 TextButton(onPickTag, modifier = Modifier.hand()) { Text(stringResource(Res.string.home_tag_change)) }
+            }
+            if (kind == HomeBlockType.Tracker) {
+                TextButton(onPickTracker, modifier = Modifier.hand()) { Text(stringResource(Res.string.home_tracker_change)) }
             }
             if (kind == HomeBlockType.OnThisDay) {
                 val months = block.config[HomeBlock.ALSO] == HomeBlock.MONTHS

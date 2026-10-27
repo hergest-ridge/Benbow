@@ -84,6 +84,16 @@ internal val AppServices.trackersShown: Boolean get() = labs
 /** A tab of their own on the web and the desktop; a phone reaches them from «Ещё». */
 internal val AppServices.trackersTab: Boolean get() = trackersShown && platform != "android"
 
+/** Opens [id]'s sheet from elsewhere (Home, the calendar): beside the list in the tab, else a page of its own. */
+internal fun openTracker(services: AppServices, nav: Navigator, id: String) {
+    if (services.trackersTab) {
+        services.showTracker.value = id
+        nav.selectTab(Route.Trackers)
+    } else {
+        nav.open(Route.TrackerSheet(id))
+    }
+}
+
 /** Writes to the trackers off the main thread, one at a time in the order they were asked for (a sheet, Home, a widget). */
 internal class TrackerWrites(private val scope: CoroutineScope, private val repo: TrackerRepository) {
     private val lock = Mutex()

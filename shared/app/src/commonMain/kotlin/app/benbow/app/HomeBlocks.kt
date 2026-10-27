@@ -75,6 +75,9 @@ internal class HomeActions(
     /** The board's block (ADR-040): a note opened, the board itself. */
     val openNote: (BoardNote) -> Unit = {},
     val board: () -> Unit = {},
+    /** Trackers' blocks (ADR-050): the trackers, a tracker's sheet. */
+    val trackers: () -> Unit = {},
+    val openTracker: (String) -> Unit = {},
 )
 
 /** A block (or a piece of a list block): a long press anywhere on it opens its menu and no click follows. */
@@ -221,6 +224,15 @@ private fun TileBlock(block: HomeBlock, home: HomeState, actions: HomeActions, s
             actions.board,
             edges,
         )
+
+        // Trackers' blocks only where trackers show (ADR-050): a layout from a labs device draws nothing elsewhere.
+        HomeBlockType.Trackers -> if (services.trackersShown) {
+            TrackersBlock(services, block.blockSize ?: BlockSize.M, actions.trackers, actions.openTracker, edges)
+        }
+
+        HomeBlockType.Tracker -> block.config[HomeBlock.TRACKER]?.takeIf { services.trackersShown }?.let { tracker ->
+            TrackerBlock(services, tracker, block.blockSize ?: BlockSize.S, actions.openTracker, edges)
+        }
 
         HomeBlockType.Tag -> home.galleries[block.id]?.let { gallery ->
             TagBlock(

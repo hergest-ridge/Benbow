@@ -116,9 +116,9 @@ class HomeLayoutTest {
         val (drafts, at) = editor.remove("drafts")!!
         assertEquals(null, repo.homeLayout().first().blocks.find { it.id == "drafts" })
         assertEquals(
-            listOf(HomeBlockType.Drafts, HomeBlockType.Notes, HomeBlockType.Tag),
+            listOf(HomeBlockType.Drafts, HomeBlockType.Notes, HomeBlockType.Tag, HomeBlockType.Trackers, HomeBlockType.Tracker),
             editor.layout.value.addable(),
-            "a tag block can always come",
+            "a tag block can always come, and a block per tracker",
         )
         editor.put(drafts, at)
         assertEquals(editor.layout.value, repo.homeLayout().first())

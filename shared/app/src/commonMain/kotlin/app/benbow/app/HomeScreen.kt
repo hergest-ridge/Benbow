@@ -304,6 +304,8 @@ internal fun HomeScreen(services: AppServices, nav: Navigator) {
                 },
                 openNote = { note -> nav.open(Route.Editor(note.id, note.entry.day, board = true)) },
                 board = { nav.selectTab(Route.Board) },
+                trackers = { if (services.trackersTab) nav.selectTab(Route.Trackers) else nav.open(Route.Trackers) },
+                openTracker = { id -> openTracker(services, nav, id) },
             )
             postponing?.let { entry ->
                 PostponeDialog(onPick = { day ->

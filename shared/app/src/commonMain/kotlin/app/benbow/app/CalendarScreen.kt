@@ -94,6 +94,7 @@ import app.benbow.client.calendar.defaultCalendarColor
 import app.benbow.core.calendar.CalendarExport
 import app.benbow.core.calendar.CalendarKind
 import app.benbow.core.calendar.MY_CALENDAR
+import app.benbow.core.tracker.TrackerField
 import app.benbow.ui.mouseSwipe
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -105,6 +106,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
@@ -308,6 +310,9 @@ internal fun CalendarScreen(services: AppServices, nav: Navigator) {
     val entries by vm.entries.collectAsStateWithLifecycle()
     val written by vm.written.collectAsStateWithLifecycle()
     val today = remember { LocalDate.parse(services.today()) }
+    val trackers by remember {
+        if (services.trackersShown) services.trackers.trackers() else flowOf(emptyList())
+    }.collectAsStateWithLifecycle(emptyList())
     var sheet by remember { mutableStateOf<EventSheetRequest?>(null) }
     var showCalendars by remember { mutableStateOf(false) }
     var overview by remember { mutableStateOf(false) }
@@ -416,6 +421,10 @@ internal fun CalendarScreen(services: AppServices, nav: Navigator) {
                         IconButton({ nav.open(Route.Reminders(selected.toString())) }, modifier = Modifier.hand()) { Text("🔔") }
                     }
                 }
+                // Trackers shown in the calendar (ADR-050): a quiet line each with the day's marks.
+                if (trackers.any { it[TrackerField.CALENDAR] == "true" }) {
+                    item(key = "trackers") { CalendarTrackers(services, selected) { openTracker(services, nav, it) } }
+                }
                 val shown = if (unfolded) dayEvents else dayEvents.take(FOLDED_EVENTS)
                 items(shown, key = { "e" + it.id + it.day }) { event ->
                     EventRow(event, selected.toString(), colorOf(event)) { sheet = EventSheetRequest(event, EventDraft.of(event)) }
@@ -492,6 +501,10 @@ internal fun CalendarScreen(services: AppServices, nav: Navigator) {
             onImport = {
                 showCalendars = false
                 openFile()
+            },
+            trackers = trackers.filter { !it.archived },
+            onTracker = { tracker, on ->
+                services.trackerWrites { updateTracker(tracker.id, mapOf(TrackerField.CALENDAR to if (on) "true" else null)) }
             },
             onDismiss = { showCalendars = false },
         )

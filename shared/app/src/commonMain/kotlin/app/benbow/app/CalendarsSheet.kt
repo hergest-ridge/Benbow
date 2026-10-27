@@ -32,10 +32,15 @@ import app.benbow.app.resources.calendar_import
 import app.benbow.app.resources.calendar_my_events
 import app.benbow.app.resources.calendar_name_hint
 import app.benbow.app.resources.calendar_new
+import app.benbow.app.resources.calendar_trackers
+import app.benbow.app.resources.calendar_trackers_hint
 import app.benbow.app.resources.cancel
 import app.benbow.app.resources.event_save
+import app.benbow.app.resources.untitled
 import app.benbow.client.SWATCHES
 import app.benbow.client.calendar.CalendarItem
+import app.benbow.core.tracker.TrackerField
+import app.benbow.core.tracker.TrackerRecord
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -51,6 +56,9 @@ internal fun CalendarsSheet(
     onDelete: (CalendarItem) -> Unit,
     onExport: (CalendarItem) -> Unit,
     onImport: () -> Unit,
+    /** Trackers (ADR-050) and their checkboxes: shown in the calendar, off by default. */
+    trackers: List<TrackerRecord> = emptyList(),
+    onTracker: (TrackerRecord, Boolean) -> Unit = { _, _ -> },
     onDismiss: () -> Unit,
 ) {
     var editing by remember { mutableStateOf<CalendarItem?>(null) }
@@ -81,6 +89,31 @@ internal fun CalendarsSheet(
             }
             TextButton({ creating = true }, Modifier.padding(horizontal = 12.dp).hand()) { Text(stringResource(Res.string.calendar_new)) }
             TextButton(onImport, Modifier.padding(horizontal = 12.dp).hand()) { Text(stringResource(Res.string.calendar_import)) }
+            if (trackers.isNotEmpty()) {
+                val untitled = stringResource(Res.string.untitled)
+                Text(
+                    stringResource(Res.string.calendar_trackers),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp),
+                )
+                Text(
+                    stringResource(Res.string.calendar_trackers_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                )
+                trackers.forEach { tracker ->
+                    val on = tracker[TrackerField.CALENDAR] == "true"
+                    Row(
+                        Modifier.fillMaxWidth().hand().clickable { onTracker(tracker, !on) }.padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Checkbox(on, { onTracker(tracker, it) }, modifier = Modifier.hand())
+                        Text(trackerTitle(tracker, untitled), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    }
+                }
+            }
         }
     }
     val target = editing

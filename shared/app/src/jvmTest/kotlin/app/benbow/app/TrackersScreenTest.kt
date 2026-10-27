@@ -18,8 +18,12 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.test.waitUntilAtLeastOneExists
+import app.benbow.client.HomeBlock
+import app.benbow.client.HomeBlockType
 import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.db.BenbowDb
+import app.benbow.client.editHomeLayout
+import app.benbow.client.plusBlock
 import app.benbow.core.tracker.SpanField
 import app.benbow.core.tracker.TrackerCells
 import app.benbow.core.tracker.TrackerField
@@ -182,6 +186,45 @@ class TrackersScreenTest {
         waitUntilAtLeastOneExists(hasText("Трекер «🌱 Привычки»"), 5_000)
         onNodeWithText("Восстановить").click()
         waitUntil(timeoutMillis = 5_000) { runBlocking { services.trackers.trackers().first() }.size == 1 }
+    }
+
+    @Test
+    fun aTrackerOpensAsAWeekOrAYearAndRemembersWhich() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val services = labsServices("android")
+        val today = services.today()
+        val id = services.trackers.createTracker(TrackerPresets.habits.tracker, TrackerPresets.habits.columns)
+        val walk = runBlocking { services.trackers.columns(id).first() }[1].id
+        setContent { TrackerSheetScreen(services, Navigator(mutableStateListOf(Route.TrackerSheet(id))), id, back = true) }
+        waitUntilAtLeastOneExists(hasText("Неделя"), 5_000)
+        onNodeWithText("Неделя").click()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.trackers.trackers().first() }.single()[TrackerField.VIEW] == "week" }
+        waitUntilAtLeastOneExists(hasTestTag(TrackerCells.id(walk, today)), 5_000)
+        onNodeWithTag(TrackerCells.id(walk, today)).click()
+        waitUntil(timeoutMillis = 5_000) { cell(services, TrackerCells.id(walk, today))?.get("value") == "true" }
+        screenshot("trackers-12-week")
+        onNodeWithText("Год").click()
+        waitUntilAtLeastOneExists(hasTestTag("year:" + runBlocking { services.trackers.columns(id).first() }.first().id), 5_000)
+        screenshot("trackers-13-year")
+    }
+
+    @Test
+    fun aTrackersBlockOnHomeTicksTodayAndTheCalendarShowsItsLine() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val services = labsServices("android")
+        val today = services.today()
+        val id = services.trackers.createTracker(TrackerPresets.habits.tracker, TrackerPresets.habits.columns)
+        val stretch = runBlocking { services.trackers.columns(id).first() }.first().id
+        services.trackers.updateTracker(id, mapOf(TrackerField.CALENDAR to "true"))
+        services.repo.editHomeLayout { it.plusBlock(HomeBlock("t1", HomeBlockType.Tracker.value, "s", mapOf(HomeBlock.TRACKER to id)), 0) }
+        setContent { BenbowApp(services) }
+        val tick = "home:" + TrackerCells.id(stretch, today)
+        waitUntilAtLeastOneExists(hasTestTag(tick), 5_000)
+        screenshot("trackers-14-home")
+        onNodeWithTag(tick).click()
+        waitUntil(timeoutMillis = 5_000) { cell(services, TrackerCells.id(stretch, today))?.get("value") == "true" }
+
+        onNodeWithText("Календарь").click()
+        waitUntilAtLeastOneExists(hasText("🧘"), 5_000) // the day's marks under its title
+        screenshot("trackers-15-calendar")
     }
 
     @Test

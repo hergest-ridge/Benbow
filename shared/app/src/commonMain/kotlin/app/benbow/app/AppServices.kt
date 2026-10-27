@@ -262,6 +262,12 @@ class AppServices(
 
     /** Trackers (ADR-050): their records live in the calendar's file and sync on its channel. */
     val trackers = TrackerRepository(calendarDb, now)
+
+    /** Writes to the trackers, one at a time in the order asked (ADR-050): the sheet, the constructor, Home, a widget. */
+    internal val trackerWrites = TrackerWrites(scope, trackers)
+
+    /** A tracker to open in «Трекеры» (a Home block, a widget); the trackers' screen takes it. */
+    val showTracker = MutableStateFlow<String?>(null)
     private val calendarSync = CalendarSync(calendarDb, now)
 
     /** Reading and importing a calendar file (7.3d). */

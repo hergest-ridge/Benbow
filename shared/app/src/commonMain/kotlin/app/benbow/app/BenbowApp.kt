@@ -191,6 +191,9 @@ internal sealed interface Route {
     /** A tracker's sheet as a page of its own, where the window is too narrow for it beside the list. */
     data class TrackerSheet(val trackerId: String) : Route
 
+    /** «Настроить трекер» (ADR-050, B5): its name, emoji and columns. */
+    data class TrackerEditor(val trackerId: String) : Route
+
     data class Comments(val entryId: String) : Route
 
     data object Tags : Route
@@ -804,6 +807,9 @@ private fun Screens(
             }
             entry<Route.TrackerSheet>(metadata = if (services.trackersTab) FULL_WINDOW else emptyMap()) {
                 TrackerSheetScreen(services, nav, it.trackerId, back = true)
+            }
+            entry<Route.TrackerEditor>(metadata = if (services.trackersTab) FULL_WINDOW else emptyMap()) {
+                TrackerEditorScreen(services, nav, it.trackerId)
             }
             entry<Route.More>(metadata = TAB) { MoreScreen(services, listNav) }
             entry<Route.Comments> { CommentsScreen(services, nav, it) }

@@ -4,11 +4,12 @@ import app.benbow.core.tracker.ChoiceOption
 import app.benbow.core.tracker.ColumnField
 import app.benbow.core.tracker.ColumnType
 import app.benbow.core.tracker.DayBy
+import app.benbow.core.tracker.GoalPer
 import app.benbow.core.tracker.TrackerField
 
 /**
- * A tracker to start from (ADR-050): its fields and its columns' fields, in order. B4 has the two the spike tried; the
- * constructor and the others (Вода, Чтение, Спорт, Время) come with B5. Everything in them can be changed after.
+ * A tracker to start from (ADR-050): its fields and its columns' fields, in order. Everything in them can be changed
+ * after, in «Настроить трекер»; [blank] is a sheet with no columns that opens there at once.
  */
 internal class TrackerPreset(val id: String, val tracker: Map<String, String?>, val columns: List<Map<String, String?>>)
 
@@ -88,7 +89,91 @@ internal object TrackerPresets {
         ),
     )
 
-    val all = listOf(habits, sleep)
+    /** Glasses of water a day, filling up towards eight. */
+    val water = TrackerPreset(
+        "water",
+        mapOf(
+            TrackerField.NAME to "Вода",
+            TrackerField.ICON to "emoji:💧",
+            TrackerField.VIEW to "month",
+            TrackerField.BACKGROUND to "fog",
+            TrackerField.PRESET to "water",
+        ),
+        listOf(
+            column("Вода", "emoji:💧", "blue", ColumnType.Count, extra = mapOf(ColumnField.UNIT to "стаканов", ColumnField.GOAL to "8")),
+            column("Чай и кофе", "emoji:🍵", "brown", ColumnType.Count, short = "Чай", extra = mapOf(ColumnField.UNIT to "чашек")),
+        ),
+    )
+
+    /** Reading: whether one read, how many pages, and which book. */
+    val reading = TrackerPreset(
+        "reading",
+        mapOf(
+            TrackerField.NAME to "Чтение",
+            TrackerField.ICON to "emoji:📚",
+            TrackerField.VIEW to "month",
+            TrackerField.BACKGROUND to "clay",
+            TrackerField.LOOK_PREFIX + "paper" to "lines",
+            TrackerField.PRESET to "reading",
+        ),
+        listOf(
+            column("Читал(а)", "emoji:📖", "purple", ColumnType.Check, short = "Читал"),
+            column("Страницы", "emoji:📄", "blue", ColumnType.Count, short = "Стр.", extra = mapOf(ColumnField.UNIT to "стр.")),
+            column("Книга", "emoji:📚", "brown", ColumnType.Note),
+        ),
+    )
+
+    /** Sport: training days towards three a week, steps, stretching and how one felt. */
+    val sport = TrackerPreset(
+        "sport",
+        mapOf(
+            TrackerField.NAME to "Спорт",
+            TrackerField.ICON to "emoji:🏃",
+            TrackerField.VIEW to "month",
+            TrackerField.BACKGROUND to "mint",
+            TrackerField.PRESET to "sport",
+        ),
+        listOf(
+            column(
+                "Тренировка",
+                "emoji:💪",
+                "red",
+                ColumnType.Check,
+                short = "Трен.",
+                extra = mapOf(ColumnField.GOAL to "3", ColumnField.GOAL_PER to GoalPer.Week.token),
+            ),
+            column("Шаги, тысяч", "emoji:🚶", "green", ColumnType.Count, short = "Шаги", extra = mapOf(ColumnField.UNIT to "тыс.")),
+            column("Растяжка", "emoji:🧘", "teal", ColumnType.Check),
+            column("Самочувствие", "emoji:🔋", "yellow", ColumnType.Scale, short = "Сила"),
+        ),
+    )
+
+    /** Time on what matters, by timer: one at a time, a day's total in each cell. */
+    val time = TrackerPreset(
+        "time",
+        mapOf(
+            TrackerField.NAME to "Время",
+            TrackerField.ICON to "emoji:🕒",
+            TrackerField.VIEW to "month",
+            TrackerField.BACKGROUND to "storm",
+            TrackerField.PRESET to "time",
+        ),
+        listOf(
+            column("Работа", "emoji:💻", "blue", ColumnType.Time, extra = mapOf(ColumnField.TIMER to "one")),
+            column("Учёба", "emoji:🧠", "purple", ColumnType.Time, extra = mapOf(ColumnField.TIMER to "one")),
+            column("Своё дело", "emoji:🎨", "orange", ColumnType.Time, short = "Своё", extra = mapOf(ColumnField.TIMER to "one")),
+        ),
+    )
+
+    /** A sheet with no columns: «Настроить трекер» opens on it. */
+    val blank = TrackerPreset(
+        "blank",
+        mapOf(TrackerField.NAME to "Мой трекер", TrackerField.ICON to "emoji:📋", TrackerField.VIEW to "month"),
+        emptyList(),
+    )
+
+    /** The presets in the order «Новый трекер» offers them; [blank] comes apart, last. */
+    val all = listOf(habits, water, reading, sport, sleep, time)
 
     private fun column(
         name: String,

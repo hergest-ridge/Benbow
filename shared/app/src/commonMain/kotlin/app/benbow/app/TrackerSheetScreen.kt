@@ -68,14 +68,18 @@ import app.benbow.app.resources.next
 import app.benbow.app.resources.previous
 import app.benbow.app.resources.save
 import app.benbow.app.resources.today
+import app.benbow.app.resources.trackers_archive
 import app.benbow.app.resources.trackers_cell_count
 import app.benbow.app.resources.trackers_cell_note
 import app.benbow.app.resources.trackers_cell_text
 import app.benbow.app.resources.trackers_clear
+import app.benbow.app.resources.trackers_columns_empty
 import app.benbow.app.resources.trackers_figures_hide
 import app.benbow.app.resources.trackers_figures_show
 import app.benbow.app.resources.trackers_look
+import app.benbow.app.resources.trackers_setup
 import app.benbow.app.resources.trackers_total
+import app.benbow.app.resources.trackers_unarchive
 import app.benbow.app.resources.untitled
 import app.benbow.app.resources.weekdays_short
 import app.benbow.client.LookFields
@@ -93,8 +97,6 @@ import app.benbow.core.tracker.TrackerSpans
 import app.benbow.ui.theme.BenbowPalette
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
@@ -108,8 +110,8 @@ import org.jetbrains.compose.resources.stringResource
 private typealias SheetCells = Map<String, Map<String, String?>>
 private typealias SheetSpans = Map<String, List<TrackerRecord>>
 
-/** A write to the trackers, in the order the taps came. */
-private typealias TrackerWrite = (TrackerRepository.() -> Unit) -> Unit
+/** A write to the trackers, in the order the taps came ([TrackerWrites]). */
+internal typealias TrackerWrite = (TrackerRepository.() -> Unit) -> Unit
 
 /**
  * A tracker's sheet (ADR-050, B4): the month as on paper, days down the page and its columns across, on the records in
@@ -125,8 +127,7 @@ internal fun TrackerSheetScreen(services: AppServices, nav: Navigator, trackerId
     val allColumns by remember(trackerId) { services.trackers.columns(trackerId) }.collectAsStateWithLifecycle(null)
     val columns = remember(allColumns) { allColumns?.filter { !it.archived } }
     val today = remember { LocalDate.parse(services.today()) }
-    val writes = remember { Mutex() }
-    val write: TrackerWrite = { action -> services.scope.launch { writes.withLock { services.trackers.action() } } }
+    val write: TrackerWrite = { services.trackerWrites(it) }
     val untitled = stringResource(Res.string.untitled)
     val figures = tracker?.get(TrackerField.FIGURES) != FIGURES_HIDDEN
     var looking by remember { mutableStateOf(false) }
@@ -179,6 +180,17 @@ internal fun TrackerSheetScreen(services: AppServices, nav: Navigator, trackerId
                     Box {
                         IconButton({ menu = true }, Modifier.hand()) { Icon(Icons.More, stringResource(Res.string.menu)) }
                         DropdownMenu(menu, { menu = false }) {
+                            DropdownMenuItem({ Text(stringResource(Res.string.trackers_setup)) }, {
+                                menu = false
+                                nav.open(Route.TrackerEditor(trackerId))
+                            }, Modifier.hand(), leadingIcon = { Icon(Icons.Edit, null) })
+                            val archived = tracker.archived
+                            DropdownMenuItem({
+                                Text(stringResource(if (archived) Res.string.trackers_unarchive else Res.string.trackers_archive))
+                            }, {
+                                menu = false
+                                write { updateTracker(trackerId, mapOf(TrackerField.ARCHIVED to if (archived) null else "true")) }
+                            }, Modifier.hand(), leadingIcon = { Icon(if (archived) Icons.Unarchive else Icons.Archive, null) })
                             DropdownMenuItem({ Text(stringResource(Res.string.move_to_trash)) }, {
                                 menu = false
                                 write { moveToTrash(trackerId) }
@@ -191,7 +203,25 @@ internal fun TrackerSheetScreen(services: AppServices, nav: Navigator, trackerId
             },
         )
     }) { padding ->
-        if (tracker != null && columns != null) {
+        if (tracker != null && columns?.isEmpty() == true) {
+            // A blank sheet: its columns are made in «Настроить трекер».
+            Column(
+                Modifier.padding(padding).fillMaxSize().padding(32.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    stringResource(Res.string.trackers_columns_empty),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.widthIn(max = 420.dp),
+                )
+                TextButton({ nav.open(Route.TrackerEditor(trackerId)) }, Modifier.padding(top = 12.dp).hand()) {
+                    Text(stringResource(Res.string.trackers_setup))
+                }
+            }
+        } else if (tracker != null && columns != null) {
             Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                 // The tracker's own look, as a note's (its color and layers, ADR-047), drawn muted so the marks stay the
                 // main thing; as wide as a page of a notebook.

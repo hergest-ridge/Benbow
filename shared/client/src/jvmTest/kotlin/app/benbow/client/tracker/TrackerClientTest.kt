@@ -68,6 +68,21 @@ class TrackerClientTest {
     }
 
     @Test
+    fun aMovedColumnOrTrackerTakesARankBetweenItsNewNeighbours() = runTest {
+        val repo = TrackerRepository(calendarDb(), now)
+        val tracker = repo.createTracker(mapOf(TrackerField.NAME to "Привычки"), listOf("А", "Б", "В").map { column(it, "check") })
+        val before = repo.columns(tracker).first()
+        val moving = before[2]
+        repo.place(TrackerKind.COLUMN, moving.id, before.filter { it.id != moving.id }.map { it.record }, 0)
+        assertEquals(listOf("В", "А", "Б"), repo.columns(tracker).first().map { it.name })
+
+        val other = repo.createTracker(mapOf(TrackerField.NAME to "Сон"))
+        val list = repo.trackers().first()
+        repo.place(TrackerKind.TRACKER, other, list.filter { it.id != other }, 0)
+        assertEquals(listOf("Сон", "Привычки"), repo.trackers().first().map { it[TrackerField.NAME] })
+    }
+
+    @Test
     fun cellsComeByDayAndASpanOverMidnightShowsOnBothDays() = runTest {
         val repo = TrackerRepository(calendarDb(), now)
         val tracker = repo.createTracker(

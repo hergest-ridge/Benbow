@@ -125,6 +125,39 @@ class TrackersScreenTest {
     }
 
     @Test
+    fun aBlankSheetGetsItsColumnsInTheConstructor() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val services = labsServices("android")
+        val id = services.trackers.createTracker(TrackerPresets.blank.tracker, TrackerPresets.blank.columns)
+        fun columns() = runBlocking { services.trackers.columns(id).first() }
+        setContent { TrackerEditorScreen(services, Navigator(mutableStateListOf(Route.TrackerEditor(id))), id) }
+        waitUntilAtLeastOneExists(hasText("Колонок пока нет", substring = true), 5_000)
+        onNodeWithText("Добавить колонку").click()
+        waitUntilAtLeastOneExists(hasText("Число"), 5_000)
+        onNodeWithText("Число").click() // a type first, then the column's editor opens
+        waitUntil(timeoutMillis = 5_000) { columns().size == 1 }
+        assertEquals("count", columns().single().record["type"])
+        waitUntilAtLeastOneExists(hasTestTag("column-name"), 5_000)
+        onNodeWithTag("column-name").performTextReplacement("Отжимания")
+        screenshot("trackers-08-column")
+        onNodeWithText("Готово").click()
+        waitUntil(timeoutMillis = 5_000) { columns().single().name == "Отжимания" }
+        screenshot("trackers-09-constructor")
+    }
+
+    @Test
+    fun aTrashedTrackerWaitsInTheTrash() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val services = labsServices("android")
+        val id = services.trackers.createTracker(TrackerPresets.habits.tracker, TrackerPresets.habits.columns)
+        services.trackers.moveToTrash(id)
+        setContent { BenbowApp(services) }
+        onNodeWithText("Ещё").click()
+        onNodeWithText("Корзина").click()
+        waitUntilAtLeastOneExists(hasText("Трекер «🌱 Привычки»"), 5_000)
+        onNodeWithText("Восстановить").click()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.trackers.trackers().first() }.size == 1 }
+    }
+
+    @Test
     fun theOwnersAppShowsNoTrackers() = runDesktopComposeUiTest(width = 1280, height = 800) {
         setContent { BenbowApp(feedTestServices()) }
         waitForIdle()

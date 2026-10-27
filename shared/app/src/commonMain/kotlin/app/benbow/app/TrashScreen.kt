@@ -91,7 +91,10 @@ import app.benbow.app.resources.trash_purge
 import app.benbow.app.resources.trash_tag_item
 import app.benbow.app.resources.trash_tags
 import app.benbow.app.resources.trash_today
+import app.benbow.app.resources.trash_tracker_item
+import app.benbow.app.resources.trash_trackers
 import app.benbow.app.resources.trash_yesterday
+import app.benbow.app.resources.untitled
 import app.benbow.app.resources.voice_note
 import app.benbow.client.EntrySummary
 import app.benbow.client.LibraryItem
@@ -148,6 +151,8 @@ internal fun TrashScreen(services: AppServices, nav: Navigator) {
     val media by remember { services.repo.mediaInTrash() }.collectAsStateWithLifecycle(TrashMedia())
     val events by services.calendar.trashedEvents().collectAsStateWithLifecycle(emptyList())
     val calendars by services.calendar.trashedCalendars().collectAsStateWithLifecycle(emptyList())
+    // Trackers (ADR-050) with their columns and marks; only where trackers show.
+    val trackers by remember { services.trackers.trashedTrackers() }.collectAsStateWithLifecycle(emptyList())
     val tags by services.repo.trashedTags().collectAsStateWithLifecycle(emptyList())
     val categories = LocalTags.current.trashedCategories
     var order by rememberSaveable { mutableStateOf(TrashOrder.Latest) }
@@ -240,7 +245,7 @@ internal fun TrashScreen(services: AppServices, nav: Navigator) {
         }
         val items = entries ?: return@Scaffold
         val listed = items.isNotEmpty() || notes.isNotEmpty() || off.isNotEmpty()
-        if (!listed && events.isEmpty() && calendars.isEmpty() && tags.isEmpty() && categories.isEmpty()) {
+        if (!listed && events.isEmpty() && calendars.isEmpty() && tags.isEmpty() && categories.isEmpty() && trackers.isEmpty()) {
             Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(stringResource(Res.string.trash_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -407,6 +412,12 @@ internal fun TrashScreen(services: AppServices, nav: Navigator) {
             }
             items(events, key = { "e" + it.id }) { event ->
                 TrashRow(event.title, dayLabel(event.day)) { services.scope.launch { services.calendar.restore(event.id) } }
+            }
+            if (trackers.isNotEmpty()) item(key = "trackers") { TrashHeader(stringResource(Res.string.trash_trackers)) }
+            items(trackers, key = { "t" + it.id }) { tracker ->
+                TrashRow(stringResource(Res.string.trash_tracker_item, trackerTitle(tracker, stringResource(Res.string.untitled))), null) {
+                    services.trackerWrites { restore(tracker.id) }
+                }
             }
         }
     }

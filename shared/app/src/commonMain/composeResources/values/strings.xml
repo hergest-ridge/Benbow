@@ -391,6 +391,18 @@
     <string name="tag_color">Цвет</string>
     <string name="color_default">Обычный</string>
     <string name="color_as_category">Как у категории</string>
+    <string-array name="ink_names">
+        <item>Серый</item>
+        <item>Коричневый</item>
+        <item>Оранжевый</item>
+        <item>Жёлтый</item>
+        <item>Зелёный</item>
+        <item>Бирюзовый</item>
+        <item>Синий</item>
+        <item>Фиолетовый</item>
+        <item>Розовый</item>
+        <item>Красный</item>
+    </string-array>
     <string-array name="swatch_names">
         <item>Коралловый</item>
         <item>Персиковый</item>
@@ -781,6 +793,56 @@
     <string name="trackers_cell_text">Текст</string>
     <string name="trackers_cell_note">Заметка к дню</string>
     <string name="trackers_clear">Очистить</string>
+    <string name="trackers_blank">Пустой лист</string>
+    <string name="trackers_setup">Настроить трекер</string>
+    <string name="trackers_name">Название</string>
+    <string name="trackers_emoji">Эмодзи</string>
+    <string name="trackers_columns">Колонки</string>
+    <string name="trackers_columns_empty">Колонок пока нет. Добавьте первую: отметку, число, оценку, выбор, время или заметку.</string>
+    <string name="trackers_column_add">Добавить колонку</string>
+    <string name="trackers_up">Выше</string>
+    <string name="trackers_down">Ниже</string>
+    <string name="trackers_archive">В архив</string>
+    <string name="trackers_unarchive">Вернуть из архива</string>
+    <string name="trackers_archive_hint">Из архива колонка вернётся со всеми значениями.</string>
+    <string name="trackers_type">Тип</string>
+    <string name="trackers_type_hint">Значения не переписываются: если вернуть прежний тип, они снова прочитаются.</string>
+    <string name="trackers_type_check">Да или нет</string>
+    <string name="trackers_type_count">Число</string>
+    <string name="trackers_type_scale">Оценка</string>
+    <string name="trackers_type_choice">Выбор</string>
+    <string name="trackers_type_time">Время</string>
+    <string name="trackers_type_note">Заметка</string>
+    <string name="trackers_type_check_about">Отметка за день одним касанием</string>
+    <string name="trackers_type_count_about">Стаканы, страницы, разы: касание прибавляет одно</string>
+    <string name="trackers_type_scale_about">От 1 до 5 или свой размах, глубже цветом</string>
+    <string name="trackers_type_choice_about">Свои варианты, у каждого цвет и эмодзи</string>
+    <string name="trackers_type_time_about">Таймер или часы на листе, как в трекере сна</string>
+    <string name="trackers_type_note_about">Пара слов к дню</string>
+    <string name="trackers_short">Коротко в шапке</string>
+    <string name="trackers_ink">Цвет отметок</string>
+    <string name="trackers_unit">Единица</string>
+    <string name="trackers_goal">Цель</string>
+    <string name="trackers_goal_day">в день</string>
+    <string name="trackers_goal_week">в неделю</string>
+    <string name="trackers_goal_month">в месяц</string>
+    <string name="trackers_goal_hint">Цель только закрашивается, когда достигнута: пропуски никто не считает.</string>
+    <string name="trackers_range">Размах оценки</string>
+    <string name="trackers_options">Варианты</string>
+    <string name="trackers_option_add">Добавить вариант</string>
+    <string name="trackers_option_name">Вариант</string>
+    <string name="trackers_option_remove">Убрать вариант</string>
+    <string name="trackers_option_color">Цвет варианта</string>
+    <string name="trackers_hours">Часы на листе</string>
+    <string name="trackers_hours_from">С</string>
+    <string name="trackers_hours_to">До</string>
+    <string name="trackers_hours_hint">С 21:00 до 11:00, как в трекере сна, клетка на каждый час. Пусто: в клетке итог дня.</string>
+    <string name="trackers_day_by">Отрезок считается за день</string>
+    <string name="trackers_day_start">начала</string>
+    <string name="trackers_day_end">окончания (сон)</string>
+    <string name="trackers_timer_one">Один таймер за раз</string>
+    <string name="trash_trackers">Трекеры</string>
+    <string name="trash_tracker_item">Трекер «%1$s»</string>
     <string name="board_as_list">Списком</string>
     <string name="board_as_grid">Сеткой</string>
     <string name="board_files">Вложений: %1$d</string>

@@ -105,6 +105,16 @@ class TrackerRepository(
     /** Sets a column's fields (header texts, icon, color, type, options, goal…); its cells are never rewritten. */
     fun updateColumn(id: String, fields: Map<String, String?>) = put(TrackerKind.COLUMN, id, fields)
 
+    /**
+     * Puts the tracker or column [id] (of [kind]) at [at] among [others], the records of its list as shown without it:
+     * its rank between theirs (others get one first when they lack it), so a move rewrites nothing else.
+     */
+    fun place(kind: String, id: String, others: List<TrackerRecord>, at: Int) = db.transaction {
+        BoardRank.place(id, others.map { it.id to it[TrackerField.RANK] }, at).forEach { (each, rank) ->
+            db.putRecord(kind, each, mapOf(TrackerField.RANK to rank), now)
+        }
+    }
+
     /** [field] of [column]'s cell on [day]: a check's "true", a rating, an option's id, a note; null clears it. */
     fun setCell(column: String, day: String, value: String?, field: String = CellField.VALUE) = cell(column, day, mapOf(field to value))
 

@@ -30,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -102,7 +103,11 @@ internal fun LookSheet(
             if (screen == null) {
                 Preview(id, words, look, base)
             } else {
-                Box(Modifier.background(screenPage).then(entryBackdrop(screenId(id), screen, screenPage, muted = true, moving = true))) {
+                Box(
+                    Modifier.clipToBounds().background(
+                        screenPage,
+                    ).then(entryBackdrop(screenId(id), screen, screenPage, muted = true, moving = true)),
+                ) {
                     Preview(id, words, look, base)
                 }
             }

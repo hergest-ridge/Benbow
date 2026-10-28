@@ -116,24 +116,28 @@ class TrackersScreenTest {
     @Test
     fun aTimerRunsFromItsHeaderAndADaysSpansAreTypedByHand() = runDesktopComposeUiTest(width = 412, height = 860) {
         val services = testServices("android")
-        val today = services.today()
+        val today = services.today() // the sheet's today, the journal's: the clock's yesterday until DAY_START_HOUR
         val id = services.trackers.createTracker(TrackerPresets.time.tracker, TrackerPresets.time.columns)
         fun work() = runBlocking { services.trackers.columns(id).first() }.first()
-        fun spans() = runBlocking { services.trackers.spans(listOf(work().id), today, today).first() }
+
+        // Up to the clock's day: a timer's span is on the day it starts by the clock, after the sheet's today until 04:00.
+        fun spans() = runBlocking { services.trackers.spans(listOf(work().id), today, "${localDateTimeNow().date}").first() }
         setContent { TrackerSheetScreen(services, Navigator(mutableStateListOf(Route.TrackerSheet(id))), id, back = true) }
         val timer = "timer:" + work().id
         waitUntilAtLeastOneExists(hasTestTag(timer), 5_000)
         onNodeWithTag(timer).click()
         waitUntil(timeoutMillis = 5_000) { work().running != null }
+        val started = work().running
         waitUntilAtLeastOneExists(hasContentDescription("Остановить таймер"), 5_000)
         screenshot("trackers-10-timer")
         onNodeWithTag(timer).click()
-        waitUntil(timeoutMillis = 5_000) { work().running == null && spans().size == 1 }
+        waitUntil(timeoutMillis = 5_000) { work().running == null && spans().singleOrNull()?.get(SpanField.START) == started }
 
+        val listed = spansOn(spans(), today, work().dayBy).size // the timer's span, unless it went to the clock's day
         onNodeWithTag(TrackerCells.id(work().id, today)).performSemanticsAction(SemanticsActions.OnLongClick)
         waitUntilAtLeastOneExists(hasText("Добавить отрезок"), 5_000)
         onNodeWithText("Добавить отрезок").click()
-        waitUntilAtLeastOneExists(hasTestTag("span-start:1"), 5_000)
+        waitUntilAtLeastOneExists(hasTestTag("span-start:$listed"), 5_000)
         screenshot("trackers-11-spans")
         onNodeWithText("Сохранить").click()
         waitUntil(timeoutMillis = 5_000) { spans().size == 2 }

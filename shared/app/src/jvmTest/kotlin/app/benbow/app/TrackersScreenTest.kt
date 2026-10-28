@@ -10,6 +10,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -145,7 +146,8 @@ class TrackersScreenTest {
         waitUntilAtLeastOneExists(hasText("Привычки"), 5_000)
         screenshot("trackers-07-wide")
 
-        onNodeWithContentDescription("Меню").click()
+        onAllNodesWithContentDescription("Меню").assertCountEquals(2) // the list's row and the sheet beside it
+        onAllNodesWithContentDescription("Меню")[1].click() // the sheet's
         waitUntilAtLeastOneExists(hasText("В корзину"), 5_000)
         onNodeWithText("В корзину").click()
         waitUntilAtLeastOneExists(hasText("Вернуть"), 5_000)

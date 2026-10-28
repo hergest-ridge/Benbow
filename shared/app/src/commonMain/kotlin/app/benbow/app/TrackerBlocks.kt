@@ -130,7 +130,7 @@ internal fun TrackersBlock(services: AppServices, size: BlockSize, onTrackers: (
 /** A tracker's line in «Трекеры»: its title and today's marks. */
 @Composable
 private fun TodayLine(services: AppServices, tracker: TrackerRecord, untitled: String, onOpen: () -> Unit) {
-    val today = remember { LocalDate.parse(services.today()) }
+    val today = remember { trackerToday() }
     val days = trackerDays(services, tracker.id, listOf(today))
     val figures = tracker[TrackerField.FIGURES] != FIGURES_HIDDEN
     val marks = days.columns.mapNotNull { markText(it, days.cells[TrackerCells.id(it.id, "$today")], days.seconds(it, "$today"), figures) }
@@ -158,7 +158,7 @@ private fun TodayLine(services: AppServices, tracker: TrackerRecord, untitled: S
 internal fun TrackerBlock(services: AppServices, trackerId: String, size: BlockSize, onOpen: (String) -> Unit, modifier: Modifier) {
     val trackers by remember { services.trackers.trackers() }.collectAsStateWithLifecycle(emptyList())
     val tracker = trackers.firstOrNull { it.id == trackerId } ?: return
-    val today = remember { LocalDate.parse(services.today()) }
+    val today = remember { trackerToday() }
     val days = remember(size, today) {
         when (size) {
             BlockSize.S -> listOf(today)

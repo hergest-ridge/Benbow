@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
@@ -57,7 +58,7 @@ class WidgetTracker(val id: String, val title: String, val marks: List<WidgetMar
  * follow each tracker's eye.
  */
 suspend fun AppServices.trackersToday(limit: Int = WIDGET_TRACKERS): List<WidgetTracker> = withContext(IoDispatcher) {
-    val day = today()
+    val day = "${trackerToday()}"
     trackers.trackers().first().filter { !it.archived }.take(limit).map { tracker ->
         val columns = trackers.columns(tracker.id).first().filter { !it.archived }.take(WIDGET_COLUMNS)
         val cells = trackers.cells(columns.map { it.id }, day, day).first().associate { it.id to it.fields }
@@ -81,7 +82,7 @@ suspend fun AppServices.trackersToday(limit: Int = WIDGET_TRACKERS): List<Widget
 suspend fun AppServices.tickToday(columnId: String) {
     withContext(IoDispatcher) {
         val column = trackers.column(columnId) ?: return@withContext
-        val day = today()
+        val day = "${trackerToday()}"
         when (column.type) {
             ColumnType.Check -> {
                 val marked = trackers.cells(listOf(columnId), day, day).first().singleOrNull()?.get(CellField.VALUE) == "true"
@@ -99,6 +100,12 @@ suspend fun AppServices.tickToday(columnId: String) {
 internal fun localNow(): String = timeOf(localDateTimeNow())
 
 internal fun localDateTimeNow(): LocalDateTime = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+
+/**
+ * Trackers' today: the clock's date, the day a timer's span and the sleep sheet's midnight count by (ADR-052), not the
+ * journal's day from [DAY_START_HOUR].
+ */
+internal fun trackerToday(): LocalDate = localDateTimeNow().date
 
 /** How many trackers, and columns of each, a widget shows. */
 private const val WIDGET_TRACKERS = 3

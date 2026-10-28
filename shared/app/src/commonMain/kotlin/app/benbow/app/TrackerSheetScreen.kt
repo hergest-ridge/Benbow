@@ -103,7 +103,7 @@ internal fun TrackerSheetScreen(services: AppServices, nav: Navigator, trackerId
     val tracker = trackers?.firstOrNull { it.id == trackerId }
     val allColumns by remember(trackerId) { services.trackers.columns(trackerId) }.collectAsStateWithLifecycle(null)
     val columns = remember(allColumns) { allColumns?.filter { !it.archived } }
-    val today = remember { LocalDate.parse(services.today()) }
+    val today = remember { trackerToday() }
     val write: TrackerWrite = { services.trackerWrites(it) }
     val untitled = stringResource(Res.string.untitled)
     val figures = tracker?.get(TrackerField.FIGURES) != FIGURES_HIDDEN

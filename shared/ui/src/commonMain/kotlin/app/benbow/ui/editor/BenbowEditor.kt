@@ -108,8 +108,10 @@ private fun BoxScope.EditorBody(state: EditorState, readOnly: Boolean, atoms: At
     val density = LocalDensity.current
     // A picture link on its way stands as tall as the picture will (ADR-045).
     val coming = LocalPicturesComing.current
-    val styles = remember(colors, atoms, width, density, coming) {
-        EditorStyles(colors, dark = colors.background.luminance() < 0.5f, atomHeight = {
+    // The note's own font (ADR-047) for its words and headings, at its size; code keeps the monospace.
+    val font = LocalNoteFont.current
+    val styles = remember(colors, atoms, width, density, coming, font) {
+        EditorStyles(colors, dark = colors.background.luminance() < 0.5f, baseSize = 17.sp * (font?.scale ?: 1f), atomHeight = {
             with(density) { atoms.height(it, width, coming).toSp() }
         })
     }
@@ -117,6 +119,7 @@ private fun BoxScope.EditorBody(state: EditorState, readOnly: Boolean, atoms: At
         color = colors.onSurface,
         fontSize = styles.baseSize,
         lineHeight = TextUnit.Unspecified,
+        fontFamily = font?.family ?: MaterialTheme.typography.bodyLarge.fontFamily,
     )
     val measurer = rememberTextMeasurer()
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }

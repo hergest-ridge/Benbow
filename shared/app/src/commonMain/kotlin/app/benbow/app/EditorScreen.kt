@@ -32,6 +32,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -109,6 +110,7 @@ import app.benbow.client.DraftSession
 import app.benbow.client.EntryDetail
 import app.benbow.client.GentleRules
 import app.benbow.client.JournalRepository
+import app.benbow.client.LookFields
 import app.benbow.client.TagRef
 import app.benbow.client.TemplateContext
 import app.benbow.client.Templates
@@ -138,6 +140,8 @@ import app.benbow.core.text.RichText
 import app.benbow.ui.editor.BenbowEditor
 import app.benbow.ui.editor.EditorState
 import app.benbow.ui.editor.EditorToolbar
+import app.benbow.ui.editor.LocalNoteFont
+import app.benbow.ui.editor.inFont
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.drop
@@ -947,162 +951,166 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
             }
         },
     ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize()) {
-            if (detail?.conflictHeads?.isNotEmpty() == true) {
-                Banner(
-                    stringResource(Res.string.conflict_banner),
-                    stringResource(Res.string.conflict_choose),
-                    error = true,
-                    onAction = openHistory,
-                )
-            }
-            if (detail?.inTrash == true) {
-                Banner(stringResource(Res.string.in_trash_banner), stringResource(Res.string.restore), onAction = vm::restoreFromTrash)
-            }
-            if (dropping) {
-                Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-                ) {
-                    Text(
-                        stringResource(Res.string.drop_to_attach),
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(16.dp),
+        // The note's own font (ADR-047) for its title and words; the rest of the screen keeps the app's.
+        val font = noteFont(detail?.look?.get(LookFields.FONT))
+        CompositionLocalProvider(LocalNoteFont provides font) {
+            Column(Modifier.padding(padding).fillMaxSize()) {
+                if (detail?.conflictHeads?.isNotEmpty() == true) {
+                    Banner(
+                        stringResource(Res.string.conflict_banner),
+                        stringResource(Res.string.conflict_choose),
+                        error = true,
+                        onAction = openHistory,
                     )
                 }
-            }
-            if (postponing) {
-                PostponeDialog(onPick = { day ->
-                    postponing = false
-                    vm.entryId?.let { services.postpone(it, day.toString(), detail?.until) }
-                }, onDismiss = { postponing = false })
-            }
-            if (pickingBackground) {
-                val words = remember { vm.plainText() }
-                LookSheet(
-                    id = detail?.id.orEmpty(),
-                    words = words,
-                    color = detail?.background,
-                    look = detail?.look.orEmpty(),
-                    page = if (route.board) boardCardColor() else MaterialTheme.colorScheme.background,
-                    onColor = vm::setBackground,
-                    onLook = vm::setLook,
-                    onDismiss = { pickingBackground = false },
-                )
-            }
-            if (vm.reading && editor != null && detail != null && !vm.broken) {
-                val thread by vm.comments.collectAsStateWithLifecycle()
-                PostView(
-                    services,
-                    detail,
-                    editor,
-                    thread,
-                    onOpenMedia = { nav.open(Route.Media(detail.id, it)) },
-                    onOpenComment = { nav.open(Route.Editor(it.summary.id, it.summary.day)) },
-                    onOpenCommentMedia = { comment, attachment -> nav.open(Route.Media(comment, attachment)) },
-                    onReact = vm::react,
-                    ribbon = ribbon,
-                    pictures = pictures,
-                    scroll = readScroll,
-                    commentField = if (wide) {
-                        { QuickNoteBar(services, onSend = vm::comment, hint = stringResource(Res.string.comment_hint), inline = true) }
-                    } else {
-                        null
-                    },
-                    modifier = Modifier.fillMaxSize().then(measureWords),
-                )
-                return@Column
-            }
-            if (editor != null && vm.isBlankNew && !route.board) {
-                val context = templateContext(route.day)
-                LaunchedEffect(route.template) { route.template?.let { vm.applyTemplate(it, context) } }
-                LaunchedEffect(route.heading) { route.heading?.let(vm::applyHeading) }
-                TemplateRow { vm.applyTemplate(it, context) }
-            }
-            if (editor != null && !vm.broken && !route.board) {
-                MetadataRow(
-                    services,
-                    mood = detail?.mood,
-                    tags = detail?.tags.orEmpty(),
-                    onMood = vm::setMood,
-                    onAddTag = vm::addTag,
-                    onCreateTag = vm::createTag,
-                    onRemoveTag = vm::removeTag,
-                    withMood = !route.board,
-                )
-            }
-            if (ribbon && detail != null) {
-                AttachmentStrip(
-                    services.media,
-                    attachments,
-                    onOpen = { nav.open(Route.Media(detail.id, it.meta.id)) },
-                    placed = inline,
-                    onMove = vm::moveAttachment,
-                )
-            }
-            // A note's title on top (Keep's «Название»), then its words; its tags at the foot.
-            val title = vm.title
-            if (title != null && editor != null && !vm.broken && !vm.reading) {
-                LaunchedEffect(title) { snapshotFlow { title.text.toString() }.drop(1).collect { vm.titleChanged() } }
-                NoteTitle(title)
-            }
-            val fill = if (route.board) Modifier.weight(1f).fillMaxWidth() else Modifier.fillMaxSize()
-            when {
-                vm.broken -> Text(
-                    stringResource(Res.string.entry_broken),
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(24.dp),
-                )
-
-                editor != null && vm.listDocument != null -> key(vm.listVersion) {
-                    ChecklistEditor(vm.listDocument!!, vm::listChanged, fill, focusFirst = route.entryId == null)
+                if (detail?.inTrash == true) {
+                    Banner(stringResource(Res.string.in_trash_banner), stringResource(Res.string.restore), onAction = vm::restoreFromTrash)
                 }
-
-                editor != null -> {
-                    val focus = remember { FocusRequester() }
-                    LaunchedEffect(editor) { snapshotFlow { editor.model }.drop(1).collect(vm::onEdited) }
-                    LaunchedEffect(Unit) { if (route.entryId == null) focus.requestFocus() }
-                    Box(fill) {
-                        // A note's empty words say what goes there, as Keep's «Заметка»: over a plain empty line only
-                        // (a list's marker or a heading there would show through it).
-                        val plain = editor.model.paragraphs.singleOrNull()?.let {
-                            it.list == null && it.style == BlockStyle.Normal && it.callout == null && it.atom == null
-                        } == true
-                        if (route.board && plain && editor.model.text.isEmpty()) {
-                            Text(
-                                stringResource(Res.string.board_text_hint),
-                                Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        BenbowEditor(
-                            state = editor,
-                            atoms = pictures,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .onFocusChanged { editorFocused = it.hasFocus }
-                                .focusRequester(focus)
-                                .then(measureWords)
-                                .verticalScroll(writeScroll)
-                                .padding(horizontal = 20.dp, vertical = 12.dp)
-                                .fillMaxWidth(),
+                if (dropping) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                    ) {
+                        Text(
+                            stringResource(Res.string.drop_to_attach),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(16.dp),
                         )
                     }
                 }
-            }
-            if (route.board && editor != null && !vm.broken) {
-                MetadataRow(
-                    services,
-                    mood = null,
-                    tags = detail?.tags.orEmpty(),
-                    onMood = vm::setMood,
-                    onAddTag = vm::addTag,
-                    onCreateTag = vm::createTag,
-                    onRemoveTag = vm::removeTag,
-                    withMood = false,
-                )
+                if (postponing) {
+                    PostponeDialog(onPick = { day ->
+                        postponing = false
+                        vm.entryId?.let { services.postpone(it, day.toString(), detail?.until) }
+                    }, onDismiss = { postponing = false })
+                }
+                if (pickingBackground) {
+                    val words = remember { vm.plainText() }
+                    LookSheet(
+                        id = detail?.id.orEmpty(),
+                        words = words,
+                        color = detail?.background,
+                        look = detail?.look.orEmpty(),
+                        page = if (route.board) boardCardColor() else MaterialTheme.colorScheme.background,
+                        onColor = vm::setBackground,
+                        onLook = vm::setLook,
+                        onDismiss = { pickingBackground = false },
+                    )
+                }
+                if (vm.reading && editor != null && detail != null && !vm.broken) {
+                    val thread by vm.comments.collectAsStateWithLifecycle()
+                    PostView(
+                        services,
+                        detail,
+                        editor,
+                        thread,
+                        onOpenMedia = { nav.open(Route.Media(detail.id, it)) },
+                        onOpenComment = { nav.open(Route.Editor(it.summary.id, it.summary.day)) },
+                        onOpenCommentMedia = { comment, attachment -> nav.open(Route.Media(comment, attachment)) },
+                        onReact = vm::react,
+                        ribbon = ribbon,
+                        pictures = pictures,
+                        scroll = readScroll,
+                        commentField = if (wide) {
+                            { QuickNoteBar(services, onSend = vm::comment, hint = stringResource(Res.string.comment_hint), inline = true) }
+                        } else {
+                            null
+                        },
+                        modifier = Modifier.fillMaxSize().then(measureWords),
+                    )
+                    return@Column
+                }
+                if (editor != null && vm.isBlankNew && !route.board) {
+                    val context = templateContext(route.day)
+                    LaunchedEffect(route.template) { route.template?.let { vm.applyTemplate(it, context) } }
+                    LaunchedEffect(route.heading) { route.heading?.let(vm::applyHeading) }
+                    TemplateRow { vm.applyTemplate(it, context) }
+                }
+                if (editor != null && !vm.broken && !route.board) {
+                    MetadataRow(
+                        services,
+                        mood = detail?.mood,
+                        tags = detail?.tags.orEmpty(),
+                        onMood = vm::setMood,
+                        onAddTag = vm::addTag,
+                        onCreateTag = vm::createTag,
+                        onRemoveTag = vm::removeTag,
+                        withMood = !route.board,
+                    )
+                }
+                if (ribbon && detail != null) {
+                    AttachmentStrip(
+                        services.media,
+                        attachments,
+                        onOpen = { nav.open(Route.Media(detail.id, it.meta.id)) },
+                        placed = inline,
+                        onMove = vm::moveAttachment,
+                    )
+                }
+                // A note's title on top (Keep's «Название»), then its words; its tags at the foot.
+                val title = vm.title
+                if (title != null && editor != null && !vm.broken && !vm.reading) {
+                    LaunchedEffect(title) { snapshotFlow { title.text.toString() }.drop(1).collect { vm.titleChanged() } }
+                    NoteTitle(title)
+                }
+                val fill = if (route.board) Modifier.weight(1f).fillMaxWidth() else Modifier.fillMaxSize()
+                when {
+                    vm.broken -> Text(
+                        stringResource(Res.string.entry_broken),
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(24.dp),
+                    )
+
+                    editor != null && vm.listDocument != null -> key(vm.listVersion) {
+                        ChecklistEditor(vm.listDocument!!, vm::listChanged, fill, focusFirst = route.entryId == null)
+                    }
+
+                    editor != null -> {
+                        val focus = remember { FocusRequester() }
+                        LaunchedEffect(editor) { snapshotFlow { editor.model }.drop(1).collect(vm::onEdited) }
+                        LaunchedEffect(Unit) { if (route.entryId == null) focus.requestFocus() }
+                        Box(fill) {
+                            // A note's empty words say what goes there, as Keep's «Заметка»: over a plain empty line only
+                            // (a list's marker or a heading there would show through it).
+                            val plain = editor.model.paragraphs.singleOrNull()?.let {
+                                it.list == null && it.style == BlockStyle.Normal && it.callout == null && it.atom == null
+                            } == true
+                            if (route.board && plain && editor.model.text.isEmpty()) {
+                                Text(
+                                    stringResource(Res.string.board_text_hint),
+                                    Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                                    style = MaterialTheme.typography.bodyLarge.inFont(LocalNoteFont.current),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            BenbowEditor(
+                                state = editor,
+                                atoms = pictures,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .onFocusChanged { editorFocused = it.hasFocus }
+                                    .focusRequester(focus)
+                                    .then(measureWords)
+                                    .verticalScroll(writeScroll)
+                                    .padding(horizontal = 20.dp, vertical = 12.dp)
+                                    .fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
+                if (route.board && editor != null && !vm.broken) {
+                    MetadataRow(
+                        services,
+                        mood = null,
+                        tags = detail?.tags.orEmpty(),
+                        onMood = vm::setMood,
+                        onAddTag = vm::addTag,
+                        onCreateTag = vm::createTag,
+                        onRemoveTag = vm::removeTag,
+                        withMood = false,
+                    )
+                }
             }
         }
     }
@@ -1168,12 +1176,16 @@ private fun NoteTitle(state: TextFieldState) {
         state,
         Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 8.dp),
         inputTransformation = onward,
-        textStyle = MaterialTheme.typography.titleLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+        textStyle = MaterialTheme.typography.titleLarge.copy(color = MaterialTheme.colorScheme.onSurface).inFont(LocalNoteFont.current),
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         decorator = TextFieldDecorator { field ->
             Box {
                 if (state.text.isEmpty()) {
-                    Text(hint, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        hint,
+                        style = MaterialTheme.typography.titleLarge.inFont(LocalNoteFont.current),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 field()
             }

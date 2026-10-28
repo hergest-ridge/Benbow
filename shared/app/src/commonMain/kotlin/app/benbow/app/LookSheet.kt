@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -43,6 +44,9 @@ import app.benbow.app.resources.look_color
 import app.benbow.app.resources.look_credit_ambient
 import app.benbow.app.resources.look_credit_hero
 import app.benbow.app.resources.look_credit_morris
+import app.benbow.app.resources.look_font
+import app.benbow.app.resources.look_font_plain
+import app.benbow.app.resources.look_font_sample
 import app.benbow.app.resources.look_light
 import app.benbow.app.resources.look_lights
 import app.benbow.app.resources.look_motion
@@ -60,6 +64,8 @@ import app.benbow.app.resources.look_screen
 import app.benbow.app.resources.look_shuffle
 import app.benbow.app.resources.look_title
 import app.benbow.client.LookFields
+import app.benbow.ui.editor.NoteFont
+import app.benbow.ui.editor.inFont
 import app.benbow.ui.mouseSwipe
 import org.jetbrains.compose.resources.StringArrayResource
 import org.jetbrains.compose.resources.StringResource
@@ -90,6 +96,8 @@ internal fun LookSheet(
     screen: Map<String, String>? = null,
     screenPage: Color = page,
     onScreen: (Map<String, String?>) -> Unit = {},
+    /** «Шрифт»: a note's words take a font, a tracker's sheet doesn't. */
+    fonts: Boolean = true,
 ) {
     val base = swatch(color) ?: page
     // Opened whole: the note on top and every row under it (half open, only its color would show).
@@ -114,6 +122,7 @@ internal fun LookSheet(
             Part(Res.string.look_color) {
                 SwatchPicker(color, stringResource(Res.string.background_none), onColor, Modifier.padding(horizontal = 20.dp))
             }
+            if (fonts) FontRow(look[LookFields.FONT], base, onLook)
             Layer(LookLayer.Paper, Res.string.look_paper, Res.array.look_papers, id, look, base, onLook)
             if (NoteLooks.isPhoto(look[LookLayer.Paper.field])) Credit(Res.string.look_credit_ambient)
             Layer(LookLayer.Pattern, Res.string.look_pattern, Res.array.look_patterns, id, look, base, onLook)
@@ -169,6 +178,7 @@ internal fun screenId(id: String) = "$id/screen"
 /** The note itself, its first words over its look, the way the open note shows it. */
 @Composable
 private fun Preview(id: String, words: String, look: Map<String, String>, base: Color) {
+    val font = noteFont(look[LookFields.FONT])
     val (title, rest) = remember(words) {
         words.trim().lines().filter { it.isNotBlank() }.let {
             it.firstOrNull().orEmpty() to
@@ -184,14 +194,14 @@ private fun Preview(id: String, words: String, look: Map<String, String>, base: 
     ) {
         Text(
             title,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleMedium.inFont(font),
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         Text(
             rest,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyMedium.inFont(font),
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 4,
             overflow = TextOverflow.Ellipsis,
@@ -209,6 +219,60 @@ private fun Part(title: StringResource, content: @Composable () -> Unit) {
         modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp),
     )
     content()
+}
+
+/** «Шрифт» (L3): «Обычный», then each bundled font, its sample drawn in it over the note's color, the chosen one framed. */
+@Composable
+private fun FontRow(chosen: String?, base: Color, onLook: (Map<String, String?>) -> Unit) = Part(Res.string.look_font) {
+    val swipeRow = rememberLazyListState()
+    LazyRow(
+        state = swipeRow,
+        modifier = Modifier.mouseSwipe(swipeRow),
+        contentPadding = PaddingValues(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item {
+            FontChoice(stringResource(Res.string.look_font_plain), null, chosen == null, base) { onLook(mapOf(LookFields.FONT to null)) }
+        }
+        items(NoteFonts.tokens) { token ->
+            FontChoice(NoteFonts.name(token), noteFont(token), token == chosen, base) { onLook(mapOf(LookFields.FONT to token)) }
+        }
+    }
+}
+
+@Composable
+private fun FontChoice(name: String, font: NoteFont?, on: Boolean, base: Color, onPick: () -> Unit) {
+    val shape = RoundedCornerShape(10.dp)
+    Column(Modifier.width(TILE_WIDTH), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            Modifier.size(TILE_WIDTH, 60.dp).clip(shape).background(base)
+                .border(
+                    if (on) 3.dp else 1.dp,
+                    if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                    shape,
+                )
+                .hand().clickable(onClick = onPick)
+                .semantics {
+                    contentDescription = name
+                    selected = on
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                stringResource(Res.string.look_font_sample),
+                style = MaterialTheme.typography.headlineSmall.inFont(font),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+            )
+        }
+        Text(
+            name,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    }
 }
 
 /** A layer's row: «Нет», then each of its choices drawn alone over the note's color, the chosen one framed. */

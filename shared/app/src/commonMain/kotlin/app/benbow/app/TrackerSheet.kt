@@ -138,11 +138,12 @@ internal val TrackerColumn.sheetHours: HourWindow? get() = if (type == ColumnTyp
 
 /**
  * «Оформление трекера»: the look sheet's layers as the tracker's fields (`look_<layer>`, ADR-047), only layers the app
- * sets and only tokens; null takes a layer off.
+ * sets (a font is a note's alone) and only tokens; null takes a layer off.
  */
-internal fun trackerLook(layers: Map<String, String?>): Map<String, String?> = layers.filterKeys { it in LookFields.LAYERS }
-    .map { (layer, token) -> TrackerField.LOOK_PREFIX + layer to token?.takeIf(LookFields::isToken) }
-    .toMap()
+internal fun trackerLook(layers: Map<String, String?>): Map<String, String?> =
+    layers.filterKeys { it in LookFields.LAYERS && it != LookFields.FONT }
+        .map { (layer, token) -> TrackerField.LOOK_PREFIX + layer to token?.takeIf(LookFields::isToken) }
+        .toMap()
 
 /** The layers the screen behind a tracker's sheet takes (ADR-051): a note's pattern, light and motion. */
 internal val SCREEN_LAYERS = listOf(LookLayer.Pattern, LookLayer.Light, LookLayer.Motion)

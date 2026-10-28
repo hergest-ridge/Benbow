@@ -1082,6 +1082,9 @@
     <!-- The look of a note (ADR-047). -->
     <string name="look_title">Оформление записки</string>
     <string name="look_color">Цвет</string>
+    <string name="look_font">Шрифт</string>
+    <string name="look_font_plain">Обычный</string>
+    <string name="look_font_sample">Аа</string>
     <string name="look_paper">Бумага</string>
     <string name="look_pattern">Узор</string>
     <string name="look_light">Свет</string>

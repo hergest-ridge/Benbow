@@ -317,6 +317,7 @@ internal fun TrackerSheetScreen(services: AppServices, nav: Navigator, trackerId
             screen = screenLook(tracker.fields),
             screenPage = ground,
             onScreen = { layers -> write { updateTracker(trackerId, trackerScreen(layers)) } },
+            fonts = false,
         )
     }
 }

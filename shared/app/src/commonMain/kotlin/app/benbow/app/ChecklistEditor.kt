@@ -74,6 +74,8 @@ import app.benbow.core.content.Document
 import app.benbow.core.content.Span
 import app.benbow.core.content.TextBlock
 import app.benbow.core.text.BlockKeys
+import app.benbow.ui.editor.LocalNoteFont
+import app.benbow.ui.editor.inFont
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
@@ -358,7 +360,7 @@ private fun BoxRow(model: ListModel, key: String, drag: RowDrag?, modifier: Modi
             textStyle = MaterialTheme.typography.bodyLarge.copy(
                 color = if (row.checked) colors.onSurfaceVariant else colors.onSurface,
                 textDecoration = if (row.checked) TextDecoration.LineThrough else null,
-            ),
+            ).inFont(LocalNoteFont.current),
             cursorBrush = SolidColor(colors.primary),
         )
         if (focused) {

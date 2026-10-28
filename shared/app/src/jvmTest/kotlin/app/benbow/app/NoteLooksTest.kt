@@ -1,16 +1,24 @@
 package app.benbow.app
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.waitUntilAtLeastOneExists
+import androidx.compose.ui.text.font.FontFamily
+import app.benbow.client.JournalRepository
+import app.benbow.client.LookFields
+import app.benbow.client.createBoardNote
 import app.benbow.client.setLook
+import app.benbow.ui.editor.NoteFont
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import java.io.File
@@ -57,7 +65,7 @@ class NoteLooksTest {
                 "light" to "999 pink 2;45 neon 2;45 blue 9",
                 "motion" to "spin",
                 "scrap" to "glitter.3",
-                "font" to "caveat", // a newer app's layer
+                "picture" to "fern", // a newer app's layer
             ),
         )
         assertTrue(look.isEmpty, "a newer app's look draws as nothing here: $look")
@@ -145,6 +153,81 @@ class NoteLooksTest {
                 onAllNodes(hasScrollAction())[0].performTouchInput { swipeUp(startY = bottom * 0.8f, endY = bottom * 0.3f) }
                 waitForIdle()
                 screenshot("looks-l1-note-scrolled-$theme")
+            }
+        }
+    }
+
+    @Test
+    fun everyFontIsBundledAndAnUnknownOneIsTheAppsOwn() = runDesktopComposeUiTest {
+        var fonts: List<NoteFont?> = emptyList()
+        var unknown: NoteFont? = NoteFont(FontFamily.Default)
+        setContent {
+            fonts = NoteFonts.tokens.map { noteFont(it) }
+            unknown = noteFont("caveat") // one of the server's pack (L4), not in this app
+        }
+        waitForIdle()
+        assertEquals(8, NoteFonts.tokens.distinct().size)
+        assertTrue(fonts.all { it != null }, "every font offered is in the app")
+        assertEquals(null, unknown, "an unknown font is the app's own")
+        assertTrue(NoteFonts.tokens.all(LookFields::isToken))
+        assertEquals("Amatic SC", NoteFonts.name("amatic-sc"))
+        assertEquals("JetBrains Mono", NoteFonts.name("jetbrains-mono"))
+    }
+
+    /** The owner, 2026-10-28: the note in its font, open and on the board; the feed keeps the app's font. */
+    @Test
+    fun aNoteInItsOwnFont() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val services = feedTestServices()
+        val today = services.today()
+        val words = "Утро у моря\nПроснулась раньше будильника. Чай на балконе, чайки, ветер пахнет водорослями."
+        val sea = services.repo.createNote(today, words)
+        services.repo.setBackground(sea, "sand")
+        services.repo.setLook(sea, mapOf("font" to "neucha", "paper" to "lines"))
+        val list = services.repo.createBoardNote(
+            today,
+            JournalRepository.textBody("На выходные\nКупить ниток и пуговиц\nПозвонить бабушке"),
+        )
+        services.repo.setLook(list, mapOf("font" to "amatic-sc"))
+        val shop = services.repo.createBoardNote(today, JournalRepository.textBody("Ремонт\nНиша 62 см, розетка слева"))
+        services.repo.setLook(shop, mapOf("font" to "cormorant-infant"))
+        setContent { BenbowApp(services) }
+        onAllNodesWithText("Лента")[0].click()
+        waitUntilAtLeastOneExists(hasText("Утро у моря", substring = true), 5_000)
+        waitForIdle()
+        screenshot("fonts-feed")
+        onAllNodesWithText("Утро у моря", substring = true)[0].click()
+        waitUntilAtLeastOneExists(hasText("Проснулась раньше", substring = true), 5_000)
+        waitForIdle()
+        screenshot("fonts-note")
+        onNodeWithContentDescription("Назад").performClick()
+        waitUntilAtLeastOneExists(hasText("Записки"), 5_000)
+        onAllNodesWithText("Записки")[0].click()
+        waitUntilAtLeastOneExists(hasText("На выходные"), 5_000)
+        waitForIdle()
+        screenshot("fonts-board")
+    }
+
+    @Test
+    fun theFontsRowShowsEachInItsOwnLetters() {
+        for (dark in listOf(false, true)) {
+            runDesktopComposeUiTest(width = 412, height = 860) {
+                setContent {
+                    app.benbow.ui.theme.BenbowTheme(darkTheme = dark) {
+                        LookSheet(
+                            id = "n",
+                            words = "Утро у моря\nПроснулась раньше будильника. Чай на балконе, чайки.",
+                            color = null,
+                            look = mapOf("font" to "pangolin"),
+                            page = MaterialTheme.colorScheme.background,
+                            onColor = {},
+                            onLook = {},
+                            onDismiss = {},
+                        )
+                    }
+                }
+                waitUntilAtLeastOneExists(hasText("Шрифт"), 5_000)
+                waitForIdle()
+                screenshot("fonts-sheet-${if (dark) "dark" else "light"}")
             }
         }
     }

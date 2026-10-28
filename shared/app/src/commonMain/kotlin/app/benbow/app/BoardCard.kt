@@ -21,6 +21,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -45,7 +46,10 @@ import app.benbow.app.resources.board_tick
 import app.benbow.app.resources.board_untick
 import app.benbow.client.BoardNote
 import app.benbow.client.CardLine
+import app.benbow.client.LookFields
 import app.benbow.client.Media
+import app.benbow.ui.editor.LocalNoteFont
+import app.benbow.ui.editor.inFont
 import coil3.compose.AsyncImage
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.max
@@ -80,7 +84,10 @@ internal fun BoardCard(
             .then(entryBackdrop(note.entry.id, note.entry.look, color ?: boardCardColor(), muted = true))
             .border(if (chosen) 2.dp else 1.dp, outline, CARD_SHAPE),
     ) {
-        Column(words.fillMaxWidth()) { CardWords(note, media, onTick) }
+        // Its words in the note's own font (ADR-047), as the open note shows them.
+        CompositionLocalProvider(LocalNoteFont provides noteFont(note.entry.look[LookFields.FONT])) {
+            Column(words.fillMaxWidth()) { CardWords(note, media, onTick) }
+        }
     }
 }
 
@@ -125,7 +132,12 @@ private fun CardWords(note: BoardNote, media: Media?, onTick: ((String, Boolean)
     val lines = if (inPlace) card.inPlace else card.lines
     Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (card.title.isNotEmpty()) {
-            Text(card.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(
+                card.title,
+                style = MaterialTheme.typography.titleMedium.inFont(LocalNoteFont.current),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
         if (lines.isNotEmpty()) {
             CardLines(
@@ -171,7 +183,7 @@ private fun CardWords(note: BoardNote, media: Media?, onTick: ((String, Boolean)
 @Composable
 private fun CardLines(lines: List<CardLine>, more: Boolean, rows: Int, onTick: ((String, Boolean) -> Unit)?) {
     val density = LocalDensity.current
-    val style = MaterialTheme.typography.bodyMedium
+    val style = MaterialTheme.typography.bodyMedium.inFont(LocalNoteFont.current)
     val row = with(density) { (style.lineHeight.takeIf { it.isSp } ?: (style.fontSize * 1.4f)).toPx() }
     val gap = with(density) { 2.dp.roundToPx() }
     SubcomposeLayout { constraints ->
@@ -208,7 +220,7 @@ private fun CardLineRow(line: CardLine, last: Boolean, rows: Int, onTick: ((Stri
         MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
     } else {
         MaterialTheme.typography.bodyMedium
-    }
+    }.inFont(LocalNoteFont.current)
     when {
         line.box -> Row(verticalAlignment = Alignment.Top) {
             val key = line.key

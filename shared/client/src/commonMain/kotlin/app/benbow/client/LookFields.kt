@@ -2,14 +2,18 @@ package app.benbow.client
 
 /**
  * The look of a note (ADR-047): one LWW field per layer, `look_<layer>`, each a token the app draws (paper, pattern,
- * light, motion, scrap; a font and a picture come later), so two devices changing different layers merge. Fields of
- * layers this app doesn't know yet are read and kept like any other, and exports carry them in the front matter.
+ * light, motion, scrap and the font of its words; a picture comes later), so two devices changing different layers
+ * merge. Fields of layers this app doesn't know yet are read and kept like any other, and exports carry them in the
+ * front matter.
  */
 object LookFields {
     const val PREFIX = "look_"
 
     /** The layers this app sets. */
-    val LAYERS = listOf("paper", "pattern", "light", "motion", "scrap")
+    val LAYERS = listOf("paper", "pattern", "light", "motion", "scrap", FONT)
+
+    /** The font of the note's words and headings: a note's alone, never a tracker's. */
+    const val FONT = "font"
 
     /** The look's tokens by layer, unknown layers included (a newer app's): the drawing skips what it doesn't know. */
     fun of(fields: Map<String, String?>): Map<String, String> = fields.mapNotNull { (key, value) ->

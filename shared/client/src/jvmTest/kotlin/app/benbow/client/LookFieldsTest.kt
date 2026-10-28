@@ -38,10 +38,19 @@ class LookFieldsTest {
     }
 
     @Test
+    fun aNotesFontIsALayerOfItsLook() = runTest {
+        val id = repo.createNote("2026-10-28", "Утро у моря")
+        repo.setLook(id, mapOf("font" to "neucha", "paper" to "lines"))
+        assertEquals(mapOf("font" to "neucha", "paper" to "lines"), repo.entry(id).first()!!.look)
+        repo.setLook(id, LookFields.LAYERS.associateWith { null })
+        assertTrue(repo.entry(id).first()!!.look.isEmpty(), "«Сбросить оформление» takes the font off too")
+    }
+
+    @Test
     fun aNewerAppsLayerIsKept() = runTest {
         val id = repo.createNote("2026-10-26", "Мысль")
-        repo.setField(id, "look_font", "caveat") // as a newer app's op would arrive
+        repo.setField(id, "look_picture", "fern") // as a newer app's op would arrive
         repo.setLook(id, mapOf("paper" to "dots"))
-        assertEquals(mapOf("font" to "caveat", "paper" to "dots"), repo.entry(id).first()!!.look)
+        assertEquals(mapOf("picture" to "fern", "paper" to "dots"), repo.entry(id).first()!!.look)
     }
 }

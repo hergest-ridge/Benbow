@@ -40,7 +40,9 @@ class TrackerEditsTest {
         assertEquals("", numberText(null))
         assertEquals(21 * 60, typedClock("21"))
         assertEquals(9 * 60 + 5, typedClock("9:05"))
-        assertNull(typedClock("24:00"))
+        assertEquals(0, typedClock("24:00"), "the day's end is midnight")
+        assertNull(typedClock("24:30"))
+        assertNull(typedClock("25"))
         assertNull(typedClock("7:60"))
         assertNull(typedClock("1:2:3"))
         assertEquals("07:05", clockOf(7 * 60 + 5))
@@ -68,6 +70,13 @@ class TrackerEditsTest {
         val night = column("type" to "time", "name" to "Сон", "hours" to "21:00-11:00")
         assertEquals("21:00", ColumnDraft.of(night).from)
         assertEquals(mapOf("hours" to null), ColumnDraft.of(night).copy(from = "", to = "").changes(night), "both empty: a day's total")
+        assertEquals(mapOf("hours" to "00:00-00:00"), ColumnDraft.of(night).copy(from = "0", to = "0").changes(night), "a whole day")
+        assertEquals(
+            mapOf("hours" to "00:00-00:00"),
+            ColumnDraft.of(night).copy(from = "00:00", to = "24:00").changes(night),
+            "24:00 ends it",
+        )
+        assertEquals(emptyMap(), ColumnDraft.of(night).copy(from = "0", to = "24:30").changes(night), "no hour after the day's end")
 
         val walks = column("type" to "check", "name" to "Прогулка")
         assertEquals(

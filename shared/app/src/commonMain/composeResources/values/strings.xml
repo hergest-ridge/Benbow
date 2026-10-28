@@ -798,6 +798,9 @@
     <string name="trackers_name">Название</string>
     <string name="trackers_emoji">Эмодзи</string>
     <string name="trackers_columns">Колонки</string>
+    <string name="trackers_layout">Месяц на листе</string>
+    <string name="trackers_layout_down">Дни вниз</string>
+    <string name="trackers_layout_across">Дни вправо</string>
     <string name="trackers_columns_empty">Колонок пока нет. Добавьте первую: отметку, число, оценку, выбор, время или заметку.</string>
     <string name="trackers_column_add">Добавить колонку</string>
     <string name="trackers_up">Выше</string>
@@ -836,7 +839,7 @@
     <string name="trackers_hours">Часы на листе</string>
     <string name="trackers_hours_from">С</string>
     <string name="trackers_hours_to">До</string>
-    <string name="trackers_hours_hint">С 21:00 до 11:00, как в трекере сна, клетка на каждый час. Пусто: в клетке итог дня.</string>
+    <string name="trackers_hours_hint">Клетка на каждый час. С 00:00 до 00:00 — сутки, как в трекере сна; с 21:00 до 11:00 — только ночь. Пусто: в клетке итог дня.</string>
     <string name="trackers_day_by">Отрезок считается за день</string>
     <string name="trackers_day_start">начала</string>
     <string name="trackers_day_end">окончания (сон)</string>
@@ -1087,6 +1090,7 @@
     <string name="look_none">Нет</string>
     <string name="look_shuffle">Перемешать</string>
     <string name="look_reset">Сбросить оформление</string>
+    <string name="look_screen">Фон экрана</string>
     <string name="look_motion_hint">Только в открытой записке</string>
     <string name="look_credit_hero">Узоры Hero Patterns: Стив Шогер, CC BY 4.0</string>
     <string name="look_credit_morris">Обои Уильяма Морриса из Метрополитен-музея, общественное достояние</string>

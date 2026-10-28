@@ -1,5 +1,6 @@
 package app.benbow.app
 
+import app.benbow.core.tracker.ColumnField
 import app.benbow.core.tracker.ColumnType
 import app.benbow.core.tracker.DayBy
 import app.benbow.core.tracker.HourWindow
@@ -66,6 +67,18 @@ class TrackerSheetLogicTest {
             LocalDateTime(2026, 10, 27, 8, 0),
             hourStarts(HourWindow.of("08:00-20:00")!!, LocalDate(2026, 10, 27), DayBy.End).first(),
         )
+        // The sleep sheet's whole day (owner): from midnight, all of it the day itself, whichever day a span counts for.
+        for (by in DayBy.entries) {
+            val day = hourStarts(HourWindow.of("00:00-00:00")!!, LocalDate(2026, 10, 27), by)
+            assertEquals(24, day.size)
+            assertEquals(LocalDateTime(2026, 10, 27, 0, 0), day.first())
+            assertEquals(LocalDateTime(2026, 10, 27, 23, 0), day.last())
+        }
+        assertEquals("00:00-00:00", TrackerPresets.sleep.columns.first()[ColumnField.HOURS])
+        // A whole day from another hour still crosses midnight.
+        val evening = hourStarts(HourWindow.of("18:00-18:00")!!, LocalDate(2026, 10, 27), DayBy.End)
+        assertEquals(LocalDateTime(2026, 10, 26, 18, 0), evening.first())
+        assertEquals(LocalDateTime(2026, 10, 27, 17, 0), evening.last())
     }
 
     @Test
@@ -135,7 +148,7 @@ class TrackerSheetLogicTest {
         assertEquals(mapOf("look_pattern" to null), trackerLook(mapOf("pattern" to "<svg>")), "anything but a token takes it off")
         assertEquals(31, monthDays(LocalDate(2026, 10, 27)).size)
         assertEquals(LocalDate(2026, 2, 28), monthDays(LocalDate(2026, 2, 1)).last())
-        assertEquals(14, TrackerColumn(TrackerRecord("s", TrackerPresets.sleep.columns.first())).hours?.hours?.size)
+        assertEquals(24, TrackerColumn(TrackerRecord("s", TrackerPresets.sleep.columns.first())).hours?.hours?.size)
     }
 
     private fun span(id: String, start: String, end: String) = TrackerRecord(id, mapOf("column" to "sleep", "start" to start, "end" to end))

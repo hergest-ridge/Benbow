@@ -27,6 +27,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -126,77 +128,95 @@ internal fun TrackerSheetScreen(services: AppServices, nav: Navigator, trackerId
     val shownMonth = monthOfPage(pager.currentPage)
     val page = MaterialTheme.colorScheme.surfaceVariant
     val months = stringArrayResource(Res.array.months_genitive)
-    Scaffold(topBar = {
-        TopAppBar(
-            navigationIcon = { if (back) BackButton(nav::back) },
-            title = {
-                Column {
-                    Text(tracker?.let { trackerTitle(it, untitled) }.orEmpty(), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(
-                        when (view) {
-                            SheetView.Month -> monthTitle(shownMonth.toString().take(7), withYear = true).orEmpty()
-                            SheetView.Week -> weekTitle(weekOfPage(today, weeks.currentPage), months)
-                            SheetView.Year -> "${yearOfPage(today, years.currentPage)}"
-                        },
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        style = MaterialTheme.typography.labelMedium,
+    // The screen behind the sheet (ADR-051): under the bar and around the sheet alike, which let it show through.
+    val screen = remember(tracker) { tracker?.let { screenLook(it.fields) }.orEmpty() }
+    val ground = MaterialTheme.colorScheme.background
+    Scaffold(
+        modifier = if (screen.isEmpty()) {
+            Modifier
+        } else {
+            Modifier.background(ground).then(entryBackdrop(screenId(trackerId), screen, ground, muted = true, moving = true))
+        },
+        containerColor = if (screen.isEmpty()) ground else Color.Transparent,
+        topBar = {
+            TopAppBar(
+                colors = if (screen.isEmpty()) {
+                    TopAppBarDefaults.topAppBarColors()
+                } else {
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
                     )
-                }
-            },
-            actions = {
-                if (tracker != null) {
-                    if (active.currentPage != todayPage) {
-                        IconButton({ scope.launch { active.animateScrollToPage(todayPage) } }, modifier = Modifier.hand()) {
-                            TodayIcon(today.day, stringResource(Res.string.today))
-                        }
-                    }
-                    IconButton({ looking = true }, modifier = Modifier.hand()) {
-                        Icon(Icons.Palette, stringResource(Res.string.trackers_look))
-                    }
-                    IconButton({
-                        write { updateTracker(trackerId, mapOf(TrackerField.FIGURES to if (figures) FIGURES_HIDDEN else null)) }
-                    }, modifier = Modifier.hand()) {
-                        Icon(
-                            if (figures) Icons.Eye else Icons.EyeOff,
-                            stringResource(if (figures) Res.string.trackers_figures_hide else Res.string.trackers_figures_show),
+                },
+                navigationIcon = { if (back) BackButton(nav::back) },
+                title = {
+                    Column {
+                        Text(tracker?.let { trackerTitle(it, untitled) }.orEmpty(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            when (view) {
+                                SheetView.Month -> monthTitle(shownMonth.toString().take(7), withYear = true).orEmpty()
+                                SheetView.Week -> weekTitle(weekOfPage(today, weeks.currentPage), months)
+                                SheetView.Year -> "${yearOfPage(today, years.currentPage)}"
+                            },
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            style = MaterialTheme.typography.labelMedium,
                         )
                     }
-                    // A mouse can't swipe (desktop, web), as in the calendar.
-                    if (LocalPagerArrows.current) {
+                },
+                actions = {
+                    if (tracker != null) {
+                        if (active.currentPage != todayPage) {
+                            IconButton({ scope.launch { active.animateScrollToPage(todayPage) } }, modifier = Modifier.hand()) {
+                                TodayIcon(today.day, stringResource(Res.string.today))
+                            }
+                        }
+                        IconButton({ looking = true }, modifier = Modifier.hand()) {
+                            Icon(Icons.Palette, stringResource(Res.string.trackers_look))
+                        }
                         IconButton({
-                            scope.launch { active.animateScrollToPage(active.currentPage - 1) }
-                        }, modifier = Modifier.hand()) { Icon(Icons.ChevronLeft, stringResource(Res.string.previous)) }
-                        IconButton({
-                            scope.launch { active.animateScrollToPage(active.currentPage + 1) }
-                        }, modifier = Modifier.hand()) { Icon(Icons.ChevronRight, stringResource(Res.string.next)) }
-                    }
-                    Box {
-                        IconButton({ menu = true }, Modifier.hand()) { Icon(Icons.More, stringResource(Res.string.menu)) }
-                        DropdownMenu(menu, { menu = false }) {
-                            DropdownMenuItem({ Text(stringResource(Res.string.trackers_setup)) }, {
-                                menu = false
-                                nav.open(Route.TrackerEditor(trackerId))
-                            }, Modifier.hand(), leadingIcon = { Icon(Icons.Edit, null) })
-                            val archived = tracker.archived
-                            DropdownMenuItem({
-                                Text(stringResource(if (archived) Res.string.trackers_unarchive else Res.string.trackers_archive))
-                            }, {
-                                menu = false
-                                write { updateTracker(trackerId, mapOf(TrackerField.ARCHIVED to if (archived) null else "true")) }
-                            }, Modifier.hand(), leadingIcon = { Icon(if (archived) Icons.Unarchive else Icons.Archive, null) })
-                            DropdownMenuItem({ Text(stringResource(Res.string.move_to_trash)) }, {
-                                menu = false
-                                write { moveToTrash(trackerId) }
-                                services.messages.tryEmit(AppMessage.TrackerTrashed(trackerId, trackerTitle(tracker, untitled)))
-                                if (back) nav.back()
-                            }, Modifier.hand(), leadingIcon = { Icon(Icons.Delete, null) })
+                            write { updateTracker(trackerId, mapOf(TrackerField.FIGURES to if (figures) FIGURES_HIDDEN else null)) }
+                        }, modifier = Modifier.hand()) {
+                            Icon(
+                                if (figures) Icons.Eye else Icons.EyeOff,
+                                stringResource(if (figures) Res.string.trackers_figures_hide else Res.string.trackers_figures_show),
+                            )
+                        }
+                        // A mouse can't swipe (desktop, web), as in the calendar.
+                        if (LocalPagerArrows.current) {
+                            IconButton({
+                                scope.launch { active.animateScrollToPage(active.currentPage - 1) }
+                            }, modifier = Modifier.hand()) { Icon(Icons.ChevronLeft, stringResource(Res.string.previous)) }
+                            IconButton({
+                                scope.launch { active.animateScrollToPage(active.currentPage + 1) }
+                            }, modifier = Modifier.hand()) { Icon(Icons.ChevronRight, stringResource(Res.string.next)) }
+                        }
+                        Box {
+                            IconButton({ menu = true }, Modifier.hand()) { Icon(Icons.More, stringResource(Res.string.menu)) }
+                            DropdownMenu(menu, { menu = false }) {
+                                DropdownMenuItem({ Text(stringResource(Res.string.trackers_setup)) }, {
+                                    menu = false
+                                    nav.open(Route.TrackerEditor(trackerId))
+                                }, Modifier.hand(), leadingIcon = { Icon(Icons.Edit, null) })
+                                val archived = tracker.archived
+                                DropdownMenuItem({
+                                    Text(stringResource(if (archived) Res.string.trackers_unarchive else Res.string.trackers_archive))
+                                }, {
+                                    menu = false
+                                    write { updateTracker(trackerId, mapOf(TrackerField.ARCHIVED to if (archived) null else "true")) }
+                                }, Modifier.hand(), leadingIcon = { Icon(if (archived) Icons.Unarchive else Icons.Archive, null) })
+                                DropdownMenuItem({ Text(stringResource(Res.string.move_to_trash)) }, {
+                                    menu = false
+                                    write { moveToTrash(trackerId) }
+                                    services.messages.tryEmit(AppMessage.TrackerTrashed(trackerId, trackerTitle(tracker, untitled)))
+                                    if (back) nav.back()
+                                }, Modifier.hand(), leadingIcon = { Icon(Icons.Delete, null) })
+                            }
                         }
                     }
-                }
-            },
-        )
-    }) { padding ->
+                },
+            )
+        },
+    ) { padding ->
         if (tracker != null && columns?.isEmpty() == true) {
             // A blank sheet: its columns are made in «Настроить трекер».
             Column(
@@ -230,7 +250,7 @@ internal fun TrackerSheetScreen(services: AppServices, nav: Navigator, trackerId
                 // main thing; as wide as a page of a notebook.
                 val base = swatch(tracker[TrackerField.BACKGROUND]) ?: page
                 val look = remember(tracker) { LookFields.of(tracker.fields) }
-                val wide = view == SheetView.Month && columns.any { it.sheetHours != null }
+                val wide = view == SheetView.Month && (tracker.across || columns.any { it.sheetHours != null })
                 Column(
                     Modifier.widthIn(max = if (wide) SheetSizes.WIDE_SHEET else SheetSizes.SHEET)
                         .fillMaxSize()
@@ -240,7 +260,12 @@ internal fun TrackerSheetScreen(services: AppServices, nav: Navigator, trackerId
                         .then(entryBackdrop(tracker.id, look, base, muted = true, moving = true)),
                 ) {
                     when (view) {
-                        SheetView.Month -> {
+                        // Days down the page, or along its top (the tracker's `layout`, ADR-051).
+                        SheetView.Month -> if (tracker.across) {
+                            HorizontalPager(pager, beyondViewportPageCount = 1, modifier = Modifier.weight(1f).fillMaxWidth()) { at ->
+                                AcrossMonthPage(services, columns, monthOfPage(at), today, figures, write)
+                            }
+                        } else {
                             SheetHeader(columns, figures, write)
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                             HorizontalPager(pager, beyondViewportPageCount = 1, modifier = Modifier.weight(1f).fillMaxWidth()) { at ->
@@ -287,6 +312,9 @@ internal fun TrackerSheetScreen(services: AppServices, nav: Navigator, trackerId
             onLook = { layers -> write { updateTracker(trackerId, trackerLook(layers)) } },
             onDismiss = { looking = false },
             title = Res.string.trackers_look,
+            screen = screenLook(tracker.fields),
+            screenPage = ground,
+            onScreen = { layers -> write { updateTracker(trackerId, trackerScreen(layers)) } },
         )
     }
 }
@@ -302,21 +330,7 @@ internal fun MonthPage(
     write: TrackerWrite,
 ) {
     val days = remember(month) { monthDays(month) }
-    val ids = remember(columns) { columns.map { it.id } }
-    val timed = remember(columns) { columns.filter { it.type == ColumnType.Time }.map { it.id } }
-    val cellRecords by remember(ids, month) {
-        services.trackers.cells(ids, "${days.first()}", "${days.last()}")
-    }.collectAsStateWithLifecycle(emptyList())
-    // A night's evening can be on the day before the 1st, its morning on the day after the month's last.
-    val spanRecords by remember(timed, month) {
-        if (timed.isEmpty()) {
-            flowOf(emptyList<TrackerRecord>())
-        } else {
-            services.trackers.spans(timed, "${days.first().minus(1, DateTimeUnit.DAY)}", "${days.last().plus(1, DateTimeUnit.DAY)}")
-        }
-    }.collectAsStateWithLifecycle(emptyList())
-    val cells = remember(cellRecords) { cellRecords.associate { it.id to it.fields } }
-    val spans = remember(spanRecords) { spanRecords.groupBy { it[SpanField.COLUMN].orEmpty() } }
+    val (cells, spans) = rememberMonthRecords(services, columns, days)
     val list = rememberLazyListState(initialFirstVisibleItemIndex = (days.indexOf(today) - SheetSizes.TODAY_ABOVE).coerceAtLeast(0))
     val weekdays = stringArrayResource(Res.array.weekdays_short)
     var asked by remember { mutableStateOf<Pair<TrackerColumn, LocalDate>?>(null) }
@@ -341,6 +355,31 @@ internal fun MonthPage(
     spansOf?.let { (column, day) ->
         DaySpansDialog(column, day, spans[column.id].orEmpty(), write) { spansOf = null }
     }
+}
+
+/** The cells and spans of [columns] over [days], kept up to date. */
+@Composable
+internal fun rememberMonthRecords(
+    services: AppServices,
+    columns: List<TrackerColumn>,
+    days: List<LocalDate>,
+): Pair<SheetCells, SheetSpans> {
+    val ids = remember(columns) { columns.map { it.id } }
+    val timed = remember(columns) { columns.filter { it.type == ColumnType.Time }.map { it.id } }
+    val cellRecords by remember(ids, days) {
+        services.trackers.cells(ids, "${days.first()}", "${days.last()}")
+    }.collectAsStateWithLifecycle(emptyList())
+    // A night's evening can be on the day before the 1st, its morning on the day after the month's last.
+    val spanRecords by remember(timed, days) {
+        if (timed.isEmpty()) {
+            flowOf(emptyList<TrackerRecord>())
+        } else {
+            services.trackers.spans(timed, "${days.first().minus(1, DateTimeUnit.DAY)}", "${days.last().plus(1, DateTimeUnit.DAY)}")
+        }
+    }.collectAsStateWithLifecycle(emptyList())
+    val cells = remember(cellRecords) { cellRecords.associate { it.id to it.fields } }
+    val spans = remember(spanRecords) { spanRecords.groupBy { it[SpanField.COLUMN].orEmpty() } }
+    return cells to spans
 }
 
 /** `figures` when the eye has hidden them. */

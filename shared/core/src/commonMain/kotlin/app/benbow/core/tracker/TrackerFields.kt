@@ -21,6 +21,12 @@ object TrackerField {
     const val BACKGROUND = "background"
     const val LOOK_PREFIX = "look_"
 
+    /** The screen behind its sheet (ADR-051): `screen_pattern`, `screen_light`, `screen_motion`, tokens of a note's look. */
+    const val SCREEN_PREFIX = "screen_"
+
+    /** How its month lies: `across` puts the days along the top and the columns down the side; none: days down the page. */
+    const val LAYOUT = "layout"
+
     /** Where it opens: `month`, `week`, `year` or `sleep`. */
     const val VIEW = "view"
     const val RANK = "rank"

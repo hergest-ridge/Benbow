@@ -69,8 +69,10 @@ internal fun typedNumber(text: String): String? = text.trim().replace(',', '.').
 internal fun typedClock(text: String): Int? {
     val parts = text.trim().split(':')
     if (parts.size > 2) return null
-    val hour = parts[0].toIntOrNull()?.takeIf { it in 0..23 } ?: return null
+    val hour = parts[0].toIntOrNull()?.takeIf { it in 0..24 } ?: return null
     val minute = parts.getOrNull(1)?.let { typed -> typed.toIntOrNull()?.takeIf { it in 0..59 } ?: return null } ?: 0
+    // "24:00" is the day's end, midnight again: "с 00:00 до 24:00" is a whole day.
+    if (hour == 24) return if (minute == 0) 0 else null
     return hour * 60 + minute
 }
 
@@ -135,7 +137,7 @@ internal data class ColumnDraft(
         } else {
             val a = typedClock(from)
             val b = typedClock(to)
-            if (a != null && b != null && a != b) HourWindow(a, b).toString() else null
+            if (a != null && b != null) HourWindow(a, b).toString() else null // the same hour twice: a whole day
         }
         window?.let { text(ColumnField.HOURS, it.ifEmpty { null }) }
         if (options != column.options) out[ColumnField.OPTIONS] = ChoiceOption.write(options)

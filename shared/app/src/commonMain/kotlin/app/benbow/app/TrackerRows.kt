@@ -1,9 +1,13 @@
 package app.benbow.app
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
+import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -22,8 +26,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -37,9 +43,11 @@ import app.benbow.app.resources.trackers_week
 import app.benbow.core.tracker.ColumnField
 import app.benbow.core.tracker.ColumnType
 import app.benbow.core.tracker.GoalPer
+import app.benbow.core.tracker.HourWindow
 import app.benbow.core.tracker.TrackerCells
 import app.benbow.core.tracker.TrackerColumn
 import app.benbow.core.tracker.TrackerFigures
+import app.benbow.core.tracker.TrackerRecord
 import app.benbow.core.tracker.TrackerSpans
 import app.benbow.ui.theme.BenbowPalette
 import kotlinx.datetime.DayOfWeek
@@ -67,17 +75,21 @@ internal fun SheetHeader(columns: List<TrackerColumn>, figures: Boolean, write: 
                         Text(listOfNotNull(icon, column.name).joinToString(" "), maxLines = 1, style = MaterialTheme.typography.labelMedium)
                         TimerButton(column, write)
                     }
-                    Row(Modifier.fillMaxWidth()) {
-                        window.hours.forEach { hour ->
-                            Text(
-                                "$hour",
-                                modifier = Modifier.weight(1f),
-                                color = faint,
-                                fontSize = 9.sp,
-                                textAlign = TextAlign.Center,
-                                maxLines = 1,
-                                style = MaterialTheme.typography.labelSmall,
-                            )
+                    BoxWithConstraints(Modifier.fillMaxWidth()) {
+                        // A whole day on a phone leaves no room for every number: then every third (0, 3, 6, …).
+                        val every = if (maxWidth / window.hours.size < SheetSizes.HOUR_LABEL) 3 else 1
+                        Row(Modifier.fillMaxWidth()) {
+                            window.hours.forEach { hour ->
+                                Text(
+                                    if (hour % every == 0) "$hour" else "",
+                                    modifier = Modifier.weight(1f),
+                                    color = faint,
+                                    fontSize = 9.sp,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
                         }
                     }
                 }
@@ -107,8 +119,8 @@ internal fun SheetHeader(columns: List<TrackerColumn>, figures: Boolean, write: 
 
 /**
  * A day's line: its number and weekday, then a cell per column; days to come are faint and wait. A line ends each week.
- * On the sleep sheet a tap paints or clears an hour, a long press and a drag along the row paints the hours it passes
- * (or clears them, when it started on a painted one), and a long press alone opens the day's spans ([onSpans]).
+ * On the sleep sheet a tap paints or clears an hour, a drag along the row paints the hours it passes (or clears them,
+ * when it started on a painted one; [hourGestures]), and a long press alone opens the day's spans ([onSpans]).
  */
 @Composable
 internal fun DayRow(
@@ -125,7 +137,6 @@ internal fun DayRow(
 ) {
     val future = day > today
     val date = "$day"
-    val haptic = LocalHapticFeedback.current
     Column {
         Row(
             Modifier.fillMaxWidth().height(SheetSizes.ROW_HEIGHT)
@@ -147,48 +158,16 @@ internal fun DayRow(
                 val own = spans[column.id].orEmpty()
                 val window = column.sheetHours
                 if (window != null) {
-                    val starts = hourStarts(window, day, column.dayBy)
-                    val painted = starts.map { covered(own, it) }
-                    var preview by remember(column.id, date) { mutableStateOf<IntRange?>(null) }
-                    val tapHour = { i: Int ->
-                        val edits = hourTap(own, starts[i])
-                        write { together { edits.forEach { editSpan(column.id, it) } } }
-                    }
-                    Row(
-                        Modifier.weight(starts.size * SheetSizes.HOUR_WEIGHT).fillMaxHeight().then(
-                            if (future) {
-                                Modifier
-                            } else {
-                                Modifier.hand().hourGestures(
-                                    starts.size,
-                                    own,
-                                    onTap = tapHour,
-                                    onHold = { onSpans(column) },
-                                    onDrag = { range ->
-                                        if (preview == null && range != null) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        preview = range
-                                    },
-                                    onDrop = { from, to ->
-                                        val edits = dragEdits(own, starts, from, to)
-                                        write { together { edits.forEach { editSpan(column.id, it) } } }
-                                    },
-                                )
-                            },
-                        ),
-                    ) {
-                        starts.indices.forEach { i ->
-                            HourCell(
-                                column,
-                                painted = painted[i],
-                                first = i == 0 || !painted[i - 1],
-                                last = i == starts.lastIndex || !painted[i + 1],
-                                previewed = preview?.contains(i) == true,
-                                enabled = !future,
-                                tag = "${TrackerCells.id(column.id, date)}:$i",
-                                modifier = Modifier.weight(1f),
-                            ) { tapHour(i) }
-                        }
-                    }
+                    HourStrip(
+                        column,
+                        day,
+                        window,
+                        own,
+                        enabled = !future,
+                        write = write,
+                        onSpans = { onSpans(column) },
+                        modifier = Modifier.weight(window.hours.size * SheetSizes.HOUR_WEIGHT).fillMaxHeight(),
+                    )
                     if (figures) {
                         Text(
                             TrackerSpans.total(own, date, column.dayBy).takeIf { it > 0 }?.let(::clockText).orEmpty(),
@@ -221,42 +200,124 @@ internal fun DayRow(
 }
 
 /**
- * Taps and drags on a day's hours ([count] of them, gestures restarting when [key] changes): a tap on one ([onTap]); a
- * long press, then a drag along the row ([onDrag] while it goes, null once it ends; [onDrop] with where it started and
- * ended) or no drag at all ([onHold]).
+ * A day's hours of a sleep column, along a row ([DayRow]) or down a day's column when [down] (a month across): a tap
+ * paints or clears one, a drag the hours it passes ([hourGestures], [dragEdits]), a long press alone opens the day's
+ * spans ([onSpans]).
+ */
+@Composable
+internal fun HourStrip(
+    column: TrackerColumn,
+    day: LocalDate,
+    window: HourWindow,
+    own: List<TrackerRecord>,
+    enabled: Boolean,
+    write: TrackerWrite,
+    onSpans: () -> Unit,
+    modifier: Modifier,
+    down: Boolean = false,
+) {
+    val date = "$day"
+    val haptic = LocalHapticFeedback.current
+    val starts = hourStarts(window, day, column.dayBy)
+    val painted = starts.map { covered(own, it) }
+    var preview by remember(column.id, date) { mutableStateOf<IntRange?>(null) }
+    val tapHour = { i: Int ->
+        val edits = hourTap(own, starts[i])
+        write { together { edits.forEach { editSpan(column.id, it) } } }
+    }
+    val gestures = if (!enabled) {
+        Modifier
+    } else {
+        Modifier.hand().hourGestures(
+            starts.size,
+            own,
+            down,
+            onTap = tapHour,
+            onHold = { onSpans() },
+            onDrag = { range ->
+                if (preview == null && range != null) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                preview = range
+            },
+            onDrop = { from, to ->
+                val edits = dragEdits(own, starts, from, to)
+                write { together { edits.forEach { editSpan(column.id, it) } } }
+            },
+        )
+    }
+    val cell = @Composable { i: Int, weight: Modifier ->
+        HourCell(
+            column,
+            painted = painted[i],
+            first = i == 0 || !painted[i - 1],
+            last = i == starts.lastIndex || !painted[i + 1],
+            previewed = preview?.contains(i) == true,
+            enabled = enabled,
+            tag = "${TrackerCells.id(column.id, date)}:$i",
+            modifier = weight,
+            vertical = down,
+        ) { tapHour(i) }
+    }
+    if (down) {
+        Column(modifier.then(gestures)) { starts.indices.forEach { cell(it, Modifier.weight(1f)) } }
+    } else {
+        Row(modifier.then(gestures)) { starts.indices.forEach { cell(it, Modifier.weight(1f)) } }
+    }
+}
+
+/**
+ * Taps and drags on a day's hours ([count] of them along the row, or down when [down]; gestures restarting when [key]
+ * changes): a tap on one ([onTap]); a drag over them ([onDrag] while it goes, null once it ends; [onDrop] with where it
+ * started and ended), which a mouse starts by pressing and moving (owner, ADR-051) and a finger after a long press, so a
+ * finger still scrolls the sheet; a long press with no drag, by either, opens the day's spans ([onHold]).
  */
 private fun Modifier.hourGestures(
     count: Int,
     key: Any,
+    down: Boolean = false,
     onTap: (Int) -> Unit,
     onHold: (Int) -> Unit,
     onDrag: (IntRange?) -> Unit,
     onDrop: (Int, Int) -> Unit,
-): Modifier = pointerInput(count, key) {
-    detectTapGestures(onTap = { onTap(hourAt(it.x, size.width, count)) })
-}.pointerInput(count, key) {
-    var from = 0
-    var to = 0
-    detectDragGesturesAfterLongPress(
-        onDragStart = {
-            from = hourAt(it.x, size.width, count)
-            to = from
-            onDrag(from..from)
-        },
-        onDragEnd = {
-            onDrag(null)
-            if (to == from) onHold(from) else onDrop(from, to)
-        },
-        onDragCancel = { onDrag(null) },
-        onDrag = { change, _ ->
+): Modifier = pointerInput(count, key, down) {
+    detectTapGestures(onTap = { onTap(hourAt(if (down) it.y else it.x, if (down) size.height else size.width, count)) })
+}.pointerInput(count, key, down) {
+    // After the taps' detector in the chain, so it sees each event first and takes what it drags (no tap after a drag).
+    val at = { p: Offset -> hourAt(if (down) p.y else p.x, if (down) size.height else size.width, count) }
+    awaitEachGesture {
+        val press = awaitFirstDown(requireUnconsumed = false)
+        var clicked = false
+        val start = if (press.type == PointerType.Mouse) {
+            withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                awaitTouchSlopOrCancellation(press.id) { change, _ -> change.consume() }.also { clicked = it == null }
+            }
+        } else {
+            awaitLongPressOrCancellation(press.id).also { clicked = it == null }
+        }
+        if (clicked) return@awaitEachGesture // a tap, or a finger scrolling the sheet
+        // A mouse that moved paints at once; one held still, or a finger's long press, may still be only a hold.
+        val held = start == null || press.type != PointerType.Mouse
+        val from = at(press.position)
+        var to = at((start ?: press).position)
+        var moved = !held
+        onDrag(minOf(from, to)..maxOf(from, to))
+        while (true) {
+            val change = awaitPointerEvent().changes.firstOrNull { it.id == press.id }
+            if (change == null) {
+                onDrag(null)
+                return@awaitEachGesture
+            }
             change.consume()
-            val at = hourAt(change.position.x, size.width, count)
-            if (at != to) {
-                to = at
+            if (!change.pressed) break
+            val now = at(change.position)
+            if (now != to) {
+                to = now
+                moved = true
                 onDrag(minOf(from, to)..maxOf(from, to))
             }
-        },
-    )
+        }
+        onDrag(null)
+        if (moved) onDrop(from, to) else onHold(from)
+    }
 }
 
 @Composable

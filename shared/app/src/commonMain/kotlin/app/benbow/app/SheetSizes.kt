@@ -23,6 +23,9 @@ internal object SheetSizes {
 
     /** An hour of the sleep sheet is half as wide as a column. */
     const val HOUR_WEIGHT = 0.5f
+
+    /** Hours narrower than this are numbered only every third (a whole day on a phone). */
+    val HOUR_LABEL = 14.dp
     const val FUTURE_ALPHA = 0.35f
 
     /**

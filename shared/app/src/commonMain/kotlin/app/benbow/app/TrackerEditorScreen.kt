@@ -22,6 +22,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -66,6 +67,9 @@ import app.benbow.app.resources.trackers_columns
 import app.benbow.app.resources.trackers_columns_empty
 import app.benbow.app.resources.trackers_down
 import app.benbow.app.resources.trackers_emoji
+import app.benbow.app.resources.trackers_layout
+import app.benbow.app.resources.trackers_layout_across
+import app.benbow.app.resources.trackers_layout_down
 import app.benbow.app.resources.trackers_name
 import app.benbow.app.resources.trackers_setup
 import app.benbow.app.resources.trackers_type_check
@@ -87,6 +91,7 @@ import app.benbow.client.IoDispatcher
 import app.benbow.core.tracker.ColumnField
 import app.benbow.core.tracker.ColumnType
 import app.benbow.core.tracker.TrackerColumn
+import app.benbow.core.tracker.TrackerField
 import app.benbow.core.tracker.TrackerKind
 import app.benbow.core.tracker.TrackerRecord
 import app.benbow.core.uuidV7
@@ -199,6 +204,16 @@ private fun TrackerForm(
             modifier = Modifier.width(EMOJI_FIELD),
         )
         EmojiRow(TRACKER_EMOJI) { draft = draft.copy(emoji = it) }
+        // How the month lies (owner, ADR-051): days down the page, or along its top with the columns down the side.
+        Section(stringResource(Res.string.trackers_layout)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(false to Res.string.trackers_layout_down, true to Res.string.trackers_layout_across).forEach { (across, label) ->
+                    FilterChip(tracker.across == across, {
+                        write { updateTracker(tracker.id, mapOf(TrackerField.LAYOUT to if (across) LAYOUT_ACROSS else null)) }
+                    }, { Text(stringResource(label)) }, modifier = Modifier.hand())
+                }
+            }
+        }
         Section(stringResource(Res.string.trackers_columns)) {
             val live = columns.filter { !it.archived }
             if (live.isEmpty()) Hint(stringResource(Res.string.trackers_columns_empty))

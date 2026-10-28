@@ -55,6 +55,7 @@ import app.benbow.app.resources.look_patterns
 import app.benbow.app.resources.look_reset
 import app.benbow.app.resources.look_scrap
 import app.benbow.app.resources.look_scraps
+import app.benbow.app.resources.look_screen
 import app.benbow.app.resources.look_shuffle
 import app.benbow.app.resources.look_title
 import app.benbow.client.LookFields
@@ -68,6 +69,8 @@ import org.jetbrains.compose.resources.stringResource
  * «Оформление записки» (ADR-047, replacing «Фон»): the note as it will look on top, then its color and each layer of
  * its look as a row of small previews drawn over that color. Every choice is saved at once, a field of its own, so
  * the page behind changes with it. The sets that ask for credit get it under their row while one of theirs is on.
+ * With a [screen] (a tracker's, ADR-051), «Фон экрана» follows: the screen behind the sheet, its pattern, light and
+ * motion over [screenPage], and the preview sits on it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,6 +86,9 @@ internal fun LookSheet(
     onDismiss: () -> Unit,
     /** «Оформление трекера» for a tracker's sheet (ADR-050), which takes the same look. */
     title: StringResource = Res.string.look_title,
+    screen: Map<String, String>? = null,
+    screenPage: Color = page,
+    onScreen: (Map<String, String?>) -> Unit = {},
 ) {
     val base = swatch(color) ?: page
     // Opened whole: the note on top and every row under it (half open, only its color would show).
@@ -93,7 +99,13 @@ internal fun LookSheet(
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(horizontal = 20.dp),
             )
-            Preview(id, words, look, base)
+            if (screen == null) {
+                Preview(id, words, look, base)
+            } else {
+                Box(Modifier.background(screenPage).then(entryBackdrop(screenId(id), screen, screenPage, muted = true, moving = true))) {
+                    Preview(id, words, look, base)
+                }
+            }
             Part(Res.string.look_color) {
                 SwatchPicker(color, stringResource(Res.string.background_none), onColor, Modifier.padding(horizontal = 20.dp))
             }
@@ -108,6 +120,7 @@ internal fun LookSheet(
             Layer(LookLayer.Motion, Res.string.look_motion, Res.array.look_motions, id, look, base, onLook)
             Credit(Res.string.look_motion_hint)
             Layer(LookLayer.Scrap, Res.string.look_scrap, Res.array.look_scraps, id, look, base, onLook)
+            if (screen != null) ScreenLayers(id, screen, screenPage, onScreen)
             val scrap = look[LookLayer.Scrap.field]
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 TextButton(
@@ -116,14 +129,37 @@ internal fun LookSheet(
                     modifier = Modifier.hand(),
                 ) { Text(stringResource(Res.string.look_shuffle)) }
                 TextButton(
-                    { onLook(LookFields.LAYERS.associateWith { null }) },
-                    enabled = look.keys.any { it in LookFields.LAYERS },
+                    {
+                        onLook(LookFields.LAYERS.associateWith { null })
+                        if (!screen.isNullOrEmpty()) onScreen(SCREEN_LAYERS.associate { it.field to null })
+                    },
+                    enabled = look.keys.any { it in LookFields.LAYERS } || !screen.isNullOrEmpty(),
                     modifier = Modifier.hand(),
                 ) { Text(stringResource(Res.string.look_reset)) }
             }
         }
     }
 }
+
+/** «Фон экрана» (ADR-051): the screen behind a tracker's sheet, a note's pattern, light and motion drawn over [page]. */
+@Composable
+private fun ScreenLayers(id: String, screen: Map<String, String>, page: Color, onScreen: (Map<String, String?>) -> Unit) {
+    Text(
+        stringResource(Res.string.look_screen),
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp),
+    )
+    Layer(LookLayer.Pattern, Res.string.look_pattern, Res.array.look_patterns, screenId(id), screen, page, onScreen)
+    when {
+        NoteLooks.isHero(screen[LookLayer.Pattern.field]) -> Credit(Res.string.look_credit_hero)
+        NoteLooks.isMorris(screen[LookLayer.Pattern.field]) -> Credit(Res.string.look_credit_morris)
+    }
+    Layer(LookLayer.Light, Res.string.look_light, Res.array.look_lights, screenId(id), screen, page, onScreen)
+    Layer(LookLayer.Motion, Res.string.look_motion, Res.array.look_motions, screenId(id), screen, page, onScreen)
+}
+
+/** What lays out a screen's look: not its sheet's, so the two patterns don't line up. */
+internal fun screenId(id: String) = "$id/screen"
 
 /** The note itself, its first words over its look, the way the open note shows it. */
 @Composable

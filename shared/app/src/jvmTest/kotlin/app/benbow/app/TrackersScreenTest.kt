@@ -1,12 +1,14 @@
 package app.benbow.app
 
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -15,6 +17,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.runDesktopComposeUiTest
@@ -100,10 +103,10 @@ class TrackersScreenTest {
         setContent { TrackerSheetScreen(services, Navigator(mutableStateListOf(Route.TrackerSheet(id))), id, back = true) }
         waitUntilAtLeastOneExists(hasText("🌙 Сон"), 5_000)
 
-        onNodeWithTag("${TrackerCells.id(night, today)}:3").click() // midnight: the 21:00-11:00 night's fourth hour
+        onNodeWithTag("${TrackerCells.id(night, today)}:0").click() // midnight: the day's first hour
         waitUntil(timeoutMillis = 5_000) { spans().size == 1 }
         waitUntilAtLeastOneExists(hasText("1:00"), 5_000) // the sheet has it too: the next tap sees the hour to join
-        onNodeWithTag("${TrackerCells.id(night, today)}:4").click()
+        onNodeWithTag("${TrackerCells.id(night, today)}:1").click()
         waitUntilAtLeastOneExists(hasText("2:00"), 5_000) // the night's length at the row's end
         val span = spans().single()
         assertEquals("${today}T00:00:00" to "${today}T02:00:00", span[SpanField.START] to span[SpanField.END], "the hour joined the night")
@@ -267,6 +270,107 @@ class TrackersScreenTest {
     fun theOwnersAppHasTheTrackersTab() = runDesktopComposeUiTest(width = 1280, height = 800) {
         setContent { BenbowApp(feedTestServices()) }
         waitUntilAtLeastOneExists(hasText("Трекеры"), 5_000)
+    }
+
+    @Test
+    fun aMouseDragsANightOverTheSleepSheetWithoutALongPress() = runDesktopComposeUiTest(width = 1280, height = 860) {
+        val services = testServices("desktop")
+        val today = services.today()
+        val id = services.trackers.createTracker(TrackerPresets.sleep.tracker, TrackerPresets.sleep.columns)
+        val night = runBlocking { services.trackers.columns(id).first() }.first().id
+        fun spans() = runBlocking { services.trackers.spans(listOf(night), today, today).first() }
+        setContent { TrackerSheetScreen(services, Navigator(mutableStateListOf(Route.TrackerSheet(id))), id, back = true) }
+        val midnight = "${TrackerCells.id(night, today)}:0"
+        waitUntilAtLeastOneExists(hasTestTag(midnight), 5_000)
+        val hour = onNodeWithTag(midnight).fetchSemanticsNode().size.width.toFloat()
+        onNodeWithTag(midnight).performMouseInput {
+            moveTo(center)
+            press()
+            repeat(4) { moveBy(Offset(hour / 2, 0f), delayMillis = 16) } // to 2:00's hour
+            release()
+        }
+        waitUntil(timeoutMillis = 5_000) { spans().size == 1 }
+        val span = spans().single()
+        assertEquals("${today}T00:00:00" to "${today}T03:00:00", span[SpanField.START] to span[SpanField.END], "three hours at once")
+        screenshot("trackers-18-mouse-night")
+    }
+
+    @Test
+    fun aMonthAcrossHasItsDaysOnTopAndMarksTheSame() = runDesktopComposeUiTest(width = 1280, height = 860) {
+        val services = testServices("desktop")
+        val today = services.today()
+        val id = services.trackers.createTracker(
+            TrackerPresets.habits.tracker + (TrackerField.LAYOUT to "across"),
+            TrackerPresets.habits.columns,
+        )
+        val first = runBlocking { services.trackers.columns(id).first() }.first().id
+        setContent { TrackerSheetScreen(services, Navigator(mutableStateListOf(Route.TrackerSheet(id))), id, back = true) }
+        val tag = TrackerCells.id(first, today)
+        waitUntilAtLeastOneExists(hasTestTag(tag), 5_000)
+        screenshot("trackers-19-across")
+        onNodeWithTag(tag).click()
+        waitUntil(timeoutMillis = 5_000) { cell(services, tag)?.get("value") == "true" }
+    }
+
+    @Test
+    fun aMonthAcrossOnAPhoneScrollsItsDaysWithTodayInView() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val services = testServices("android")
+        val today = services.today()
+        val id = services.trackers.createTracker(
+            TrackerPresets.habits.tracker + (TrackerField.LAYOUT to "across"),
+            TrackerPresets.habits.columns,
+        )
+        val first = runBlocking { services.trackers.columns(id).first() }.first().id
+        setContent { TrackerSheetScreen(services, Navigator(mutableStateListOf(Route.TrackerSheet(id))), id, back = true) }
+        waitUntilAtLeastOneExists(hasTestTag(TrackerCells.id(first, today)), 5_000)
+        waitForIdle()
+        onNodeWithTag(TrackerCells.id(first, today)).assertIsDisplayed()
+        screenshot("trackers-22-across-phone")
+    }
+
+    @Test
+    fun aSleepSheetAcrossPaintsADaysHoursDownItsColumn() = runDesktopComposeUiTest(width = 1280, height = 860) {
+        val services = testServices("desktop")
+        val today = services.today()
+        val id = services.trackers.createTracker(
+            TrackerPresets.sleep.tracker + (TrackerField.LAYOUT to "across"),
+            TrackerPresets.sleep.columns,
+        )
+        val night = runBlocking { services.trackers.columns(id).first() }.first().id
+        fun spans() = runBlocking { services.trackers.spans(listOf(night), today, today).first() }
+        setContent { TrackerSheetScreen(services, Navigator(mutableStateListOf(Route.TrackerSheet(id))), id, back = true) }
+        val hour = { i: Int -> "${TrackerCells.id(night, today)}:$i" }
+        waitUntilAtLeastOneExists(hasTestTag(hour(0)), 5_000)
+        onNodeWithTag(hour(0)).click() // midnight
+        waitUntil(timeoutMillis = 5_000) { spans().size == 1 }
+        waitUntilAtLeastOneExists(hasText("1:00"), 5_000) // the day's length under its hours
+        val height = onNodeWithTag(hour(1)).fetchSemanticsNode().size.height.toFloat()
+        onNodeWithTag(hour(1)).performMouseInput {
+            moveTo(center)
+            press()
+            repeat(4) { moveBy(Offset(0f, height / 2), delayMillis = 16) } // down to 3:00's hour
+            release()
+        }
+        waitUntilAtLeastOneExists(hasText("4:00"), 5_000)
+        val span = spans().single()
+        assertEquals("${today}T00:00:00" to "${today}T04:00:00", span[SpanField.START] to span[SpanField.END], "the drag joined the night")
+        screenshot("trackers-20-sleep-across")
+    }
+
+    @Test
+    fun theScreenBehindTheSheetTakesAPattern() = runDesktopComposeUiTest(width = 1280, height = 860) {
+        val services = testServices("desktop")
+        val id = services.trackers.createTracker(TrackerPresets.habits.tracker, TrackerPresets.habits.columns)
+        fun tracker() = runBlocking { services.trackers.trackers().first() }.single()
+        setContent { TrackerSheetScreen(services, Navigator(mutableStateListOf(Route.TrackerSheet(id))), id, back = true) }
+        waitUntilAtLeastOneExists(hasContentDescription("Оформление трекера"), 5_000)
+        onNodeWithContentDescription("Оформление трекера").click()
+        waitUntilAtLeastOneExists(hasText("Фон экрана"), 5_000)
+        onAllNodesWithContentDescription("Круги").assertCountEquals(2) // the sheet's pattern, then the screen's
+        onAllNodesWithContentDescription("Круги")[1].click()
+        waitUntil(timeoutMillis = 5_000) { tracker()["screen_pattern"] == "circles" }
+        assertEquals(null, tracker()["look_pattern"], "the sheet keeps its own")
+        screenshot("trackers-21-screen-look")
     }
 
     /** The texts shown in the cell tagged [tag] (merged into it, as a tap target). */

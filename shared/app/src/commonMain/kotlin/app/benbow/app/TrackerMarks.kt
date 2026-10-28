@@ -236,7 +236,7 @@ internal fun ValueRow(column: TrackerColumn, value: String?, ink: Color, dark: B
 /**
  * An hour of the sleep sheet: painted hours join into one bar with round ends; an empty hour is a faint dot; hours a
  * drag passes show a lighter bar until it ends. Taps and drags are the row's (DayRow); [onTap] is the hour's action for
- * accessibility and tests.
+ * accessibility and tests. [vertical]: the hours go down a day's column (a month across, ADR-051), the bar with them.
  */
 @Composable
 internal fun HourCell(
@@ -248,12 +248,21 @@ internal fun HourCell(
     enabled: Boolean,
     tag: String,
     modifier: Modifier,
+    vertical: Boolean = false,
     onTap: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
     val ink = column.record[ColumnField.COLOR]?.let { BenbowPalette.text(it, colors.background.luminance() < 0.5f) } ?: colors.primary
+    // The bar's thickness across the way the hours go, and its length along it.
+    val bar = if (vertical) {
+        Modifier.fillMaxHeight().fillMaxWidth(
+            SheetSizes.BAR_HEIGHT,
+        )
+    } else {
+        Modifier.fillMaxWidth().fillMaxHeight(SheetSizes.BAR_HEIGHT)
+    }
     Box(
-        modifier.fillMaxHeight()
+        modifier.then(if (vertical) Modifier.fillMaxWidth() else Modifier.fillMaxHeight())
             .then(
                 if (enabled) {
                     Modifier.semantics {
@@ -270,24 +279,36 @@ internal fun HourCell(
         contentAlignment = Alignment.Center,
     ) {
         when {
-            previewed -> Box(
-                Modifier.fillMaxWidth().fillMaxHeight(SheetSizes.BAR_HEIGHT).background(ink.copy(alpha = SheetSizes.PART_ALPHA)),
-            )
+            previewed -> Box(bar.background(ink.copy(alpha = SheetSizes.PART_ALPHA)))
 
             painted -> {
                 val round = { at: Boolean -> if (at) SheetSizes.BAR_CORNER else 0.dp }
+                val gap = { at: Boolean -> if (at) 1.dp else 0.dp }
                 Box(
-                    Modifier.fillMaxWidth().fillMaxHeight(SheetSizes.BAR_HEIGHT)
-                        .padding(start = if (first) 1.dp else 0.dp, end = if (last) 1.dp else 0.dp)
-                        .background(
-                            ink.copy(alpha = SheetSizes.MARK_ALPHA),
+                    bar.then(
+                        if (vertical) {
+                            Modifier.padding(top = gap(first), bottom = gap(last))
+                        } else {
+                            Modifier.padding(start = gap(first), end = gap(last))
+                        },
+                    ).background(
+                        ink.copy(alpha = SheetSizes.MARK_ALPHA),
+                        if (vertical) {
+                            RoundedCornerShape(
+                                topStart = round(first),
+                                topEnd = round(first),
+                                bottomEnd = round(last),
+                                bottomStart = round(last),
+                            )
+                        } else {
                             RoundedCornerShape(
                                 topStart = round(first),
                                 topEnd = round(last),
                                 bottomEnd = round(last),
                                 bottomStart = round(first),
-                            ),
-                        ),
+                            )
+                        },
+                    ),
                 )
             }
 

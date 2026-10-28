@@ -144,6 +144,25 @@ internal fun trackerLook(layers: Map<String, String?>): Map<String, String?> = l
     .map { (layer, token) -> TrackerField.LOOK_PREFIX + layer to token?.takeIf(LookFields::isToken) }
     .toMap()
 
+/** The layers the screen behind a tracker's sheet takes (ADR-051): a note's pattern, light and motion. */
+internal val SCREEN_LAYERS = listOf(LookLayer.Pattern, LookLayer.Light, LookLayer.Motion)
+
+/** The screen's look by layer, from the tracker's `screen_<layer>` fields (a newer app's layers too: drawing skips them). */
+internal fun screenLook(fields: Map<String, String?>): Map<String, String> = fields.mapNotNull { (key, value) ->
+    if (key.startsWith(TrackerField.SCREEN_PREFIX) && value != null) key.removePrefix(TrackerField.SCREEN_PREFIX) to value else null
+}.toMap()
+
+/** «Фон экрана»: its layers as the tracker's fields, only [SCREEN_LAYERS] and only tokens; null takes a layer off. */
+internal fun trackerScreen(layers: Map<String, String?>): Map<String, String?> =
+    layers.filterKeys { layer -> SCREEN_LAYERS.any { it.field == layer } }
+        .map { (layer, token) -> TrackerField.SCREEN_PREFIX + layer to token?.takeIf(LookFields::isToken) }
+        .toMap()
+
+/** A month with its days along the top and the columns down the side (owner, ADR-051), set in «Настроить трекер». */
+internal val TrackerRecord.across: Boolean get() = this[TrackerField.LAYOUT] == LAYOUT_ACROSS
+
+internal const val LAYOUT_ACROSS = "across"
+
 /** The emoji of an `emoji:` icon token; other schemes (a hand-drawn set) come later and give none here. */
 internal fun iconEmoji(icon: String): String? = if (icon.startsWith(EMOJI)) icon.removePrefix(EMOJI).ifEmpty { null } else null
 
@@ -152,11 +171,12 @@ private const val EMOJI = "emoji:"
 /**
  * The hours a time column shows on [day]'s row, as the times they start: its window's clock hours on the day they fall
  * on. A night over midnight belongs to the day one wakes ([DayBy.End]: its evening hours are the day before) or to the
- * day it starts ([DayBy.Start]: its morning hours are the next day).
+ * day it starts ([DayBy.Start]: its morning hours are the next day). A window from midnight is the day itself, a whole
+ * one too ("00:00-00:00", the sleep sheet's).
  */
 internal fun hourStarts(window: HourWindow, day: LocalDate, by: DayBy): List<LocalDateTime> {
     val fromHour = window.from / 60
-    val crosses = window.to <= window.from
+    val crosses = fromHour > 0 && window.to <= window.from
     return window.hours.map { hour ->
         val date = when {
             !crosses -> day

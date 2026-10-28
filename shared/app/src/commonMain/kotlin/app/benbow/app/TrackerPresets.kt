@@ -52,7 +52,7 @@ internal object TrackerPresets {
         ),
     )
 
-    /** The sleep sheet: days × the night's hours from nine in the evening to eleven in the morning, and how it went. */
+    /** The sleep sheet: days × the day's 24 hours from midnight (owner: a whole day, not the night only), and how it went. */
     val sleep = TrackerPreset(
         "sleep",
         mapOf(
@@ -68,7 +68,7 @@ internal object TrackerPresets {
                 "emoji:🌙",
                 "blue",
                 ColumnType.Time,
-                extra = mapOf(ColumnField.HOURS to "21:00-11:00", ColumnField.DAY_BY to DayBy.End.token),
+                extra = mapOf(ColumnField.HOURS to "00:00-00:00", ColumnField.DAY_BY to DayBy.End.token),
             ),
             column(
                 "Как спалось",

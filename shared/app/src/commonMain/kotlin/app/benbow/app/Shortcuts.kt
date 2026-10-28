@@ -43,13 +43,13 @@ sealed interface Shortcut {
 
     data object Back : Shortcut
 
-    /** Ctrl+1 … Ctrl+5: the tabs in order. */
+    /** Ctrl+1 … Ctrl+6: the tabs in order (six on the web and the desktop with «Трекеры», five on a phone). */
     data class Tab(val index: Int) : Shortcut
 }
 
-private val DIGITS = listOf(Key.One, Key.Two, Key.Three, Key.Four, Key.Five)
+private val DIGITS = listOf(Key.One, Key.Two, Key.Three, Key.Four, Key.Five, Key.Six)
 
-/** Ctrl (or ⌘) + N, F, S, 1–5, and Alt+←. The editor's own Ctrl+B/I/U/E/Z/Y/C/X are left alone. */
+/** Ctrl (or ⌘) + N, F, S, 1–6, and Alt+←. The editor's own Ctrl+B/I/U/E/Z/Y/C/X are left alone. */
 fun shortcutOf(key: Key, ctrl: Boolean, alt: Boolean): Shortcut? = when {
     ctrl && key == Key.N -> Shortcut.NewEntry
     ctrl && key == Key.F -> Shortcut.Search
@@ -60,8 +60,8 @@ fun shortcutOf(key: Key, ctrl: Boolean, alt: Boolean): Shortcut? = when {
 }
 
 /**
- * In the browser (ADR-029) Ctrl+N (a new window) and Ctrl+1…5 (its tabs) belong to the browser, so the app takes Alt+N
- * and Alt+1…5; Ctrl+F and Ctrl+S are the app's (the page is a canvas: the browser's find and save see nothing).
+ * In the browser (ADR-029) Ctrl+N (a new window) and Ctrl+1…6 (its tabs) belong to the browser, so the app takes Alt+N
+ * and Alt+1…6; Ctrl+F and Ctrl+S are the app's (the page is a canvas: the browser's find and save see nothing).
  * Back is the browser's own (Alt+←, a mouse's side button), which the app follows. [code] is KeyboardEvent.code.
  */
 fun webShortcutOf(code: String, ctrl: Boolean, alt: Boolean): Shortcut? = when {
@@ -72,7 +72,7 @@ fun webShortcutOf(code: String, ctrl: Boolean, alt: Boolean): Shortcut? = when {
     else -> null
 }
 
-private val WEB_DIGITS = listOf("Digit1", "Digit2", "Digit3", "Digit4", "Digit5")
+private val WEB_DIGITS = listOf("Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6")
 
 fun shortcutOf(event: KeyEvent): Shortcut? =
     if (event.type != KeyEventType.KeyDown) null else shortcutOf(event.key, event.isCtrlPressed || event.isMetaPressed, event.isAltPressed)

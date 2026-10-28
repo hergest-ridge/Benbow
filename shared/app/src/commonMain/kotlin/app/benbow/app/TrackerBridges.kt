@@ -11,7 +11,6 @@ import app.benbow.core.tracker.TrackerSpans
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
@@ -25,9 +24,8 @@ import kotlin.time.Clock
 /** A timer running on a tracker, as an ongoing notification shows it: its column's emoji and name, its tracker's. */
 class RunningTimer(val columnId: String, val title: String, val tracker: String, val startedAtMillis: Long)
 
-/** Timers running on trackers outside the trash and the archive; none where trackers don't show (the owner's app). */
+/** Timers running on trackers outside the trash and the archive. */
 fun AppServices.runningTimers(): Flow<List<RunningTimer>> {
-    if (!trackersShown) return flowOf(emptyList())
     return combine(trackers.trackers(), trackers.runningColumns()) { list, columns ->
         val shown = list.filter { !it.archived }.associateBy { it.id }
         columns.mapNotNull { column ->
@@ -55,11 +53,10 @@ class WidgetMark(val columnId: String, val text: String, val marked: Boolean, va
 class WidgetTracker(val id: String, val title: String, val marks: List<WidgetMark>)
 
 /**
- * Today's marks of the first [limit] trackers outside the archive, for Android's widget (ADR-050, B8); none where
- * trackers don't show. The numbers follow each tracker's eye.
+ * Today's marks of the first [limit] trackers outside the archive, for Android's widget (ADR-050, B8). The numbers
+ * follow each tracker's eye.
  */
 suspend fun AppServices.trackersToday(limit: Int = WIDGET_TRACKERS): List<WidgetTracker> = withContext(IoDispatcher) {
-    if (!trackersShown) return@withContext emptyList()
     val day = today()
     trackers.trackers().first().filter { !it.archived }.take(limit).map { tracker ->
         val columns = trackers.columns(tracker.id).first().filter { !it.archived }.take(WIDGET_COLUMNS)

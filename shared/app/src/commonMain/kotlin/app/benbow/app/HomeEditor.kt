@@ -123,7 +123,6 @@ import app.benbow.client.addable
 import app.benbow.client.figureCount
 import app.benbow.client.figures
 import app.benbow.client.packHome
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.getString
@@ -221,11 +220,9 @@ internal fun HomeEditor(services: AppServices, start: HomeLayout, home: HomeStat
     /** The tag picker for a tag block: its id, or "" for a new one. */
     var pickingTag by remember { mutableStateOf<String?>(null) }
 
-    /** The same for a tracker block (ADR-050), offered only where trackers show. */
+    /** The same for a tracker block (ADR-050). */
     var pickingTracker by remember { mutableStateOf<String?>(null) }
-    val trackers by remember {
-        if (services.trackersShown) services.trackers.trackers() else flowOf(emptyList())
-    }.collectAsStateWithLifecycle(emptyList())
+    val trackers by remember { services.trackers.trackers() }.collectAsStateWithLifecycle(emptyList())
     val untitled = stringResource(Res.string.untitled)
     val trackerTitles = trackers.filter { !it.archived }.associate { it.id to trackerTitle(it, untitled) }
     val snackbar = remember { SnackbarHostState() }
@@ -280,14 +277,8 @@ internal fun HomeEditor(services: AppServices, start: HomeLayout, home: HomeStat
                             },
                         )
                     }
-                    // A tracker's blocks only where trackers show, one per tracker only once there is one (ADR-050).
-                    val addable = layout.addable().filter { kind ->
-                        when (kind) {
-                            HomeBlockType.Trackers -> services.trackersShown
-                            HomeBlockType.Tracker -> trackerTitles.isNotEmpty()
-                            else -> true
-                        }
-                    }
+                    // A tracker's block only once there is one (ADR-050).
+                    val addable = layout.addable().filter { kind -> kind != HomeBlockType.Tracker || trackerTitles.isNotEmpty() }
                     if (adding && addable.isNotEmpty()) {
                         Catalog(addable, onPick = { kind ->
                             when (kind) {

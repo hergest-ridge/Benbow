@@ -88,7 +88,7 @@ private fun MoreList(services: AppServices, nav: Navigator) {
         MoreItem(Icons.Search, stringResource(Res.string.tab_search), stringResource(Res.string.more_search)) { nav.open(Route.Search) }
         MoreItem(Icons.Gallery, stringResource(Res.string.library), stringResource(Res.string.more_library)) { nav.open(Route.Library) }
         // A phone's way to the trackers (ADR-050); the web and the desktop have a tab.
-        if (services.trackersShown && !services.trackersTab) {
+        if (!services.trackersTab) {
             MoreItem(Icons.Trackers, stringResource(Res.string.tab_trackers), stringResource(Res.string.more_trackers)) {
                 nav.open(Route.Trackers)
             }

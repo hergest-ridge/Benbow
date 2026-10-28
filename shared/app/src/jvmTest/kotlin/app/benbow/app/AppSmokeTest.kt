@@ -1177,7 +1177,7 @@ class AppSmokeTest {
         waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.journal().first().any { it.title == "Набрано с клавиатуры" } } }
         screenshot("35-desktop-editor")
 
-        services.shortcuts.tryEmit(Shortcut.Tab(4))
+        services.shortcuts.tryEmit(Shortcut.Tab(5)) // «Ещё», after «Записки» and «Трекеры»
         waitUntilExactlyOneExists(hasText("Сочетания клавиш"), 5_000)
         onNodeWithText("Сочетания клавиш").click()
         waitUntilExactlyOneExists(hasText("Ctrl+N"), 5_000)

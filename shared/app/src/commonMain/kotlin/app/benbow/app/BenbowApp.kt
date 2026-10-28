@@ -376,7 +376,7 @@ private fun AppRoot(services: AppServices) {
                 // A tracker's timer notification or widget (ADR-050): the trackers, a tab or a page from «Ещё».
                 AppLaunch.Trackers -> if (services.trackersTab) {
                     nav.selectTab(Route.Trackers)
-                } else if (services.trackersShown) {
+                } else {
                     nav.selectTab(Route.More)
                     nav.open(Route.Trackers)
                 }

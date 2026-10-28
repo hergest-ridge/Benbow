@@ -172,7 +172,7 @@
     <string-array name="shortcut_list">
         <item>Ctrl+N|Новая запись</item>
         <item>Ctrl+F|Поиск</item>
-        <item>Ctrl+1 … Ctrl+5|Главная, Лента, Календарь, Поиск, Ещё</item>
+        <item>Ctrl+1 … Ctrl+6|Главная, Лента, Календарь, Записки, Трекеры, Ещё</item>
         <item>Ctrl+S|Сохранить версию записи</item>
         <item>Alt+Влево|Назад</item>
         <item>PgUp, PgDn, Пробел|Лента, пост, поиск: на экран вверх или вниз</item>
@@ -184,7 +184,7 @@
     <string-array name="shortcut_list_web">
         <item>Alt+N|Новая запись</item>
         <item>Ctrl+F|Поиск</item>
-        <item>Alt+1 … Alt+5|Главная, Лента, Календарь, Поиск, Ещё</item>
+        <item>Alt+1 … Alt+6|Главная, Лента, Календарь, Записки, Трекеры, Ещё</item>
         <item>Ctrl+S|Сохранить версию записи</item>
         <item>Alt+Влево|Назад (и кнопка «Назад» браузера)</item>
         <item>Ctrl+V|Вставить картинку из буфера в запись</item>

@@ -63,11 +63,8 @@ class BenbowApplication : Application() {
             updater = AndroidAppUpdater(this),
             labs = packageName != "app.benbow", // the dev and bench builds show unfinished work, the owner's app never
         ).also {
-            // Trackers (ADR-050) where they show: their widget can be picked, their running timers are notifications.
-            if (it.labs) {
-                TrackerWidget.enable(this, true)
-                TimerNotifications.start(this, it)
-            }
+            // Trackers' running timers are notifications (ADR-050).
+            TimerNotifications.start(this, it)
         }
     }
 

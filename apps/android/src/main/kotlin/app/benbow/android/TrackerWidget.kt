@@ -1,8 +1,6 @@
 package app.benbow.android
 
-import android.content.ComponentName
 import android.content.Context
-import android.content.pm.PackageManager
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -64,16 +62,6 @@ class TrackerWidget : GlanceAppWidget() {
         /** Called when the app leaves the screen and after a tap here: today's marks may have changed. */
         fun refresh(context: Context, services: AppServices) {
             services.scope.launch { TrackerWidget().updateAll(context.applicationContext) }
-        }
-
-        /** The widget can be picked only where trackers show (dev and bench builds), never in the owner's app yet. */
-        fun enable(context: Context, on: Boolean) {
-            val state = if (on) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-            context.packageManager.setComponentEnabledSetting(
-                ComponentName(context, TrackerWidgetReceiver::class.java),
-                state,
-                PackageManager.DONT_KILL_APP,
-            )
         }
     }
 }

@@ -42,7 +42,7 @@ import kotlin.test.assertTrue
 class TrackersScreenTest {
     @Test
     fun aPhoneStartsFromAPresetMarksDaysByTypeAndHidesTheNumbers() = runDesktopComposeUiTest(width = 412, height = 860) {
-        val services = labsServices("android")
+        val services = testServices("android")
         val today = services.today()
         setContent { BenbowApp(services) }
         assertEquals(0, onAllNodesWithText("Трекеры").fetchSemanticsNodes().size, "no tab on a phone")
@@ -92,7 +92,7 @@ class TrackersScreenTest {
 
     @Test
     fun theSleepSheetPaintsANightHourByHourAsOneSpan() = runDesktopComposeUiTest(width = 412, height = 860) {
-        val services = labsServices("android")
+        val services = testServices("android")
         val today = services.today()
         val id = services.trackers.createTracker(TrackerPresets.sleep.tracker, TrackerPresets.sleep.columns)
         val night = runBlocking { services.trackers.columns(id).first() }.first().id
@@ -102,6 +102,7 @@ class TrackersScreenTest {
 
         onNodeWithTag("${TrackerCells.id(night, today)}:3").click() // midnight: the 21:00-11:00 night's fourth hour
         waitUntil(timeoutMillis = 5_000) { spans().size == 1 }
+        waitUntilAtLeastOneExists(hasText("1:00"), 5_000) // the sheet has it too: the next tap sees the hour to join
         onNodeWithTag("${TrackerCells.id(night, today)}:4").click()
         waitUntilAtLeastOneExists(hasText("2:00"), 5_000) // the night's length at the row's end
         val span = spans().single()
@@ -111,7 +112,7 @@ class TrackersScreenTest {
 
     @Test
     fun aTimerRunsFromItsHeaderAndADaysSpansAreTypedByHand() = runDesktopComposeUiTest(width = 412, height = 860) {
-        val services = labsServices("android")
+        val services = testServices("android")
         val today = services.today()
         val id = services.trackers.createTracker(TrackerPresets.time.tracker, TrackerPresets.time.columns)
         fun work() = runBlocking { services.trackers.columns(id).first() }.first()
@@ -138,7 +139,7 @@ class TrackersScreenTest {
 
     @Test
     fun aWideWindowHasATabWithTheListBesideTheSheetAndTheTrashGivesItBack() = runDesktopComposeUiTest(width = 1280, height = 800) {
-        val services = labsServices("desktop")
+        val services = testServices("desktop")
         services.trackers.createTracker(TrackerPresets.habits.tracker, TrackerPresets.habits.columns)
         setContent { BenbowApp(services) }
         onNodeWithText("Трекеры").click()
@@ -159,7 +160,7 @@ class TrackersScreenTest {
 
     @Test
     fun aBlankSheetGetsItsColumnsInTheConstructor() = runDesktopComposeUiTest(width = 412, height = 860) {
-        val services = labsServices("android")
+        val services = testServices("android")
         val id = services.trackers.createTracker(TrackerPresets.blank.tracker, TrackerPresets.blank.columns)
         fun columns() = runBlocking { services.trackers.columns(id).first() }
         setContent { TrackerEditorScreen(services, Navigator(mutableStateListOf(Route.TrackerEditor(id))), id) }
@@ -179,7 +180,7 @@ class TrackersScreenTest {
 
     @Test
     fun aTrashedTrackerWaitsInTheTrash() = runDesktopComposeUiTest(width = 412, height = 860) {
-        val services = labsServices("android")
+        val services = testServices("android")
         val id = services.trackers.createTracker(TrackerPresets.habits.tracker, TrackerPresets.habits.columns)
         services.trackers.moveToTrash(id)
         setContent { BenbowApp(services) }
@@ -192,7 +193,7 @@ class TrackersScreenTest {
 
     @Test
     fun aTrackerOpensAsAWeekOrAYearAndRemembersWhich() = runDesktopComposeUiTest(width = 412, height = 860) {
-        val services = labsServices("android")
+        val services = testServices("android")
         val today = services.today()
         val id = services.trackers.createTracker(TrackerPresets.habits.tracker, TrackerPresets.habits.columns)
         val walk = runBlocking { services.trackers.columns(id).first() }[1].id
@@ -211,7 +212,7 @@ class TrackersScreenTest {
 
     @Test
     fun aTrackersBlockOnHomeTicksTodayAndTheCalendarShowsItsLine() = runDesktopComposeUiTest(width = 412, height = 860) {
-        val services = labsServices("android")
+        val services = testServices("android")
         val today = services.today()
         val id = services.trackers.createTracker(TrackerPresets.habits.tracker, TrackerPresets.habits.columns)
         val stretch = runBlocking { services.trackers.columns(id).first() }.first().id
@@ -231,7 +232,7 @@ class TrackersScreenTest {
 
     @Test
     fun aWidgetReadsTodayAndTicksChecksAndCounts() = runBlocking {
-        val services = labsServices("android")
+        val services = testServices("android")
         val id = services.trackers.createTracker(TrackerPresets.habits.tracker, TrackerPresets.habits.columns)
         val ids = services.trackers.columns(id).first().map { it.id }
         val (stretch, water) = ids[0] to ids[3]
@@ -250,7 +251,7 @@ class TrackersScreenTest {
 
     @Test
     fun tenColumnsFitTheMonthAndTheYear() = runDesktopComposeUiTest(width = 412, height = 860) {
-        val services = labsServices("android")
+        val services = testServices("android")
         val columns = (1..10).map { mapOf("name" to "Колонка $it", "type" to "check", "icon" to "emoji:🌱", "color" to "green") }
         val id = services.trackers.createTracker(mapOf("name" to "Десять"), columns)
         val first = runBlocking { services.trackers.columns(id).first() }.first().id
@@ -263,10 +264,9 @@ class TrackersScreenTest {
     }
 
     @Test
-    fun theOwnersAppShowsNoTrackers() = runDesktopComposeUiTest(width = 1280, height = 800) {
+    fun theOwnersAppHasTheTrackersTab() = runDesktopComposeUiTest(width = 1280, height = 800) {
         setContent { BenbowApp(feedTestServices()) }
-        waitForIdle()
-        assertTrue(onAllNodesWithText("Трекеры").fetchSemanticsNodes().isEmpty())
+        waitUntilAtLeastOneExists(hasText("Трекеры"), 5_000)
     }
 
     /** The texts shown in the cell tagged [tag] (merged into it, as a tap target). */
@@ -278,12 +278,11 @@ class TrackersScreenTest {
         return runBlocking { services.trackers.cells(listOf(column), day, day).first() }.singleOrNull()?.fields
     }
 
-    private fun labsServices(platform: String) = AppServices(
+    private fun testServices(platform: String) = AppServices(
         JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), BenbowDb.Schema),
         JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), CalendarDb.Schema),
         mediaIn(Files.createTempDirectory("benbow-media").toFile()),
         platform,
         "Test",
-        labs = true,
-    )
+    ) // no labs: what the owner's app shows (ADR-050, out of labs in 0.17.1)
 }

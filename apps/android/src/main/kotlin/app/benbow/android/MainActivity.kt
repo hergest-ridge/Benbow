@@ -66,6 +66,6 @@ class MainActivity : ComponentActivity() {
         super.onStop()
         SyncWorker.scheduleSoon(this)
         BenbowWidget.refresh(this, services)
-        if (services.labs) TrackerWidget.refresh(this, services)
+        TrackerWidget.refresh(this, services)
     }
 }

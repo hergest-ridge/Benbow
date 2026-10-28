@@ -78,11 +78,8 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
 
-/** Trackers show only in labs builds while they are being built (ADR-050). */
-internal val AppServices.trackersShown: Boolean get() = labs
-
 /** A tab of their own on the web and the desktop; a phone reaches them from «Ещё». */
-internal val AppServices.trackersTab: Boolean get() = trackersShown && platform != "android"
+internal val AppServices.trackersTab: Boolean get() = platform != "android"
 
 /** Opens [id]'s sheet from elsewhere (Home, the calendar): beside the list in the tab, else a page of its own. */
 internal fun openTracker(services: AppServices, nav: Navigator, id: String) {

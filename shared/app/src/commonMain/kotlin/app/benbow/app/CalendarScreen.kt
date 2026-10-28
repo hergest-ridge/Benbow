@@ -106,7 +106,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
@@ -310,9 +309,7 @@ internal fun CalendarScreen(services: AppServices, nav: Navigator) {
     val entries by vm.entries.collectAsStateWithLifecycle()
     val written by vm.written.collectAsStateWithLifecycle()
     val today = remember { LocalDate.parse(services.today()) }
-    val trackers by remember {
-        if (services.trackersShown) services.trackers.trackers() else flowOf(emptyList())
-    }.collectAsStateWithLifecycle(emptyList())
+    val trackers by remember { services.trackers.trackers() }.collectAsStateWithLifecycle(emptyList())
     var sheet by remember { mutableStateOf<EventSheetRequest?>(null) }
     var showCalendars by remember { mutableStateOf(false) }
     var overview by remember { mutableStateOf(false) }

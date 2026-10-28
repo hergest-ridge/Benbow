@@ -225,12 +225,9 @@ private fun TileBlock(block: HomeBlock, home: HomeState, actions: HomeActions, s
             edges,
         )
 
-        // Trackers' blocks only where trackers show (ADR-050): a layout from a labs device draws nothing elsewhere.
-        HomeBlockType.Trackers -> if (services.trackersShown) {
-            TrackersBlock(services, block.blockSize ?: BlockSize.M, actions.trackers, actions.openTracker, edges)
-        }
+        HomeBlockType.Trackers -> TrackersBlock(services, block.blockSize ?: BlockSize.M, actions.trackers, actions.openTracker, edges)
 
-        HomeBlockType.Tracker -> block.config[HomeBlock.TRACKER]?.takeIf { services.trackersShown }?.let { tracker ->
+        HomeBlockType.Tracker -> block.config[HomeBlock.TRACKER]?.let { tracker ->
             TrackerBlock(services, tracker, block.blockSize ?: BlockSize.S, actions.openTracker, edges)
         }
 

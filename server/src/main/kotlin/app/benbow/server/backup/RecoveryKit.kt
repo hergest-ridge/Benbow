@@ -1,6 +1,7 @@
 package app.benbow.server.backup
 
 import app.benbow.server.ServerConfig
+import app.benbow.server.fonts.OwnFonts
 import app.benbow.server.storage.BlobStore
 import app.benbow.server.storage.createUnder
 import java.nio.file.Files
@@ -26,6 +27,15 @@ internal class RecoveryKit(private val dataDir: Path, private val mirror: Path, 
             if (!source.isRegularFile()) continue
             val folder = createUnder(mirror, "$CONFIG_DIR/" + relative.substringBeforeLast('/', ""))
             copyChecked(source, folder.resolve(source.fileName.toString()))
+        }
+        // The owner's own fonts (ADR-052): every file kept, a removed one too (it waits in `removed/`).
+        val fonts = dataDir.resolve(OwnFonts.DIR)
+        for (file in OwnFonts.keptFiles(fonts)) {
+            val relative = fonts.relativize(file).joinToString("/")
+            copyChecked(
+                file,
+                createUnder(mirror, "${OwnFonts.DIR}/" + relative.substringBeforeLast('/', "")).resolve(file.fileName.toString()),
+            )
         }
         syncExport()
         val readme = mirror.resolve(README)
@@ -91,6 +101,7 @@ internal class RecoveryKit(private val dataDir: Path, private val mirror: Path, 
             |  media\           все фото, видео, звуки и файлы, как на сервере (год\месяц\...)
             |  export\          все записи в Markdown и JSON: читаются без программы
             |  config\          настройки сервера, его сертификат (по нему устройства узнают сервер) и ключи для друзей
+            |  fonts\           ваши шрифты для записок
             |  .benbow-mirror   метка: по ней сервер узнаёт свою папку. Не удаляйте её.
             |
             |В config\ лежат пароль и ключи сервера: берегите эту папку так же, как сам компьютер.

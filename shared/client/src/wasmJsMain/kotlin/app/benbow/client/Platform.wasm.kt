@@ -18,6 +18,8 @@ actual open class LocalFile(val name: String, val blob: JsAny, val size: Long, v
 
 actual fun LocalFile.readAllText(): String = checkNotNull(bytes) { "$name is too large to read as text here" }.decodeToString()
 
+actual fun LocalFile.readAllBytes(): ByteArray = checkNotNull(bytes) { "$name is too large to read whole here" }
+
 /** Slices of the blob, each read on its own (a song's tags without its audio). */
 actual fun LocalFile.randomRead(): RandomRead = object : RandomRead {
     override val size: Long = this@randomRead.size

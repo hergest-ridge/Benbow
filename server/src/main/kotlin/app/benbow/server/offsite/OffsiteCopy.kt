@@ -3,6 +3,7 @@ package app.benbow.server.offsite
 import app.benbow.server.PURGE_JOURNAL
 import app.benbow.server.ServerConfig
 import app.benbow.server.calendar.CalendarDatabase
+import app.benbow.server.fonts.OwnFonts
 import app.benbow.server.storage.Backups
 import app.benbow.server.storage.BlobStore
 import app.benbow.server.storage.Database
@@ -127,7 +128,9 @@ class OffsiteCopy(
             emptyList()
         }
         archive(export, exported, written, "export.zip", target, key)
-        archive(dataDir, CONFIG.map(dataDir::resolve).filter { it.isRegularFile() }, written, "config.zip", target, key)
+        // The settings and the owner's own fonts (ADR-052): OffsiteRestore puts every file back at its place.
+        val config = CONFIG.map(dataDir::resolve).filter { it.isRegularFile() } + OwnFonts.keptFiles(dataDir.resolve(OwnFonts.DIR))
+        archive(dataDir, config, written, "config.zip", target, key)
         passes = passes.copy(lastAt = if (media.done) now else passes.lastAt, written = written.toMap())
         if (snapshots + media.files > 0) log.info("Copy outside the house: {} snapshots, {} media files", snapshots, media.files)
 

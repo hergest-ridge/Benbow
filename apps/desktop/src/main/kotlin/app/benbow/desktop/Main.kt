@@ -6,6 +6,7 @@ import androidx.compose.ui.window.application
 import app.benbow.app.AppServices
 import app.benbow.app.BenbowDesktop
 import app.benbow.app.mediaIn
+import app.benbow.client.FolderFontShelf
 import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.db.BenbowDb
 import app.benbow.client.keepBeforeMigrating
@@ -49,6 +50,7 @@ fun main() {
         mediaCacheBytes = 10L * 1024 * 1024 * 1024, // the PC has room; originals open without waiting
         reminderClock = clock,
         audio = JavaFxAudio(),
+        fontShelf = FolderFontShelf(File(dir, "fonts")),
         labs = System.getenv("BENBOW_LABS") == "1", // unfinished work, for dev runs only
     )
     application { BenbowDesktop(services, tray) }

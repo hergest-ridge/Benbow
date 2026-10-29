@@ -9,6 +9,7 @@ import app.benbow.client.DraftSession
 import app.benbow.client.Due
 import app.benbow.client.ExportProgress
 import app.benbow.client.ExportReport
+import app.benbow.client.FontShelf
 import app.benbow.client.HomeBlock
 import app.benbow.client.IoDispatcher
 import app.benbow.client.JournalRepository
@@ -17,6 +18,7 @@ import app.benbow.client.Pairing
 import app.benbow.client.PairingException
 import app.benbow.client.ReminderItem
 import app.benbow.client.SearchQuery
+import app.benbow.client.ServerFonts
 import app.benbow.client.ServerHistory
 import app.benbow.client.ServerPages
 import app.benbow.client.ServerPurges
@@ -204,6 +206,8 @@ class AppServices(
     audio: AudioEngine = SilentAudio(),
     /** Updating this app from its server (ADR-042, U2); Android only. */
     updater: AppUpdater? = null,
+    /** Where fonts from the server are kept (ADR-052): a folder, or IndexedDB in the browser; none in most tests. */
+    fontShelf: FontShelf? = null,
     /** Unfinished work shows: dev and bench builds and dev runs, never the owner's app (now: the note-look spike, ADR-047). */
     val labs: Boolean = false,
 ) {
@@ -220,6 +224,17 @@ class AppServices(
 
     /** «Место» (ADR-041): the server's count of its files, and the last one kept here. */
     internal val storage = ServerStorage(db, apis)
+
+    /** Fonts from the server (ADR-052): its catalog and the files of the fonts notes use, kept on this device. */
+    val fonts = ServerFonts(db, apis, fontShelf)
+
+    @Volatile
+    private var fontsReadAt = 0L
+
+    /** A fresh font catalog: when «Оформление записки» opens (after a sync it comes every few hours). */
+    fun refreshFonts() {
+        scope.launch { runCatching { fonts.refresh() }.onSuccess { fontsReadAt = now() } }
+    }
 
     /** How «Место» gets a fresh count; tests put their own here. */
     internal var storageReader: suspend () -> StorageReport = { storage.fetch() }
@@ -496,6 +511,16 @@ class AppServices(
         val result = engine.sync()
         if (result !is SyncResult.Done) return result
         Settings(db).connection?.let { calendarStatus.value = calendarSync.sync(apis(it), it) }
+        if (now() - fontsReadAt > FONTS_EVERY) {
+            try {
+                fonts.refresh()
+                fontsReadAt = now()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // The fonts wait for the next time; the sync went through.
+            }
+        }
         return try {
             media.dropPurged() // before uploading: a file deleted for good is never sent
             media.uploadPending()
@@ -511,3 +536,6 @@ class AppServices(
     /** The journal day new entries belong to ([DAY_START_HOUR]). */
     fun today(): String = journalToday().toString()
 }
+
+/** How often a sync reads the server's font catalog again (ADR-052). */
+private const val FONTS_EVERY = 6 * 3_600_000L

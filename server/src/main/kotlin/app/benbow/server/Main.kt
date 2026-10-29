@@ -5,6 +5,9 @@ import app.benbow.server.api.benbowModule
 import app.benbow.server.backup.BackupJobs
 import app.benbow.server.backup.MirrorRestore
 import app.benbow.server.calendar.CalendarDatabase
+import app.benbow.server.fonts.FontPack
+import app.benbow.server.fonts.Fonts
+import app.benbow.server.fonts.OwnFonts
 import app.benbow.server.offsite.AgeFiles
 import app.benbow.server.offsite.OffsiteCopy
 import app.benbow.server.offsite.OffsiteKey
@@ -208,6 +211,10 @@ fun main(args: Array<String>) {
             ),
             // Read once now, so «Где хранить» has its answer by the time the page is opened (ADR-042, I1).
             survey = HostSurvey.system()?.also { it.current() },
+            fonts = Fonts(
+                FontPack(fontsRoot()).also { log.info("Font pack: {} fonts", it.fonts.size) },
+                OwnFonts(dataDir.resolve(OwnFonts.DIR)),
+            ),
         )
     val server = embeddedServer(
         factory = Netty,
@@ -247,6 +254,12 @@ fun main(args: Array<String>) {
 private fun appRoot(): Path? = System.getProperty("benbow.android")?.let(Path::of)
     ?: runCatching {
         Path.of(ServerContext::class.java.protectionDomain.codeSource.location.toURI()).parent.parent.resolve("android")
+    }.getOrNull()
+
+/** The font pack (ADR-052): the package's `fonts` folder beside `lib`, or where `benbow.fonts` points (`:server:run`). */
+private fun fontsRoot(): Path? = System.getProperty("benbow.fonts")?.let(Path::of)
+    ?: runCatching {
+        Path.of(ServerContext::class.java.protectionDomain.codeSource.location.toURI()).parent.parent.resolve("fonts")
     }.getOrNull()
 
 /** The web client's files: the package's `web` folder beside `lib`, or where `benbow.web` points (`:server:run`). */

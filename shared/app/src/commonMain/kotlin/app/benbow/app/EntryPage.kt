@@ -10,6 +10,7 @@ import app.benbow.app.resources.not_on_device
 import app.benbow.app.resources.weekdays
 import app.benbow.client.IoDispatcher
 import app.benbow.client.LocalFile
+import app.benbow.client.LookFields
 import app.benbow.client.tagRegistry
 import app.benbow.client.uri
 import app.benbow.core.content.AttachmentBlock
@@ -130,7 +131,11 @@ internal suspend fun AppServices.entryPage(id: String): PrintPage? = withContext
     }
     val title = document.blocks.firstNotNullOfOrNull { (it as? TextBlock)?.children?.joinToString("") { s -> s.text } }
         ?.takeIf { it.isNotBlank() } ?: moment
-    PrintPage(title.take(80), HtmlExporter.page(title, head, body, tail))
+    // The note's own font on paper too (ADR-052), carried in the page.
+    val font = pageFont(entry.look[LookFields.FONT], fonts)
+    val style = font?.let { HtmlExporter.noteFont(it.files, it.scale) }.orEmpty()
+    val words = if (font != null) "<div class=\"note\">$body</div>" else body
+    PrintPage(title.take(80), HtmlExporter.page(title, head, words, tail, style))
 }
 
 private fun Color.css(): String {

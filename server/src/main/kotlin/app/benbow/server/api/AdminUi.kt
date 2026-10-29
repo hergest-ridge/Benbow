@@ -16,7 +16,7 @@ import io.ktor.server.routing.get
  * a file name) can ever act as code.
  */
 internal const val ADMIN_CSP =
-    "default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self'; " +
+    "default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; " +
         "form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
 
 private val assets = mapOf(
@@ -71,6 +71,10 @@ internal val doneMessages = mapOf(
     "offsite-off" to "Копия вне дома выключена; её папка и ключ остались как есть",
     "offsite-pass" to "Пароль записан: key.age в копии закрыт новым паролем",
     "freed" to "Место освобождено: файлы удалены навсегда",
+    "font" to "Шрифт добавлен: устройства возьмут его, когда он понадобится",
+    "font-replaced" to "Начертание заменено; прежний файл лежит в папке fonts\\removed",
+    "font-removed" to "Шрифт убран: записки с ним покажутся обычным шрифтом; файл лежит в папке fonts\\removed",
+    "font-size" to "Размер шрифта сохранён",
 )
 
 internal class Flash(val text: String, val error: Boolean)
@@ -193,6 +197,8 @@ private val iconPaths = mapOf(
         "2 .9 2 2-.9 2-2 2z",
     "file" to "M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5" +
         "L18.5 9H13z",
+    "font" to "M9.93 13.5h4.14L12 7.98zM20 2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-4.05 " +
+        "16.5l-1.14-3H9.17l-1.12 3H5.96l5.11-13h1.86l5.11 13h-2.09z",
     "edit" to "M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 " +
         "0l-1.83 1.83 3.75 3.75 1.83-1.83z",
 )

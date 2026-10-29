@@ -204,6 +204,7 @@ tasks.named<ProcessResources>("processResources") {
 tasks.named<JavaExec>("run") {
     systemProperty("benbow.web", layout.buildDirectory.dir("web").get().asFile.absolutePath)
     systemProperty("benbow.android", layout.buildDirectory.dir("android").get().asFile.absolutePath)
+    systemProperty("benbow.fonts", layout.projectDirectory.dir("packaging/fonts").asFile.absolutePath)
 }
 
 tasks.register<Sync>("packageServer") {
@@ -238,6 +239,7 @@ tasks.register<Sync>("packageServer") {
     from(layout.buildDirectory.dir("install/server/lib")) { into("lib") }
     from(webApp) { into("web") }
     from(androidRelease) { into("android") }
+    from("packaging/fonts") { into("fonts") }
     from(packageVersion)
     from("packaging/windows")
     // WinSW is not committed; drop WinSW.NET461.exe into packaging/winsw (see packaging/windows/README.txt).

@@ -7,6 +7,7 @@ import app.benbow.server.backup.BackupJobs
 import app.benbow.server.backup.MirrorFolder
 import app.benbow.server.backup.MirrorRestore
 import app.benbow.server.calendar.CalendarDatabase
+import app.benbow.server.fonts.OwnFonts
 import app.benbow.server.peer.PeerIdentity
 import app.benbow.server.storage.BlobStore
 import app.benbow.server.storage.Database
@@ -48,6 +49,7 @@ class RecoveryKitTest {
         val config = ServerConfig.load(data)
         val fingerprint = TlsMaterial.ensure(data, config.tlsPassword).fingerprint
         PeerIdentity.ensure(data.resolve("peer"))
+        OwnFonts(data.resolve(OwnFonts.DIR)).add("MyHand.ttf", Path.of("packaging/fonts/caveat.ttf").readBytes(), 1)
         data.resolve("db").createDirectories().resolve(PURGE_JOURNAL).writeText("")
         val db = Database.open(data, "test")
         val calendar = CalendarDatabase.open(data, "test", db.storeId)
@@ -78,6 +80,7 @@ class RecoveryKitTest {
             assertContentEquals(data.resolve(file).readBytes(), mirror.resolve("config").resolve(file).readBytes(), file)
         }
         assertTrue(mirror.resolve("db").resolve(PURGE_JOURNAL).exists())
+        assertTrue(mirror.resolve(OwnFonts.DIR).resolve(OwnFonts.REGISTRY).exists(), "the owner's own fonts (ADR-052)")
         assertEquals(1, mirror.resolve("calendar").listDirectoryEntries("*.sqlite").size)
         val notes = Files.walk(mirror.resolve("export")).use { p -> p.filter { it.name.endsWith(".md") }.toList() }
         assertTrue(notes.any { "Вечер у моря" in it.readText() }, notes.toString())
@@ -115,6 +118,12 @@ class RecoveryKitTest {
         assertEquals(media.toAbsolutePath(), config.mediaRoot)
         assertEquals(fingerprint, TlsMaterial.ensure(dataDir, config.tlsPassword).fingerprint, "devices know it by the same certificate")
         assertEquals(identity, PeerIdentity.ensure(dataDir.resolve("peer")).card, "friends know it by the same keys")
+        assertEquals("own:caveat", OwnFonts(dataDir.resolve(OwnFonts.DIR)).all().single().token, "the owner's fonts came back")
+        assertTrue(
+            OwnFonts(
+                dataDir.resolve(OwnFonts.DIR),
+            ).file(OwnFonts(data.resolve(OwnFonts.DIR)).all().single().files.single().sha256)!!.exists(),
+        )
         val db = Database.open(dataDir, "test")
         assertEquals(storeId, db.storeId)
         assertTrue(db.epoch > 1, "a new epoch: devices reconcile")

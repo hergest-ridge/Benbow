@@ -14,14 +14,22 @@ import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.waitUntilAtLeastOneExists
 import androidx.compose.ui.text.font.FontFamily
+import app.benbow.client.Connection
+import app.benbow.client.FolderFontShelf
 import app.benbow.client.JournalRepository
 import app.benbow.client.LookFields
+import app.benbow.client.Settings
+import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.createBoardNote
+import app.benbow.client.db.BenbowDb
 import app.benbow.client.setLook
 import app.benbow.ui.editor.NoteFont
+import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import java.io.File
+import java.nio.file.Files
+import java.util.Properties
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -230,5 +238,47 @@ class NoteLooksTest {
                 screenshot("fonts-sheet-${if (dark) "dark" else "light"}")
             }
         }
+    }
+
+    /** ADR-052: a font from the server's pack, its file kept on the device, in the open note and in «Шрифт». */
+    @Test
+    fun aNoteInAFontFromTheServer() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val caveat = File("../../server/packaging/fonts/caveat.ttf").readBytes()
+        val sha = java.security.MessageDigest.getInstance("SHA-256").digest(caveat).joinToString("") { "%02x".format(it) }
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), BenbowDb.Schema)
+        Settings(BenbowDb(driver)).apply {
+            // Paired with a server that isn't there: what the device kept from it is all it has.
+            connection = Connection("https://127.0.0.1:1", "AA", "token", "store-1", 1, "device")
+            put(
+                "fonts.catalog",
+                """{"store":"store-1","fonts":[{"token":"caveat","name":"Caveat","group":"diary","scale":1.2,""" +
+                    """"files":[{"weight":400,"sha256":"$sha","size":${caveat.size}}]}]}""",
+            )
+        }
+        val shelf = Files.createTempDirectory("benbow-fonts").toFile()
+        File(shelf, "$sha.ttf").writeBytes(caveat)
+        val services = AppServices(
+            driver,
+            JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), CalendarDb.Schema),
+            mediaIn(Files.createTempDirectory("benbow-media").toFile()),
+            "desktop",
+            "Test PC",
+            fontShelf = FolderFontShelf(shelf),
+        )
+        val sea = services.repo.createNote(services.today(), "Утро у моря\nПроснулась раньше будильника. Чай на балконе, чайки.")
+        services.repo.setLook(sea, mapOf("font" to "caveat"))
+        assertEquals(
+            listOf("neucha", "pangolin", "marmelad", "amatic-sc", "caveat"),
+            NoteFonts.choices(services.fonts.catalog.value).take(5).map { it.token },
+            "the diary's hands first, the app's own before the server's",
+        )
+        setContent { BenbowApp(services) }
+        onAllNodesWithText("Лента")[0].click()
+        waitUntilAtLeastOneExists(hasText("Утро у моря", substring = true), 5_000)
+        onAllNodesWithText("Утро у моря", substring = true)[0].click()
+        waitUntilAtLeastOneExists(hasText("Проснулась раньше", substring = true), 5_000)
+        runBlocking { delay(300) } // the file is read off the test's idling
+        waitForIdle()
+        screenshot("fonts-server-note")
     }
 }

@@ -1,6 +1,9 @@
 package app.benbow.core.content
 
 import app.benbow.core.text.Links
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
+import kotlin.math.roundToInt
 
 /**
  * Benbow Document → HTML (content-format.md#derived-forms): every block style, list, callout and mark has a tag or
@@ -202,13 +205,31 @@ a.link-card strong { display: block; font-family: system-ui, "Segoe UI", Roboto,
 .comment { border-top: 1px solid #e5ded4; padding: 0.4em 0; break-inside: avoid; }
 """
 
-        /** A complete page: [head] goes above the document (date, tags), [tail] below it (pictures, comments). */
-        fun page(title: String, head: String, body: String, tail: String): String = buildString {
+        /**
+         * A complete page: [head] goes above the document (date, tags), [tail] below it (pictures, comments); [style]
+         * after the page's own (a note's font, [noteFont]).
+         */
+        fun page(title: String, head: String, body: String, tail: String, style: String = ""): String = buildString {
             append("<!DOCTYPE html>\n<html lang=\"ru\"><head><meta charset=\"utf-8\">")
             append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">")
-            append("<title>").append(escape(title)).append("</title><style>").append(CSS).append("</style></head><body>\n")
+            append("<title>").append(escape(title)).append("</title><style>").append(CSS).append(style).append("</style></head><body>\n")
             append(head).append(body).append(tail)
             append("</body></html>\n")
+        }
+
+        /**
+         * A note's own font for its words and headings on paper (ADR-047, ADR-052), its [files] (weight to bytes) carried
+         * in the page so it prints the same anywhere, set [scale] times the page's size. It holds the document wrapped in
+         * `<div class="note">`; the date, tags and comments keep the page's fonts.
+         */
+        @OptIn(ExperimentalEncodingApi::class)
+        fun noteFont(files: List<Pair<Int, ByteArray>>, scale: Float): String = buildString {
+            for ((weight, bytes) in files) {
+                append("@font-face { font-family: \"Benbow Note\"; font-weight: $weight; src: url(data:font/ttf;base64,")
+                append(Base64.encode(bytes)).append("); }\n")
+            }
+            append(".note, .note h1, .note h2, .note h3 { font-family: \"Benbow Note\", Georgia, serif; }\n")
+            append(".note { font-size: ${(scale * 1000).roundToInt() / 1000.0}em; }\n")
         }
     }
 }

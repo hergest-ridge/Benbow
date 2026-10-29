@@ -13,6 +13,7 @@ import app.benbow.app.AndroidDictationMic
 import app.benbow.app.AppServices
 import app.benbow.app.installAndroidImages
 import app.benbow.app.mediaIn
+import app.benbow.client.FolderFontShelf
 import app.benbow.client.KeystoreSecretBox
 import app.benbow.client.SecretBox
 import app.benbow.client.SpeechModelStore
@@ -61,6 +62,7 @@ class BenbowApplication : Application() {
             mic = AndroidDictationMic(this),
             audio = audio,
             updater = AndroidAppUpdater(this),
+            fontShelf = FolderFontShelf(File(filesDir, "fonts")),
             labs = packageName != "app.benbow", // the dev and bench builds show unfinished work, the owner's app never
         ).also {
             // Trackers' running timers are notifications (ADR-050).

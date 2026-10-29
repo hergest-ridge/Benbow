@@ -27,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +39,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.background_none
 import app.benbow.app.resources.look_color
@@ -63,10 +65,12 @@ import app.benbow.app.resources.look_scraps
 import app.benbow.app.resources.look_screen
 import app.benbow.app.resources.look_shuffle
 import app.benbow.app.resources.look_title
+import app.benbow.client.IoDispatcher
 import app.benbow.client.LookFields
 import app.benbow.ui.editor.NoteFont
 import app.benbow.ui.editor.inFont
 import app.benbow.ui.mouseSwipe
+import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.StringArrayResource
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringArrayResource
@@ -221,9 +225,14 @@ private fun Part(title: StringResource, content: @Composable () -> Unit) {
     content()
 }
 
-/** «Шрифт» (L3): «Обычный», then each bundled font, its sample drawn in it over the note's color, the chosen one framed. */
+/** «Шрифт» (L3-L5): «Обычный», then every font, the diary's hands first, its sample drawn in it over the note's color. */
 @Composable
 private fun FontRow(chosen: String?, base: Color, onLook: (Map<String, String?>) -> Unit) = Part(Res.string.look_font) {
+    // The server's fonts as it lists them now (ADR-052): a font added on its page shows here the next time.
+    val server = LocalServerFonts.current
+    if (server != null) LaunchedEffect(server) { runCatching { withContext(IoDispatcher) { server.refresh() } } }
+    val catalog = server?.catalog?.collectAsStateWithLifecycle()?.value.orEmpty()
+    val choices = remember(catalog) { NoteFonts.choices(catalog) }
     val swipeRow = rememberLazyListState()
     LazyRow(
         state = swipeRow,
@@ -234,8 +243,8 @@ private fun FontRow(chosen: String?, base: Color, onLook: (Map<String, String?>)
         item {
             FontChoice(stringResource(Res.string.look_font_plain), null, chosen == null, base) { onLook(mapOf(LookFields.FONT to null)) }
         }
-        items(NoteFonts.tokens) { token ->
-            FontChoice(NoteFonts.name(token), noteFont(token), token == chosen, base) { onLook(mapOf(LookFields.FONT to token)) }
+        items(choices, key = { it.token }) { font ->
+            FontChoice(font.name, noteFont(font.token), font.token == chosen, base) { onLook(mapOf(LookFields.FONT to font.token)) }
         }
     }
 }

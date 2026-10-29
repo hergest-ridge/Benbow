@@ -12,6 +12,9 @@ expect open class LocalFile
 /** Its whole content as text (a drawing's SVG). */
 expect fun LocalFile.readAllText(): String
 
+/** Its whole content (a font from the server, carried into a printed page). */
+expect fun LocalFile.readAllBytes(): ByteArray
+
 /** The file in pieces: a sound's tags are read without reading its audio (ADR-035). */
 expect fun LocalFile.randomRead(): RandomRead
 

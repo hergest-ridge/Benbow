@@ -1,6 +1,7 @@
 package app.benbow.client
 
 import app.benbow.core.api.ApiError
+import app.benbow.core.api.FontCatalog
 import app.benbow.core.api.KnownEntry
 import app.benbow.core.api.LinkPreviewInfo
 import app.benbow.core.api.LinkPreviewRequest
@@ -101,6 +102,12 @@ interface BenbowApi {
 
     /** The Android app the server carries (ADR-042), from byte [from] on (Range: a cut download goes on). */
     suspend fun downloadApp(from: Long, write: suspend (channel: ByteReadChannel, resumed: Boolean) -> Unit)
+
+    /** The fonts notes can take from the server (ADR-052): the pack and the owner's own. */
+    suspend fun fonts(): FontCatalog = FontCatalog(emptyList())
+
+    /** A font's file by its SHA-256, as the catalog names it. */
+    suspend fun downloadFont(sha256: String): ByteArray = throw UnsupportedOperationException("downloadFont")
 }
 
 /** The finished upload didn't match its hash (corrupted on the way); start it again. */
@@ -238,6 +245,10 @@ class KtorBenbowApi(private val client: HttpClient, private val baseUrl: String,
             write(response.bodyAsChannel(), response.status == HttpStatusCode.PartialContent)
         }
     }
+
+    override suspend fun fonts(): FontCatalog = client.get("$baseUrl/api/v1/fonts") { auth() }.ok().body()
+
+    override suspend fun downloadFont(sha256: String): ByteArray = client.get("$baseUrl/api/v1/fonts/files/$sha256") { auth() }.ok().body()
 
     private fun io.ktor.client.request.HttpRequestBuilder.auth() {
         token()?.let { bearerAuth(it) }

@@ -84,6 +84,7 @@ internal fun Route.adminRoutes(ctx: ServerContext) {
     }
 
     mediaMoveRoutes(ctx)
+    fontRoutes(ctx)
     offsiteRoutes(ctx)
     reportRoutes(ctx)
 
@@ -142,6 +143,7 @@ private fun adminTabs(ctx: ServerContext): List<Tab> {
         Tab("backups", "Копии", "backup", alert = staleBackups || mediaGone),
         ctx.storage?.let { Tab("space", "Место", "disk") },
         ctx.speech?.let { Tab("speech", "Голос", "mic") },
+        ctx.fonts?.let { Tab("fonts", "Шрифты", "font") },
         Tab("friends", "Друзья", "chat"),
         Tab("link", "Связь", "sync", alert = linkNeedsAttention(ctx.peers)),
     )
@@ -163,6 +165,7 @@ internal fun adminPage(
             append(backupsSection(ctx, plan, offsiteStep))
             ctx.storage?.let { append(spaceSection(it, ctx.purges)) }
             ctx.speech?.let { append(speechSection(it)) }
+            ctx.fonts?.let { append(fontsSection(it)) }
             append(friendsSection(ctx.peers))
             append(linkSection(ctx.peers))
         }

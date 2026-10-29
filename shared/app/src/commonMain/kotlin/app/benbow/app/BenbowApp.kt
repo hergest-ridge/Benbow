@@ -315,6 +315,7 @@ fun BenbowApp(services: AppServices) {
             LocalTags provides tags,
             LocalGentle provides gentle,
             LocalPagerArrows provides (services.platform != "android"), // a mouse: side buttons on pictures
+            LocalServerFonts provides services.fonts, // the fonts notes take from the server (ADR-052)
         ) { AppRoot(services) }
     }
 }

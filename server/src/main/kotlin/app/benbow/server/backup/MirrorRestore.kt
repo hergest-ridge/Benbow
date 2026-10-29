@@ -2,6 +2,7 @@ package app.benbow.server.backup
 
 import app.benbow.server.PURGE_JOURNAL
 import app.benbow.server.ServerConfig
+import app.benbow.server.fonts.OwnFonts
 import app.benbow.server.storage.Backups
 import app.benbow.server.storage.MediaFolder
 import app.benbow.server.storage.Restore
@@ -27,7 +28,7 @@ import kotlin.io.path.outputStream
  * folder on a new PC built from the second disk. The settings and keys as they were (devices know the server by the same
  * certificate), every snapshot with its manifest (so the next pass doesn't prune the mirror's history) and the newest
  * verified one put in place with a new epoch, the calendar the same way, the purge journal (done again at the first
- * start), and every media file copied and checked by SHA-256. Only into a data folder with no database and an empty
+ * start), the owner's own fonts, and every media file copied and checked by SHA-256. Only into a data folder with no database and an empty
  * media folder; the mirror is only read. The settings then point at this mirror and this media folder.
  */
 object MirrorRestore {
@@ -68,6 +69,15 @@ object MirrorRestore {
         }
         mirror.resolve("db").resolve(PURGE_JOURNAL).takeIf { it.isRegularFile() }?.let {
             RecoveryKit.copyChecked(it, createUnder(dataDir, "db").resolve(PURGE_JOURNAL))
+        }
+        // The owner's own fonts (ADR-052), as the kit kept them.
+        val fonts = mirror.resolve(OwnFonts.DIR)
+        for (file in OwnFonts.keptFiles(fonts)) {
+            val relative = fonts.relativize(file).joinToString("/")
+            RecoveryKit.copyChecked(
+                file,
+                createUnder(dataDir, "${OwnFonts.DIR}/" + relative.substringBeforeLast('/', "")).resolve(file.name),
+            )
         }
 
         // Snapshots with their manifests, then the newest verified one as the live database.

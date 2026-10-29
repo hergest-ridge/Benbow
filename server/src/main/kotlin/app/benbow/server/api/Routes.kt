@@ -1,6 +1,7 @@
 package app.benbow.server.api
 
 import app.benbow.core.api.ApiError
+import app.benbow.core.api.FontCatalog
 import app.benbow.core.api.LinkPreviewRequest
 import app.benbow.core.api.PairRequest
 import app.benbow.core.api.PairResponse
@@ -28,6 +29,7 @@ import app.benbow.server.backup.BackupJobs
 import app.benbow.server.backup.BackupStatus
 import app.benbow.server.calendar.CalendarDatabase
 import app.benbow.server.calendar.SqliteCalendarStore
+import app.benbow.server.fonts.Fonts
 import app.benbow.server.offsite.OffsiteCopy
 import app.benbow.server.offsite.OffsiteSetup
 import app.benbow.server.peer.PeerLink
@@ -121,6 +123,8 @@ class ServerContext(
     val offsiteSetup: OffsiteSetup? = null,
     /** This PC's disks and home network for «Где хранить» (ADR-042, I1); null away from Windows and in most tests. */
     val survey: HostSurvey? = null,
+    /** The fonts notes take from here (ADR-052): the package's pack and the owner's own; null in tests that don't need them. */
+    val fonts: Fonts? = null,
     /** This computer's addresses on the home network, the one phones are shown first. */
     val lanAddresses: () -> List<String> = ::lanAddresses,
 )
@@ -357,6 +361,26 @@ fun Application.benbowModule(ctx: ServerContext) {
                     call.response.header(HttpHeaders.ETag, "\"${app.info.sha256}\"")
                     call.response.header(HttpHeaders.ContentDisposition, "attachment; filename=\"${app.file.fileName}\"")
                     call.respond(LocalPathContent(app.file, ContentType("application", "vnd.android.package-archive")))
+                }
+
+                /**
+                 * The fonts a note can take from this server (ADR-052): the pack and the owner's own, each with its files.
+                 */
+                get("/fonts") {
+                    call.respond(withContext(Dispatchers.IO) { ctx.fonts?.catalog() } ?: FontCatalog(emptyList()))
+                }
+
+                /**
+                 * A font's file by SHA-256, as the catalog names it; devices check it and keep it.
+                 */
+                get("/fonts/files/{sha256}") {
+                    val sha = call.parameters["sha256"]!!
+                    val file = withContext(Dispatchers.IO) { ctx.fonts?.file(sha) }
+                        ?: return@get call.respond(HttpStatusCode.NotFound, ApiError("not_found", "No such font file"))
+                    call.response.header(HttpHeaders.ETag, "\"$sha\"")
+                    call.response.header(HttpHeaders.CacheControl, "private, max-age=31536000, immutable")
+                    val type = if (file.fileName.toString().endsWith(".otf")) "otf" else "ttf"
+                    call.respond(LocalPathContent(file, ContentType("font", type)))
                 }
 
                 get("/blobs/{sha256}") {

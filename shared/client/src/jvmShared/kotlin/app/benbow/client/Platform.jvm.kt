@@ -14,6 +14,8 @@ actual typealias LocalFile = java.io.File
 
 actual fun LocalFile.readAllText(): String = readText()
 
+actual fun LocalFile.readAllBytes(): ByteArray = readBytes()
+
 actual fun LocalFile.randomRead(): RandomRead = object : RandomRead {
     override val size: Long = length()
 

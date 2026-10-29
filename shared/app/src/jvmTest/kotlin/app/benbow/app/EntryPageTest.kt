@@ -3,6 +3,7 @@ package app.benbow.app
 import app.benbow.client.addTag
 import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.db.BenbowDb
+import app.benbow.client.setLook
 import app.benbow.client.setTagCategory
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlinx.coroutines.test.runTest
@@ -42,5 +43,23 @@ class EntryPageTest {
         assertTrue("<img src=\"file:" in html, "the picture from the device's media folder")
         assertTrue("<h1>Прогулка у моря</h1>" in html, "the first line reads as the title")
         assertTrue("<h3>Комментарии</h3>" in html && "14 октября 2026, " in html && "Перечитал утром" in html, html)
+    }
+
+    /** ADR-052: a note in its own font prints in it, the font carried in the page; the date and the thread keep theirs. */
+    @Test
+    fun aNoteInItsFontPrintsInIt() = runTest {
+        val repo = services.repo
+        val id = repo.createNote("2026-10-29", "Утро у моря\nЧай на балконе")
+        repo.setLook(id, mapOf("font" to "amatic-sc"))
+        repo.createComment(id, "2026-10-29", "Перечитал вечером")
+        val html = services.entryPage(id)!!.html
+        val faces = Regex("""@font-face \{ font-family: "Benbow Note"; font-weight: (400|700); src: url\(data:font/ttf;base64,""")
+        assertEquals(2, faces.findAll(html).count(), "its regular and bold")
+        assertTrue("<div class=\"note\"><h1>Утро у моря</h1>" in html, "the words and the title in it")
+        assertTrue(".note { font-size: 1.35em; }" in html, "as large as on screen")
+        assertTrue(html.indexOf("Перечитал вечером") > html.indexOf("</div>"), "the thread outside it")
+
+        repo.setLook(id, mapOf("font" to "nope"))
+        assertTrue("Benbow Note" !in services.entryPage(id)!!.html, "a font this device can't draw: the page's own")
     }
 }

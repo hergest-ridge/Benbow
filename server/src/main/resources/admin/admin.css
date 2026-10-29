@@ -291,3 +291,12 @@ fieldset.choice input { margin-top: 3px; accent-color: var(--md-primary); }
   .card { box-shadow: none; border: 1px solid #999; }
   .code-key { background: #fff; border: 1px solid #000; color: #000; }
 }
+
+/* «Шрифты» (ADR-052): each font's sample in its own letters, its size and its removal beside it. */
+.font-sample { line-height: 1.4; margin: 2px 0 4px; overflow-wrap: anywhere; }
+.item.font { align-items: center; }
+.item.font form.scale { gap: 4px; }
+.card h4 { font: 500 14px/20px inherit; margin: 16px 0 4px; color: var(--md-on-surface-variant); }
+select { height: 36px; border-radius: 8px; border: 1px solid var(--md-outline); background: var(--md-surface);
+  color: var(--md-on-surface); padding: 0 8px; font: inherit; }
+input[type=file] { font: inherit; max-width: 100%; }

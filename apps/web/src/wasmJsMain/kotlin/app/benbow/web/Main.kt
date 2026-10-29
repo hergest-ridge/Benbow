@@ -17,6 +17,7 @@ import app.benbow.app.installWebShortcuts
 import app.benbow.app.keepMiddleButton
 import app.benbow.app.preloadTexts
 import app.benbow.app.showNotification
+import app.benbow.client.BrowserFontShelf
 import app.benbow.client.BrowserMedia
 import app.benbow.client.BrowserShelf
 import app.benbow.client.BrowserSqlDriver
@@ -71,6 +72,7 @@ private suspend fun start() {
             mediaCacheBytes = 2L * 1024 * 1024 * 1024, // downloads kept in IndexedDB; the PC has room
             reminderClock = reminders,
             audio = BrowserAudio(),
+            fontShelf = BrowserFontShelf(shelf),
             labs = !pagePath().startsWith("/app"), // the dev server shows unfinished work, the server's /app/ never
         )
         val media = services.media as BrowserMedia

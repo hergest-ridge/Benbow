@@ -38,6 +38,8 @@ data class Appearance(
     val pageBorders: Boolean = true,
     /** A note's paper, patterns and scrapbook stay put as its words scroll (owner: off, they go with the words, like paper). */
     val staticBackdrop: Boolean = false,
+    /** «Шрифты записок в ленте» (owner): the feed's posts in their notes' own fonts, as they read open; off, the app's font. */
+    val feedFonts: Boolean = false,
 ) {
     internal fun save(settings: Settings) {
         settings.put(MODE, mode.name)
@@ -53,6 +55,7 @@ data class Appearance(
         settings.put(LIGHT_BEYOND_PAGE, lightBeyondPage.toString())
         settings.put(PAGE_BORDERS, pageBorders.toString())
         settings.put(STATIC_BACKDROP, staticBackdrop.toString())
+        settings.put(FEED_FONTS, feedFonts.toString())
     }
 
     companion object {
@@ -69,6 +72,7 @@ data class Appearance(
         private const val LIGHT_BEYOND_PAGE = "post.lightBeyondPage"
         private const val PAGE_BORDERS = "post.borders"
         private const val STATIC_BACKDROP = "post.staticBackdrop"
+        private const val FEED_FONTS = "feed.noteFonts"
 
         internal fun load(settings: Settings) = Appearance(
             mode = ThemeMode.entries.firstOrNull { it.name == settings.get(MODE) } ?: ThemeMode.System,
@@ -84,6 +88,7 @@ data class Appearance(
             lightBeyondPage = settings.get(LIGHT_BEYOND_PAGE) != "false",
             pageBorders = settings.get(PAGE_BORDERS) != "false",
             staticBackdrop = settings.get(STATIC_BACKDROP) == "true",
+            feedFonts = settings.get(FEED_FONTS) == "true",
         )
     }
 }

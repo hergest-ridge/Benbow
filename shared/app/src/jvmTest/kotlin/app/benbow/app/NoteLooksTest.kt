@@ -1,18 +1,26 @@
 package app.benbow.app
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.waitUntilAtLeastOneExists
+import androidx.compose.ui.test.waitUntilDoesNotExist
 import androidx.compose.ui.text.font.FontFamily
 import app.benbow.client.Connection
 import app.benbow.client.FolderFontShelf
@@ -215,27 +223,42 @@ class NoteLooksTest {
         screenshot("fonts-board")
     }
 
+    /** ADR-054: the sheet's parts as a list, each opening as a grid; «Шрифт» by its groups, the diary's hands first. */
     @Test
-    fun theFontsRowShowsEachInItsOwnLetters() {
+    fun theSheetListsItsPartsAndEachOpensAsAGrid() {
         for (dark in listOf(false, true)) {
             runDesktopComposeUiTest(width = 412, height = 860) {
                 setContent {
                     app.benbow.ui.theme.BenbowTheme(darkTheme = dark) {
                         LookSheet(
-                            id = "n",
-                            words = "Утро у моря\nПроснулась раньше будильника. Чай на балконе, чайки.",
-                            color = null,
-                            look = mapOf("font" to "pangolin"),
-                            page = MaterialTheme.colorScheme.background,
-                            onColor = {},
-                            onLook = {},
+                            LookTarget(
+                                id = "n",
+                                words = "Утро у моря\nПроснулась раньше будильника. Чай на балконе, чайки.",
+                                color = null,
+                                look = mapOf("font" to "pangolin", "pattern" to "waves"),
+                                page = MaterialTheme.colorScheme.background,
+                                onColor = {},
+                                onLook = {},
+                            ),
                             onDismiss = {},
                         )
                     }
                 }
+                val theme = if (dark) "dark" else "light"
                 waitUntilAtLeastOneExists(hasText("Шрифт"), 5_000)
+                waitUntilAtLeastOneExists(hasText("Pangolin"), 5_000) // what is chosen, said in the list
                 waitForIdle()
-                screenshot("fonts-sheet-${if (dark) "dark" else "light"}")
+                screenshot("look-parts-$theme")
+                onAllNodesWithText("Шрифт")[0].click()
+                waitUntilAtLeastOneExists(hasText("Рукописные"), 5_000)
+                waitForIdle()
+                screenshot("look-fonts-$theme")
+                onNodeWithContentDescription("Назад").performClick()
+                waitUntilAtLeastOneExists(hasText("Узор"), 5_000)
+                onAllNodesWithText("Узор")[0].click()
+                waitUntilAtLeastOneExists(hasText("Волны"), 5_000)
+                waitForIdle()
+                screenshot("look-patterns-$theme")
             }
         }
     }
@@ -243,28 +266,7 @@ class NoteLooksTest {
     /** ADR-052: a font from the server's pack, its file kept on the device, in the open note and in «Шрифт». */
     @Test
     fun aNoteInAFontFromTheServer() = runDesktopComposeUiTest(width = 412, height = 860) {
-        val caveat = File("../../server/packaging/fonts/caveat.ttf").readBytes()
-        val sha = java.security.MessageDigest.getInstance("SHA-256").digest(caveat).joinToString("") { "%02x".format(it) }
-        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), BenbowDb.Schema)
-        Settings(BenbowDb(driver)).apply {
-            // Paired with a server that isn't there: what the device kept from it is all it has.
-            connection = Connection("https://127.0.0.1:1", "AA", "token", "store-1", 1, "device")
-            put(
-                "fonts.catalog",
-                """{"store":"store-1","fonts":[{"token":"caveat","name":"Caveat","group":"diary","scale":1.2,""" +
-                    """"files":[{"weight":400,"sha256":"$sha","size":${caveat.size}}]}]}""",
-            )
-        }
-        val shelf = Files.createTempDirectory("benbow-fonts").toFile()
-        File(shelf, "$sha.ttf").writeBytes(caveat)
-        val services = AppServices(
-            driver,
-            JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), CalendarDb.Schema),
-            mediaIn(Files.createTempDirectory("benbow-media").toFile()),
-            "desktop",
-            "Test PC",
-            fontShelf = FolderFontShelf(shelf),
-        )
+        val services = serverFontServices("caveat")
         val sea = services.repo.createNote(services.today(), "Утро у моря\nПроснулась раньше будильника. Чай на балконе, чайки.")
         services.repo.setLook(sea, mapOf("font" to "caveat"))
         assertEquals(
@@ -280,5 +282,76 @@ class NoteLooksTest {
         runBlocking { delay(300) } // the file is read off the test's idling
         waitForIdle()
         screenshot("fonts-server-note")
+    }
+
+    /** The owner, 2026-10-29: after one font from the server, the next one picked didn't take (on the web). */
+    @Test
+    fun aSecondFontFromTheServerTakesItsPlace() = runDesktopComposeUiTest {
+        val services = serverFontServices("caveat", "bad-script")
+        var token by mutableStateOf("caveat")
+        var drawn: NoteFont? = null
+        setContent { CompositionLocalProvider(LocalServerFonts provides services.fonts) { drawn = noteFont(token) } }
+        waitUntil(timeoutMillis = 5_000) { drawn != null }
+        val caveat = drawn
+        token = "bad-script"
+        waitUntil(timeoutMillis = 5_000) { drawn != null && drawn !== caveat }
+        token = "caveat"
+        waitUntil(timeoutMillis = 5_000) { drawn === caveat }
+    }
+
+    /** ADR-054: in a wide window «Оформление» stands beside the note, the page against the feed, nothing over anything. */
+    @Test
+    fun inAWideWindowTheLookStandsBesideTheNote() = runDesktopComposeUiTest(width = 1600, height = 900) {
+        val services = feedTestServices()
+        val sea = services.repo.createNote(services.today(), "Утро у моря\nПроснулась раньше будильника. Чай на балконе, чайки.")
+        services.repo.setLook(sea, mapOf("paper" to "lines"))
+        setContent { BenbowApp(services) }
+        onAllNodesWithText("Лента")[0].click()
+        waitUntilAtLeastOneExists(hasText("Утро у моря", substring = true), 5_000)
+        onAllNodesWithText("Утро у моря", substring = true)[0].click()
+        waitUntilAtLeastOneExists(hasContentDescription("Меню"), 5_000)
+        onAllNodes(hasContentDescription("Меню")).onLast().performClick()
+        onNodeWithText("Редактировать").performClick()
+        waitUntilAtLeastOneExists(hasContentDescription("Оформление записки"), 5_000)
+        onNodeWithContentDescription("Оформление записки").performClick()
+        waitUntilAtLeastOneExists(hasContentDescription("Закрыть"), 5_000)
+        waitForIdle()
+        screenshot("look-beside-note")
+        val page = onAllNodes(hasText("Проснулась раньше", substring = true))[0].fetchSemanticsNode().boundsInRoot
+        val panel = onAllNodesWithText("Бумага")[0].fetchSemanticsNode().boundsInRoot
+        assertTrue(page.right < panel.left, "the page and the pane side by side: $page, $panel")
+        onNodeWithContentDescription("Закрыть").performClick()
+        waitUntilDoesNotExist(hasContentDescription("Закрыть"), 5_000)
+    }
+
+    /** Services paired with a server that isn't there, its catalog and the [tokens]' files kept on the device. */
+    private fun serverFontServices(vararg tokens: String): AppServices {
+        val files = tokens.associateWith { File("../../server/packaging/fonts/$it.ttf").readBytes() }
+        val sha = { bytes: ByteArray ->
+            java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+        }
+        // A file, as on desktop: paired, the services sync at once beside the search index, and one in-memory
+        // connection can't hold both transactions.
+        val dbFile = File(Files.createTempDirectory("benbow-db").toFile(), "benbow.db")
+        val driver = JdbcSqliteDriver("jdbc:sqlite:${dbFile.absolutePath}", Properties(), BenbowDb.Schema)
+        val fonts = files.entries.joinToString(",") { (token, bytes) ->
+            """{"token":"$token","name":"$token","group":"diary","scale":1.2,"files":[{"weight":400,"sha256":"${sha(
+                bytes,
+            )}","size":${bytes.size}}]}"""
+        }
+        Settings(BenbowDb(driver)).apply {
+            connection = Connection("https://127.0.0.1:1", "AA", "token", "store-1", 1, "device")
+            put("fonts.catalog", """{"store":"store-1","fonts":[$fonts]}""")
+        }
+        val shelf = Files.createTempDirectory("benbow-fonts").toFile()
+        files.values.forEach { File(shelf, "${sha(it)}.ttf").writeBytes(it) }
+        return AppServices(
+            driver,
+            JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), CalendarDb.Schema),
+            mediaIn(Files.createTempDirectory("benbow-media").toFile()),
+            "desktop",
+            "Test PC",
+            fontShelf = FolderFontShelf(shelf),
+        )
     }
 }

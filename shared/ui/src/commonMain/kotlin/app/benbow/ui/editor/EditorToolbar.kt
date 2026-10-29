@@ -1,6 +1,10 @@
 package app.benbow.ui.editor
 
-import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -93,6 +97,10 @@ private enum class Panel { Text, Paragraph }
 
 private enum class Picker { Color, Highlight, Callout }
 
+/** A row above the bottom one comes out from under it and goes back in: it grows from its own bottom edge. */
+private val comeOut = expandVertically(expandFrom = Alignment.Bottom) + fadeIn()
+private val goIn = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut()
+
 /**
  * Formatting bar shown above the keyboard. Buttons never take focus, so the selection survives taps. [onChecklist]
  * takes the checklist button's place where a checklist is something else (a note on the board turns into its list).
@@ -113,11 +121,17 @@ fun EditorToolbar(state: EditorState, modifier: Modifier = Modifier, onChecklist
         picker = null
     }
     val pick = { which: Picker -> picker = if (picker == which) null else which }
+    // The rows above come out from under the bottom one, which never moves (owner): each grows from its own bottom edge,
+    // and the bar grows upward with it. What was open stays drawn while it goes.
+    var lastPicker by remember { mutableStateOf(Picker.Color) }
+    var lastPanel by remember { mutableStateOf(Panel.Text) }
+    picker?.let { lastPicker = it }
+    panel?.let { lastPanel = it }
     Surface(modifier = modifier.fillMaxWidth(), tonalElevation = 3.dp) {
-        Column(Modifier.animateContentSize()) {
-            picker?.let { current ->
-                PaletteRow(current) { token ->
-                    when (current) {
+        Column {
+            AnimatedVisibility(picker != null, enter = comeOut, exit = goIn) {
+                PaletteRow(lastPicker) { token ->
+                    when (lastPicker) {
                         Picker.Color -> state.toggleMark(Mark.Color(token))
                         Picker.Highlight -> state.toggleMark(Mark.Highlight(token))
                         Picker.Callout -> state.toggleCallout(token, "💡")
@@ -125,12 +139,15 @@ fun EditorToolbar(state: EditorState, modifier: Modifier = Modifier, onChecklist
                     picker = null
                 }
             }
-            when (panel) {
-                Panel.Text -> ToolRow { TextTools(state, marks, picker, pick) }
-                Panel.Paragraph -> ToolRow { ParagraphTools(state, picker, pick) }
-                null -> Unit
+            AnimatedVisibility(panel != null, enter = comeOut, exit = goIn) {
+                Column {
+                    when (lastPanel) {
+                        Panel.Text -> ToolRow { TextTools(state, marks, picker, pick) }
+                        Panel.Paragraph -> ToolRow { ParagraphTools(state, picker, pick) }
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                }
             }
-            if (panel != null) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             ToolRow {
                 Tool(EditorIcons.Undo, stringResource(Res.string.tool_undo), "Ctrl+Z", enabled = state.canUndo) { state.undo() }
                 Tool(EditorIcons.Redo, stringResource(Res.string.tool_redo), "Ctrl+Y", enabled = state.canRedo) { state.redo() }

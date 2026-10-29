@@ -517,8 +517,8 @@ class AppServices(
                 fontsReadAt = now()
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Exception) {
-                // The fonts wait for the next time; the sync went through.
+            } catch (_: Throwable) {
+                // The fonts wait for the next time; the sync went through (a cut connection is an Error in the browser).
             }
         }
         return try {

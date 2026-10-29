@@ -28,7 +28,10 @@ class ServerFonts(private val db: BenbowDb, private val apiFor: (Connection) -> 
     private class Kept(val store: String, val fonts: List<FontInfo>)
 
     private val fonts = MutableStateFlow(kept())
-    private val fetching = Mutex()
+
+    // One fetch per file at a time, files side by side (a grid of fonts asks for them all at once).
+    private val guard = Mutex()
+    private val fetching = HashMap<String, Mutex>()
 
     /** The server's fonts as last read; empty before the first read and for a server without fonts. */
     val catalog: StateFlow<List<FontInfo>> = fonts.asStateFlow()
@@ -50,12 +53,14 @@ class ServerFonts(private val db: BenbowDb, private val apiFor: (Connection) -> 
     suspend fun file(file: FontFileInfo): LocalFile? {
         val shelf = shelf ?: return null
         shelf.read(file.sha256)?.let { return it }
-        return fetching.withLock {
+        val lock = guard.withLock { fetching.getOrPut(file.sha256) { Mutex() } }
+        return lock.withLock {
             shelf.read(file.sha256) ?: run {
                 val connection = Settings(db).connection ?: return null
                 val bytes = try {
                     apiFor(connection).downloadFont(file.sha256)
-                } catch (e: Exception) {
+                } catch (e: Throwable) {
+                    // A cut connection reaches the browser as an Error, not an Exception: either way, no font now.
                     if (e is kotlin.coroutines.cancellation.CancellationException) throw e
                     return null
                 }

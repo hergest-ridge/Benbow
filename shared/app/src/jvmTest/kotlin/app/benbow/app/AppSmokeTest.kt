@@ -16,6 +16,7 @@ import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasAnySibling
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
@@ -1127,14 +1128,24 @@ class AppSmokeTest {
         waitUntilExactlyOneExists(hasContentDescription("Меню"), 5_000)
         onNodeWithContentDescription("Меню").click()
         onNodeWithText("Редактировать").click()
-        // «Оформление записки» (ADR-047, ADR-049: an icon beside the star while writing): the color, then layers of the
-        // look, each saved as it is picked.
+        // «Оформление записки» (ADR-047, ADR-049: an icon beside the star while writing; ADR-054: its parts, each a
+        // grid): the color, then layers of the look, each saved as it is picked.
         waitUntilExactlyOneExists(hasContentDescription("Оформление записки"), 5_000)
         onNodeWithContentDescription("Оформление записки").click()
+        fun part(name: String) {
+            waitUntilAtLeastOneExists(hasText(name), 5_000)
+            onAllNodesWithText(name)[0].click()
+        }
+        fun back(from: String) = onNode(hasContentDescription("Назад") and hasAnySibling(hasText(from))).performClick()
+        part("Цвет")
         onNodeWithContentDescription("Мятный").click()
         waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.entry(id).first()?.background == "mint" } }
+        back("Цвет")
+        part("Бумага")
         onNodeWithContentDescription("Линейка").click()
         waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.entry(id).first()?.look?.get("paper") == "lines" } }
+        back("Бумага")
+        part("Скрапбук")
         onNodeWithContentDescription("Скотч").click()
         waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.entry(id).first()?.look?.get("scrap") == "tape" } }
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Перемешать") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
@@ -1144,7 +1155,8 @@ class AppSmokeTest {
         }
         waitForIdle()
         screenshot("31-note-look")
-        onNodeWithText("Скрапбук").performScrollTo()
+        back("Скрапбук")
+        waitUntilAtLeastOneExists(hasText("Сбросить оформление"), 5_000)
         waitForIdle()
         screenshot("31-note-look-2")
         onNodeWithContentDescription("Назад").click()

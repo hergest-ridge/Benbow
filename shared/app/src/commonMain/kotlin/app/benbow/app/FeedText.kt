@@ -66,6 +66,7 @@ import app.benbow.core.text.MarkSpan
 import app.benbow.core.text.Paragraph
 import app.benbow.core.text.RichText
 import app.benbow.ui.editor.EditorStyles
+import app.benbow.ui.editor.LocalNoteFont
 import app.benbow.ui.editor.ReadingLinkCard
 import app.benbow.ui.editor.SpoilerDots
 import app.benbow.ui.editor.SpoilerLayout
@@ -73,6 +74,7 @@ import app.benbow.ui.editor.SpoilerReveal
 import app.benbow.ui.editor.awaitLinkTap
 import app.benbow.ui.editor.drawLinkUnderlines
 import app.benbow.ui.editor.drawPressedLink
+import app.benbow.ui.editor.inFont
 import app.benbow.ui.editor.linkCardHeight
 import app.benbow.ui.editor.linkRanges
 import app.benbow.ui.editor.linkUnder
@@ -225,7 +227,7 @@ private fun FeedBlock(rich: RichText, block: Block, styles: EditorStyles, dark: 
     val colors = MaterialTheme.colorScheme
     val first = rich.paragraphs[block.paragraphs.first()]
     val callout = first.callout
-    val body = MaterialTheme.typography.bodyLarge
+    val body = MaterialTheme.typography.bodyLarge.inFont(LocalNoteFont.current)
     when {
         first.atom is Atom.Divider -> HorizontalDivider(Modifier.padding(vertical = 6.dp), color = colors.outlineVariant)
 

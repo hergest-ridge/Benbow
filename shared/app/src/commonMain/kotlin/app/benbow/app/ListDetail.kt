@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -87,10 +88,47 @@ internal class ListPane(private val settings: Settings) {
         save()
     }
 
+    /** The open note's «Оформление» beside it (owner), on this device. */
+    val beside = BesidePane(settings)
+
     private companion object {
         const val KEY = "ui.listWidth"
     }
 }
+
+/**
+ * «Оформление записки» beside the open note in a wide window (owner, ADR-054): while it is [open] the right side is taken
+ * whole, the note's page against the list's edge, then a line that moves, then the pane, all side by side and never
+ * one over another. The page's width is dragged by that line and kept in the device's settings.
+ */
+internal class BesidePane(private val settings: Settings) {
+    var open by mutableStateOf(false)
+    var page by mutableStateOf(settings.get(KEY)?.toFloatOrNull()?.dp ?: READABLE)
+
+    fun save() = settings.put(KEY, page.value.toString())
+
+    fun reset() {
+        page = READABLE
+        save()
+    }
+
+    private companion object {
+        const val KEY = "ui.lookPageWidth"
+    }
+}
+
+/** The right side as the open note sees it: how wide it is, and the pane it can open beside itself. */
+internal class DetailPane(val width: Dp, val beside: BesidePane) {
+    /** Whether the page and the pane both fit at their least. */
+    val roomy: Boolean get() = width >= PAGE_MIN + LINE + LOOK_MIN
+}
+
+internal val LocalDetailPane = compositionLocalOf<DetailPane?> { null }
+
+/** The least the page and «Оформление» keep beside each other, and the line between them. */
+private val PAGE_MIN = 360.dp
+private val LOOK_MIN = 320.dp
+private val LINE = 9.dp
 
 /** The pointer over the divider: a left-right arrow where the platform has one. */
 internal expect val ResizeColumnIcon: PointerIcon
@@ -169,9 +207,12 @@ private class ListDetailScene(
                 },
             contentAlignment = Alignment.TopCenter,
         ) {
-            val framed = appearance.pageBorders && detail != null && maxWidth > READABLE
+            // «Оформление» beside the note takes the side whole: the page goes against the list's edge (owner).
+            val whole = pane.beside.open && detail != null
+            val side = DetailPane(maxWidth, pane.beside)
+            val framed = appearance.pageBorders && detail != null && maxWidth > READABLE && !whole
             Box(
-                Modifier.widthIn(max = READABLE).fillMaxHeight().drawWithContent {
+                (if (whole) Modifier.fillMaxWidth() else Modifier.widthIn(max = READABLE)).fillMaxHeight().drawWithContent {
                     drawContent()
                     if (framed) {
                         val px = 1.dp.toPx()
@@ -180,7 +221,10 @@ private class ListDetailScene(
                     }
                 },
             ) {
-                CompositionLocalProvider(LocalPaneGlow provides glow.takeIf { appearance.lightBeyondPage }) {
+                CompositionLocalProvider(
+                    LocalPaneGlow provides glow.takeIf { appearance.lightBeyondPage },
+                    LocalDetailPane provides side,
+                ) {
                     if (detail == null) empty() else detail.Content()
                 }
             }
@@ -240,5 +284,50 @@ internal fun DetailPlaceholder(onNewEntry: () -> Unit) {
                 Text(stringResource(Res.string.new_entry), Modifier.padding(start = 8.dp))
             }
         }
+    }
+}
+
+/**
+ * The open note and, with [pane], its «Оформление» beside it (owner, ADR-054): the page at its width against the list,
+ * the line between them, the pane taking the rest. The note keeps its place either way, so opening the pane never
+ * builds it again (its words, cursor and scroll stay).
+ */
+@Composable
+internal fun LookBeside(pane: DetailPane?, panel: @Composable (Modifier) -> Unit, note: @Composable () -> Unit) {
+    Row(Modifier.fillMaxSize()) {
+        val widest = pane?.let { it.width - LINE - LOOK_MIN }
+        Box(if (pane != null && widest != null) Modifier.width(pane.beside.page.coerceIn(PAGE_MIN, widest)) else Modifier.weight(1f)) {
+            note()
+        }
+        if (pane != null && widest != null) {
+            BesideLine(pane.beside, widest)
+            panel(Modifier.weight(1f).fillMaxHeight())
+        }
+    }
+}
+
+/** The line between the note and its «Оформление»: dragged within reason, a double click puts it back. */
+@Composable
+private fun BesideLine(beside: BesidePane, widest: Dp) {
+    val density = LocalDensity.current
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    val dragged by interaction.collectIsDraggedAsState()
+    val drag = rememberDraggableState { delta ->
+        beside.page = (beside.page.coerceIn(PAGE_MIN, widest) + with(density) { delta.toDp() }).coerceIn(PAGE_MIN, widest)
+    }
+    Box(
+        Modifier.width(LINE).fillMaxHeight()
+            .hoverable(interaction)
+            .pointerHoverIcon(ResizeColumnIcon)
+            .pointerInput(beside) { detectTapGestures(onDoubleTap = { beside.reset() }) }
+            .draggable(drag, Orientation.Horizontal, interactionSource = interaction, onDragStopped = { beside.save() }),
+        contentAlignment = Alignment.Center,
+    ) {
+        val colors = MaterialTheme.colorScheme
+        VerticalDivider(
+            thickness = if (hovered || dragged) 3.dp else 1.dp,
+            color = if (hovered || dragged) colors.primary.copy(alpha = 0.6f) else colors.outlineVariant.copy(alpha = 0.5f),
+        )
     }
 }

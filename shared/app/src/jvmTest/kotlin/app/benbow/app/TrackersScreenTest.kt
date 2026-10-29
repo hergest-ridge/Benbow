@@ -368,8 +368,11 @@ class TrackersScreenTest {
         waitUntilAtLeastOneExists(hasContentDescription("Оформление трекера"), 5_000)
         onNodeWithContentDescription("Оформление трекера").click()
         waitUntilAtLeastOneExists(hasText("Фон экрана"), 5_000)
-        onAllNodesWithContentDescription("Круги").assertCountEquals(2) // the sheet's pattern, then the screen's
-        onAllNodesWithContentDescription("Круги")[1].click()
+        // «Узор» twice in the list (ADR-054): the sheet's, then the screen's, each opening as a grid.
+        onAllNodesWithText("Узор").assertCountEquals(2)
+        onAllNodesWithText("Узор")[1].click()
+        waitUntilAtLeastOneExists(hasContentDescription("Круги"), 5_000)
+        onNodeWithContentDescription("Круги").click()
         waitUntil(timeoutMillis = 5_000) { tracker()["screen_pattern"] == "circles" }
         assertEquals(null, tracker()["look_pattern"], "the sheet keeps its own")
         screenshot("trackers-21-screen-look")

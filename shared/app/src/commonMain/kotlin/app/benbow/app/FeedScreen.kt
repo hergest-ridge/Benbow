@@ -51,6 +51,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
@@ -101,10 +102,12 @@ import app.benbow.app.resources.months_nominative
 import app.benbow.client.EntrySummary
 import app.benbow.client.FeedItem
 import app.benbow.client.FeedKey
+import app.benbow.client.LookFields
 import app.benbow.client.Veil
 import app.benbow.client.effectiveVeil
 import app.benbow.client.tagRegistry
 import app.benbow.core.sync.AttachmentState
+import app.benbow.ui.editor.LocalNoteFont
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -760,7 +763,9 @@ private fun PostBody(
 ) {
     val colors = MaterialTheme.colorScheme
     val entry = item.summary
-    FeedText(body, expanded, onExpand)
+    // «Шрифты записок в ленте» (owner): the post in its note's own font, as it reads open.
+    val font = if (LocalAppearance.current.feedFonts) noteFont(entry.look[LookFields.FONT]) else null
+    CompositionLocalProvider(LocalNoteFont provides font) { FeedText(body, expanded, onExpand) }
     // Every sound of the post, wherever it sits in the text (ADR-035).
     item.audio.forEach {
         VoiceRow(services, entry.id, it, item.transcripts[it.meta.id], tags = item.tracks[it.meta.id], queue = queue)

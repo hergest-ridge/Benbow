@@ -99,7 +99,10 @@ private fun serverFont(token: String): NoteFont? {
     val catalog by fonts.catalog.collectAsStateWithLifecycle()
     val info = catalog.firstOrNull { it.token == token } ?: return null
     val key = info.files.joinToString(",") { it.sha256 } + "@" + info.scale
+    // A new font starts from what this process has of it, never from the font before (owner: the second one picked
+    // didn't take): produceState keeps its value when its key changes.
     val loaded by produceState(LoadedFonts.get(key), key) {
+        value = LoadedFonts.get(key)
         if (value == null) value = LoadedFonts.load(fonts, info, key)
     }
     return loaded

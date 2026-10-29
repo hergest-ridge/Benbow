@@ -36,6 +36,8 @@ import app.benbow.app.resources.Res
 import app.benbow.app.resources.appearance
 import app.benbow.app.resources.feed_cards
 import app.benbow.app.resources.feed_cards_hint
+import app.benbow.app.resources.feed_fonts
+import app.benbow.app.resources.feed_fonts_hint
 import app.benbow.app.resources.feed_scrubber
 import app.benbow.app.resources.feed_scrubber_hint
 import app.benbow.app.resources.feed_section
@@ -192,6 +194,18 @@ internal fun AppearanceScreen(services: AppServices, nav: Navigator) {
                     )
                 }
                 Switch(current.staticBackdrop, { services.setAppearance(current.copy(staticBackdrop = it)) }, modifier = Modifier.hand())
+            }
+            // The feed's posts in their notes' own fonts (owner; off, the app's font, easy to run an eye down).
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f).padding(end = 16.dp)) {
+                    Text(stringResource(Res.string.feed_fonts), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        stringResource(Res.string.feed_fonts_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(current.feedFonts, { services.setAppearance(current.copy(feedFonts = it)) }, modifier = Modifier.hand())
             }
             // A wide window's open note (owner): its light over the whole right side, a line down each side.
             if (services.platform != "android" || LocalWide.current) {

@@ -750,6 +750,8 @@
     <string name="page_borders_hint">В широком окне открытая запись обведена по бокам тонкой линией, как край ленты.</string>
     <string name="static_backdrop">Статичный фон</string>
     <string name="static_backdrop_hint">Бумага, узоры и скрапбук записки стоят на месте, а не едут вместе с текстом при прокрутке.</string>
+    <string name="feed_fonts">Шрифты записок в ленте</string>
+    <string name="feed_fonts_hint">Записки в ленте показываются своими шрифтами, как открытые. Выключено — обычным шрифтом, его легче пробегать глазами.</string>
     <string name="picture_links">Не вставлять ссылки вложений</string>
     <string name="picture_links_hint">Картинка или гифка по ссылке ложится вложением под ссылкой. Включено — только вложение, без строки с адресом.</string>
     <string name="ticked_below">Отмеченные пункты — вниз</string>
@@ -1093,6 +1095,13 @@
     <string name="look_none">Нет</string>
     <string name="look_shuffle">Перемешать</string>
     <string name="look_reset">Сбросить оформление</string>
+    <string name="look_close">Закрыть</string>
+    <string name="look_fonts_diary">Рукописные</string>
+    <string name="look_fonts_own">Свои</string>
+    <string name="look_fonts_serif">С засечками</string>
+    <string name="look_fonts_sans">Без засечек</string>
+    <string name="look_fonts_accent">Акцентные</string>
+    <string name="look_fonts_mono">Моноширинные</string>
     <string name="look_screen">Фон экрана</string>
     <string name="look_motion_hint">Только в открытой записке</string>
     <string name="look_credit_hero">Узоры Hero Patterns: Стив Шогер, CC BY 4.0</string>

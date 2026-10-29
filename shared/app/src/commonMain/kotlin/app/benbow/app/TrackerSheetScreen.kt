@@ -305,19 +305,21 @@ internal fun TrackerSheetScreen(services: AppServices, nav: Navigator, trackerId
     }
     if (looking && tracker != null) {
         LookSheet(
-            id = tracker.id,
-            words = trackerTitle(tracker, untitled) + "\n" + columns.orEmpty().joinToString(" · ") { it.name },
-            color = tracker[TrackerField.BACKGROUND],
-            look = LookFields.of(tracker.fields),
-            page = page,
-            onColor = { color -> write { updateTracker(trackerId, mapOf(TrackerField.BACKGROUND to color)) } },
-            onLook = { layers -> write { updateTracker(trackerId, trackerLook(layers)) } },
+            LookTarget(
+                id = tracker.id,
+                words = trackerTitle(tracker, untitled) + "\n" + columns.orEmpty().joinToString(" · ") { it.name },
+                color = tracker[TrackerField.BACKGROUND],
+                look = LookFields.of(tracker.fields),
+                page = page,
+                onColor = { color -> write { updateTracker(trackerId, mapOf(TrackerField.BACKGROUND to color)) } },
+                onLook = { layers -> write { updateTracker(trackerId, trackerLook(layers)) } },
+                screen = screenLook(tracker.fields),
+                screenPage = ground,
+                onScreen = { layers -> write { updateTracker(trackerId, trackerScreen(layers)) } },
+                fonts = false,
+            ),
             onDismiss = { looking = false },
             title = Res.string.trackers_look,
-            screen = screenLook(tracker.fields),
-            screenPage = ground,
-            onScreen = { layers -> write { updateTracker(trackerId, trackerScreen(layers)) } },
-            fonts = false,
         )
     }
 }

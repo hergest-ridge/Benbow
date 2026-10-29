@@ -38,7 +38,7 @@ class EntryPageTest {
         val html = page.html
         java.io.File("build/screens/26-entry-page.html").apply { parentFile.mkdirs() }.writeText(html) // for review, like the screenshots
         assertTrue("<p class=\"meta\">Вторник, 13 октября 2026, " in html && "· 😄" in html, html)
-        assertTrue("<span style=\"background:#e2f6d3\">Море</span>" in html, "tags in their (light) category color")
+        assertTrue("<span style=\"background:${lightSwatch("mint")}\">Море</span>" in html, "tags in their category color on paper")
         assertTrue("тёплый &lt;вечер&gt;" in html, "text is escaped")
         assertTrue("<img src=\"file:" in html, "the picture from the device's media folder")
         assertTrue("<h1>Прогулка у моря</h1>" in html, "the first line reads as the title")

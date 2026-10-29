@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- The window before the first frame wears the default palette's page (ADR-057); MainActivity then sets the theme's own. -->
+    <style name="Theme.Benbow" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/benbow_page</item>
+    </style>
+
     <!-- The capture sheet draws its own scrim over whatever app is underneath. -->
     <style name="Theme.Benbow.Capture" parent="@android:style/Theme.Material.NoActionBar">
         <item name="android:windowIsTranslucent">true</item>

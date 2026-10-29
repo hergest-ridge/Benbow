@@ -39,6 +39,7 @@ import app.benbow.app.resources.feed_jump_random
 import app.benbow.app.resources.feed_jump_today
 import app.benbow.app.resources.feed_jump_year_ago
 import app.benbow.app.resources.months_nominative
+import app.benbow.ui.theme.BenbowTheme
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.minus
 import org.jetbrains.compose.resources.stringArrayResource
@@ -188,7 +189,7 @@ private fun YearMonths(
                                 names.getOrElse(m - 1) { "$m" },
                                 style = MaterialTheme.typography.labelLarge,
                                 textAlign = TextAlign.Center,
-                                color = if (row != null) colors.onSurface else colors.onSurfaceVariant.copy(alpha = 0.38f),
+                                color = if (row != null) colors.onSurface else BenbowTheme.colors.disabled,
                             )
                         }
                     }

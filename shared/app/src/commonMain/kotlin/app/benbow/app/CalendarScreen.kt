@@ -96,6 +96,7 @@ import app.benbow.core.calendar.CalendarKind
 import app.benbow.core.calendar.MY_CALENDAR
 import app.benbow.core.tracker.TrackerField
 import app.benbow.ui.mouseSwipe
+import app.benbow.ui.theme.BenbowTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -655,7 +656,7 @@ private fun MonthGrid(
                                     date.day.toString(),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = when {
-                                        !inMonth -> colors.onSurfaceVariant.copy(alpha = 0.4f)
+                                        !inMonth -> BenbowTheme.colors.textQuiet
                                         date == today -> colors.primary
                                         else -> colors.onSurface
                                     },

@@ -30,7 +30,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -53,7 +52,7 @@ import app.benbow.core.tracker.TrackerColumn
 import app.benbow.core.tracker.TrackerField
 import app.benbow.core.tracker.TrackerRecord
 import app.benbow.core.tracker.TrackerSpans
-import app.benbow.ui.theme.BenbowPalette
+import app.benbow.ui.theme.BenbowTheme
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
@@ -181,13 +180,13 @@ internal fun TrackerBlock(services: AppServices, trackerId: String, size: BlockS
 @Composable
 private fun TodayMarks(services: AppServices, records: TrackerDays, today: LocalDate, figures: Boolean, onOpen: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val dark = colors.background.luminance() < 0.5f
+    val dark = BenbowTheme.colors.dark
     val day = "$today"
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         records.columns.take(TODAY_MARKS).forEach { column ->
             val fields = records.cells[TrackerCells.id(column.id, day)]
             val fill = pixelFill(column, fields, records.seconds(column, day))
-            val ink = column.record[ColumnField.COLOR]?.let { BenbowPalette.text(it, dark) } ?: colors.primary
+            val ink = column.record[ColumnField.COLOR]?.let { BenbowTheme.colors.tokens.mark(it, dark) } ?: colors.primary
             val icon = column.record[ColumnField.ICON]?.let(::iconEmoji) ?: column.short.take(1)
             Box(
                 Modifier.weight(1f).height(TODAY_HEIGHT).clip(RoundedCornerShape(10.dp))
@@ -226,10 +225,10 @@ private fun TodayMarks(services: AppServices, records: TrackerDays, today: Local
 @Composable
 private fun MiniSheet(records: TrackerDays, days: List<LocalDate>, today: LocalDate, square: Dp) {
     val colors = MaterialTheme.colorScheme
-    val dark = colors.background.luminance() < 0.5f
+    val dark = BenbowTheme.colors.dark
     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
         records.columns.take(MINI_ROWS).forEach { column ->
-            val ink = column.record[ColumnField.COLOR]?.let { BenbowPalette.text(it, dark) } ?: colors.primary
+            val ink = column.record[ColumnField.COLOR]?.let { BenbowTheme.colors.tokens.mark(it, dark) } ?: colors.primary
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     column.record[ColumnField.ICON]?.let(::iconEmoji) ?: column.short.take(1),

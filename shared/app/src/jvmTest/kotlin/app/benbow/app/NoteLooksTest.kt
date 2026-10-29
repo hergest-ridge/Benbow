@@ -32,6 +32,8 @@ import app.benbow.client.createBoardNote
 import app.benbow.client.db.BenbowDb
 import app.benbow.client.setLook
 import app.benbow.ui.editor.NoteFont
+import app.benbow.ui.theme.ThemePalette
+import app.benbow.ui.theme.colorsOf
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -127,12 +129,42 @@ class NoteLooksTest {
         val ink = Color(0xFF1D1B18)
         for (kind in NoteLooks.scraps) {
             for (seed in listOf(1, 7, 42, -3)) {
-                val card = Scrapbook(kind, seed, Size(380f, 390f), paper, ink, dark = false, px = 2f)
-                val page = Scrapbook(kind, seed, Size(1600f, 2400f), paper, ink, dark = false, px = 2f)
+                val card =
+                    Scrapbook(
+                        kind,
+                        seed,
+                        Size(380f, 390f),
+                        paper,
+                        ink,
+                        dark = false,
+                        tokens = colorsOf(ThemePalette.Inn, dark = false).tokens,
+                        px = 2f,
+                    )
+                val page =
+                    Scrapbook(
+                        kind,
+                        seed,
+                        Size(1600f, 2400f),
+                        paper,
+                        ink,
+                        dark = false,
+                        tokens = colorsOf(ThemePalette.Inn, dark = false).tokens,
+                        px = 2f,
+                    )
                 assertEquals(card.tones(), page.tones(), "$kind $seed: the same tones on a card and on the open page")
             }
         }
-        val wide = Scrapbook("scraps", 7, Size(2560f, 2880f), paper, ink, dark = false, px = 2f)
+        val wide =
+            Scrapbook(
+                "scraps",
+                7,
+                Size(2560f, 2880f),
+                paper,
+                ink,
+                dark = false,
+                tokens = colorsOf(ThemePalette.Inn, dark = false).tokens,
+                px = 2f,
+            )
         assertTrue(wide.scrapSizes().all { it.width <= 600f && it.height <= 300f }, "no poster of a scrap: ${wide.scrapSizes()}")
     }
 

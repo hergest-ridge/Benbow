@@ -22,13 +22,15 @@ import app.benbow.core.text.ListKind
 import app.benbow.core.text.Mark
 import app.benbow.core.text.Paragraph
 import app.benbow.core.text.SizeStep
-import app.benbow.ui.theme.BenbowPalette
+import app.benbow.ui.theme.TokenColors
 
 /** Maps the semantic model to Compose text styles. All visuals of formatting live here. */
 @Immutable
 data class EditorStyles(
     val colors: ColorScheme,
     val dark: Boolean,
+    /** The content tokens' colors in the theme ([app.benbow.ui.theme.BenbowColors.tokens]). */
+    val tokens: TokenColors,
     val baseSize: TextUnit = 17.sp,
     /** An atom paragraph's line is as tall as what's drawn over it ([AtomViews]). */
     val atomHeight: (Atom) -> TextUnit = { 56.sp },
@@ -124,9 +126,9 @@ data class EditorStyles(
 
                 Mark.Spoiler -> background = colors.onSurface.copy(alpha = 0.16f)
 
-                is Mark.Color -> color = BenbowPalette.text(mark.token, dark) ?: Color.Unspecified
+                is Mark.Color -> color = tokens.text(mark.token, dark) ?: Color.Unspecified
 
-                is Mark.Highlight -> background = BenbowPalette.highlight(mark.token, dark) ?: Color.Unspecified
+                is Mark.Highlight -> background = tokens.highlight(mark.token, dark) ?: Color.Unspecified
 
                 is Mark.Size -> size = sizeFactor(mark.step).em
 
@@ -145,7 +147,7 @@ data class EditorStyles(
         )
     }
 
-    fun calloutBackground(tone: String): Color = BenbowPalette.tint(tone, dark) ?: colors.surfaceVariant
+    fun calloutBackground(tone: String): Color = tokens.tint(tone, dark) ?: colors.surfaceVariant
 
     private companion object {
         const val LINE_HEIGHT = 1.45f

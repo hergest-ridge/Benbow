@@ -25,7 +25,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
@@ -44,7 +43,7 @@ import app.benbow.core.tracker.TrackerColumn
 import app.benbow.core.tracker.TrackerFigures
 import app.benbow.core.tracker.TrackerRecord
 import app.benbow.core.tracker.TrackerSpans
-import app.benbow.ui.theme.BenbowPalette
+import app.benbow.ui.theme.BenbowTheme
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.datetime.LocalDate
 import org.jetbrains.compose.resources.stringArrayResource
@@ -83,11 +82,12 @@ internal fun YearPage(
     val days = remember(year) { yearDays(year) }
     val byDay = remember(cellRecords) { cellRecords.associate { (it[CellField.DAY] ?: it.id.substringAfterLast(':')) to it.fields } }
     val colors = MaterialTheme.colorScheme
-    val dark = colors.background.luminance() < 0.5f
-    val ink = column.record[ColumnField.COLOR]?.let { BenbowPalette.text(it, dark) } ?: colors.primary
+    val dark = BenbowTheme.colors.dark
+    val tokens = BenbowTheme.colors.tokens
+    val ink = column.record[ColumnField.COLOR]?.let { tokens.mark(it, dark) } ?: colors.primary
     val empty = colors.outline.copy(alpha = SheetSizes.FRAME_ALPHA)
     // Each day's color once per change of its records, not on every frame.
-    val pixels = remember(byDay, spanRecords, column, ink, dark) {
+    val pixels = remember(byDay, spanRecords, column, ink, dark, tokens) {
         days.map { day ->
             day ?: return@map null
             val date = "$day"
@@ -95,7 +95,7 @@ internal fun YearPage(
             val seconds = if (column.type == ColumnType.Time) TrackerSpans.total(spanRecords, date, column.dayBy) else 0L
             val fill = pixelFill(column, fields, seconds)
             val option = if (column.type == ColumnType.Choice) column.options.find { it.id == fields?.get(CellField.VALUE) } else null
-            val tint = option?.color?.let { BenbowPalette.text(it, dark) } ?: ink
+            val tint = option?.color?.let { tokens.mark(it, dark) } ?: ink
             if (fill > 0f) tint.copy(alpha = SheetSizes.PART_ALPHA + (SheetSizes.MARK_ALPHA - SheetSizes.PART_ALPHA) * fill) else empty
         }
     }

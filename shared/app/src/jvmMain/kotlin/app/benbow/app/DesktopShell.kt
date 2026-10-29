@@ -9,7 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.ApplicationScope
@@ -28,6 +28,7 @@ import app.benbow.app.resources.tray_new_entry
 import app.benbow.app.resources.tray_open
 import app.benbow.app.resources.tray_quit
 import app.benbow.client.Settings
+import app.benbow.ui.theme.isDarkColor
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.debounce
@@ -93,16 +94,19 @@ fun ApplicationScope.BenbowDesktop(services: AppServices, tray: TrayState) {
             snapshotFlow { Triple(state.placement, state.position, state.size) }.drop(1).debounce(500).collect { save(settings, state) }
         }
         AppTheme(services) {
-            // The title bar takes the app's background and text colors, and follows theme changes.
+            // The title bar takes the app's background and text colors, and follows theme changes; so does the window's own
+            // ground, which shows for a moment as it grows (ADR-057).
             val caption = MaterialTheme.colorScheme.background
             val text = MaterialTheme.colorScheme.onBackground
             LaunchedEffect(caption, text) {
+                window.background = java.awt.Color(caption.toArgb())
+                window.contentPane.background = window.background
                 repeat(50) {
                     if (WindowsTitleBar.paint(
                             window,
                             caption,
                             text,
-                            dark = caption.luminance() < 0.5f,
+                            dark = caption.isDarkColor(),
                         )
                     ) {
                         return@LaunchedEffect

@@ -28,8 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Placeable
 import androidx.compose.ui.layout.SubcomposeLayout
@@ -50,6 +48,7 @@ import app.benbow.client.LookFields
 import app.benbow.client.Media
 import app.benbow.ui.editor.LocalNoteFont
 import app.benbow.ui.editor.inFont
+import app.benbow.ui.theme.BenbowTheme
 import coil3.compose.AsyncImage
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.max
@@ -97,10 +96,7 @@ internal fun BoardCard(
  * them take it too.
  */
 @Composable
-internal fun boardCardColor(): Color {
-    val colors = MaterialTheme.colorScheme
-    return if (colors.background.luminance() < 0.5f) lerp(colors.background, Color.Black, 0.2f) else colors.surfaceContainerLowest
-}
+internal fun boardCardColor(): Color = BenbowTheme.colors.boardCard
 
 /** Rows of text a card shows at most (Keep's card: some 26, its title's included). */
 private const val CARD_ROWS = 26

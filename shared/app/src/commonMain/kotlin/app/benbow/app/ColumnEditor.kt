@@ -35,7 +35,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -83,6 +82,7 @@ import app.benbow.core.tracker.GoalPer
 import app.benbow.core.tracker.TrackerColumn
 import app.benbow.core.uuidV7
 import app.benbow.ui.theme.BenbowPalette
+import app.benbow.ui.theme.BenbowTheme
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
@@ -246,7 +246,7 @@ private fun GoalFields(goal: String, per: GoalPer, pers: List<GoalPer>, onGoal: 
 @Composable
 private fun OptionsEditor(options: List<ChoiceOption>, newId: () -> String, onChange: (List<ChoiceOption>) -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val dark = colors.background.luminance() < 0.5f
+    val dark = BenbowTheme.colors.dark
     Section(stringResource(Res.string.trackers_options)) {
         options.forEachIndexed { i, option ->
             val change = { next: ChoiceOption -> onChange(options.mapIndexed { j, each -> if (j == i) next else each }) }
@@ -256,7 +256,7 @@ private fun OptionsEditor(options: List<ChoiceOption>, newId: () -> String, onCh
                     Box(
                         Modifier.size(28.dp)
                             .clip(CircleShape)
-                            .background(option.color?.let { BenbowPalette.text(it, dark) } ?: colors.outlineVariant)
+                            .background(option.color?.let { BenbowTheme.colors.tokens.mark(it, dark) } ?: colors.outlineVariant)
                             .hand()
                             .clickable { picking = true }
                             .semantics { contentDescription = option.name },

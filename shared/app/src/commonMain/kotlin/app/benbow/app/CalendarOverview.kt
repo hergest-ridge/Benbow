@@ -46,6 +46,7 @@ import app.benbow.app.resources.calendar_nearest
 import app.benbow.app.resources.calendar_overview
 import app.benbow.app.resources.months_genitive
 import app.benbow.app.resources.months_nominative
+import app.benbow.ui.theme.BenbowTheme
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.isoDayNumber
 import kotlinx.datetime.number
@@ -208,7 +209,7 @@ private fun MiniMonth(
             Text(
                 name,
                 style = MaterialTheme.typography.labelMedium,
-                color = if (written != null) colors.onSurface else colors.onSurfaceVariant.copy(alpha = 0.6f),
+                color = if (written != null) colors.onSurface else BenbowTheme.colors.textQuiet,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

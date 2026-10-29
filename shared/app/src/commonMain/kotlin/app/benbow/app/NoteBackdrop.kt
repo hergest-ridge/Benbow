@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.State
@@ -38,6 +39,7 @@ import androidx.compose.ui.graphics.ImageShader
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -46,7 +48,6 @@ import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.VectorPainter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
@@ -54,7 +55,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import app.benbow.ui.theme.BenbowPalette
+import app.benbow.ui.theme.BenbowTheme
+import app.benbow.ui.theme.TokenColors
+import app.benbow.ui.theme.isDarkColor
+import app.benbow.ui.theme.lookBudget
+import app.benbow.ui.theme.screen
 import kotlin.math.PI
 import kotlin.math.ceil
 import kotlin.math.cos
@@ -155,7 +160,9 @@ internal fun noteBackdrop(
     paperScroll: PaperScroll? = null,
 ): Modifier {
     if (look == null || look.isEmpty) return Modifier
-    val dark = base.luminance() < 0.5f
+    val dark = base.isDarkColor()
+    val tokens = BenbowTheme.colors.tokens
+    val note = NoteInk(base, ink, MaterialTheme.colorScheme.onSurfaceVariant, dark, tokens)
     val scatter = look.scatter.mapNotNull { path -> key(path) { lookPicture("tabler/$path")?.let { rememberVectorPainter(it) } } }
     val drift: State<Float>? = if (look.motion == "drift" && moving && lightFrame == null && !reducedMotion()) {
         rememberInfiniteTransition().animateFloat(
@@ -171,16 +178,20 @@ internal fun noteBackdrop(
     val paperPhoto = look.paperPhoto?.let { lookPhoto("paper/$it.jpg") }
     val wallpaper = look.wallpaper?.let { lookPhoto("morris/$it.jpg") }
     val strength = if (muted) MUTED else 1f
-    return remember(look, base, ink, seed, strength, drift, scatter, tile, tilePainter, paperPhoto, wallpaper, lightFrame, paperScroll) {
+    val keys =
+        arrayOf(look, base, ink, tokens, seed, strength, drift, scatter, tile, tilePainter, paperPhoto, wallpaper, lightFrame, paperScroll)
+    return remember(*keys) {
         Modifier.drawWithCache {
-            val layers = Layers(look, base, ink, dark, seed, size, scatter.size, 1.dp.toPx())
+            val layers = Layers(look, note, seed, size, scatter.size, 1.dp.toPx())
             val tiles = if (tile != null && tilePainter != null) tileBrush(tile, tilePainter, layers.tileTone) else null
             val papers = paperPhoto?.let { ShaderBrush(ImageShader(it, TileMode.Repeated, TileMode.Repeated)) }
             // The whole sheet the words are on, from where they start (under the page's bar): the scrapbook's top pieces
             // at its top, clear of the bar's buttons, the bottom ones at its end.
             val top = paperScroll?.top?.invoke() ?: 0f
             val sheet = Size(size.width, max(size.height, paperScroll?.length?.invoke() ?: 0f) - top)
-            val scrapbook = look.scrap?.let { Scrapbook(it, seed + look.scrapShuffle * SHUFFLE_STEP, sheet, base, ink, dark, 1.dp.toPx()) }
+            val scrapbook = look.scrap?.let {
+                Scrapbook(it, seed + look.scrapShuffle * SHUFFLE_STEP, sheet, base, ink, dark, tokens, 1.dp.toPx())
+            }
             onDrawBehind {
                 // Paper, patterns and the scrapbook go up with the words (owner: «эффект бумаги»); light and motion
                 // stay, as light does.
@@ -200,8 +211,8 @@ internal fun noteBackdrop(
                     }
                 }
                 val frame = lightFrame?.invoke()
-                if (look.motion == "drift") drawDrift(frame?.phase ?: drift?.value ?: STILL, dark, ink, strength, frame)
-                drawLights(look.lights, dark, ink, strength, frame)
+                if (look.motion == "drift") drawDrift(frame?.phase ?: drift?.value ?: STILL, note, strength, frame)
+                drawLights(look.lights, note, strength, frame)
                 layers.paper(this, strength, shift)
                 layers.pattern(this, strength, scatter, shift)
                 tiles?.let {
@@ -229,15 +240,17 @@ internal expect fun reducedMotion(): Boolean
 /** The look's paths and points for one size, built once; [pattern]'s scattered pictures come drawn from painters. */
 private class Layers(
     private val look: NoteLook,
-    private val base: Color,
-    private val ink: Color,
-    private val dark: Boolean,
+    private val note: NoteInk,
     seed: Int,
     private val box: Size,
     scatterCount: Int,
     /** One dp in pixels: steps and lines keep their size on every screen. */
     private val px: Float,
 ) {
+    private val base = note.base
+    private val ink = note.main
+    private val dark = note.dark
+    private val tokens = note.tokens
     private val random = Random(seed)
     private val unit = max(box.width, box.height)
 
@@ -313,7 +326,7 @@ private class Layers(
                     y += step
                 }
                 // A notebook's margin, in a rose that keeps to the note's key.
-                val margin = (BenbowPalette.text("red", dark) ?: ink).copy(alpha = 0.28f * strength)
+                val margin = (tokens.mark("red", dark) ?: ink).copy(alpha = 0.28f * strength)
                 drawLine(margin, Offset(MARGIN * px, 0f), Offset(MARGIN * px, size.height), px)
             }
 
@@ -332,7 +345,7 @@ private class Layers(
             }
 
             "parchment" -> {
-                val warm = BenbowPalette.text("brown", dark) ?: ink
+                val warm = tokens.mark("brown", dark) ?: ink
                 banded(shift) { blots.forEach { drawCircle(warm.copy(alpha = 0.05f * strength), it.size * unit, it.at) } }
                 drawRect(
                     Brush.radialGradient(
@@ -408,16 +421,29 @@ private class Layers(
         }
     }
 
-    private fun tone(token: String) = BenbowPalette.text(token, dark) ?: ink
+    private fun tone(token: String) = tokens.mark(token, dark) ?: ink
 
     /**
      * [color] at [alpha] over the note, held to at most [CALM] of a visible step from the note's color, then muted by
      * [strength]: a bright tone over a far color fades more than a near one, so no pattern shouts over the words (owner:
      * the busiest looked too busy for what was written on them).
      */
-    fun calm(color: Color, alpha: Float, strength: Float): Color {
+    private val calmed = HashMap<Triple<Color, Float, Float>, Color>()
+
+    fun calm(color: Color, alpha: Float, strength: Float): Color = calmed.getOrPut(Triple(color, alpha, strength)) {
         val step = sqrt(((color.red - base.red).pow(2) + (color.green - base.green).pow(2) + (color.blue - base.blue).pow(2)) / 3f)
-        return color.copy(alpha = min(alpha, CALM / step.coerceAtLeast(0.001f)) * strength)
+        color.copy(alpha = note.budget(color, min(alpha, CALM / step.coerceAtLeast(0.001f)) * strength))
+    }
+}
+
+/**
+ * A note's page and the words on it, which its look must leave readable (ADR-057): every layer is held to [lookBudget]
+ * over [base], so the words keep 7:1 and the secondary ones 4.5:1 however strong the look.
+ */
+internal data class NoteInk(val base: Color, val main: Color, val secondary: Color, val dark: Boolean, val tokens: TokenColors) {
+    /** [wanted] alpha of [layer], or less where the words would stop reading; [screened] for a dark note's lights. */
+    fun budget(layer: Color, wanted: Float, screened: Boolean = false): Float = lookBudget(wanted, main, secondary) { alpha ->
+        if (screened) screen(layer, alpha, base) else layer.copy(alpha = alpha).compositeOver(base)
     }
 }
 
@@ -429,7 +455,7 @@ internal class LightFrame(val area: Size, val at: Offset, val phase: Float? = nu
  * [frame] they fall across the pane around the note instead, drawn here where they cross the note: the pane draws
  * the same over its margins (PaneGlow), so the light runs on unbroken over the note's edges.
  */
-internal fun DrawScope.drawLights(lights: List<LookLight>, dark: Boolean, ink: Color, strength: Float, frame: LightFrame? = null) {
+internal fun DrawScope.drawLights(lights: List<LookLight>, note: NoteInk, strength: Float, frame: LightFrame? = null) {
     val area = frame?.area?.takeIf { it.width > 0f && it.height > 0f }
     val box = area ?: size
     val at = frame?.takeIf { area != null }?.at ?: Offset.Zero
@@ -437,10 +463,11 @@ internal fun DrawScope.drawLights(lights: List<LookLight>, dark: Boolean, ink: C
     lights.forEach { light ->
         val a = light.angle / 180f * PI.toFloat()
         val center = Offset(box.width / 2 + cos(a) * box.width * 0.6f, box.height / 2 + sin(a) * box.height * 0.6f) - at
-        val glow = (BenbowPalette.text(light.tone, dark) ?: ink).copy(alpha = LIGHT_ALPHA[light.strength.coerceIn(1, 3) - 1] * strength)
+        val tone = note.tokens.mark(light.tone, note.dark) ?: note.main
+        val glow = tone.copy(alpha = note.budget(tone, LIGHT_ALPHA[light.strength.coerceIn(1, 3) - 1] * strength, screened = note.dark))
         drawRect(
             Brush.radialGradient(listOf(glow, Color.Transparent), center = center, radius = unit * 0.85f),
-            blendMode = if (dark) BlendMode.Screen else BlendMode.SrcOver,
+            blendMode = if (note.dark) BlendMode.Screen else BlendMode.SrcOver,
         )
     }
 }
@@ -449,12 +476,12 @@ internal fun DrawScope.drawLights(lights: List<LookLight>, dark: Boolean, ink: C
  * A slow gradient drifting across the note, [phase] 0..1; with a [frame], across the pane around it, at the pane's phase
  * (PaneGlow), so the note and its margins move as one.
  */
-internal fun DrawScope.drawDrift(phase: Float, dark: Boolean, ink: Color, strength: Float, frame: LightFrame? = null) {
+internal fun DrawScope.drawDrift(phase: Float, note: NoteInk, strength: Float, frame: LightFrame? = null) {
     val area = frame?.area?.takeIf { it.width > 0f && it.height > 0f }
     val box = area ?: size
     val at = frame?.takeIf { area != null }?.at ?: Offset.Zero
-    val a = (BenbowPalette.text("purple", dark) ?: ink).copy(alpha = 0.35f * strength)
-    val b = (BenbowPalette.text("teal", dark) ?: ink).copy(alpha = 0.3f * strength)
+    val a = (note.tokens.mark("purple", note.dark) ?: note.main).let { it.copy(alpha = note.budget(it, 0.35f * strength)) }
+    val b = (note.tokens.mark("teal", note.dark) ?: note.main).let { it.copy(alpha = note.budget(it, 0.3f * strength)) }
     val shift = box.width * (phase - 0.5f)
     drawRect(
         Brush.linearGradient(

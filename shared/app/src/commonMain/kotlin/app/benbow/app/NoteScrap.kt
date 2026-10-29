@@ -29,10 +29,11 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import app.benbow.ui.theme.BenbowPalette
+import app.benbow.ui.theme.BenbowTheme
+import app.benbow.ui.theme.TokenColors
+import app.benbow.ui.theme.isDarkColor
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.min
@@ -58,6 +59,7 @@ internal class Scrapbook(
     private val base: Color,
     private val ink: Color,
     private val dark: Boolean,
+    private val tokens: TokenColors,
     /** One dp in pixels: tape and paper keep their size on every screen. */
     private val px: Float,
 ) {
@@ -100,6 +102,7 @@ internal class Scrapbook(
                     14 * px,
                     base,
                     dark,
+                    tokens,
                     px,
                     jags,
                 )
@@ -125,6 +128,7 @@ internal class Scrapbook(
                     17 * px,
                     base,
                     dark,
+                    tokens,
                     px,
                     jags,
                 )
@@ -159,7 +163,7 @@ internal class Scrapbook(
         tapes.forEach { drawTape(it, dark, strength) }
     }
 
-    private fun tone(token: String) = BenbowPalette.text(token, dark) ?: ink
+    private fun tone(token: String) = tokens.mark(token, dark) ?: ink
 
     private fun tear(width: Float) = Stroke(width * px, cap = StrokeCap.Round, join = StrokeJoin.Round)
 
@@ -178,7 +182,7 @@ internal class Scrapbook(
             3 -> Offset(inset, box.height - inset) to 45f + tilt
             else -> Offset(box.width * (0.35f + random.nextFloat() * 0.3f), 3 * px) to tilt * 0.8f
         }
-        return random.tape(at, angle, length, thickness, base, dark, px, jags)
+        return random.tape(at, angle, length, thickness, base, dark, tokens, px, jags)
     }
 
     /**
@@ -398,7 +402,8 @@ internal class Scrapbook(
 @Composable
 internal fun TapedPicture(path: String, style: String, seed: Int, base: Color, modifier: Modifier = Modifier) {
     val image = lookPhoto(path)
-    val dark = base.luminance() < 0.5f
+    val dark = base.isDarkColor()
+    val tokens = BenbowTheme.colors.tokens
     val turn = remember(seed, style) {
         val random = Random(seed)
         when (style) {
@@ -414,8 +419,14 @@ internal fun TapedPicture(path: String, style: String, seed: Int, base: Color, m
             val jags = Random(seed xor JAGS)
             val tapes = when (style) {
                 "tape" -> listOf(
-                    random.tape(Offset(2 * px, 2 * px), -42f + random.nextFloat() * 8f, 50 * px, 16 * px, base, dark, px, jags),
-                    random.tape(Offset(size.width - 2 * px, 2 * px), 42f - random.nextFloat() * 8f, 50 * px, 16 * px, base, dark, px, jags),
+                    random.tape(Offset(2 * px, 2 * px), -42f + random.nextFloat() * 8f, 50 * px, 16 * px, base, dark, tokens, px, jags),
+                    random.tape(
+                        Offset(
+                            size.width - 2 * px,
+                            2 * px,
+                        ),
+                        42f - random.nextFloat() * 8f, 50 * px, 16 * px, base, dark, tokens, px, jags,
+                    ),
                 )
 
                 "strip", "polaroid" -> listOf(
@@ -426,6 +437,7 @@ internal fun TapedPicture(path: String, style: String, seed: Int, base: Color, m
                         18 * px,
                         base,
                         dark,
+                        tokens,
                         px,
                         jags,
                     ),
@@ -510,11 +522,12 @@ private fun Random.tape(
     thickness: Float,
     base: Color,
     dark: Boolean,
+    tokens: TokenColors,
     px: Float,
     /** Where its torn ends' teeth come from (see Scrapbook's jags). */
     jags: Random,
 ): Tape {
-    val tone = BenbowPalette.text(TAPE_TONES[nextInt(TAPE_TONES.size)], dark) ?: Color.Gray
+    val tone = tokens.mark(TAPE_TONES[nextInt(TAPE_TONES.size)], dark) ?: Color.Gray
     val color = if (dark) lerp(tone, base, 0.45f) else lerp(tone, Color.White, 0.55f)
     val accent = when {
         dark -> lerp(tone, Color.White, 0.25f)

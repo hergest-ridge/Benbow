@@ -71,6 +71,7 @@ internal object TimerNotifications {
         )
         return NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
+            .setColor(AndroidTheme.accent(context))
             .setContentTitle(timer.title)
             .setContentText(timer.tracker)
             .setWhen(timer.startedAtMillis)

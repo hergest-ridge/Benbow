@@ -29,16 +29,20 @@ import app.benbow.client.SpeechModel
 import app.benbow.client.SyncController
 import app.benbow.client.SyncEngine
 import app.benbow.client.SyncResult
+import app.benbow.client.ThemeChoice
 import app.benbow.client.Veil
 import app.benbow.client.calendar.CalendarRepository
 import app.benbow.client.calendar.CalendarSync
 import app.benbow.client.calendar.CalendarSyncResult
 import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.calendar.moveJournalEvents
+import app.benbow.client.currentThemeChoice
 import app.benbow.client.db.BenbowDb
+import app.benbow.client.editThemeChoice
 import app.benbow.client.moveToBoard
 import app.benbow.client.moveToJournal
 import app.benbow.client.removeAttachments
+import app.benbow.client.themeChoice
 import app.benbow.client.tracker.TrackerRepository
 import app.benbow.client.upcoming
 import app.benbow.core.api.FriendsFeed
@@ -50,14 +54,20 @@ import app.benbow.core.api.UnreferencedFile
 import app.benbow.core.media.AttachmentKey
 import app.benbow.ui.editor.PictureLoading
 import app.benbow.ui.editor.Removal
+import app.benbow.ui.theme.OwnPalette
+import app.benbow.ui.theme.ThemePalette
 import app.cash.sqldelight.db.SqlDriver
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.TimeZone
@@ -350,6 +360,17 @@ class AppServices(
     fun setAppearance(value: Appearance) {
         value.save(Settings(db))
         appearance.value = value
+    }
+
+    /** The palette every device wears (ADR-057), as it changes here or syncs from elsewhere. */
+    fun themeChoices(): Flow<ThemeChoice> = repo.themeChoice()
+
+    /** The palette every device wears, as stored now: for the first frame, and for what draws outside the composition. */
+    fun themeChoiceNow(): ThemeChoice = repo.currentThemeChoice()
+
+    /** Picks [palette] for every device; with [own], «Своя»'s colors too. */
+    fun choosePalette(palette: ThemePalette, own: OwnPalette? = null) {
+        scope.launch { repo.editThemeChoice { choice -> (own?.let { choice.withOwn(it) } ?: choice).copy(palette = palette.name) } }
     }
 
     val export = MutableStateFlow<ExportState>(ExportState.Idle)

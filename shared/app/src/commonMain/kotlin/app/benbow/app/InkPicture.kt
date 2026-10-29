@@ -18,7 +18,6 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import app.benbow.client.Media
 import app.benbow.client.readAllText
@@ -28,17 +27,25 @@ import app.benbow.core.ink.InkStroke
 import app.benbow.core.ink.InkSvg
 import app.benbow.core.ink.InkTool
 import app.benbow.core.sync.AttachmentState
+import app.benbow.ui.theme.BenbowColors
 import app.benbow.ui.theme.BenbowPalette
+import app.benbow.ui.theme.BenbowTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /** A palette token's color in this theme; [InkDrawing.INK] is the text color. */
-internal fun inkColor(token: String, onSurface: Color, dark: Boolean): Color =
-    if (token == InkDrawing.INK) onSurface else BenbowPalette.text(token, dark) ?: onSurface
+internal fun inkColor(token: String, onSurface: Color, theme: BenbowColors): Color =
+    if (token == InkDrawing.INK) onSurface else theme.tokens.text(token, theme.dark) ?: onSurface
 
 /** The colors an SVG carries for viewers outside the app: the light theme's (ink is near-black). */
 internal fun svgColor(token: String): String {
-    val argb = if (token == InkDrawing.INK) 0xFF1F1B16.toInt() else (BenbowPalette.text(token, dark = false) ?: Color(0xFF1F1B16)).toArgb()
+    val argb = if (token ==
+        InkDrawing.INK
+    ) {
+        0xFF1F1B16.toInt()
+    } else {
+        (BenbowPalette.print.text(token, dark = false) ?: Color(0xFF1F1B16)).toArgb()
+    }
     return "#" + (argb and 0xFFFFFF).toString(16).padStart(6, '0')
 }
 
@@ -71,11 +78,11 @@ internal class InkShapes {
 }
 
 /** Draws [shapes] in canvas units scaled to this size (the canvas is [canvasWidth] units across). */
-internal fun DrawScope.drawInk(shapes: List<InkShape>, canvasWidth: Int, onSurface: Color, dark: Boolean) {
+internal fun DrawScope.drawInk(shapes: List<InkShape>, canvasWidth: Int, onSurface: Color, theme: BenbowColors) {
     val scale = size.width / canvasWidth
     withTransform({ scale(scale, scale, Offset.Zero) }) {
         for (shape in shapes) {
-            val color = inkColor(shape.stroke.color, onSurface, dark)
+            val color = inkColor(shape.stroke.color, onSurface, theme)
             if (shape.stroke.tool == InkTool.Pen) {
                 drawPath(shape.path, color)
             } else {
@@ -93,9 +100,9 @@ internal fun DrawScope.drawInk(shapes: List<InkShape>, canvasWidth: Int, onSurfa
 @Composable
 internal fun InkCanvas(drawing: InkDrawing, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
-    val dark = colors.background.luminance() < 0.5f
+    val theme = BenbowTheme.colors
     val shapes = remember(drawing) { drawing.strokes.map(::InkShape) }
-    Canvas(modifier.aspectRatio(drawing.width.toFloat() / drawing.height)) { drawInk(shapes, drawing.width, colors.onSurface, dark) }
+    Canvas(modifier.aspectRatio(drawing.width.toFloat() / drawing.height)) { drawInk(shapes, drawing.width, colors.onSurface, theme) }
 }
 
 /** A drawing attachment, read from its file (parsed off the main thread, kept for the session). */

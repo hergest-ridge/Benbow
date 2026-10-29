@@ -46,7 +46,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -96,6 +95,7 @@ import app.benbow.core.tracker.TrackerKind
 import app.benbow.core.tracker.TrackerRecord
 import app.benbow.core.uuidV7
 import app.benbow.ui.theme.BenbowPalette
+import app.benbow.ui.theme.BenbowTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -332,7 +332,7 @@ internal fun EmojiRow(emoji: List<String>, onPick: (String) -> Unit) {
 @Composable
 internal fun InkPicker(selected: String?, modifier: Modifier = Modifier, onPick: (String) -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val dark = colors.background.luminance() < 0.5f
+    val dark = BenbowTheme.colors.dark
     val names = stringArrayResource(Res.array.ink_names)
     FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         BenbowPalette.tokens.forEachIndexed { i, token ->
@@ -340,7 +340,7 @@ internal fun InkPicker(selected: String?, modifier: Modifier = Modifier, onPick:
             Box(
                 Modifier.size(32.dp)
                     .clip(CircleShape)
-                    .background(BenbowPalette.text(token, dark) ?: Color.Transparent)
+                    .background(BenbowTheme.colors.tokens.mark(token, dark) ?: Color.Transparent)
                     .border(if (on) 3.dp else 1.dp, if (on) colors.onSurface else colors.outlineVariant, CircleShape)
                     .hand()
                     .clickable { onPick(token) }

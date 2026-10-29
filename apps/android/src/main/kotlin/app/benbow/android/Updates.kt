@@ -138,6 +138,7 @@ class AndroidAppUpdater(private val context: Context) : AppUpdater {
             )
             val notification = NotificationCompat.Builder(context, CHANNEL)
                 .setSmallIcon(R.drawable.ic_notification)
+                .setColor(AndroidTheme.accent(context))
                 .setContentTitle(title)
                 .setContentText(text)
                 .setContentIntent(tap)

@@ -36,6 +36,7 @@ import app.benbow.core.text.Links
 import app.benbow.ui.resources.Res
 import app.benbow.ui.resources.picture_coming
 import app.benbow.ui.resources.picture_coming_gif
+import app.benbow.ui.theme.BenbowTheme
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -51,7 +52,7 @@ internal fun PictureComingView(card: Atom.LinkCard, coming: PictureLoading, modi
     val light = colors.onSurface.copy(alpha = 0.07f)
     Box(
         modifier.clip(shape).background(colors.surfaceContainerHigh)
-            .border(if (selected) 2.dp else 1.dp, if (selected) colors.primary else colors.outlineVariant.copy(alpha = 0.6f), shape)
+            .border(if (selected) 2.dp else 1.dp, if (selected) colors.primary else BenbowTheme.colors.hairline, shape)
             .drawBehind {
                 val x = size.width * sweep
                 val band = size.width * 0.35f

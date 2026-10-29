@@ -37,7 +37,6 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -85,7 +84,7 @@ import app.benbow.ui.editor.spoilerDots
 import app.benbow.ui.editor.spoilerLayout
 import app.benbow.ui.editor.spoilerMask
 import app.benbow.ui.editor.spoilerRanges
-import app.benbow.ui.theme.BenbowPalette
+import app.benbow.ui.theme.BenbowTheme
 import org.jetbrains.compose.resources.stringResource
 
 /** About this much text shows before "Показать ещё" (blocks count a little extra for their spacing). */
@@ -102,8 +101,9 @@ private const val LINE_COST = 40
 internal fun FeedText(body: FeedBody?, expanded: Boolean, onExpand: () -> Unit, modifier: Modifier = Modifier) {
     if (body == null || body.blocks.isEmpty()) return
     val colors = MaterialTheme.colorScheme
-    val dark = colors.background.luminance() < 0.5f
-    val styles = remember(colors) { EditorStyles(colors, dark) }
+    val theme = BenbowTheme.colors
+    val dark = theme.dark
+    val styles = remember(colors, theme) { EditorStyles(colors, dark, theme.tokens) }
     // The post's spoilers open together and close again once it scrolls away (this state goes with it).
     val reveal = remember(body) { SpoilerReveal() }
     val spoilers = if (body.spoilers) {
@@ -237,7 +237,7 @@ private fun FeedBlock(rich: RichText, block: Block, styles: EditorStyles, dark: 
         }
 
         callout != null -> Surface(
-            color = BenbowPalette.tint(callout.tone, dark) ?: colors.surfaceContainerHigh,
+            color = BenbowTheme.colors.tokens.tint(callout.tone, dark) ?: colors.surfaceContainerHigh,
             shape = RoundedCornerShape(10.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {

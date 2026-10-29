@@ -27,7 +27,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -49,7 +48,7 @@ import app.benbow.core.tracker.TrackerColumn
 import app.benbow.core.tracker.TrackerFigures
 import app.benbow.core.tracker.TrackerRecord
 import app.benbow.core.tracker.TrackerSpans
-import app.benbow.ui.theme.BenbowPalette
+import app.benbow.ui.theme.BenbowTheme
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import org.jetbrains.compose.resources.stringResource
@@ -348,7 +347,7 @@ internal fun DayLabel(day: LocalDate, weekday: String, today: Boolean) {
 internal fun WeekRow(columns: List<TrackerColumn>, days: List<LocalDate>, cells: SheetCells, spans: SheetSpans) {
     val dates = remember(days) { days.map { "$it" } }
     val colors = MaterialTheme.colorScheme
-    val dark = colors.background.luminance() < 0.5f
+    val dark = BenbowTheme.colors.dark
     Row(
         Modifier.fillMaxWidth().height(SheetSizes.WEEK_HEIGHT).padding(horizontal = SheetSizes.SIDE),
         verticalAlignment = Alignment.CenterVertically,
@@ -367,7 +366,7 @@ internal fun WeekRow(columns: List<TrackerColumn>, days: List<LocalDate>, cells:
             val byDay = dates.mapNotNull { day -> cells[TrackerCells.id(column.id, day)]?.let { day to it } }.toMap()
             val reached =
                 column.goalPer == GoalPer.Week && dates.lastOrNull()?.let { TrackerFigures.reached(column, byDay, own, it) } == true
-            val ink = column.record[ColumnField.COLOR]?.let { BenbowPalette.text(it, dark) } ?: colors.primary
+            val ink = column.record[ColumnField.COLOR]?.let { BenbowTheme.colors.tokens.mark(it, dark) } ?: colors.primary
             Text(
                 figureText(column, TrackerFigures.of(column, byDay, own, dates)),
                 modifier = Modifier.weight(1f).then(

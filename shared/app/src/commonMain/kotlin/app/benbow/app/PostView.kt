@@ -29,7 +29,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.contentDescription
@@ -48,6 +47,7 @@ import app.benbow.ui.editor.AtomViews
 import app.benbow.ui.editor.BenbowEditor
 import app.benbow.ui.editor.EditorState
 import app.benbow.ui.sideScroll
+import app.benbow.ui.theme.BenbowTheme
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
@@ -120,7 +120,7 @@ internal fun PostView(
         Reactions(detail.reactions, onReact, Modifier.padding(horizontal = 16.dp))
         HorizontalDivider(Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
         // The thread on a slightly darker strip, apart from the note (owner); in a wide window its field is in it too.
-        val shade = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) THREAD_SHADE_DARK else THREAD_SHADE_LIGHT
+        val shade = if (BenbowTheme.colors.dark) THREAD_SHADE_DARK else THREAD_SHADE_LIGHT
         Column(Modifier.fillMaxWidth().background(Color.Black.copy(alpha = shade)).padding(bottom = 16.dp)) {
             val count = comments?.size ?: 0
             Text(

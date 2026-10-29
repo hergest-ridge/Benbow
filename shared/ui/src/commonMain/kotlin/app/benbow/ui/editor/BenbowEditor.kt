@@ -46,7 +46,6 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -90,6 +89,7 @@ import app.benbow.core.text.Mark
 import app.benbow.core.text.MarkSpan
 import app.benbow.core.text.RichText
 import app.benbow.core.text.linkAt
+import app.benbow.ui.theme.BenbowTheme
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -105,13 +105,14 @@ fun BenbowEditor(state: EditorState, modifier: Modifier = Modifier, readOnly: Bo
 @Composable
 private fun BoxScope.EditorBody(state: EditorState, readOnly: Boolean, atoms: AtomViews, width: Dp) {
     val colors = MaterialTheme.colorScheme
+    val theme = BenbowTheme.colors
     val density = LocalDensity.current
     // A picture link on its way stands as tall as the picture will (ADR-045).
     val coming = LocalPicturesComing.current
     // The note's own font (ADR-047) for its words and headings, at its size; code keeps the monospace.
     val font = LocalNoteFont.current
-    val styles = remember(colors, atoms, width, density, coming, font) {
-        EditorStyles(colors, dark = colors.background.luminance() < 0.5f, baseSize = 17.sp * (font?.scale ?: 1f), atomHeight = {
+    val styles = remember(colors, theme, atoms, width, density, coming, font) {
+        EditorStyles(colors, theme.dark, theme.tokens, baseSize = 17.sp * (font?.scale ?: 1f), atomHeight = {
             with(density) { atoms.height(it, width, coming).toSp() }
         })
     }

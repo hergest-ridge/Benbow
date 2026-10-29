@@ -47,7 +47,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerIcon
@@ -71,6 +70,7 @@ import app.benbow.ui.resources.Res
 import app.benbow.ui.resources.link_copy
 import app.benbow.ui.resources.link_open
 import app.benbow.ui.theme.BenbowPalette
+import app.benbow.ui.theme.BenbowTheme
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
@@ -243,7 +243,7 @@ fun LinkCardView(
     Surface(
         shape = shape,
         color = colors.surfaceContainerLow,
-        border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) colors.primary else colors.outlineVariant.copy(alpha = 0.6f)),
+        border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) colors.primary else BenbowTheme.colors.hairline),
         modifier = modifier.scale(scale).clip(shape).pointerHoverIcon(PointerIcon.Hand)
             .combinedClickable(
                 interaction,
@@ -329,16 +329,16 @@ private fun Thumb(card: Atom.LinkCard, picture: (@Composable (String, Boolean, M
         return
     }
     val host = Links.host(card.href)
-    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val theme = BenbowTheme.colors
     val token = BenbowPalette.tokens[(host.hashCode() and Int.MAX_VALUE) % BenbowPalette.tokens.size]
     Box(
-        modifier.clip(shape).background(BenbowPalette.tint(token, dark) ?: MaterialTheme.colorScheme.surfaceContainerHigh),
+        modifier.clip(shape).background(theme.tokens.tint(token, theme.dark) ?: MaterialTheme.colorScheme.surfaceContainerHigh),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             host.firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "·",
             style = MaterialTheme.typography.titleMedium,
-            color = BenbowPalette.text(token, dark) ?: MaterialTheme.colorScheme.onSurfaceVariant,
+            color = theme.tokens.text(token, theme.dark) ?: MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

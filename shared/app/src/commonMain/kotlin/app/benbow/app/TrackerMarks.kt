@@ -34,7 +34,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
@@ -61,7 +60,7 @@ import app.benbow.core.tracker.TrackerCells
 import app.benbow.core.tracker.TrackerColumn
 import app.benbow.core.tracker.TrackerRecord
 import app.benbow.core.tracker.TrackerSpans
-import app.benbow.ui.theme.BenbowPalette
+import app.benbow.ui.theme.BenbowTheme
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
@@ -87,8 +86,8 @@ internal fun DayCell(
     onAsk: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
-    val dark = colors.background.luminance() < 0.5f
-    val ink = column.record[ColumnField.COLOR]?.let { BenbowPalette.text(it, dark) } ?: colors.primary
+    val dark = BenbowTheme.colors.dark
+    val ink = column.record[ColumnField.COLOR]?.let { BenbowTheme.colors.tokens.mark(it, dark) } ?: colors.primary
     val shape = RoundedCornerShape(SheetSizes.CELL_CORNER)
     val value = fields?.get(CellField.VALUE)
     var picking by remember { mutableStateOf(false) }
@@ -156,7 +155,7 @@ internal fun DayCell(
                     Modifier.fillMaxSize().background(
                         (
                             option.color?.let {
-                                BenbowPalette.text(it, dark)
+                                BenbowTheme.colors.tokens.mark(it, dark)
                             } ?: ink
                             ).copy(alpha = SheetSizes.PART_ALPHA),
                     ),
@@ -211,7 +210,7 @@ internal fun ValueRow(column: TrackerColumn, value: String?, ink: Color, dark: B
     ) {
         values.forEachIndexed { i, each ->
             val option = column.options.find { it.id == each }
-            val tint = option?.color?.let { BenbowPalette.text(it, dark) } ?: ink
+            val tint = option?.color?.let { BenbowTheme.colors.tokens.mark(it, dark) } ?: ink
             val level = if (column.type == ColumnType.Scale) (i + 1f) / values.size else 1f
             Box(
                 Modifier.size(SheetSizes.PICK_SIZE)
@@ -252,7 +251,8 @@ internal fun HourCell(
     onTap: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
-    val ink = column.record[ColumnField.COLOR]?.let { BenbowPalette.text(it, colors.background.luminance() < 0.5f) } ?: colors.primary
+    val theme = BenbowTheme.colors
+    val ink = column.record[ColumnField.COLOR]?.let { theme.tokens.mark(it, theme.dark) } ?: colors.primary
     // The bar's thickness across the way the hours go, and its length along it.
     val bar = if (vertical) {
         Modifier.fillMaxHeight().fillMaxWidth(
@@ -321,7 +321,8 @@ internal fun HourCell(
 @Composable
 internal fun TimerButton(column: TrackerColumn, write: TrackerWrite) {
     val colors = MaterialTheme.colorScheme
-    val ink = column.record[ColumnField.COLOR]?.let { BenbowPalette.text(it, colors.background.luminance() < 0.5f) } ?: colors.primary
+    val theme = BenbowTheme.colors
+    val ink = column.record[ColumnField.COLOR]?.let { theme.tokens.text(it, theme.dark) } ?: colors.primary
     val running = column.running
     var now by remember { mutableStateOf(localDateTimeNow()) }
     if (running != null) {

@@ -46,7 +46,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -61,6 +60,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.voice_discard
+import app.benbow.ui.theme.BenbowTheme
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.log10
 import kotlin.math.roundToInt
@@ -128,7 +128,7 @@ internal class RecorderKeys(private val start: (RecorderMode) -> Boolean, privat
 @Composable
 internal fun KeyHousing(modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val dark = colors.surface.luminance() < 0.5f
+    val dark = BenbowTheme.colors.dark
     val shape = RoundedCornerShape(12.dp)
     Row(
         modifier
@@ -185,9 +185,9 @@ internal fun RecorderKey(
         wasDown = down
     }
     val colors = MaterialTheme.colorScheme
-    val dark = colors.surface.luminance() < 0.5f
+    val dark = BenbowTheme.colors.dark
     val face = if (dark) colors.surfaceContainerHighest else colors.surfaceContainerLowest
-    val sunk = if (dark) colors.surfaceContainerHigh else colors.surfaceContainerLow
+    val sunk = if (dark) colors.surfaceContainerHigh else colors.surfaceContainer
     val side = colors.outlineVariant
     val shape = RoundedCornerShape(9.dp)
     Box(
@@ -244,7 +244,7 @@ internal fun RecorderKey(
                     icon,
                     null,
                     Modifier.size(20.dp),
-                    tint = if (locked) colors.onSurfaceVariant.copy(alpha = 0.45f) else colors.onSurface,
+                    tint = if (locked) BenbowTheme.colors.disabled else colors.onSurface,
                 )
                 Text(label, style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant, maxLines = 1)
             }

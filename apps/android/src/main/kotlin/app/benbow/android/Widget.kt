@@ -48,8 +48,10 @@ class BenbowWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(setOf(BUTTONS, FULL))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val today = (context.applicationContext as BenbowApplication).services.todaySummary()
-        provideContent { GlanceTheme { Content(today) } }
+        val services = (context.applicationContext as BenbowApplication).services
+        val today = services.todaySummary()
+        val colors = AndroidTheme.widgetColors(context, services)
+        provideContent { GlanceTheme(colors) { Content(today) } }
     }
 
     companion object {

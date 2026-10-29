@@ -211,8 +211,52 @@
         <item>Таверна</item>
         <item>Море</item>
         <item>Пергамент</item>
+        <item>Лес</item>
+        <item>Сумерки</item>
+        <item>Чернила</item>
         <item>Цвета системы</item>
+        <item>Своя</item>
     </string-array>
+    <string name="theme_contrast">Контраст</string>
+    <string-array name="theme_contrasts">
+        <item>Как в системе</item>
+        <item>Обычный</item>
+        <item>Повышенный</item>
+        <item>Высокий</item>
+    </string-array>
+    <string name="theme_black">Чёрный фон</string>
+    <string name="theme_black_hint">Тёмная тема на чистом чёрном, для экранов OLED</string>
+    <string name="own_palette">Своя палитра</string>
+    <string name="own_palette_edit">Изменить</string>
+    <string name="own_color">Цвет</string>
+    <string name="own_hue">Оттенок</string>
+    <string name="own_chroma">Насыщенность</string>
+    <string name="own_hex">HEX</string>
+    <string name="own_character">Характер</string>
+    <string-array name="own_characters">
+        <item>Спокойная</item>
+        <item>Яркая</item>
+        <item>Выразительная</item>
+        <item>Верная цвету</item>
+        <item>Сдержанная</item>
+        <item>Монохром</item>
+    </string-array>
+    <string name="own_ground">Фон</string>
+    <string-array name="own_grounds">
+        <item>В тон</item>
+        <item>Тёплый</item>
+        <item>Холодный</item>
+        <item>Серый</item>
+    </string-array>
+    <string name="own_accent">Второй цвет</string>
+    <string name="own_accent_hint">Свой цвет для второго акцента; без него его выбирает характер</string>
+    <string name="own_preview_light">Светлая</string>
+    <string name="own_preview_dark">Тёмная</string>
+    <string name="own_preview_title">Утро у моря</string>
+    <string name="own_preview_text">Чай на балконе, чайки.</string>
+    <string name="own_preview_quiet">вчера, 08:15</string>
+    <string name="own_preview_button">Написать</string>
+    <string name="own_done">Готово</string>
     <string name="lock">Блокировка</string>
     <string name="lock_enable">Блокировать приложение</string>
     <string name="lock_after">Закрывать, если не открывать</string>

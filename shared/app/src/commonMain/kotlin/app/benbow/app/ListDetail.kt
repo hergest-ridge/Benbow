@@ -60,6 +60,7 @@ import app.benbow.app.resources.Res
 import app.benbow.app.resources.detail_empty
 import app.benbow.app.resources.new_entry
 import app.benbow.client.Settings
+import app.benbow.ui.theme.BenbowTheme
 import org.jetbrains.compose.resources.stringResource
 
 // Wide windows (ux.md#desktop-and-web): the tab's screen stays on the left while what it opened shows on the right,
@@ -185,7 +186,10 @@ private class ListDetailScene(
         val appearance = LocalAppearance.current
         val glow = remember { PaneGlow() }
         val ink = MaterialTheme.colorScheme.onSurface
-        val line = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        val tokens = BenbowTheme.colors.tokens
+        val page = MaterialTheme.colorScheme.background
+        val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+        val line = BenbowTheme.colors.divider
         // The note's motion runs here, for the margins and the note alike (it reads this phase through its frame).
         val phase = if (appearance.lightBeyondPage && glow.drift && !reducedMotion()) {
             rememberInfiniteTransition().animateFloat(
@@ -202,8 +206,9 @@ private class ListDetailScene(
                 .onGloballyPositioned { glow.bounds = it.boundsInWindow() }
                 .drawBehind {
                     if (!appearance.lightBeyondPage) return@drawBehind
-                    if (glow.drift) drawDrift(phase?.value ?: STILL, glow.dark, ink, 1f)
-                    drawLights(glow.lights, glow.dark, ink, 1f)
+                    val note = NoteInk(page, ink, secondary, glow.dark, tokens)
+                    if (glow.drift) drawDrift(phase?.value ?: STILL, note, 1f)
+                    drawLights(glow.lights, note, 1f)
                 },
             contentAlignment = Alignment.TopCenter,
         ) {
@@ -261,7 +266,7 @@ private fun PaneDivider(pane: ListPane, widest: Dp) {
         val colors = MaterialTheme.colorScheme
         VerticalDivider(
             thickness = if (hovered || dragged) 3.dp else 1.dp,
-            color = if (hovered || dragged) colors.primary.copy(alpha = 0.6f) else colors.outlineVariant.copy(alpha = 0.5f),
+            color = if (hovered || dragged) colors.primary.copy(alpha = 0.6f) else BenbowTheme.colors.divider,
         )
     }
 }
@@ -327,7 +332,7 @@ private fun BesideLine(beside: BesidePane, widest: Dp) {
         val colors = MaterialTheme.colorScheme
         VerticalDivider(
             thickness = if (hovered || dragged) 3.dp else 1.dp,
-            color = if (hovered || dragged) colors.primary.copy(alpha = 0.6f) else colors.outlineVariant.copy(alpha = 0.5f),
+            color = if (hovered || dragged) colors.primary.copy(alpha = 0.6f) else BenbowTheme.colors.divider,
         )
     }
 }

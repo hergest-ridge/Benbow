@@ -49,7 +49,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
@@ -120,6 +119,8 @@ import app.benbow.core.api.StorageReport
 import app.benbow.core.api.StorageState
 import app.benbow.core.api.UnreferencedFile
 import app.benbow.ui.mouseSwipe
+import app.benbow.ui.theme.BenbowPalette
+import app.benbow.ui.theme.BenbowTheme
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -132,10 +133,8 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
-// The kinds wear the charts' categorical slots in a fixed order (the dataviz reference palette, validated for colour
-// blindness and contrast against light and dark surfaces); the states a neutral ramp, so the two never read as one.
-private val KIND_LIGHT = listOf(0xFF2A78D6, 0xFFEB6834, 0xFF1BAF7A, 0xFFEDA100, 0xFFE87BA4, 0xFF008300).map { Color(it) }
-private val KIND_DARK = listOf(0xFF3987E5, 0xFFD95926, 0xFF199E70, 0xFFC98500, 0xFFD55181, 0xFF008300).map { Color(it) }
+// The kinds wear the charts' categorical slots in a fixed order ([BenbowPalette.chart]); the states a neutral ramp, so
+// the two never read as one.
 
 private val KIND_NAMES = mapOf(
     StorageKind.VIDEO to Res.string.storage_kind_video,
@@ -154,10 +153,7 @@ private val STATE_NAMES = mapOf(
 )
 
 @Composable
-private fun kindColor(kind: String): Color {
-    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    return (if (dark) KIND_DARK else KIND_LIGHT)[StorageKind.ALL.indexOf(kind).coerceAtLeast(0)]
-}
+private fun kindColor(kind: String): Color = BenbowPalette.chart(StorageKind.ALL.indexOf(kind).coerceAtLeast(0), BenbowTheme.colors.dark)
 
 @Composable
 private fun stateColor(state: String): Color {
@@ -534,7 +530,7 @@ private fun Treemap(services: AppServices, items: List<LibraryItem>, isOpen: (Li
                         DrawingPicture(
                             services.media,
                             item.attachment,
-                            Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
+                            Modifier.fillMaxSize().background(BenbowTheme.colors.paper),
                         )
 
                     visual != null -> {

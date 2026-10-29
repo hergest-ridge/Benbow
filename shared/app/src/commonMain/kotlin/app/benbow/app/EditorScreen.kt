@@ -55,7 +55,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
@@ -142,6 +141,8 @@ import app.benbow.ui.editor.EditorState
 import app.benbow.ui.editor.EditorToolbar
 import app.benbow.ui.editor.LocalNoteFont
 import app.benbow.ui.editor.inFont
+import app.benbow.ui.theme.BenbowTheme
+import app.benbow.ui.theme.isDarkColor
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.drop
@@ -668,13 +669,13 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     // The note's look over the whole page, bars and all, as its color is, in full and moving (ADR-047). Beside a list in a
     // wide window its light falls across the whole right side (PaneGlow): the page tells the pane its lights, and lays
     // its own out in the pane's place.
-    val page = noteColor ?: if (route.board) boardCardColor() else MaterialTheme.colorScheme.background
+    val page = noteColor ?: if (route.board) boardCardColor() else BenbowTheme.colors.paper
     val glow = LocalPaneGlow.current
     var pageAt by remember { mutableStateOf(Offset.Zero) }
     if (glow != null && detail != null) {
         val drawn = remember(detail.look) { NoteLooks.look(detail.look) }
         val drift = drawn.motion == "drift"
-        val dark = page.luminance() < 0.5f
+        val dark = page.isDarkColor()
         DisposableEffect(glow, detail.id, drawn.lights, drift, dark) {
             glow.show(detail.id, drawn.lights, drift, dark)
             onDispose { glow.hide(detail.id) }
@@ -711,7 +712,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     val looked = backdrop != Modifier
     val wide = LocalWide.current
     // «Оформление записки» (ADR-054): beside the note in a wide window that has room for both (owner), a sheet elsewhere.
-    val lookPage = if (route.board) boardCardColor() else MaterialTheme.colorScheme.background
+    val lookPage = if (route.board) boardCardColor() else BenbowTheme.colors.paper
     val beside = LocalDetailPane.current?.takeIf { pickingBackground && detail != null && it.roomy }
     if (beside != null) {
         DisposableEffect(beside.beside) {
@@ -752,7 +753,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                             Color.Transparent
                         } else {
                             noteColor
-                                ?: if (route.board) boardCardColor() else MaterialTheme.colorScheme.surface
+                                ?: if (route.board) boardCardColor() else BenbowTheme.colors.paper
                         },
                     ),
                     navigationIcon = {

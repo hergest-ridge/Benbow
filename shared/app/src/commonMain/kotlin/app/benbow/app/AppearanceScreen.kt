@@ -77,23 +77,12 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun AppearanceScreen(services: AppServices, nav: Navigator) {
     val current by services.appearance.collectAsStateWithLifecycle()
-    val modes = stringArrayResource(Res.array.theme_modes)
-    val names = stringArrayResource(Res.array.palette_names)
-    val dark = current.mode.isDark()
-    val system = rememberSystemColors(dark)
     Scaffold(topBar = {
         TopAppBar(navigationIcon = { BackButton(nav::back) }, title = { Text(stringResource(Res.string.appearance)) })
     }) { padding ->
         Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
-            Title(stringResource(Res.string.theme_mode))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                ThemeMode.entries.forEachIndexed { i, mode ->
-                    FilterChip(current.mode == mode, {
-                        services.setAppearance(current.copy(mode = mode))
-                    }, { Text(modes.getOrElse(i) { mode.name }) }, modifier = Modifier.hand())
-                }
-            }
-            Title(stringResource(Res.string.feed_section))
+            ThemeSection(services, current)
+            SettingsTitle(stringResource(Res.string.feed_section))
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).padding(end = 16.dp)) {
                     Text(stringResource(Res.string.feed_cards), style = MaterialTheme.typography.bodyLarge)
@@ -143,7 +132,7 @@ internal fun AppearanceScreen(services: AppServices, nav: Navigator) {
                     Switch(current.mediaHover, { services.setAppearance(current.copy(mediaHover = it)) }, modifier = Modifier.hand())
                 }
             }
-            Title(stringResource(Res.string.post_section))
+            SettingsTitle(stringResource(Res.string.post_section))
             Text(
                 stringResource(Res.string.post_media),
                 style = MaterialTheme.typography.bodyLarge,
@@ -234,7 +223,7 @@ internal fun AppearanceScreen(services: AppServices, nav: Navigator) {
                     Switch(current.pageBorders, { services.setAppearance(current.copy(pageBorders = it)) }, modifier = Modifier.hand())
                 }
             }
-            Title(stringResource(Res.string.tab_board))
+            SettingsTitle(stringResource(Res.string.tab_board))
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).padding(end = 16.dp)) {
                     Text(stringResource(Res.string.ticked_below), style = MaterialTheme.typography.bodyLarge)
@@ -246,57 +235,6 @@ internal fun AppearanceScreen(services: AppServices, nav: Navigator) {
                 }
                 Switch(current.tickedBelow, { services.setAppearance(current.copy(tickedBelow = it)) }, modifier = Modifier.hand())
             }
-            Title(stringResource(Res.string.palette))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                ThemePalette.entries.forEachIndexed { i, palette ->
-                    val scheme = if (palette == ThemePalette.System) system else remember(palette, dark) { schemeOf(palette, dark) }
-                    if (scheme != null) {
-                        PaletteCard(names.getOrElse(i) { palette.name }, scheme, current.palette == palette) {
-                            services.setAppearance(current.copy(palette = palette))
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun Title(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 8.dp, top = 20.dp, bottom = 8.dp),
-    )
-}
-
-/** A palette's name over a small sample of it: its surface, accent and two containers. */
-@Composable
-private fun PaletteCard(name: String, scheme: ColorScheme, selected: Boolean, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        color = scheme.surfaceContainerLow,
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(
-            if (selected) 3.dp else 1.dp,
-            if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-        ),
-        modifier = Modifier.width(150.dp).hand(),
-    ) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(scheme.primary, scheme.secondary, scheme.primaryContainer, scheme.tertiaryContainer).forEach {
-                    Box(Modifier.size(22.dp).background(it, CircleShape))
-                }
-            }
-            Box(
-                Modifier.fillMaxWidth().size(
-                    height = 10.dp,
-                    width = 0.dp,
-                ).background(scheme.surfaceContainerHighest, RoundedCornerShape(5.dp)),
-            )
-            Text(name, style = MaterialTheme.typography.labelLarge, color = scheme.onSurface)
         }
     }
 }

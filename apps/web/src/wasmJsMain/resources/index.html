@@ -4,20 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
-    <meta name="theme-color" content="#FFF8F3" media="(prefers-color-scheme: light)">
-    <meta name="theme-color" content="#1C1611" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#FBEBDD">
     <title>Benbow</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <!-- The page, accent and mode the app last wore here (ADR-057), before anything is drawn. -->
+    <script src="theme.js"></script>
     <style>
-        html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #FFF8F3; }
-        @media (prefers-color-scheme: dark) { html, body { background: #1C1611; } }
+        html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: var(--page); }
         /* Shown while the app loads (several MB of WebAssembly the first time), then faded out by the app. */
         #loading { position: fixed; inset: 0; z-index: 10; background: inherit; display: flex; flex-direction: column;
                    align-items: center; justify-content: center; gap: 22px; transition: opacity .25s ease-out;
-                   font: 15px system-ui, sans-serif; color: #8A7F74; }
+                   font: 15px system-ui, sans-serif; color: var(--quiet); }
         #loading img { width: 88px; height: 88px; border-radius: 20px; box-shadow: 0 8px 28px rgba(0, 0, 0, .28); }
-        #loading .bar { width: 120px; height: 3px; border-radius: 2px; background: rgba(217, 130, 43, .2); overflow: hidden; }
-        #loading .bar::after { content: ''; display: block; width: 40%; height: 100%; border-radius: 2px; background: #D9822B;
+        #loading .bar { position: relative; width: 120px; height: 3px; border-radius: 2px; overflow: hidden; }
+        #loading .bar::before { content: ''; position: absolute; inset: 0; background: var(--accent); opacity: .2; }
+        #loading .bar::after { content: ''; position: relative; display: block; width: 40%; height: 100%; border-radius: 2px; background: var(--accent);
                                animation: benbow-slide 1.1s ease-in-out infinite; }
         #loading .error { max-width: 420px; padding: 0 24px; text-align: center; }
         #loading.gone { opacity: 0; pointer-events: none; }

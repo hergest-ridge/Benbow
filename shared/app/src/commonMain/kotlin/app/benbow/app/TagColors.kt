@@ -17,7 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -26,40 +26,24 @@ import app.benbow.app.resources.Res
 import app.benbow.app.resources.swatch_names
 import app.benbow.client.SWATCHES
 import app.benbow.client.TagRegistry
+import app.benbow.ui.theme.BenbowPalette
+import app.benbow.ui.theme.BenbowTheme
 import org.jetbrains.compose.resources.stringArrayResource
 
-/** Google Keep's note colors by name ([SWATCHES]): a light and a dark shade, so tags read well in both themes. */
-private val SHADES: Map<String, Pair<Long, Long>> = mapOf(
-    "coral" to (0xFFFAAFA8 to 0xFF77172E),
-    "peach" to (0xFFF39F76 to 0xFF692B17),
-    "sand" to (0xFFFFF8B8 to 0xFF7C4A03),
-    "mint" to (0xFFE2F6D3 to 0xFF264D3B),
-    "sage" to (0xFFB4DDD3 to 0xFF0C625D),
-    "fog" to (0xFFD4E4ED to 0xFF256377),
-    "storm" to (0xFFAECCDC to 0xFF284255),
-    "dusk" to (0xFFD3BFDB to 0xFF472E5B),
-    "blossom" to (0xFFF6E2DD to 0xFF6C394F),
-    "clay" to (0xFFE9E3D4 to 0xFF4B443A),
-)
-
-/** The light shade as CSS, for printed pages. */
-internal fun lightSwatch(name: String?): String? = SHADES[name]?.first?.let { "#" + (it and 0xFFFFFF).toString(16).padStart(6, '0') }
+/** A note color ([SWATCHES]) on paper, as CSS for printed pages: the same whatever a device's theme. */
+internal fun lightSwatch(name: String?): String? =
+    BenbowPalette.printSwatches.fill(name, dark = false)?.let { "#" + (it.toArgb() and 0xFFFFFF).toString(16).padStart(6, '0') }
 
 /** The tag registry (names, categories, colors by id) for the whole app, provided once at the root. */
 internal val LocalTags = compositionLocalOf { TagRegistry() }
 
+/** A note color ([SWATCHES]) in the theme (ADR-057), for a note's page, a card or a chip under words. */
 @Composable
-internal fun swatch(name: String?): Color? {
-    val (light, dark) = SHADES[name] ?: return null
-    return Color(if (MaterialTheme.colorScheme.background.luminance() < 0.5f) dark else light)
-}
+internal fun swatch(name: String?): Color? = BenbowTheme.colors.let { it.swatches.fill(name, it.dark) }
 
-/** A calendar's mark (grid dots and bars, the day's strip): the shade that stands out against the theme. */
+/** A note color that stands out on the page: a calendar's dots and bars, the day's strip, a category's dot or name. */
 @Composable
-internal fun markColor(name: String?): Color? {
-    val (light, dark) = SHADES[name] ?: return null
-    return Color(if (MaterialTheme.colorScheme.background.luminance() < 0.5f) light else dark)
-}
+internal fun markColor(name: String?): Color? = BenbowTheme.colors.let { it.swatches.mark(name, it.dark) }
 
 /** A tag's chip color (by its id): its own, else its category's, else a quiet neutral. */
 @Composable

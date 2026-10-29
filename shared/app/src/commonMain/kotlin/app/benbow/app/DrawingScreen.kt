@@ -52,7 +52,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
@@ -81,6 +80,7 @@ import app.benbow.core.ink.InkSvg
 import app.benbow.core.ink.InkTool
 import app.benbow.ui.sideScroll
 import app.benbow.ui.theme.BenbowPalette
+import app.benbow.ui.theme.BenbowTheme
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -236,7 +236,7 @@ internal fun DrawingScreen(services: AppServices, nav: Navigator, route: Route.D
 @Composable
 private fun Paper(vm: DrawingViewModel, drawing: InkDrawing) {
     val colors = MaterialTheme.colorScheme
-    val dark = colors.background.luminance() < 0.5f
+    val theme = BenbowTheme.colors
     val cache = remember { InkShapes() }
     val shapes = remember(drawing) { cache.of(drawing.strokes) }
     var current by remember { mutableStateOf<InkStroke?>(null) }
@@ -337,7 +337,7 @@ private fun Paper(vm: DrawingViewModel, drawing: InkDrawing) {
                     drawRect(edge, size = Size(widthPx, canvasHeight), style = Stroke(1.dp.toPx() / zoom))
                     // A faint dot grid helps keep lines straight; it isn't part of the drawing.
                     drawPoints(grid.map { it * unit }, PointMode.Points, edge, strokeWidth = 2.4f / zoom, cap = StrokeCap.Round)
-                    drawInk(shapes, drawing.width, colors.onSurface, dark)
+                    drawInk(shapes, drawing.width, colors.onSurface, theme)
                 }
             }
             Canvas(Modifier.fillMaxSize()) {
@@ -345,7 +345,7 @@ private fun Paper(vm: DrawingViewModel, drawing: InkDrawing) {
                 withTransform({
                     translate(offset.x, offset.y)
                     scale(zoom, zoom, Offset.Zero)
-                }) { drawInk(listOf(InkShape(line)), drawing.width, colors.onSurface, dark) }
+                }) { drawInk(listOf(InkShape(line)), drawing.width, colors.onSurface, theme) }
             }
         }
     }
@@ -354,7 +354,7 @@ private fun Paper(vm: DrawingViewModel, drawing: InkDrawing) {
 @Composable
 private fun Toolbar(vm: DrawingViewModel) {
     val colors = MaterialTheme.colorScheme
-    val dark = colors.background.luminance() < 0.5f
+    val theme = BenbowTheme.colors
     Surface(color = colors.surfaceContainer) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -375,7 +375,7 @@ private fun Toolbar(vm: DrawingViewModel) {
                                 ) {
                                     colors.primary
                                 } else {
-                                    colors.onSurfaceVariant.copy(alpha = 0.5f)
+                                    colors.outline
                                 },
                                 CircleShape,
                             ),
@@ -393,7 +393,7 @@ private fun Toolbar(vm: DrawingViewModel) {
                     val selected = vm.color == token && vm.tool != DrawTool.Eraser
                     Box(
                         Modifier.size(34.dp).clip(CircleShape).border(if (selected) 3.dp else 0.dp, colors.primary, CircleShape)
-                            .padding(5.dp).background(inkColor(token, colors.onSurface, dark), CircleShape)
+                            .padding(5.dp).background(inkColor(token, colors.onSurface, theme), CircleShape)
                             .hand().clickable {
                                 vm.color = token
                                 if (vm.tool == DrawTool.Eraser) vm.tool = DrawTool.Pen

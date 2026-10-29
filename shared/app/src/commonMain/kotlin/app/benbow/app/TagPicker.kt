@@ -336,7 +336,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.chipSection(
     item(key = key) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                swatch(color)?.let {
+                markColor(color)?.let {
                     Box(Modifier.size(10.dp).background(it, CircleShape))
                     Spacer(Modifier.width(8.dp))
                 }

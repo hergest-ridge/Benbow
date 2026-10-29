@@ -1,21 +1,38 @@
 package app.benbow.app
 
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.State
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.benbow.client.Settings
+import app.benbow.client.ThemeChoice
 import app.benbow.ui.theme.BenbowTheme
+import app.benbow.ui.theme.OwnPalette
+import app.benbow.ui.theme.PaletteCharacter
+import app.benbow.ui.theme.PaletteGround
+import app.benbow.ui.theme.ThemeContrast
 import app.benbow.ui.theme.ThemeMode
 import app.benbow.ui.theme.ThemePalette
+import app.benbow.ui.theme.ThemeSpec
+import app.benbow.ui.theme.colorOfHex
+import app.benbow.ui.theme.hex
 import app.benbow.ui.theme.isDark
+import app.benbow.ui.theme.schemeOf
 
 /** How the app looks on this device: light or dark, and the palette. Kept in local settings, not synced. */
 data class Appearance(
     val mode: ThemeMode = ThemeMode.System,
+    /** The palette this device had before it was one for every device (ADR-057): kept until a choice is made anywhere. */
     val palette: ThemePalette = ThemePalette.Inn,
+    /** This device's contrast; null, its system's (ADR-057). */
+    val contrast: ThemeContrast? = null,
+    /** A dark theme on black, for this device's OLED screen. */
+    val black: Boolean = false,
     /** Posts in the feed as rounded cards; off = edge to edge, media across the full width. */
     val feedCards: Boolean = true,
     /** The feed's date scrubber on its right edge (ADR-036 N3). */
@@ -44,6 +61,8 @@ data class Appearance(
     internal fun save(settings: Settings) {
         settings.put(MODE, mode.name)
         settings.put(PALETTE, palette.name)
+        settings.put(CONTRAST, contrast?.name ?: "system")
+        settings.put(BLACK, black.toString())
         settings.put(FEED_CARDS, feedCards.toString())
         settings.put(FEED_SCRUBBER, feedScrubber.toString())
         settings.put(POST_MEDIA, postMedia.name)
@@ -61,6 +80,8 @@ data class Appearance(
     companion object {
         private const val MODE = "theme.mode"
         private const val PALETTE = "theme.palette"
+        private const val CONTRAST = "theme.contrast"
+        private const val BLACK = "theme.black"
         private const val FEED_CARDS = "feed.cards"
         private const val FEED_SCRUBBER = "feed.scrubber"
         private const val POST_MEDIA = "post.media"
@@ -77,6 +98,8 @@ data class Appearance(
         internal fun load(settings: Settings) = Appearance(
             mode = ThemeMode.entries.firstOrNull { it.name == settings.get(MODE) } ?: ThemeMode.System,
             palette = ThemePalette.entries.firstOrNull { it.name == settings.get(PALETTE) } ?: ThemePalette.Inn,
+            contrast = ThemeContrast.entries.firstOrNull { it.name == settings.get(CONTRAST) },
+            black = settings.get(BLACK) == "true",
             feedCards = settings.get(FEED_CARDS) != "false",
             feedScrubber = settings.get(FEED_SCRUBBER) != "false",
             postMedia = PostMedia.entries.firstOrNull { it.name == settings.get(POST_MEDIA) } ?: PostMedia.Carousel,
@@ -103,12 +126,50 @@ enum class PostMedia { Carousel, Grid, Strip }
 @Composable
 internal expect fun rememberSystemColors(dark: Boolean): ColorScheme?
 
+/** The system's wish for contrast as Material's level, 0 to 1 (Android 14+, a browser's `prefers-contrast`), else 0. */
+@Composable
+internal expect fun rememberSystemContrast(): Double
+
+/** The palette every device wears ([ThemeChoice]), else this device's own from before; with its colors of one's own. */
+internal fun themeSpecOf(choice: ThemeChoice, appearance: Appearance, systemContrast: Double): ThemeSpec = ThemeSpec(
+    palette = choice.palette?.let { name ->
+        ThemePalette.entries.firstOrNull { it.name == name } ?: ThemePalette.Inn
+    } ?: appearance.palette,
+    own = choice.own(),
+    contrast = appearance.contrast?.level ?: systemContrast,
+    black = appearance.black,
+)
+
+/** «Своя» as stored; null without a color it can read. */
+internal fun ThemeChoice.own(): OwnPalette? = colorOfHex(seed)?.let { seed ->
+    OwnPalette(
+        seed = seed,
+        character = PaletteCharacter.entries.firstOrNull { it.name == character } ?: PaletteCharacter.Calm,
+        ground = PaletteGround.entries.firstOrNull { it.name == ground } ?: PaletteGround.Own,
+        accent = colorOfHex(accent),
+    )
+}
+
+/** [own] as stored, every field of it. */
+internal fun ThemeChoice.withOwn(own: OwnPalette) =
+    copy(seed = own.seed.hex(), character = own.character.name, ground = own.ground.name, accent = own.accent?.hex())
+
+/** The palette every device wears, as it changes: read at once for the first frame, then followed. */
+@Composable
+internal fun rememberThemeChoice(services: AppServices): State<ThemeChoice> {
+    val choices = remember(services) { services.themeChoices() }
+    return choices.collectAsStateWithLifecycle(remember(services) { services.themeChoiceNow() })
+}
+
 /** [BenbowTheme] with this device's appearance: for the app and the capture sheet alike. */
 @Composable
 fun AppTheme(services: AppServices, content: @Composable () -> Unit) {
     val appearance by services.appearance.collectAsStateWithLifecycle()
+    val choice by rememberThemeChoice(services)
     val dark = appearance.mode.isDark()
-    BenbowTheme(darkTheme = dark, palette = appearance.palette, systemColors = rememberSystemColors(dark)) {
+    val spec = themeSpecOf(choice, appearance, rememberSystemContrast())
+    BenbowTheme(darkTheme = dark, spec = spec, systemColors = rememberSystemColors(dark)) {
+        ThemeOutside(MaterialTheme.colorScheme, dark)
         CompositionLocalProvider(
             LocalAppearance provides appearance,
             LocalTickedBelow provides appearance.tickedBelow,
@@ -118,3 +179,21 @@ fun AppTheme(services: AppServices, content: @Composable () -> Unit) {
         )
     }
 }
+
+/**
+ * This device's theme as a scheme in [dark] or light, outside the composition (ADR-057): a window's ground before the
+ * first frame, the widgets, a notification's accent. [systemContrast] is what the platform says now.
+ */
+fun AppServices.themeScheme(dark: Boolean, systemColors: ColorScheme?, systemContrast: Double): ColorScheme =
+    schemeOf(themeSpecOf(themeChoiceNow(), appearance.value, systemContrast), dark, systemColors)
+
+/** This device's mode, outside the composition: null as the system's, else light or dark. */
+fun AppServices.themeDark(): Boolean? = when (appearance.value.mode) {
+    ThemeMode.System -> null
+    ThemeMode.Light -> false
+    ThemeMode.Dark -> true
+}
+
+/** The theme told to what draws outside the app's own frame (ADR-057): the browser's bar and its next loading page. */
+@Composable
+internal expect fun ThemeOutside(scheme: ColorScheme, dark: Boolean)

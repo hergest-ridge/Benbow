@@ -52,7 +52,6 @@ import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Paint
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -71,6 +70,7 @@ import app.benbow.app.resources.player_previous
 import app.benbow.app.resources.player_queue
 import app.benbow.client.Media
 import app.benbow.client.randomRead
+import app.benbow.ui.theme.isDarkColor
 import com.materialkolor.dynamicColorScheme
 import com.materialkolor.ktx.animateColorScheme
 import com.materialkolor.ktx.themeColorOrNull
@@ -290,7 +290,7 @@ private fun QueueRow(media: Media, track: Track, onClick: () -> Unit) {
 @Composable
 private fun rememberCoverScheme(media: Media, cover: String?): ColorScheme {
     val base = MaterialTheme.colorScheme
-    val dark = base.surface.luminance() < 0.5f
+    val dark = base.surface.isDarkColor()
     val seeds = remember { mutableStateMapOf<String, Color?>() }
     val seed by produceState(cover?.let { seeds[it] }, cover) {
         value = when {

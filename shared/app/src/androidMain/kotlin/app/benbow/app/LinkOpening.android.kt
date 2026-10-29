@@ -16,9 +16,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import app.benbow.ui.theme.BenbowTheme
 
 /**
  * A web link opens in the browser's Custom Tab as a sheet over the entry (ADR-038): a swipe down and the entry is where
@@ -28,10 +28,10 @@ import androidx.compose.ui.platform.LocalContext
 internal actual fun rememberOpenUrl(): (String) -> Unit {
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
+    val dark = BenbowTheme.colors.dark
     LaunchedEffect(Unit) { CustomTabs.bind(context.applicationContext) }
-    return remember(context, colors) {
+    return remember(context, colors, dark) {
         val toolbar = colors.surface.toArgb()
-        val dark = colors.background.luminance() < 0.5f
         ({ href: String -> open(context, href, toolbar, dark) })
     }
 }

@@ -45,6 +45,7 @@ import app.benbow.core.tracker.TrackerFigures
 import app.benbow.core.tracker.TrackerRecord
 import app.benbow.core.tracker.TrackerSpans
 import app.benbow.ui.sideScroll
+import app.benbow.ui.theme.BenbowTheme
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.isoDayNumber
@@ -126,7 +127,7 @@ internal fun AcrossMonthPage(
                     } else {
                         SleepRows(column, window, own, grid, names, figures, total, write) { spansOf = column to it }
                     }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    HorizontalDivider(color = BenbowTheme.colors.divider)
                 }
             }
         }

@@ -43,7 +43,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
@@ -91,6 +90,7 @@ import app.benbow.ui.resources.tool_underline
 import app.benbow.ui.resources.tool_undo
 import app.benbow.ui.sideScroll
 import app.benbow.ui.theme.BenbowPalette
+import app.benbow.ui.theme.BenbowTheme
 import org.jetbrains.compose.resources.stringResource
 
 private enum class Panel { Text, Paragraph }
@@ -145,7 +145,7 @@ fun EditorToolbar(state: EditorState, modifier: Modifier = Modifier, onChecklist
                         Panel.Text -> ToolRow { TextTools(state, marks, picker, pick) }
                         Panel.Paragraph -> ToolRow { ParagraphTools(state, picker, pick) }
                     }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    HorizontalDivider(color = BenbowTheme.colors.divider)
                 }
             }
             ToolRow {
@@ -345,14 +345,14 @@ private fun PanelTool(label: String, name: String, open: Boolean, marked: Boolea
 /** Text color: an "A" over a bar in the color the words have here (none: the page's). */
 @Composable
 private fun ColorTool(name: String, token: String?, active: Boolean, onClick: () -> Unit) {
-    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val theme = BenbowTheme.colors
     ToolBox(name, null, active, true, onClick) { color ->
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("A", style = MaterialTheme.typography.titleSmall, color = color)
             Box(
                 Modifier.width(14.dp).height(3.dp).background(
                     token?.let {
-                        BenbowPalette.text(it, dark)
+                        theme.tokens.text(it, theme.dark)
                     } ?: color,
                     RoundedCornerShape(1.dp),
                 ),
@@ -385,7 +385,7 @@ private fun ToolBox(
         ) {
             content(
                 when {
-                    !enabled -> colors.onSurface.copy(alpha = 0.38f)
+                    !enabled -> BenbowTheme.colors.disabled
                     active -> colors.onSecondaryContainer
                     else -> colors.onSurface
                 },
@@ -401,16 +401,16 @@ private fun Divider() {
 
 @Composable
 private fun PaletteRow(picker: Picker, onPick: (String) -> Unit) {
-    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val theme = BenbowTheme.colors
     Row(
         modifier = Modifier.sideScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         BenbowPalette.tokens.forEach { token ->
             val color = when (picker) {
-                Picker.Color -> BenbowPalette.text(token, dark)
-                Picker.Highlight -> BenbowPalette.highlight(token, dark)
-                Picker.Callout -> BenbowPalette.tint(token, dark)
+                Picker.Color -> theme.tokens.text(token, theme.dark)
+                Picker.Highlight -> theme.tokens.highlight(token, theme.dark)
+                Picker.Callout -> theme.tokens.tint(token, theme.dark)
             } ?: Color.Gray
             Box(
                 Modifier.size(30.dp).clip(CircleShape).background(color)

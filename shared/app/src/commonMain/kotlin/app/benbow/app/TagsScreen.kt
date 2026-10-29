@@ -275,7 +275,7 @@ private fun LazyListScope.section(
             )
             Spacer(Modifier.width(6.dp))
             if (onEdit != null) {
-                Box(Modifier.size(10.dp).background(swatch(registry.categoryColor(id)) ?: Color.Transparent, CircleShape))
+                Box(Modifier.size(10.dp).background(markColor(registry.categoryColor(id)) ?: Color.Transparent, CircleShape))
                 Spacer(Modifier.width(8.dp))
             }
             Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)

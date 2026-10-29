@@ -79,9 +79,9 @@ internal suspend fun AppServices.entryPage(id: String): PrintPage? = withContext
     val missing = getString(Res.string.not_on_device)
     val label = { a: AttachmentState -> a.caption ?: a.meta.name ?: a.meta.kind }
     val body = HtmlExporter(
-        color = { BenbowPalette.text(it, dark = false)?.css() },
-        highlight = { BenbowPalette.highlight(it, dark = false)?.css() },
-        tint = { BenbowPalette.tint(it, dark = false)?.css() },
+        color = { BenbowPalette.print.text(it, dark = false)?.css() },
+        highlight = { BenbowPalette.print.highlight(it, dark = false)?.css() },
+        tint = { BenbowPalette.print.tint(it, dark = false)?.css() },
         attachmentUrl = { ref -> pictures[ref].orEmpty() },
         imageUrl = { cardPictures[it] },
     ).export(

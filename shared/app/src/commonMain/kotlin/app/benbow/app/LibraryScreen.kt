@@ -88,6 +88,7 @@ import app.benbow.client.Veil
 import app.benbow.client.library
 import app.benbow.core.media.AttachmentKey
 import app.benbow.ui.sideScroll
+import app.benbow.ui.theme.BenbowTheme
 import coil3.compose.AsyncImage
 import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
@@ -313,7 +314,7 @@ private fun LibraryTile(
     ) {
         Box(
             Modifier.fillMaxSize().padding(inset).clip(RoundedCornerShape(if (chosen) 10.dp else 3.dp))
-                .background(if (meta.kind == "drawing" && !curtained) colors.surface else colors.surfaceContainerHigh),
+                .background(if (meta.kind == "drawing" && !curtained) BenbowTheme.colors.paper else colors.surfaceContainerHigh),
         ) {
             when {
                 curtained -> Curtain(Modifier.fillMaxSize())

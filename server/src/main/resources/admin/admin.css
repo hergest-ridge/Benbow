@@ -1,32 +1,57 @@
-/* The server's admin page in Material 3, with the client's "Inn" scheme (BenbowTheme.kt, materialkolor, exact values). */
+/* The server's admin page in Material 3, in the client's "Inn" palette: the block below is generated from BenbowTheme.kt
+   by ThemeFilesTest (ADR-057), with Benbow's page and cards and higher contrast where the browser asks for it. */
+/* theme:begin */
 :root {
-  --md-primary:#8F4E00; --md-on-primary:#FFFFFF; --md-primary-container:#D9822B; --md-on-primary-container:#4B2600;
-  --md-secondary:#33647F; --md-on-secondary:#FFFFFF; --md-secondary-container:#AEDDFD; --md-on-secondary-container:#32627E;
-  --md-tertiary:#006684; --md-tertiary-container:#00A3D0; --md-on-tertiary-container:#003444;
-  --md-error:#BA1A1A; --md-on-error:#FFFFFF; --md-error-container:#FFDAD6; --md-on-error-container:#93000A;
-  --md-surface:#FFF8F4; --md-on-surface:#241A0D; --md-surface-variant:#F7DECC; --md-on-surface-variant:#544437;
-  --md-outline:#877365; --md-outline-variant:#DAC2B1;
-  --md-surface-container-lowest:#FFFFFF; --md-surface-container-low:#FFF1E6; --md-surface-container:#FFEAD7;
-  --md-surface-container-high:#FAE5D0; --md-surface-container-highest:#F4DFCB;
-  --md-inverse-surface:#3B2E21; --md-inverse-on-surface:#FFEEDF; --md-inverse-primary:#FFB77A;
-  --ok:#2E6B3F; --ok-container:#C8EFCB; --on-ok-container:#0F3A1B;
+  --md-primary:#8F4E00; --md-on-primary:#FFFFFF; --md-primary-container:#D9822B; --md-on-primary-container:#010000;
+  --md-secondary:#33647F; --md-on-secondary:#FFFFFF; --md-secondary-container:#AEDDFD; --md-on-secondary-container:#0C455F;
+  --md-tertiary:#006684; --md-tertiary-container:#00A3D0; --md-on-tertiary-container:#000000; --md-error:#BA1A1A;
+  --md-on-error:#FFFFFF; --md-error-container:#FFDAD6; --md-on-error-container:#93000A; --md-surface:#FBEBDD;
+  --md-on-surface:#241A0D; --md-surface-variant:#F7DECC; --md-on-surface-variant:#544437; --md-outline:#877365;
+  --md-outline-variant:#DAC2B1; --md-surface-container-lowest:#FFFFFF; --md-surface-container-low:#FFFFFF; --md-surface-container:#FBEBDD;
+  --md-surface-container-high:#FAE5D0; --md-surface-container-highest:#F4DFCB; --md-inverse-surface:#3B2E21; --md-inverse-on-surface:#FFEEDF;
+  --md-inverse-primary:#FFB77A; --ok:#316944; --ok-container:#D9E8C1; --on-ok-container:#241A0D;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --md-primary:#FFB77A; --md-on-primary:#4C2700; --md-primary-container:#D9822B; --md-on-primary-container:#4B2600;
-    --md-secondary:#9DCDEC; --md-on-secondary:#00344A; --md-secondary-container:#164C66; --md-on-secondary-container:#8CBBDA;
-    --md-tertiary:#67D3FF; --md-tertiary-container:#00A3D0; --md-on-tertiary-container:#003444;
-    --md-error:#FFB4AB; --md-on-error:#690005; --md-error-container:#93000A; --md-on-error-container:#FFDAD6;
-    --md-surface:#1B1106; --md-on-surface:#F4DFCB; --md-surface-variant:#544437; --md-on-surface-variant:#DAC2B1;
-    --md-outline:#A28D7E; --md-outline-variant:#544437;
-    --md-surface-container-lowest:#160C03; --md-surface-container-low:#241A0D; --md-surface-container:#291E11;
-    --md-surface-container-high:#34281B; --md-surface-container-highest:#3F3225;
-    --md-inverse-surface:#F4DFCB; --md-inverse-on-surface:#3B2E21; --md-inverse-primary:#8F4E00;
-    --ok:#9DD5A4; --ok-container:#1F4D2A; --on-ok-container:#C8EFCB;
+    --md-primary:#FFB77A; --md-on-primary:#4C2700; --md-primary-container:#D9822B; --md-on-primary-container:#010000;
+    --md-secondary:#9DCDEC; --md-on-secondary:#00344A; --md-secondary-container:#164C66; --md-on-secondary-container:#C5E7FF;
+    --md-tertiary:#67D3FF; --md-tertiary-container:#00A3D0; --md-on-tertiary-container:#000000; --md-error:#FFB4AB;
+    --md-on-error:#690005; --md-error-container:#93000A; --md-on-error-container:#FFDAD6; --md-surface:#1B1106;
+    --md-on-surface:#F4DFCB; --md-surface-variant:#544437; --md-on-surface-variant:#DAC2B1; --md-outline:#A28D7E;
+    --md-outline-variant:#544437; --md-surface-container-lowest:#160C03; --md-surface-container-low:#241A0D; --md-surface-container:#291E11;
+    --md-surface-container-high:#34281B; --md-surface-container-highest:#3F3225; --md-inverse-surface:#F4DFCB; --md-inverse-on-surface:#3B2E21;
+    --md-inverse-primary:#8F4E00; --ok:#8BD79D; --ok-container:#3E4B2E; --on-ok-container:#F4DFCB;
     color-scheme: dark;
   }
 }
+@media (prefers-contrast: more) {
+  :root {
+    --md-primary:#462300; --md-on-primary:#FFFFFF; --md-primary-container:#703C00; --md-on-primary-container:#FFFFFF;
+    --md-secondary:#003044; --md-on-secondary:#FFFFFF; --md-secondary-container:#194E68; --md-on-secondary-container:#FFFFFF;
+    --md-tertiary:#003040; --md-tertiary-container:#005067; --md-on-tertiary-container:#FFFFFF; --md-error:#600004;
+    --md-on-error:#FFFFFF; --md-error-container:#98000A; --md-on-error-container:#FFFFFF; --md-surface:#FBEBDD;
+    --md-on-surface:#000000; --md-surface-variant:#F7DECC; --md-on-surface-variant:#000000; --md-outline:#37291E;
+    --md-outline-variant:#564639; --md-surface-container-lowest:#FFFFFF; --md-surface-container-low:#FFFFFF; --md-surface-container:#FBEBDD;
+    --md-surface-container-high:#E6D1BD; --md-surface-container-highest:#D7C3B0; --md-inverse-surface:#3B2E21; --md-inverse-on-surface:#FFFFFF;
+    --md-inverse-primary:#FFB77A; --ok:#225C37; --ok-container:#D9E8C1; --on-ok-container:#000000;
+    color-scheme: light;
+  }
+}
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+  :root {
+    --md-primary:#FFEDE0; --md-on-primary:#000000; --md-primary-container:#FFB26F; --md-on-primary-container:#160800;
+    --md-secondary:#E2F2FF; --md-on-secondary:#000000; --md-secondary-container:#99C9E8; --md-on-secondary-container:#000D16;
+    --md-tertiary:#DEF3FF; --md-tertiary-container:#57D0FF; --md-on-tertiary-container:#000D14; --md-error:#FFECE9;
+    --md-on-error:#000000; --md-error-container:#FFAEA4; --md-on-error-container:#220001; --md-surface:#1B1106;
+    --md-on-surface:#FFFFFF; --md-surface-variant:#544437; --md-on-surface-variant:#FFFFFF; --md-outline:#FFEDE0;
+    --md-outline-variant:#D6BEAE; --md-surface-container-lowest:#000000; --md-surface-container-low:#291E11; --md-surface-container:#3B2E21;
+    --md-surface-container-high:#46392B; --md-surface-container-highest:#524436; --md-inverse-surface:#F4DFCB; --md-inverse-on-surface:#000000;
+    --md-inverse-primary:#6E3B00; --ok:#8BD79D; --ok-container:#3E4B2E; --on-ok-container:#FFFFFF;
+    color-scheme: dark;
+  }
+}
+/* theme:end */
 
 * { box-sizing: border-box; }
 html { scroll-padding-top: 0; }

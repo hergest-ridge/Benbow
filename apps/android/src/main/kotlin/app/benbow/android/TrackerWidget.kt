@@ -55,7 +55,8 @@ class TrackerWidget : GlanceAppWidget() {
         val services = (context.applicationContext as BenbowApplication).services
         val trackers = services.trackersToday()
         val timers = services.runningTimers().first()
-        provideContent { GlanceTheme { Content(trackers, timers) } }
+        val colors = AndroidTheme.widgetColors(context, services)
+        provideContent { GlanceTheme(colors) { Content(trackers, timers) } }
     }
 
     companion object {

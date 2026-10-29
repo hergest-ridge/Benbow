@@ -51,7 +51,7 @@ Markdown, plain text, HTML and PDF are **exports** (lossy except HTML). This fil
 Later atomic embeds (tables, toggles) are new `_type`s that follow the same rules.
 
 ## Theme tokens
-Colors, highlights and callout tones are **token names**, never raw hex. The design system maps each token to light, dark and per-note-background values. Initial palette (final names set in the design pass): `gray, brown, orange, yellow, green, teal, blue, purple, pink, red`. An unknown token renders as the default color, and its data is kept.
+Colors, highlights and callout tones are **token names**, never raw hex. The design system maps each token to light, dark and per-note-background values: in the app the theme's (ADR-057: the token's hue turned a little toward the palette, at tones that read 4.5:1 on every ground), on paper (printed pages, a drawing's SVG) the default palette's light ones. Initial palette (final names set in the design pass): `gray, brown, orange, yellow, green, teal, blue, purple, pink, red`. An unknown token renders as the default color, and its data is kept.
 
 ## Canonical serialization (hashing, diffs, merges)
 - UTF-8 JSON, fixed key order per object type (order as in the tables above, `_key` and `_type` first), no insignificant whitespace, **exactly one block per line**:

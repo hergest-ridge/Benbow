@@ -68,6 +68,7 @@ class ReminderReceiver : BroadcastReceiver() {
             )
             val notification = NotificationCompat.Builder(context, AlarmReminderClock.CHANNEL)
                 .setSmallIcon(R.drawable.ic_notification)
+                .setColor(AndroidTheme.accent(context))
                 .setContentTitle(context.getString(R.string.app_name))
                 .setContentText(intent.getStringExtra(AlarmReminderClock.EXTRA_TEXT))
                 .setContentIntent(open)

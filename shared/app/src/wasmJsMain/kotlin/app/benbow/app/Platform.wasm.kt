@@ -9,6 +9,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -21,6 +22,7 @@ import app.benbow.app.resources.media_file
 import app.benbow.client.LocalFile
 import app.benbow.client.uri
 import app.benbow.core.text.Links
+import app.benbow.ui.theme.hex
 import org.jetbrains.compose.resources.stringResource
 
 // The browser's side of the app's platform pieces (ADR-029).
@@ -30,6 +32,12 @@ internal actual val pageServer: String? = pageOrigin()
 /** The browser has no system palette to borrow. */
 @Composable
 internal actual fun rememberSystemColors(dark: Boolean): ColorScheme? = null
+
+/** The browser's `prefers-contrast: more`, read once: the highest level; else 0. */
+@Composable
+internal actual fun rememberSystemContrast(): Double = remember { if (prefersMoreContrast()) 1.0 else 0.0 }
+
+private fun prefersMoreContrast(): Boolean = js("window.matchMedia('(prefers-contrast: more)').matches")
 
 /** The browser's reduced motion (prefers-reduced-motion), read once. */
 @Composable
@@ -110,3 +118,24 @@ internal actual fun MediaPlayer(file: LocalFile, mime: String, modifier: Modifie
         onRelease = { pauseMedia(it) },
     )
 }
+
+/** The browser's bar and the page under the app take the theme's page, and the next loading page (`theme.js`) the page, the accent and the mode. */
+@Composable
+internal actual fun ThemeOutside(scheme: ColorScheme, dark: Boolean) {
+    val page = scheme.background.hex()
+    val accent = scheme.primary.hex()
+    val quiet = scheme.onSurfaceVariant.hex()
+    LaunchedEffect(page, accent, quiet, dark) { tellPage(page, accent, quiet, dark) }
+}
+
+private fun tellPage(page: String, accent: String, quiet: String, dark: Boolean): Unit = js(
+    """{
+    try { localStorage.setItem('benbow.theme', JSON.stringify({ page: page, accent: accent, quiet: quiet, dark: dark })); } catch (e) {}
+    document.querySelectorAll('meta[name=theme-color]').forEach(function (meta) { meta.setAttribute('content', page); });
+    var root = document.documentElement;
+    root.style.setProperty('--page', page);
+    root.style.setProperty('--accent', accent);
+    root.style.setProperty('--quiet', quiet);
+    root.style.colorScheme = dark ? 'dark' : 'light';
+}""",
+)

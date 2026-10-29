@@ -1106,7 +1106,7 @@ class AppSmokeTest {
         onNodeWithText("Светлая").click()
         onNodeWithText("Море").click()
         waitUntil(timeoutMillis = 5_000) {
-            services.appearance.value == Appearance(app.benbow.ui.theme.ThemeMode.Light, app.benbow.ui.theme.ThemePalette.Sea)
+            services.appearance.value.mode == app.benbow.ui.theme.ThemeMode.Light && services.themeChoiceNow().palette == "Sea"
         }
         waitForIdle()
         screenshot("29-appearance-sea-light")

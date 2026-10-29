@@ -781,6 +781,7 @@
     <string name="board_empty">Здесь будут записки</string>
     <string name="board_empty_hint">Списки, идеи, всё, что нужно под рукой. В дневник они не попадут, пока вы сами их туда не перенесёте.</string>
     <string name="tab_trackers">Трекеры</string>
+    <string name="tab_friends">Друзья</string>
     <string name="more_trackers">Привычки, время и сон по дням</string>
     <string name="trackers_figures_hide">Скрыть цифры</string>
     <string name="trackers_figures_show">Показать цифры</string>

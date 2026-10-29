@@ -43,11 +43,11 @@ sealed interface Shortcut {
 
     data object Back : Shortcut
 
-    /** Ctrl+1 … Ctrl+6: the tabs in order (six on the web and the desktop with «Трекеры», five on a phone). */
+    /** Ctrl+1 … Ctrl+7: the tabs in order (seven in the browser with «Друзья», six on the desktop, five on a phone). */
     data class Tab(val index: Int) : Shortcut
 }
 
-private val DIGITS = listOf(Key.One, Key.Two, Key.Three, Key.Four, Key.Five, Key.Six)
+private val DIGITS = listOf(Key.One, Key.Two, Key.Three, Key.Four, Key.Five, Key.Six, Key.Seven)
 
 /** Ctrl (or ⌘) + N, F, S, 1–6, and Alt+←. The editor's own Ctrl+B/I/U/E/Z/Y/C/X are left alone. */
 fun shortcutOf(key: Key, ctrl: Boolean, alt: Boolean): Shortcut? = when {
@@ -72,7 +72,7 @@ fun webShortcutOf(code: String, ctrl: Boolean, alt: Boolean): Shortcut? = when {
     else -> null
 }
 
-private val WEB_DIGITS = listOf("Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6")
+private val WEB_DIGITS = listOf("Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6", "Digit7")
 
 fun shortcutOf(event: KeyEvent): Shortcut? =
     if (event.type != KeyEventType.KeyDown) null else shortcutOf(event.key, event.isCtrlPressed || event.isMetaPressed, event.isAltPressed)

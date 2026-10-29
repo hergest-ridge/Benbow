@@ -1,6 +1,7 @@
 package app.benbow.client
 
 import app.benbow.client.db.BenbowDb
+import app.benbow.core.api.FriendsFeed
 import app.benbow.core.api.LinkPreviewInfo
 import app.benbow.core.api.PurgeDone
 import app.benbow.core.api.PurgePreview
@@ -65,6 +66,15 @@ class ServerPurges(private val db: BenbowDb, private val apiFor: (Connection) ->
     suspend fun preview(request: PurgeRequest): PurgePreview = api().purgePreview(request)
 
     suspend fun commit(planId: String): PurgeDone = api().purgeCommit(planId)
+
+    private fun api() = apiFor(Settings(db).connection ?: throw PairingException("Not paired with a server"))
+}
+
+/** «Лента друзей (проба)» (ADR-056): the server's friends' notes as posts; online only, nothing kept here. */
+class ServerFriends(private val db: BenbowDb, private val apiFor: (Connection) -> BenbowApi) {
+    suspend fun feed(): FriendsFeed = api().friendsFeed()
+
+    suspend fun post(text: String) = api().postToFriends(text)
 
     private fun api() = apiFor(Settings(db).connection ?: throw PairingException("Not paired with a server"))
 }

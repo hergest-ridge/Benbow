@@ -19,6 +19,7 @@ import app.benbow.client.PairingException
 import app.benbow.client.ReminderItem
 import app.benbow.client.SearchQuery
 import app.benbow.client.ServerFonts
+import app.benbow.client.ServerFriends
 import app.benbow.client.ServerHistory
 import app.benbow.client.ServerPages
 import app.benbow.client.ServerPurges
@@ -40,6 +41,7 @@ import app.benbow.client.moveToJournal
 import app.benbow.client.removeAttachments
 import app.benbow.client.tracker.TrackerRepository
 import app.benbow.client.upcoming
+import app.benbow.core.api.FriendsFeed
 import app.benbow.core.api.PurgeDone
 import app.benbow.core.api.PurgePreview
 import app.benbow.core.api.PurgeRequest
@@ -241,6 +243,11 @@ class AppServices(
 
     /** How «Место» gets the files no entry references (older than thirty days); tests put their own here. */
     internal var unreferencedReader: suspend () -> List<UnreferencedFile> = { storage.unreferenced() }
+
+    /** «Лента друзей (проба)» (ADR-056): the server's friends' notes as posts; tests put their own here. */
+    private val friends = ServerFriends(db, apis)
+    internal var friendsFeedReader: suspend () -> FriendsFeed = { friends.feed() }
+    internal var friendsPoster: suspend (String) -> Unit = { friends.post(it) }
 
     /** Deleting for good from the trash (ADR-041): the server's preview and commit; tests put their own here. */
     private val purging = ServerPurges(db, apis)

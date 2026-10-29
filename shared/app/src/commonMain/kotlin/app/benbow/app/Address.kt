@@ -16,6 +16,8 @@ internal fun Route.path(): String = when (this) {
 
     Route.Trackers, is Route.TrackerSheet, is Route.TrackerEditor -> "trackers"
 
+    Route.Friends -> "friends"
+
     Route.Search -> "search"
 
     Route.More -> "more"
@@ -80,6 +82,7 @@ internal fun linkOf(path: String): Link? {
         "calendar" -> Link.Tab(Route.Calendar)
         "notes" -> Link.Tab(Route.Board)
         "trackers" -> Link.Tab(Route.Trackers)
+        "friends" -> Link.Tab(Route.Friends)
         "search" -> Link.Tab(Route.Search)
         "more" -> Link.Tab(Route.More)
         "new" -> Link.NewEntry

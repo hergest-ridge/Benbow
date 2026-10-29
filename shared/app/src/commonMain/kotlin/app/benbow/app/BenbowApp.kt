@@ -113,6 +113,7 @@ import app.benbow.app.resources.storage_freed_none
 import app.benbow.app.resources.tab_board
 import app.benbow.app.resources.tab_calendar
 import app.benbow.app.resources.tab_feed
+import app.benbow.app.resources.tab_friends
 import app.benbow.app.resources.tab_home
 import app.benbow.app.resources.tab_more
 import app.benbow.app.resources.tab_search
@@ -187,6 +188,9 @@ internal sealed interface Route {
 
     /** Trackers (ADR-050): a tab on the web and the desktop, a page from «Ещё» on a phone. */
     data object Trackers : Route
+
+    /** «Лента друзей (проба)» (ADR-056): a tab in the browser only. */
+    data object Friends : Route
 
     /** A tracker's sheet as a page of its own, where the window is too narrow for it beside the list. */
     data class TrackerSheet(val trackerId: String) : Route
@@ -290,9 +294,16 @@ private val TABS = listOf(
 
 private val TRACKERS_TAB = Tab(Route.Trackers, Res.string.tab_trackers, Icons.Trackers)
 
-/** The tabs here: «Трекеры» after «Записки» on the web and the desktop (ADR-050); a phone keeps them in «Ещё». */
-private fun tabsOf(services: AppServices): List<Tab> =
-    if (services.trackersTab) TABS.flatMap { if (it.route == Route.Board) listOf(it, TRACKERS_TAB) else listOf(it) } else TABS
+private val FRIENDS_TAB = Tab(Route.Friends, Res.string.tab_friends, Icons.Friends)
+
+/**
+ * The tabs here: «Трекеры» after «Записки» on the web and the desktop (ADR-050); a phone keeps them in «Ещё». The
+ * browser also has «Друзья (проба)» before «Ещё» (ADR-056).
+ */
+private fun tabsOf(services: AppServices): List<Tab> {
+    val tabs = if (services.trackersTab) TABS.flatMap { if (it.route == Route.Board) listOf(it, TRACKERS_TAB) else listOf(it) } else TABS
+    return if (services.friendsTab) tabs.flatMap { if (it.route == Route.More) listOf(FRIENDS_TAB, it) else listOf(it) } else tabs
+}
 
 /** Tabs switch in place; screens on top fade in over the one below and fade away on Back (ux.md#motion). */
 private val TAB = mapOf("benbow.tab" to true)
@@ -339,7 +350,10 @@ private fun AppRoot(services: AppServices) {
     val scope = rememberCoroutineScope()
     PlatformAddress(backStack, nav) { link ->
         when (link) {
-            is Link.Tab -> nav.selectTab(link.route.takeIf { it != Route.Trackers || services.trackersTab } ?: Route.Home)
+            is Link.Tab -> nav.selectTab(
+                link.route.takeIf { (it != Route.Trackers || services.trackersTab) && (it != Route.Friends || services.friendsTab) }
+                    ?: Route.Home,
+            )
 
             is Link.Page -> {
                 nav.selectTab(Route.More)
@@ -814,6 +828,7 @@ private fun Screens(
             entry<Route.Trackers>(metadata = if (services.trackersTab) TAB + FULL_WINDOW else emptyMap()) {
                 TrackersScreen(services, nav, tab = services.trackersTab)
             }
+            entry<Route.Friends>(metadata = TAB + FULL_WINDOW) { FriendsFeedScreen(services) }
             entry<Route.TrackerSheet>(metadata = if (services.trackersTab) FULL_WINDOW else emptyMap()) {
                 TrackerSheetScreen(services, nav, it.trackerId, back = true)
             }

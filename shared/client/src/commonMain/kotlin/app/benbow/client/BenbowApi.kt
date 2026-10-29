@@ -2,9 +2,11 @@ package app.benbow.client
 
 import app.benbow.core.api.ApiError
 import app.benbow.core.api.FontCatalog
+import app.benbow.core.api.FriendsFeed
 import app.benbow.core.api.KnownEntry
 import app.benbow.core.api.LinkPreviewInfo
 import app.benbow.core.api.LinkPreviewRequest
+import app.benbow.core.api.NewFriendPost
 import app.benbow.core.api.PairRequest
 import app.benbow.core.api.PairResponse
 import app.benbow.core.api.Protocol
@@ -108,6 +110,12 @@ interface BenbowApi {
 
     /** A font's file by its SHA-256, as the catalog names it. */
     suspend fun downloadFont(sha256: String): ByteArray = throw UnsupportedOperationException("downloadFont")
+
+    /** «Лента друзей (проба)» (ADR-056): the friends' test notes as posts. */
+    suspend fun friendsFeed(): FriendsFeed = throw UnsupportedOperationException("friendsFeed")
+
+    /** A post to every friend, through the mailbox (ADR-056). */
+    suspend fun postToFriends(text: String): Unit = throw UnsupportedOperationException("postToFriends")
 }
 
 /** The finished upload didn't match its hash (corrupted on the way); start it again. */
@@ -156,6 +164,16 @@ class KtorBenbowApi(private val client: HttpClient, private val baseUrl: String,
     }.ok().body()
 
     override suspend fun storage(): StorageReport = client.get("$baseUrl/api/v1/storage") { auth() }.ok().body()
+
+    override suspend fun friendsFeed(): FriendsFeed = client.get("$baseUrl/api/v1/friends/feed") { auth() }.ok().body()
+
+    override suspend fun postToFriends(text: String) {
+        client.post("$baseUrl/api/v1/friends/posts") {
+            auth()
+            contentType(ContentType.Application.Json)
+            setBody(NewFriendPost(text))
+        }.ok()
+    }
 
     override suspend fun unreferenced(): List<UnreferencedFile> = client.get("$baseUrl/api/v1/storage/unreferenced") { auth() }.ok().body()
 

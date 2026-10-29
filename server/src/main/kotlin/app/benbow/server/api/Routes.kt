@@ -508,6 +508,8 @@ fun Application.benbowModule(ctx: ServerContext) {
                     call.respond(info)
                 }
 
+                friendsFeedRoutes(ctx)
+
                 /**
                  * Whether this server has the speech-recognition model, and its pinned files. Phones check every file
                  * against their own copy of these hashes (docs/sync.md#speech-model).

@@ -46,7 +46,7 @@ class TrackersScreenTest {
     @Test
     fun aPhoneStartsFromAPresetMarksDaysByTypeAndHidesTheNumbers() = runDesktopComposeUiTest(width = 412, height = 860) {
         val services = testServices("android")
-        val today = services.today()
+        val today = "${trackerToday()}"
         setContent { BenbowApp(services) }
         assertEquals(0, onAllNodesWithText("Трекеры").fetchSemanticsNodes().size, "no tab on a phone")
         onNodeWithText("Ещё").click()
@@ -96,7 +96,7 @@ class TrackersScreenTest {
     @Test
     fun theSleepSheetPaintsANightHourByHourAsOneSpan() = runDesktopComposeUiTest(width = 412, height = 860) {
         val services = testServices("android")
-        val today = services.today()
+        val today = "${trackerToday()}"
         val id = services.trackers.createTracker(TrackerPresets.sleep.tracker, TrackerPresets.sleep.columns)
         val night = runBlocking { services.trackers.columns(id).first() }.first().id
         fun spans() = runBlocking { services.trackers.spans(listOf(night), today, today).first() }
@@ -116,7 +116,7 @@ class TrackersScreenTest {
     @Test
     fun aTimerRunsFromItsHeaderAndADaysSpansAreTypedByHand() = runDesktopComposeUiTest(width = 412, height = 860) {
         val services = testServices("android")
-        val today = services.today()
+        val today = "${trackerToday()}" // the clock's, as the timer's span: at 02:00 too (ADR-053)
         val id = services.trackers.createTracker(TrackerPresets.time.tracker, TrackerPresets.time.columns)
         fun work() = runBlocking { services.trackers.columns(id).first() }.first()
         fun spans() = runBlocking { services.trackers.spans(listOf(work().id), today, today).first() }
@@ -125,15 +125,16 @@ class TrackersScreenTest {
         waitUntilAtLeastOneExists(hasTestTag(timer), 5_000)
         onNodeWithTag(timer).click()
         waitUntil(timeoutMillis = 5_000) { work().running != null }
+        val started = work().running
         waitUntilAtLeastOneExists(hasContentDescription("Остановить таймер"), 5_000)
         screenshot("trackers-10-timer")
         onNodeWithTag(timer).click()
-        waitUntil(timeoutMillis = 5_000) { work().running == null && spans().size == 1 }
+        waitUntil(timeoutMillis = 5_000) { work().running == null && spans().singleOrNull()?.get(SpanField.START) == started }
 
         onNodeWithTag(TrackerCells.id(work().id, today)).performSemanticsAction(SemanticsActions.OnLongClick)
         waitUntilAtLeastOneExists(hasText("Добавить отрезок"), 5_000)
         onNodeWithText("Добавить отрезок").click()
-        waitUntilAtLeastOneExists(hasTestTag("span-start:1"), 5_000)
+        waitUntilAtLeastOneExists(hasTestTag("span-start:1"), 5_000) // after the timer's
         screenshot("trackers-11-spans")
         onNodeWithText("Сохранить").click()
         waitUntil(timeoutMillis = 5_000) { spans().size == 2 }
@@ -197,7 +198,7 @@ class TrackersScreenTest {
     @Test
     fun aTrackerOpensAsAWeekOrAYearAndRemembersWhich() = runDesktopComposeUiTest(width = 412, height = 860) {
         val services = testServices("android")
-        val today = services.today()
+        val today = "${trackerToday()}"
         val id = services.trackers.createTracker(TrackerPresets.habits.tracker, TrackerPresets.habits.columns)
         val walk = runBlocking { services.trackers.columns(id).first() }[1].id
         setContent { TrackerSheetScreen(services, Navigator(mutableStateListOf(Route.TrackerSheet(id))), id, back = true) }
@@ -216,7 +217,7 @@ class TrackersScreenTest {
     @Test
     fun aTrackersBlockOnHomeTicksTodayAndTheCalendarShowsItsLine() = runDesktopComposeUiTest(width = 412, height = 860) {
         val services = testServices("android")
-        val today = services.today()
+        val today = "${trackerToday()}"
         val id = services.trackers.createTracker(TrackerPresets.habits.tracker, TrackerPresets.habits.columns)
         val stretch = runBlocking { services.trackers.columns(id).first() }.first().id
         services.trackers.updateTracker(id, mapOf(TrackerField.CALENDAR to "true"))
@@ -228,6 +229,7 @@ class TrackersScreenTest {
         onNodeWithTag(tick).click()
         waitUntil(timeoutMillis = 5_000) { cell(services, TrackerCells.id(stretch, today))?.get("value") == "true" }
 
+        services.trackers.setCell(stretch, services.today(), "true") // the calendar opens on the journal's day, till 04:00 the day before
         onNodeWithText("Календарь").click()
         waitUntilAtLeastOneExists(hasText("🧘"), 5_000) // the day's marks under its title
         screenshot("trackers-15-calendar")
@@ -275,7 +277,7 @@ class TrackersScreenTest {
     @Test
     fun aMouseDragsANightOverTheSleepSheetWithoutALongPress() = runDesktopComposeUiTest(width = 1280, height = 860) {
         val services = testServices("desktop")
-        val today = services.today()
+        val today = "${trackerToday()}"
         val id = services.trackers.createTracker(TrackerPresets.sleep.tracker, TrackerPresets.sleep.columns)
         val night = runBlocking { services.trackers.columns(id).first() }.first().id
         fun spans() = runBlocking { services.trackers.spans(listOf(night), today, today).first() }
@@ -298,7 +300,7 @@ class TrackersScreenTest {
     @Test
     fun aMonthAcrossHasItsDaysOnTopAndMarksTheSame() = runDesktopComposeUiTest(width = 1280, height = 860) {
         val services = testServices("desktop")
-        val today = services.today()
+        val today = "${trackerToday()}"
         val id = services.trackers.createTracker(
             TrackerPresets.habits.tracker + (TrackerField.LAYOUT to "across"),
             TrackerPresets.habits.columns,
@@ -315,7 +317,7 @@ class TrackersScreenTest {
     @Test
     fun aMonthAcrossOnAPhoneScrollsItsDaysWithTodayInView() = runDesktopComposeUiTest(width = 412, height = 860) {
         val services = testServices("android")
-        val today = services.today()
+        val today = "${trackerToday()}"
         val id = services.trackers.createTracker(
             TrackerPresets.habits.tracker + (TrackerField.LAYOUT to "across"),
             TrackerPresets.habits.columns,
@@ -331,7 +333,7 @@ class TrackersScreenTest {
     @Test
     fun aSleepSheetAcrossPaintsADaysHoursDownItsColumn() = runDesktopComposeUiTest(width = 1280, height = 860) {
         val services = testServices("desktop")
-        val today = services.today()
+        val today = "${trackerToday()}"
         val id = services.trackers.createTracker(
             TrackerPresets.sleep.tracker + (TrackerField.LAYOUT to "across"),
             TrackerPresets.sleep.columns,

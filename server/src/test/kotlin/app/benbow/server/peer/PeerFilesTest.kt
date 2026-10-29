@@ -311,6 +311,90 @@ class PeerFilesTest {
         }
     }
 
+    /** Two links with letters through [letters]; [setUp] chooses how files go. */
+    private fun twoLinks(
+        letters: Carrier,
+        connectParts: (MailSettings) -> Carrier,
+        setUp: (PeerLink) -> Unit,
+        check: (PeerLink, PeerLink) -> Unit,
+    ) {
+        fun link(name: String) = PeerLink(
+            PeerDatabase.inMemory(),
+            PeerIdentity.generate(),
+            connect = { letters },
+            idleMs = 200,
+            peerDir = dir.resolve(name),
+            sweepMs = 200,
+            connectParts = connectParts,
+        )
+        val anna = link("anna")
+        val max = link("max")
+        try {
+            for ((me, other) in listOf(anna to max, max to anna)) {
+                me.db.addContact("друг", other.identity.card, 0)
+                me.db.saveMailSettings(MailSettings("memory", 1, "box", "secret"))
+                setUp(me)
+                me.start()
+            }
+            anna.sendFile(max.identity.card.id, "notes.txt", bytes.inputStream())
+            awaitTrue { max.db.filesIn(anna.identity.card.id, 10).singleOrNull()?.receivedAt != null }
+            awaitTrue { anna.db.filesOut(max.identity.card.id, 10).single().removedAt != null }
+            assertContentEquals(bytes, Path.of(max.db.filesIn(anna.identity.card.id, 10).single().path!!).readBytes())
+            check(anna, max)
+        } finally {
+            anna.close()
+            max.close()
+        }
+    }
+
+    @Test
+    fun partsCanGoThroughASecondMailboxWhileLettersStayInTheFirst() {
+        val letters = MemoryCarrier()
+        val parts = MemoryCarrier(CarrierTraits(maxItem = 1L shl 20, dailyBudget = null, pushes = true, whole = true))
+        twoLinks(
+            letters,
+            connectParts = { if (it.user == "files") parts else letters },
+            setUp = {
+                it.db.savePartsMailSettings(MailSettings("memory", 1, "files", "secret"))
+                it.db.saveFilesVia(VIA_PARTS_MAIL)
+            },
+        ) { anna, _ ->
+            assertTrue(letters.dropped.none { it.first.box == Box.PARTS }, "no part in the letters' mailbox")
+            assertEquals(4, parts.dropped.count { it.first.box == Box.PARTS })
+            assertEquals(VIA_PARTS_MAIL, anna.db.filesOut(anna.db.contacts().single().id, 10).single().via)
+        }
+    }
+
+    @Test
+    fun partsCanGoThroughASharedFolder() {
+        val folder = Files.createDirectories(dir.resolve("Google Drive"))
+        val letters = MemoryCarrier()
+        twoLinks(
+            letters,
+            connectParts = { error("files don't go through a mailbox here") },
+            setUp = {
+                it.db.saveDriveFolder(folder.toString())
+                it.db.saveFilesVia(VIA_FOLDER)
+            },
+        ) { _, _ ->
+            assertTrue(letters.dropped.none { it.first.box == Box.PARTS })
+            assertTrue(folder.toFile().walk().none { it.isFile }, "nothing left in the folder")
+        }
+    }
+
+    @Test
+    fun aFileTheFriendSendsAWayNotSetUpHereWaitsAndSaysWhy() {
+        val (anna, max) = pair()
+        val link = PeerLink(max.db, max.identity, connect = { box }, peerDir = max.peerDir, sweepMs = 100)
+        try {
+            max.db.announceParts(anna.identity.card.id, PartedFile("f1", "a.txt", 1, "00", "a2V5", 30, 30, listOf("00"), VIA_FOLDER), now)
+            awaitTrue { link.filesTrouble(VIA_FOLDER) != null }
+            assertEquals(null, link.filesTrouble(VIA_MAIL))
+        } finally {
+            link.close()
+        }
+    }
+
     @Test
     fun aVersionOneStoreIsCopiedThenGainsTheFileTables() {
         val db = dir.resolve("db").also { Files.createDirectories(it) }.resolve(PeerDatabase.FILE)

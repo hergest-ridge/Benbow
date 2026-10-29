@@ -35,6 +35,12 @@ data class SharedFile(val id: String, val name: String, val size: Long, val sha2
 /** The carrier a file's parts go through (ADR-055): the mailbox's own connection for parts, for now. */
 const val VIA_MAIL = "mail"
 
+/** A second mailbox for parts only (ADR-055): past its daily limit letters still go through the first. */
+const val VIA_PARTS_MAIL = "parts-mail"
+
+/** A folder some program keeps the same in both homes (Drive's mirror, Syncthing), set in «Связь». */
+const val VIA_FOLDER = "folder"
+
 /** The Drive folder files went through before ADR-055, whole. */
 const val VIA_DRIVE = "drive"
 

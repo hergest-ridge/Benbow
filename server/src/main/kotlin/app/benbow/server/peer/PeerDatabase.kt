@@ -178,14 +178,19 @@ class PeerDatabase private constructor(private val connection: Connection) : Aut
         }
     }
 
-    fun mailSettings(): MailSettings? {
+    fun mailSettings(): MailSettings? = mailSettings(MAIL)
+
+    /** The second mailbox, for files' parts only (ADR-055). */
+    fun partsMailSettings(): MailSettings? = mailSettings(PARTS_MAIL)
+
+    private fun mailSettings(prefix: String): MailSettings? {
         val values = settings()
-        val host = values["mail.host"] ?: return null
+        val host = values["$prefix.host"] ?: return null
         return MailSettings(
             host,
-            values["mail.port"]?.toIntOrNull() ?: 993,
-            values["mail.user"].orEmpty(),
-            values["mail.password"].orEmpty(),
+            values["$prefix.port"]?.toIntOrNull() ?: 993,
+            values["$prefix.user"].orEmpty(),
+            values["$prefix.password"].orEmpty(),
         )
     }
 
@@ -213,14 +218,18 @@ class PeerDatabase private constructor(private val connection: Connection) : Aut
     }
 
     /** A blank [MailSettings.password] keeps the stored one, so the page never has to show it. */
-    fun saveMailSettings(settings: MailSettings) = transaction { c ->
-        val password = settings.password.ifBlank { mailSettings()?.password.orEmpty() }
+    fun saveMailSettings(settings: MailSettings) = saveMailSettings(MAIL, settings)
+
+    fun savePartsMailSettings(settings: MailSettings) = saveMailSettings(PARTS_MAIL, settings)
+
+    private fun saveMailSettings(prefix: String, settings: MailSettings) = transaction { c ->
+        val password = settings.password.ifBlank { mailSettings(prefix)?.password.orEmpty() }
         c.prepareStatement("INSERT OR REPLACE INTO settings(key, value) VALUES (?, ?)").use { st ->
             for ((k, v) in listOf(
-                "mail.host" to settings.host,
-                "mail.port" to "${settings.port}",
-                "mail.user" to settings.user,
-                "mail.password" to password,
+                "$prefix.host" to settings.host,
+                "$prefix.port" to "${settings.port}",
+                "$prefix.user" to settings.user,
+                "$prefix.password" to password,
             )) {
                 st.setString(1, k)
                 st.setString(2, v)
@@ -239,6 +248,8 @@ class PeerDatabase private constructor(private val connection: Connection) : Aut
 
     companion object {
         const val FILE = "peers.sqlite"
+        private const val MAIL = "mail"
+        private const val PARTS_MAIL = "parts.mail"
 
         fun open(dataDir: Path): PeerDatabase {
             val file = dataDir.resolve("db").createDirectories().resolve(FILE)

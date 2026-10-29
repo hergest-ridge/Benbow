@@ -4,7 +4,11 @@ import app.benbow.server.SERVER_VERSION
 import app.benbow.server.ServerConfig
 import app.benbow.server.offsite.OffsiteCopy
 import app.benbow.server.peer.PeerLink
+import app.benbow.server.peer.VIA_FOLDER
+import app.benbow.server.peer.VIA_MAIL
+import app.benbow.server.peer.VIA_PARTS_MAIL
 import app.benbow.server.peer.driveFolder
+import app.benbow.server.peer.filesVia
 import io.ktor.http.ContentDisposition
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -159,7 +163,10 @@ private fun peersText(peers: PeerLink): String = buildString {
     line("Friends: this server's card ${peers.identity.card.id}, fingerprint ${peers.identity.card.fingerprint}")
     val mail = peers.db.mailSettings()
     line("  Mailbox: ${mail?.let { "${it.host}:${it.port}, ${it.user}" } ?: "not set"}; status ${statusLine(peers.status)}")
-    line("  Drive folder: ${peers.db.driveFolder()?.let { "$it${if (it.exists()) "" else " (NOT THERE)"}" } ?: "not set"}")
+    val parts = peers.db.partsMailSettings()
+    line("  Files go: ${peers.db.filesVia()}; parts mailbox: ${parts?.let { "${it.host}:${it.port}, ${it.user}" } ?: "not set"}")
+    for (via in listOf(VIA_MAIL, VIA_PARTS_MAIL, VIA_FOLDER)) peers.filesTrouble(via)?.let { line("  Files $via: $it") }
+    line("  Shared folder: ${peers.db.driveFolder()?.let { "$it${if (it.exists()) "" else " (NOT THERE)"}" } ?: "not set"}")
     for (contact in peers.db.contacts()) {
         val notes = peers.db.notes(contact.id, 200)
         val seen = peers.db.seen(contact.id)

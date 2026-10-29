@@ -8,6 +8,9 @@ import app.benbow.server.peer.MailSettings
 import app.benbow.server.peer.PeerCard
 import app.benbow.server.peer.PeerLink
 import app.benbow.server.peer.VIA_DRIVE
+import app.benbow.server.peer.VIA_FOLDER
+import app.benbow.server.peer.VIA_MAIL
+import app.benbow.server.peer.VIA_PARTS_MAIL
 import app.benbow.server.peer.driveFolder
 import app.benbow.server.peer.filesIn
 import app.benbow.server.peer.filesOut
@@ -118,7 +121,7 @@ internal fun friendsInner(peers: PeerLink?): String = buildString {
     if (peers == null) return@buildString
     val lead = "Переписка с серверами друзей: тестовые сообщения и файлы. Письма запечатаны, прочитать их может только сервер друга."
     append(pageTitle("Друзья", "chat", lead))
-    val files = peers.transfers != null && peers.db.mailSettings()?.complete == true
+    val files = filesReady(peers)
     val contacts = peers.db.contacts()
     if (contacts.isEmpty()) {
         append("<div class=\"banner info\">${icon("person_add")}<div>Пока ни одного друга. Обменяйтесь карточками ниже: ")
@@ -141,7 +144,7 @@ internal fun linkInner(peers: PeerLink?): String = buildString {
     val lead = "Через что ходят письма и файлы. Порты не открываются: оба сервера сами заходят в ящик."
     append(pageTitle("Связь", "sync", lead))
     append(mailCard(peers))
-    append(driveCard(peers))
+    append(filesCard(peers))
     append("<div class=\"row end\">${postButton("/admin/peers/check", "Проверить ящик сейчас", "text", "refresh")}</div>")
 }
 
@@ -150,7 +153,8 @@ internal fun linkNeedsAttention(peers: PeerLink?): Boolean {
     if (peers == null) return true
     val folderGone = peers.db.driveFolder()?.let { !java.nio.file.Files.isDirectory(it) } ?: false
     val newer = (peers.status as? PeerLink.Status.Online)?.lastRound?.newer ?: 0
-    return peers.status is PeerLink.Status.Failed || folderGone || newer > 0
+    val files = listOf(VIA_MAIL, VIA_PARTS_MAIL, VIA_FOLDER).any { peers.filesTrouble(it) != null }
+    return peers.status is PeerLink.Status.Failed || folderGone || newer > 0 || files
 }
 
 private fun mailCard(peers: PeerLink): String = buildString {
@@ -265,7 +269,7 @@ private fun friendCard(peers: PeerLink, contact: Contact, files: Boolean): Strin
         )
     }
     append("</div>")
-    if (!files) append("<p class=\"hint\">Файлы пойдут, когда будет настроен почтовый ящик.</p>")
+    if (!files) append("<p class=\"hint\">Файлы пойдут, когда в «Связи» будет настроен путь для них.</p>")
     append("</div>")
 }
 
@@ -293,11 +297,14 @@ private fun conversation(peers: PeerLink, contact: Contact): String {
         items += n.at to "<div class=\"bubble ${if (n.outgoing) "out" else "in"}\">${esc(n.text)}<div class=\"meta\">$meta</div></div>"
     }
     for (f in peers.db.filesOut(contact.id, limit = 15)) {
-        items += f.createdAt to fileBubble("out", f.name, f.size, "${short(f.createdAt)} · ${outState(peers, f)}", null)
+        val progress = f.parts?.takeIf { f.doneAt == null && f.lastError == null }?.let { f.got to it.size }
+        items += f.createdAt to fileBubble("out", f.name, f.size, "${short(f.createdAt)} · ${outState(peers, f)}", null, progress)
     }
     for (f in peers.db.filesIn(contact.id, limit = 15)) {
         val where = f.path.takeIf { f.receivedAt != null }
-        items += f.announcedAt to fileBubble("in", f.name, f.size, "${short(f.receivedAt ?: f.announcedAt)} · ${inState(f)}", where)
+        val progress = f.parts?.takeIf { f.receivedAt == null && f.lastError == null }?.let { f.got to it.size }
+        val meta = "${short(f.receivedAt ?: f.announcedAt)} · ${inState(peers, f)}"
+        items += f.announcedAt to fileBubble("in", f.name, f.size, meta, where, progress)
     }
     if (items.isEmpty()) {
         return "<div class=\"chat\"><div class=\"empty\">" +
@@ -318,13 +325,14 @@ private fun outState(peers: PeerLink, f: FileOut): String = when {
 
     else -> buildString {
         append("у друга частей ${f.got} из ${f.parts.size}")
+        peers.filesTrouble(f.via)?.let { append(" · не идут: ${esc(it)}") }
         val limit = peers.transfers?.budgetUntil
         if (limit != null && f.dropped < f.parts.size) append(" · дневной лимит ящика, дальше в ${short(limit)}")
         append(" ${icon("schedule")}")
     }
 }
 
-private fun inState(f: FileIn): String = when {
+private fun inState(peers: PeerLink, f: FileIn): String = when {
     f.receivedAt != null -> "получен, отпечаток совпал ${icon("ok")}"
 
     f.lastError != null && f.via != VIA_DRIVE -> "не открылся: ${esc(f.lastError)} ${icon("error")}"
@@ -337,14 +345,19 @@ private fun inState(f: FileIn): String = when {
         "ждёт, пока Диск принесёт ${icon("schedule")}"
     }
 
-    else -> "пришло частей ${f.got} из ${f.parts?.size ?: "?"} ${icon("schedule")}"
+    else ->
+        "пришло частей ${f.got} из ${f.parts?.size ?: "?"}" +
+            (peers.filesTrouble(f.via)?.let { " · не принимаются: ${esc(it)}" }.orEmpty()) + " ${icon("schedule")}"
 }
 
-private fun fileBubble(side: String, name: String, size: Long, meta: String, where: String?): String {
+/** [progress]: parts there and all of them, while a file is on its way. */
+private fun fileBubble(side: String, name: String, size: Long, meta: String, where: String?, progress: Pair<Int, Int>? = null): String {
     val shown = if (size < 1_000_000) "${(size + 999) / 1000} КБ" else "%.1f МБ".format(size / 1_000_000.0)
     return "<div class=\"bubble $side\"><div class=\"file\">${icon("file")}<div><div class=\"name\">${esc(name)}</div>" +
         "<div class=\"small\">$shown</div></div></div>" +
-        (where?.let { "<div class=\"where mono\">${esc(it)}</div>" }.orEmpty()) + "<div class=\"meta\">$meta</div></div>"
+        (where?.let { "<div class=\"where mono\">${esc(it)}</div>" }.orEmpty()) +
+        (progress?.let { (got, all) -> "<div class=\"progress w${got * 10 / all.coerceAtLeast(1) * 10}\"><span></span></div>" }.orEmpty()) +
+        "<div class=\"meta\">$meta</div></div>"
 }
 
 /** Exchanging cards: this server's card to send, and the friend's to add. Fingerprints are compared by voice. */

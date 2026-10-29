@@ -138,6 +138,31 @@ class PeerAdminTest {
     }
 
     @Test
+    fun filesGoTheWayChosenAndTheSecondMailboxKeepsItsPassword() = withPage { peers, client ->
+        assertEquals(VIA_MAIL, peers.db.filesVia())
+        assertTrue("Через отдельный ящик для файлов" in client.get("/").bodyAsText())
+        assertEquals(HttpStatusCode.Found, client.submitForm("/admin/peers/files", parameters { append("via", VIA_PARTS_MAIL) }).status)
+        assertEquals(VIA_PARTS_MAIL, peers.db.filesVia())
+        assertEquals(HttpStatusCode.BadRequest, client.submitForm("/admin/peers/files", parameters { append("via", "pigeon") }).status)
+
+        suspend fun save(password: String) = client.submitForm(
+            "/admin/peers/parts-mail",
+            parameters {
+                append("host", "imap.gmail.com")
+                append("port", "993")
+                append("user", "files@example.com")
+                append("password", password)
+            },
+        )
+        assertEquals(HttpStatusCode.Found, save("files-password").status)
+        save("")
+        assertEquals("files-password", peers.db.partsMailSettings()?.password)
+        val page = client.get("/").bodyAsText()
+        assertFalse("files-password" in page, "the password is never shown")
+        assertTrue("files@example.com" in page)
+    }
+
+    @Test
     fun theDriveFolderOfOlderServersMustBeThere() = withPage { _, client ->
         val missing = client.submitForm("/admin/peers/drive", parameters { append("path", dir.resolve("missing").toString()) })
         assertTrue("нет" in missing.bodyAsText())

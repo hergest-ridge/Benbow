@@ -60,27 +60,51 @@ class PeerLink(
     private val drive: DriveFiles? = peerDir?.let { DriveFiles(db, identity, it, clock) }
     private val sweeper = Executors.newSingleThreadScheduledExecutor { Thread(it, "benbow-peers-files").apply { isDaemon = true } }
 
-    /** The parts' carrier and its failures: used on [sweeper]'s thread only. */
-    private var parts: Carrier? = null
-    private var partsRetryAt = 0L
-    private var partsPause = FIRST_PAUSE_MS
+    /** A way files' parts go (ADR-055): its carrier, opened while files move that way, and how it fails. */
+    private class Way {
+        /** Used on [sweeper]'s thread only, like [retryAt] and [pause]. */
+        var carrier: Carrier? = null
+        var account = ""
+        var retryAt = 0L
+        var pause = FIRST_PAUSE_MS
 
-    @Volatile
-    private var partsRefused = false
+        @Volatile
+        var refused = false
+
+        /** Why files can't move this way now, for «Связь» and «Друзья»; null while they can. */
+        @Volatile
+        var trouble: String? = null
+
+        fun close() {
+            carrier?.let { runCatching { it.close() } }
+            carrier = null
+        }
+    }
+
+    private val ways = linkedMapOf(VIA_MAIL to Way(), VIA_PARTS_MAIL to Way(), VIA_FOLDER to Way())
+    private val staging = peerDir?.resolve("staging")
 
     init {
         if (peerDir != null) sweeper.scheduleWithFixedDelay(::moveFiles, sweepMs, sweepMs, TimeUnit.MILLISECONDS)
     }
 
+    /** Why files can't move [via] a way now (not set up, refused, failing), or null. */
+    fun filesTrouble(via: String): String? = ways[via]?.trouble
+
     /**
-     * Seals [source] for [contact]; the next pass cuts it into parts, announces it by letter and sends the parts through
-     * the mailbox. Throws with a message for a person when files can't go.
+     * Seals [source] for [contact]; the next pass cuts it into parts, announces it by letter and sends the parts the way
+     * chosen in «Связь». Throws with a message for a person when files can't go that way.
      */
     fun sendFile(contact: String, name: String, source: InputStream) {
         val files = requireNotNull(transfers) { "файлы на этом сервере выключены" }
-        require(db.mailSettings()?.complete == true) { "сначала настройте почтовый ящик в «Связи»" }
+        val via = db.filesVia()
+        when (via) {
+            VIA_PARTS_MAIL -> require(db.partsMailSettings()?.complete == true) { "сначала настройте ящик для файлов в «Связи»" }
+            VIA_FOLDER -> require(db.driveFolder()?.isDirectory() == true) { "сначала укажите общую папку в «Связи»" }
+            else -> require(db.mailSettings()?.complete == true) { "сначала настройте почтовый ящик в «Связи»" }
+        }
         val friend = requireNotNull(db.contacts().firstOrNull { it.id == contact }) { "такого контакта нет" }
-        files.seal(friend, name, source, VIA_MAIL)
+        files.seal(friend, name, source, via)
         filesSoon()
     }
 
@@ -93,33 +117,73 @@ class PeerLink(
     private fun moveFiles() {
         sweepDrive()
         val files = transfers ?: return
+        for ((via, way) in ways) moveFiles(files, via, way)
+    }
+
+    private fun moveFiles(files: Transfers, via: String, way: Way) {
         try {
-            if (!files.busy(VIA_MAIL)) return closeParts()
-            val settings = db.mailSettings()?.takeIf { it.complete } ?: return
-            if (partsRefused || clock() < partsRetryAt) return
-            val carrier = parts ?: connectParts(settings).also { parts = it }
-            val pass = files.pass(carrier, VIA_MAIL, "mail:${settings.user}@${settings.host}")
-            partsPause = FIRST_PAUSE_MS
-            if (pass.moved) log.info("Files: {}", pass)
+            if (!files.busy(via)) {
+                way.trouble = null
+                return way.close()
+            }
+            if (way.refused || clock() < way.retryAt) return
+            val carrier = way.carrier ?: open(via, way) ?: return
+            val pass = files.pass(carrier, via, way.account)
+            way.pause = FIRST_PAUSE_MS
+            way.trouble = null
+            if (pass.moved) log.info("Files {}: {}", via, pass)
             if (pass.letters > 0) {
                 hotUntil = clock() + HOT_MS
                 sendSoon(attempt = 0)
             }
         } catch (e: LoginRefused) {
-            partsRefused = true
-            closeParts()
-            log.warn("The mailbox refused the login for files ({}); not retrying until the settings change", e.message)
+            way.refused = true
+            way.trouble = "ящик не пустил: ${e.message}"
+            way.close()
+            log.warn("The mailbox for files ({}) refused the login ({}); not retrying until the settings change", via, e.message)
         } catch (e: Exception) {
-            closeParts()
-            partsRetryAt = clock() + partsPause
-            log.warn("Moving files failed; again in {} s", partsPause / 1000, e)
-            partsPause = (partsPause * 2).coerceAtMost(LAST_PAUSE_MS)
+            way.close()
+            way.retryAt = clock() + way.pause
+            way.trouble = e.message ?: e.javaClass.simpleName
+            log.warn("Moving files {} failed; again in {} s", via, way.pause / 1000, e)
+            way.pause = (way.pause * 2).coerceAtMost(LAST_PAUSE_MS)
         }
     }
 
-    private fun closeParts() {
-        parts?.let { runCatching { it.close() } }
-        parts = null
+    /** The carrier for [via] as set up in «Связь», or null (with the reason kept) when it isn't. */
+    private fun open(via: String, way: Way): Carrier? {
+        val opened = when (via) {
+            VIA_MAIL -> db.mailSettings()?.takeIf { it.complete }?.let { connectParts(it) to "mail:${it.user}@${it.host}" }
+            VIA_PARTS_MAIL -> db.partsMailSettings()?.takeIf { it.complete }?.let { connectParts(it) to "mail:${it.user}@${it.host}" }
+            VIA_FOLDER -> db.driveFolder()?.takeIf { it.isDirectory() }?.let { FolderCarrier(it, staging!!) to "folder" }
+            else -> null
+        }
+        if (opened == null) {
+            way.trouble = when (via) {
+                VIA_PARTS_MAIL -> "ящик для файлов не настроен"
+                VIA_FOLDER -> "общая папка не указана или её нет"
+                else -> "почтовый ящик не настроен"
+            }
+            return null
+        }
+        way.carrier = opened.first
+        way.account = opened.second
+        return opened.first
+    }
+
+    /** After the settings of a way changed: its carrier is opened again with them, refused or not. */
+    fun restartFiles() {
+        runCatching {
+            sweeper.execute {
+                for (way in ways.values) {
+                    way.close()
+                    way.refused = false
+                    way.retryAt = 0
+                    way.pause = FIRST_PAUSE_MS
+                }
+                moveFiles()
+            }
+        }
     }
 
     private fun sweepDrive() {
@@ -152,13 +216,7 @@ class PeerLink(
     @Synchronized
     fun restart() {
         halt()
-        partsRefused = false
-        runCatching {
-            sweeper.execute {
-                partsRetryAt = 0
-                closeParts()
-            }
-        }
+        restartFiles()
         start()
     }
 
@@ -253,7 +311,7 @@ class PeerLink(
         sender.shutdownNow()
         sweeper.shutdownNow()
         sweeper.awaitTermination(5, TimeUnit.SECONDS)
-        closeParts()
+        ways.values.forEach { it.close() }
         db.close()
     }
 

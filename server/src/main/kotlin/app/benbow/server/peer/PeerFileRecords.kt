@@ -245,7 +245,17 @@ fun PeerDatabase.markInError(id: String, message: String?) = transaction { c ->
     c.update("UPDATE files_in SET last_error = ? WHERE id = ?", message?.take(300), id)
 }
 
-/** The folder the Google Drive desktop app mirrors (ADR-039); null until set on the admin page. */
+/** How this server sends files (ADR-055): [VIA_MAIL] unless chosen otherwise in «Связь». */
+fun PeerDatabase.filesVia(): String = transaction { c ->
+    c.query("SELECT value FROM settings WHERE key = 'files.via'") { getString(1) }.firstOrNull()
+} ?: VIA_MAIL
+
+fun PeerDatabase.saveFilesVia(via: String) = transaction { c ->
+    require(via in setOf(VIA_MAIL, VIA_PARTS_MAIL, VIA_FOLDER)) { "нет такого пути: $via" }
+    c.update("INSERT OR REPLACE INTO settings(key, value) VALUES ('files.via', ?)", via)
+}
+
+/** The folder the Google Drive desktop app mirrors, or Syncthing keeps (ADR-039, ADR-055); null until set on the admin page. */
 fun PeerDatabase.driveFolder(): Path? = transaction { c ->
     c.query("SELECT value FROM settings WHERE key = 'drive.folder'") { getString(1) }.firstOrNull()
 }?.takeIf { it.isNotBlank() }?.let(Path::of)

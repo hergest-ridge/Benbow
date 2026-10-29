@@ -26,11 +26,38 @@ import kotlin.io.path.inputStream
 import kotlin.io.path.outputStream
 
 /**
- * A file sent to a friend (ADR-039): its body goes through the shared Drive folder, sealed with a key of its own; the
- * key, the name and the plaintext's size and SHA-256 travel only inside a letter (the `text` of a [Letter.FILE]).
+ * A file sent to a friend (ADR-039), sealed with a key of its own: the key, the name and the plaintext's size and
+ * SHA-256 travel only inside a letter. As a [Letter.FILE] (servers before ADR-055) its body went through the Drive folder.
  */
 @Serializable
 data class SharedFile(val id: String, val name: String, val size: Long, val sha256: String, val key: String)
+
+/** The carrier a file's parts go through (ADR-055): the mailbox's own connection for parts, for now. */
+const val VIA_MAIL = "mail"
+
+/** The Drive folder files went through before ADR-055, whole. */
+const val VIA_DRIVE = "drive"
+
+/**
+ * A file in parts (ADR-055), the text of a [Letter.FILE_PARTS]: the sealed file is cut every [partSize] bytes, and part
+ * `n` waits in the recipient's parts box as `<id>.<n>` with the SHA-256 [parts]`[n]`. [via] names the carrier.
+ */
+@Serializable
+data class PartedFile(
+    val id: String,
+    val name: String,
+    val size: Long,
+    val sha256: String,
+    val key: String,
+    val sealedSize: Long,
+    val partSize: Long,
+    val parts: List<String>,
+    val via: String = VIA_MAIL,
+)
+
+/** The text of a [Letter.FILE_GOT]: parts of the file [id] that arrived and matched. */
+@Serializable
+data class PartsGot(val id: String, val parts: List<Int>)
 
 /** What sealing or opening a file measured of the plaintext. */
 data class Measured(val size: Long, val sha256: String)
@@ -113,32 +140,22 @@ class DriveFolder(val root: Path) {
 }
 
 /**
- * Files between servers (ADR-039): sealing one into the Drive folder, and the sweep that takes in bodies that came
- * through (opened, measured against the letter, then kept in `<peer>/received/<sender>/`) and removes ours once the
- * friend has them. A body still syncing fails to open and simply waits for the next sweep.
+ * Files from servers before ADR-055, which put sealed bodies whole into the Drive folder (ADR-039): the sweep takes in
+ * bodies that came through (opened, measured against the letter, then kept in `<peer>/received/<sender>/`) and removes
+ * ours that the friend has. A body still syncing fails to open and simply waits for the next sweep.
  */
-class FileCarrier(private val db: PeerDatabase, private val me: PeerIdentity, peerDir: Path, private val clock: () -> Long) {
+class DriveFiles(private val db: PeerDatabase, private val me: PeerIdentity, peerDir: Path, private val clock: () -> Long) {
     private val tmp = peerDir.resolve("tmp")
-    val received: Path = peerDir.resolve("received")
+    private val received: Path = peerDir.resolve("received")
 
-    fun send(folder: DriveFolder, contact: Contact, name: String, source: InputStream): SharedFile {
-        val id = UUID.randomUUID().toString()
-        val key = FileSeal.newKey()
-        val sealed = tmp.createDirectories().resolve("$id.sealing")
-        try {
-            val measured = FileSeal.seal(source, sealed, key, id)
-            folder.place(sealed, contact.card, id)
-            return SharedFile(id, name, measured.size, measured.sha256, b64(key)).also { db.addFileOut(contact.id, it, clock()) }
-        } finally {
-            sealed.deleteIfExists()
-        }
-    }
+    /** Something to do in the folder: a body to look for or one of ours to remove. */
+    fun busy(): Boolean = db.pendingIn(VIA_DRIVE).isNotEmpty() || db.doneNotRemoved(VIA_DRIVE).isNotEmpty()
 
-    /** Returns the files taken in now, as (contact id, file id). */
-    fun sweep(folder: DriveFolder): List<Pair<String, String>> {
+    /** Returns how many files were taken in now (each answered with a `file-done` letter). */
+    fun sweep(folder: DriveFolder): Int {
         val contacts = db.contacts().associateBy { it.id }
-        val taken = mutableListOf<Pair<String, String>>()
-        for (file in db.pendingIn()) {
+        var taken = 0
+        for (file in db.pendingIn(VIA_DRIVE)) {
             val sender = contacts[file.contact] ?: continue
             val body = folder.find(me.card, file.id) ?: continue
             val opened = tmp.createDirectories().resolve("${file.id}.opening")
@@ -148,32 +165,38 @@ class FileCarrier(private val db: PeerDatabase, private val me: PeerIdentity, pe
                     db.markInError(file.id, "the body doesn't match the letter (${measured.size} bytes)")
                     continue
                 }
-                val target = free(received.resolve(sender.card.id.take(12)).createDirectories(), safeName(file.name))
-                Files.move(opened, target)
-                db.markReceived(file.id, target, clock())
+                val target = keep(received, sender, file.name, opened)
+                db.markReceived(file, target, clock(), tell = true)
                 runCatching { body.deleteIfExists() } // the sender removes it too once it hears
-                taken += sender.id to file.id
+                taken++
             } catch (e: Exception) {
                 db.markInError(file.id, e.message ?: e.javaClass.simpleName) // most often: Drive is still bringing it
             } finally {
                 opened.deleteIfExists()
             }
         }
-        for (out in db.doneNotRemoved()) {
+        for (out in db.doneNotRemoved(VIA_DRIVE)) {
             contacts[out.contact]?.let { runCatching { folder.remove(it.card, out.id) } }
             db.markRemoved(out.id, clock())
         }
         return taken
     }
+}
 
-    private fun safeName(name: String): String =
-        name.replace(Regex("""[\\/:*?"<>|\p{Cntrl}]"""), "_").trim().trimStart('.').take(120).ifBlank { "file" }
+/** Moves an opened file into `received/<sender>/` under a name safe for any disk that isn't taken yet. */
+internal fun keep(received: Path, sender: Contact, name: String, opened: Path): Path {
+    val target = free(received.resolve(sender.card.id.take(12)).createDirectories(), safeName(name))
+    Files.move(opened, target)
+    return target
+}
 
-    private fun free(dir: Path, name: String): Path {
-        val dot = name.lastIndexOf('.').takeIf { it > 0 } ?: name.length
-        var candidate = dir.resolve(name)
-        var n = 2
-        while (candidate.exists()) candidate = dir.resolve("${name.take(dot)} ($n)${name.drop(dot)}").also { n++ }
-        return candidate
-    }
+private fun safeName(name: String): String =
+    name.replace(Regex("""[\\/:*?"<>|\p{Cntrl}]"""), "_").trim().trimStart('.').take(120).ifBlank { "file" }
+
+private fun free(dir: Path, name: String): Path {
+    val dot = name.lastIndexOf('.').takeIf { it > 0 } ?: name.length
+    var candidate = dir.resolve(name)
+    var n = 2
+    while (candidate.exists()) candidate = dir.resolve("${name.take(dot)} ($n)${name.drop(dot)}").also { n++ }
+    return candidate
 }

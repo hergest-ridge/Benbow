@@ -2,12 +2,20 @@ package app.benbow.server.peer
 
 import com.icegreen.greenmail.util.GreenMail
 import com.icegreen.greenmail.util.ServerSetupTest
+import jakarta.mail.Folder
+import jakarta.mail.Session
+import java.nio.file.Files
+import java.nio.file.Path
+import java.util.Properties
+import kotlin.io.path.readBytes
+import kotlin.random.Random
 import kotlin.test.AfterTest
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** The mailbox over real IMAP (GreenMail in this process): folders, APPEND, removal, IDLE, and two links talking. */
+/** The mailbox over real IMAP (GreenMail in this process): what older servers read, IDLE, and two links talking. */
 class PeerMailTest {
     private val mail = GreenMail(ServerSetupTest.IMAP.dynamicPort()).apply {
         start()
@@ -19,43 +27,50 @@ class PeerMailTest {
     fun stop() = mail.stop()
 
     @Test
-    fun foldersLettersAndRemoval() {
-        ImapMailbox(settings).use { box ->
-            box.ensureFolder("Benbow-test")
-            box.ensureFolder("Benbow-test") // twice is fine
-            box.append("Benbow-test", "id-1", "{\"v\":1}")
-            box.append("Benbow-test", "id-2", "x".repeat(5_000)) // longer than a mail line may be
-            val items = box.items("Benbow-test")
-            assertEquals(listOf("id-1", "id-2"), items.map { it.subject })
-            assertEquals("{\"v\":1}", items[0].text.trim())
-            assertEquals("x".repeat(5_000), items[1].text.trim())
-            assertEquals(setOf("id-1", "id-2"), box.subjects("Benbow-test"))
-            box.delete("Benbow-test", listOf(items[0].uid))
-            assertEquals(listOf("id-2"), box.items("Benbow-test").map { it.subject })
+    fun lettersStayPlainTextInTheirOldFolderAndPartsGoAsAttachments() {
+        val letters = Address("a1b2c3d4e5f6a7b8", Box.LETTERS)
+        val parts = Address("a1b2c3d4e5f6a7b8", Box.PARTS)
+        ImapCarrier(settings).use { box ->
+            box.drop(letters, "id-1", "{\"v\":1}".encodeToByteArray())
+            box.drop(parts, "f.0", ByteArray(300_000) { (it % 251).toByte() })
+        }
+        // What a server from before ADR-055 sees: the letters folder of the same name, the letter as plain text.
+        val store = Session.getInstance(Properties()).getStore("imap").apply { connect("127.0.0.1", mail.imap.port, "box", "secret") }
+        try {
+            val folder = store.getFolder("Benbow-a1b2c3d4e5f6").apply { open(Folder.READ_ONLY) }
+            val letter = folder.messages.single()
+            assertEquals("id-1", letter.subject)
+            assertTrue(letter.isMimeType("text/plain"))
+            assertEquals("{\"v\":1}", (letter.content as String).trim())
+            folder.close(false)
+            val part = store.getFolder("Benbow-a1b2c3d4e5f6-parts").apply { open(Folder.READ_ONLY) }.messages.single()
+            assertTrue(part.isMimeType("application/octet-stream"))
+        } finally {
+            store.close()
         }
     }
 
     @Test
     fun idleEndsWhenALetterArrivesAndAfterItsTime() {
-        ImapMailbox(settings).use { watcher ->
-            ImapMailbox(settings).use { other ->
-                watcher.ensureFolder("Benbow-in")
-                watcher.items("Benbow-in")
+        val inbox = Address("f00dfeedbeef0000", Box.LETTERS)
+        ImapCarrier(settings).use { watcher ->
+            ImapCarrier(settings).use { other ->
+                watcher.waiting(inbox)
                 val started = System.nanoTime()
-                watcher.await("Benbow-in", timeoutMs = 1_500)
+                watcher.await(inbox, timeoutMs = 1_500)
                 val waited = (System.nanoTime() - started) / 1_000_000
                 assertTrue(waited in 1_000..8_000, "an empty wait ends after its time ($waited ms)")
 
                 val sender = Thread {
                     Thread.sleep(500)
-                    other.append("Benbow-in", "id", "hello")
+                    other.drop(inbox, "id", "hello".encodeToByteArray())
                 }.apply { start() }
                 val t0 = System.nanoTime()
-                watcher.await("Benbow-in", timeoutMs = 30_000)
+                watcher.await(inbox, timeoutMs = 30_000)
                 val woke = (System.nanoTime() - t0) / 1_000_000
                 sender.join()
                 assertTrue(woke < 10_000, "a letter ends the wait ($woke ms)")
-                assertEquals(listOf("id"), watcher.items("Benbow-in").map { it.subject })
+                assertEquals(listOf("id"), watcher.waiting(inbox).map { it.name })
             }
         }
     }
@@ -90,6 +105,35 @@ class PeerMailTest {
     }
 
     @Test
+    fun twoServersSendAFileInPartsThroughOneMailbox() {
+        val dir = Files.createTempDirectory("benbow-mail-files")
+        val bytes = Random(9).nextBytes(9 * 1024 * 1024) // two parts: 8 MB and the rest
+        val anna = link(dir.resolve("anna"))
+        val max = link(dir.resolve("max"))
+        try {
+            anna.db.addContact("Макс", max.identity.card, 0)
+            max.db.addContact("Аня", anna.identity.card, 0)
+            for (link in listOf(anna, max)) {
+                link.db.saveMailSettings(settings)
+                link.start()
+            }
+            anna.sendFile(max.identity.card.id, "video.bin", bytes.inputStream())
+            awaitTrue(60_000) { max.db.filesIn(anna.identity.card.id, 10).singleOrNull()?.receivedAt != null }
+            assertContentEquals(bytes, Path.of(max.db.filesIn(anna.identity.card.id, 10).single().path!!).readBytes())
+            awaitTrue(30_000) { anna.db.filesOut(max.identity.card.id, 10).single().removedAt != null }
+            assertEquals(2, anna.db.filesOut(max.identity.card.id, 10).single().parts!!.size)
+            val parts = mail.managers.imapHostManager.getFolder(
+                mail.managers.userManager.getUser("box"),
+                "Benbow-${max.identity.card.id.take(12)}-parts",
+            )
+            assertEquals(0, parts.messageCount, "the parts left the mailbox")
+        } finally {
+            anna.close()
+            max.close()
+        }
+    }
+
+    @Test
     fun aRefusedLoginIsNotTriedAgain() {
         var attempts = 0
         val link = PeerLink(
@@ -97,7 +141,7 @@ class PeerMailTest {
             PeerIdentity.generate(),
             connect = {
                 attempts++
-                ImapMailbox(it.copy(secure = false))
+                ImapCarrier(it.copy(secure = false))
             },
         )
         try {
@@ -113,9 +157,14 @@ class PeerMailTest {
     }
 
     /** The stored settings say TLS, as the admin page always does; the test server speaks plain IMAP. */
-    private fun link() = PeerLink(PeerDatabase.inMemory(), PeerIdentity.generate(), connect = {
-        ImapMailbox(it.copy(secure = false))
-    }, idleMs = 2_000)
+    private fun link(peerDir: Path? = null) = PeerLink(
+        PeerDatabase.inMemory(),
+        PeerIdentity.generate(),
+        connect = { ImapCarrier(it.copy(secure = false)) },
+        idleMs = 2_000,
+        peerDir = peerDir,
+        sweepMs = 300,
+    )
 
     private fun awaitTrue(timeoutMs: Long = 20_000, condition: () -> Boolean) {
         val until = System.currentTimeMillis() + timeoutMs

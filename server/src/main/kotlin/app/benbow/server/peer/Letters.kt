@@ -34,10 +34,16 @@ data class Letter(
         const val NOTE = "note"
         const val ACK = "ack"
 
-        /** [text] is a [SharedFile] as JSON: the body waits in the Drive folder. */
+        /** [text] is a [SharedFile] as JSON: the body waits in the Drive folder (servers before ADR-055 send these). */
         const val FILE = "file"
 
-        /** [text] is the id of a file whose body arrived and matched. */
+        /** [text] is a [PartedFile] as JSON: the file comes in parts through a carrier (ADR-055). */
+        const val FILE_PARTS = "file-parts"
+
+        /** [text] is a [PartsGot] as JSON: parts of a file that arrived and matched. */
+        const val FILE_GOT = "file-got"
+
+        /** [text] is the id of a file that arrived whole and matched. */
         const val FILE_DONE = "file-done"
     }
 }

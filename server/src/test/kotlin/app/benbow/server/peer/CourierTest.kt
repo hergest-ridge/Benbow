@@ -1,71 +1,14 @@
 package app.benbow.server.peer
 
 import app.benbow.server.SERVER_VERSION
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.locks.ReentrantLock
-import kotlin.concurrent.withLock
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** A shared mailbox in memory that can lose, double and refuse what it carries. */
-class MemoryMailbox : Mailbox {
-    private val lock = ReentrantLock()
-    private val changed = lock.newCondition()
-    private val folders = mutableMapOf<String, MutableList<MailItem>>()
-    private var nextUid = 1L
-
-    /** Fails the next `delete` (a connection cut after the letters were kept). */
-    var failNextDelete = false
-
-    override fun ensureFolder(name: String) = lock.withLock {
-        folders.getOrPut(name) { mutableListOf() }
-        Unit
-    }
-
-    override fun items(folder: String) = lock.withLock { folders[folder].orEmpty().toList() }
-
-    override fun subjects(folder: String) = lock.withLock { folders[folder].orEmpty().map { it.subject }.toSet() }
-
-    override fun append(folder: String, subject: String, text: String) = lock.withLock {
-        folders.getValue(folder) += MailItem(nextUid++, subject, text)
-        changed.signalAll()
-    }
-
-    override fun delete(folder: String, uids: Collection<Long>) = lock.withLock {
-        if (failNextDelete) {
-            failNextDelete = false
-            error("connection reset")
-        }
-        folders[folder]?.removeAll { it.uid in uids }
-        Unit
-    }
-
-    override fun await(folder: String, timeoutMs: Long) = lock.withLock {
-        changed.await(timeoutMs, TimeUnit.MILLISECONDS)
-        Unit
-    }
-
-    override fun close() {}
-
-    fun lose(folder: String) = lock.withLock { folders[folder]?.clear() }
-
-    fun double(folder: String) = lock.withLock {
-        folders.getValue(folder).toList().forEach {
-            folders.getValue(folder) +=
-                it.copy(uid = nextUid++)
-        }
-    }
-
-    fun put(folder: String, text: String) = append(folder, "x", text)
-
-    fun count(folder: String) = lock.withLock { folders[folder].orEmpty().size }
-}
-
 /** Two servers and one mailbox: every note arrives once, whatever the mailbox loses or doubles. */
 class CourierTest {
     private var now = 1_000_000L
-    private val box = MemoryMailbox()
+    private val box = MemoryCarrier()
     private val anna = Server("Аня")
     private val max = Server("Макс")
 
@@ -166,7 +109,7 @@ class CourierTest {
         meet()
         anna.note(max, "Не задвоится")
         anna.courier.round()
-        box.failNextDelete = true
+        box.failNextRemove = true
         runCatching { max.courier.round() }
         exchange()
         assertEquals(listOf("Не задвоится"), max.received(anna))
@@ -189,7 +132,6 @@ class CourierTest {
     @Test
     fun garbageAndForgeriesAreRefusedAndRemoved() {
         meet()
-        box.ensureFolder(max.inbox)
         box.put(max.inbox, "not an envelope")
         val impostor = PeerIdentity.generate()
         val forged = Letters.seal(impostor, max.identity.card, Letter("f", 1, Letter.NOTE, "Я Аня", sentAt = now))
@@ -204,7 +146,6 @@ class CourierTest {
     @Test
     fun aLetterInANewerFormatWaitsForTheUpdateInsteadOfGoingRound() {
         meet()
-        box.ensureFolder(max.inbox)
         val today = Letters.seal(anna.identity, max.identity.card, Letter("n", 1, Letter.NOTE, "из будущего", sentAt = now))
         val tomorrow = today.replace("\"v\":${Letters.VERSION},", "\"v\":${Letters.VERSION + 1},")
         box.put(max.inbox, tomorrow)

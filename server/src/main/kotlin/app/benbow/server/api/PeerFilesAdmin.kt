@@ -22,7 +22,7 @@ import kotlin.io.path.isDirectory
 
 private const val MAX_FILE = 4L * 1024 * 1024 * 1024
 
-/** Files through the shared Google Drive folder on the admin page (ADR-039): the folder and sending a file. */
+/** Files on the admin page: sending one (in parts through the mailbox, ADR-055), and the Drive folder of older servers. */
 internal fun Route.peerFileRoutes(ctx: ServerContext) {
     get("/admin/folders") {
         if (!ctx.isLoopback(call)) return@get call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
@@ -71,9 +71,12 @@ internal fun driveCard(peers: PeerLink): String = buildString {
     }
     append("<div class=\"card\"><div class=\"row\"><h3>${icon("folder")}Google Диск</h3><span class=\"spacer\"></span>$state</div>")
     when {
-        folder == null -> append("<p class=\"muted\">Не указана: файлы не ходят, только сообщения.</p>")
+        folder == null -> append(
+            "<p class=\"muted\">Не нужен: файлы ходят через ящик частями. Укажите папку, только если сервер друга ещё не " +
+                "обновлён и шлёт файлы через Диск.</p>",
+        )
 
-        there -> append("<p>Файлы кладутся в <code>${esc(folder.resolve("Benbow").toString())}</code></p>")
+        there -> append("<p>Файлы от необновлённых серверов берутся из <code>${esc(folder.resolve("Benbow").toString())}</code></p>")
 
         else -> append(
             "<div class=\"banner err\">${icon(
@@ -81,7 +84,11 @@ internal fun driveCard(peers: PeerLink): String = buildString {
             )}<div>Папки <code>${esc(folder.toString())}</code> сейчас нет: запущен ли Google Диск?</div></div>",
         )
     }
-    append("<details class=\"edit\"${if (there) "" else " open"}><summary class=\"btn text\">${icon("edit")}Изменить</summary>")
+    append(
+        "<details class=\"edit\"${if (folder != null && !there) " open" else ""}><summary class=\"btn text\">${icon(
+            "edit",
+        )}Изменить</summary>",
+    )
     append("<form method=\"post\" action=\"/admin/peers/drive\" class=\"stack\"><div class=\"path-row\">")
     append(field("path", "Папка, которую зеркалирует Диск", folder?.toString().orEmpty(), "H:\\Google Drive или C:\\Users\\…\\My Drive"))
     append("<button class=\"btn outlined\" type=\"button\" data-pick-folder=\"path\">${icon("folder_open")}Выбрать…</button></div>")

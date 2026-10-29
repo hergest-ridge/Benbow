@@ -28,7 +28,8 @@ Losing or corrupting data is unacceptable from v1. Every storage, sync, migratio
   db/purge-journal.jsonl     every purge (ADR-041), append-only, one fsync'd line each; survives a restore and is applied again after one
   db/peers.sqlite(-wal,-shm)      the link with friends' servers (ADR-039): contacts, letters, the mailbox settings; never mixed with the journal, not backed up while it holds only test notes (F1)
   peer/identity.json         the server's keys towards friends (losing it means exchanging cards again)
-  peer/received/<sender>/    files friends sent (F5a test files), checked against their letters; peer/tmp/ only while sealing or opening
+  peer/received/<sender>/    files friends sent, checked against their letters; peer/tmp/ only while sealing or opening
+  peer/outgoing/, incoming/  sealed files on their way to a friend (until it has them) and from one (put together part by part, ADR-055)
   tmp/uploads/               in-progress resumable uploads
   thumbs/                    derived previews (regenerable, not backed up)
   backups/db/                verified DB snapshots

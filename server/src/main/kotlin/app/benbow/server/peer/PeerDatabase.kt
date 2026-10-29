@@ -274,7 +274,7 @@ internal fun ResultSet.longOrNull(column: Int): Long? = getLong(column).takeUnle
 
 /** Forward-only schema steps of `peers.sqlite`, tracked by `PRAGMA user_version`. */
 internal object PeerMigrations {
-    const val SCHEMA_VERSION = 2
+    const val SCHEMA_VERSION = 3
 
     private val steps: List<List<String>> = listOf(
         // 1: contacts, letters out and in, settings
@@ -300,6 +300,22 @@ internal object PeerMigrations {
                 id TEXT PRIMARY KEY, contact TEXT NOT NULL, name TEXT NOT NULL, size INTEGER NOT NULL, sha256 TEXT NOT NULL,
                 file_key TEXT NOT NULL, announced_at INTEGER NOT NULL, received_at INTEGER, path TEXT, last_error TEXT
             )""",
+        ),
+        // 3: files in parts through any carrier (ADR-055); the files before it went through the Drive folder
+        listOf(
+            "ALTER TABLE files_out ADD COLUMN via TEXT NOT NULL DEFAULT 'drive'",
+            "ALTER TABLE files_out ADD COLUMN sealed_size INTEGER",
+            "ALTER TABLE files_out ADD COLUMN part_size INTEGER",
+            "ALTER TABLE files_out ADD COLUMN part_hashes TEXT",
+            "ALTER TABLE files_out ADD COLUMN file_key TEXT",
+            "ALTER TABLE files_out ADD COLUMN last_error TEXT",
+            "ALTER TABLE files_in ADD COLUMN via TEXT NOT NULL DEFAULT 'drive'",
+            "ALTER TABLE files_in ADD COLUMN sealed_size INTEGER",
+            "ALTER TABLE files_in ADD COLUMN part_size INTEGER",
+            "ALTER TABLE files_in ADD COLUMN part_hashes TEXT",
+            "CREATE TABLE parts_out (file TEXT NOT NULL, n INTEGER NOT NULL, dropped_at INTEGER NOT NULL, got_at INTEGER, PRIMARY KEY (file, n))",
+            "CREATE TABLE parts_in (file TEXT NOT NULL, n INTEGER NOT NULL, got_at INTEGER NOT NULL, told_at INTEGER, PRIMARY KEY (file, n))",
+            "CREATE TABLE spend (at INTEGER NOT NULL, carrier TEXT NOT NULL, bytes INTEGER NOT NULL)",
         ),
     )
 

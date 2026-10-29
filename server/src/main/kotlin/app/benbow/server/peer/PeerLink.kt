@@ -1,6 +1,5 @@
 package app.benbow.server.peer
 
-import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import java.io.InputStream
 import java.nio.file.Path
@@ -9,19 +8,22 @@ import java.util.concurrent.TimeUnit
 import kotlin.io.path.isDirectory
 
 /**
- * Keeps the link with friends' servers going (ADR-039): one worker thread that connects to the shared mailbox, runs a
- * [Courier] round, waits in IDLE and starts over, reconnecting with growing pauses after a failure; and one thread that
- * sends a queued letter at once. Off until the mailbox is set on the admin page.
+ * Keeps the link with friends' servers going (ADR-039, ADR-055): one worker thread that connects to the carrier, runs a
+ * [Courier] round, waits in IDLE and starts over, reconnecting with growing pauses after a failure; one thread that
+ * sends a queued letter at once; and one that moves files' parts on a carrier connection of their own, so a large part
+ * never holds letters up. Off until the mailbox is set on the admin page.
  */
 class PeerLink(
     val db: PeerDatabase,
     val identity: PeerIdentity,
-    private val connect: (MailSettings) -> Mailbox = ::ImapMailbox,
+    private val connect: (MailSettings) -> Carrier = ::ImapCarrier,
     private val clock: () -> Long = System::currentTimeMillis,
     private val idleMs: Long = IDLE_MS,
     /** `<data>/peer`: where files are sealed, opened and kept; null where files aren't needed (tests). */
     peerDir: Path? = null,
     private val sweepMs: Long = SWEEP_MS,
+    /** The carrier for files' parts: the same mailbox for now, a second one later (ADR-055). */
+    private val connectParts: (MailSettings) -> Carrier = connect,
 ) : AutoCloseable {
     sealed interface Status {
         data object Off : Status
@@ -44,44 +46,90 @@ class PeerLink(
     private var running = false
 
     @Volatile
-    private var mailbox: Mailbox? = null
+    private var mailbox: Carrier? = null
 
     @Volatile
     private var courier: Courier? = null
     private var worker: Thread? = null
     private val sender = Executors.newSingleThreadScheduledExecutor { Thread(it, "benbow-peers-send").apply { isDaemon = true } }
 
-    /** Files through the Drive folder; their sweep has a thread of its own, since opening a large file takes a while. */
-    val files: FileCarrier? = peerDir?.let { FileCarrier(db, identity, it, clock) }
+    /** Files in parts through the mailbox (ADR-055); their passes have a thread of their own. */
+    val transfers: Transfers? = peerDir?.let { Transfers(db, identity, it, clock) }
+
+    /** Files from servers before ADR-055, through the Drive folder. */
+    private val drive: DriveFiles? = peerDir?.let { DriveFiles(db, identity, it, clock) }
     private val sweeper = Executors.newSingleThreadScheduledExecutor { Thread(it, "benbow-peers-files").apply { isDaemon = true } }
 
+    /** The parts' carrier and its failures: used on [sweeper]'s thread only. */
+    private var parts: Carrier? = null
+    private var partsRetryAt = 0L
+    private var partsPause = FIRST_PAUSE_MS
+
+    @Volatile
+    private var partsRefused = false
+
     init {
-        if (files != null) sweeper.scheduleWithFixedDelay(::sweep, sweepMs, sweepMs, TimeUnit.MILLISECONDS)
+        if (peerDir != null) sweeper.scheduleWithFixedDelay(::moveFiles, sweepMs, sweepMs, TimeUnit.MILLISECONDS)
     }
 
     /**
-     * Seals [source] into the Drive folder for [contact] and announces it by letter. Throws with a message for a person
-     * when the folder isn't set or isn't there.
+     * Seals [source] for [contact]; the next pass cuts it into parts, announces it by letter and sends the parts through
+     * the mailbox. Throws with a message for a person when files can't go.
      */
     fun sendFile(contact: String, name: String, source: InputStream) {
-        val carrier = requireNotNull(files) { "файлы на этом сервере выключены" }
-        val root = requireNotNull(db.driveFolder()) { "сначала укажите папку Google Диска" }
-        require(root.isDirectory()) { "папки $root нет: проверьте, что Google Диск запущен" }
+        val files = requireNotNull(transfers) { "файлы на этом сервере выключены" }
+        require(db.mailSettings()?.complete == true) { "сначала настройте почтовый ящик в «Связи»" }
         val friend = requireNotNull(db.contacts().firstOrNull { it.id == contact }) { "такого контакта нет" }
-        val file = carrier.send(DriveFolder(root), friend, name, source)
-        db.enqueue(contact, Letter.FILE, Json.encodeToString(file), clock())
-        hotUntil = clock() + HOT_MS
-        sendSoon(attempt = 0)
+        files.seal(friend, name, source, VIA_MAIL)
+        filesSoon()
     }
 
-    private fun sweep() {
-        val carrier = files ?: return
+    /** A pass over files now rather than at the next tick: a letter about one came, or one was sealed. */
+    private fun filesSoon() {
+        runCatching { sweeper.execute(::moveFiles) }
+    }
+
+    /** Never throws: a scheduled task that throws is never run again. */
+    private fun moveFiles() {
+        sweepDrive()
+        val files = transfers ?: return
+        try {
+            if (!files.busy(VIA_MAIL)) return closeParts()
+            val settings = db.mailSettings()?.takeIf { it.complete } ?: return
+            if (partsRefused || clock() < partsRetryAt) return
+            val carrier = parts ?: connectParts(settings).also { parts = it }
+            val pass = files.pass(carrier, VIA_MAIL, "mail:${settings.user}@${settings.host}")
+            partsPause = FIRST_PAUSE_MS
+            if (pass.moved) log.info("Files: {}", pass)
+            if (pass.letters > 0) {
+                hotUntil = clock() + HOT_MS
+                sendSoon(attempt = 0)
+            }
+        } catch (e: LoginRefused) {
+            partsRefused = true
+            closeParts()
+            log.warn("The mailbox refused the login for files ({}); not retrying until the settings change", e.message)
+        } catch (e: Exception) {
+            closeParts()
+            partsRetryAt = clock() + partsPause
+            log.warn("Moving files failed; again in {} s", partsPause / 1000, e)
+            partsPause = (partsPause * 2).coerceAtMost(LAST_PAUSE_MS)
+        }
+    }
+
+    private fun closeParts() {
+        parts?.let { runCatching { it.close() } }
+        parts = null
+    }
+
+    private fun sweepDrive() {
+        val files = drive ?: return
         val root = db.driveFolder()?.takeIf { it.isDirectory() } ?: return
         try {
-            val taken = carrier.sweep(DriveFolder(root))
-            for ((contact, id) in taken) db.enqueue(contact, Letter.FILE_DONE, id, clock())
-            if (taken.isNotEmpty()) {
-                log.info("Files taken in through Drive: {}", taken.size)
+            if (!files.busy()) return
+            val taken = files.sweep(DriveFolder(root))
+            if (taken > 0) {
+                log.info("Files taken in through Drive: {}", taken)
                 hotUntil = clock() + HOT_MS
                 sendSoon(attempt = 0)
             }
@@ -104,6 +152,13 @@ class PeerLink(
     @Synchronized
     fun restart() {
         halt()
+        partsRefused = false
+        runCatching {
+            sweeper.execute {
+                partsRetryAt = 0
+                closeParts()
+            }
+        }
         start()
     }
 
@@ -150,7 +205,7 @@ class PeerLink(
             try {
                 status = Status.Connecting
                 val box = connect(settings).also { mailbox = it }
-                val c = Courier(identity, db, box, clock).also { courier = it }
+                val c = Courier(identity, db, box, onFiles = ::filesSoon, clock = clock).also { courier = it }
                 val since = clock()
                 status = Status.Online(since, null, null)
                 pause = FIRST_PAUSE_MS
@@ -198,6 +253,7 @@ class PeerLink(
         sender.shutdownNow()
         sweeper.shutdownNow()
         sweeper.awaitTermination(5, TimeUnit.SECONDS)
+        closeParts()
         db.close()
     }
 
@@ -210,7 +266,7 @@ class PeerLink(
         private const val HOT_MS = 2 * 60_000L
         private const val HOT_POLL_MS = 3_000L
 
-        /** How often the Drive folder is looked at for files that came through. */
+        /** How often files' parts are moved while some are on their way (and the Drive folder looked at). */
         const val SWEEP_MS = 10_000L
     }
 }

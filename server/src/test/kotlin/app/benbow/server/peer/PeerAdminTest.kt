@@ -104,20 +104,11 @@ class PeerAdminTest {
     }
 
     @Test
-    fun aFileGoesSealedIntoTheDriveFolder() = withPage { peers, client ->
+    fun aFileIsSealedAsItArrivesAndWaitsForTheMailbox() = withPage { peers, client ->
         val friend = PeerIdentity.generate().card
         peers.db.addContact("Аня", friend, 0)
-        assertTrue("Отправить файл" !in client.get("/").bodyAsText(), "no sending before the folder is set")
-        assertTrue(
-            "нет" in client.submitForm(
-                "/admin/peers/drive",
-                parameters {
-                    append("path", dir.resolve("missing").toString())
-                },
-            ).bodyAsText(),
-        )
-        val drive = Files.createDirectories(dir.resolve("My Drive"))
-        assertEquals(HttpStatusCode.Found, client.submitForm("/admin/peers/drive", parameters { append("path", "\"$drive\"") }).status)
+        assertTrue("Отправить файл" !in client.get("/").bodyAsText(), "no sending before the mailbox is set")
+        peers.db.saveMailSettings(MailSettings("imap.example.invalid", 993, "box", "secret"))
 
         val content = "секретное содержимое".toByteArray()
         val upload = client.submitFormWithBinaryData(
@@ -137,18 +128,21 @@ class PeerAdminTest {
         val sent = peers.db.filesOut(friend.id, 10).single()
         assertEquals("заметка.txt", sent.name)
         assertEquals(content.size.toLong(), sent.size)
-        val body = DriveFolder(drive).bodyFor(friend, sent.id)
-        assertTrue(Files.exists(body))
-        assertFalse(
-            "секретное".toByteArray().let { needle ->
-                Files.readAllBytes(body).toList().windowed(needle.size).any {
-                    it ==
-                        needle.toList()
-                }
-            },
-        )
+        assertEquals(VIA_MAIL, sent.via)
+        val sealed = dir.resolve("peer/outgoing/${sent.id}.sealed")
+        assertTrue(Files.exists(sealed))
+        val needle = "секретное".toByteArray().toList()
+        assertFalse(Files.readAllBytes(sealed).toList().windowed(needle.size).any { it == needle }, "no plain copy")
         val page = client.get("/").bodyAsText()
-        assertTrue("заметка.txt" in page && "в папке Диска" in page)
+        assertTrue("заметка.txt" in page && "готовится к отправке" in page)
+    }
+
+    @Test
+    fun theDriveFolderOfOlderServersMustBeThere() = withPage { _, client ->
+        val missing = client.submitForm("/admin/peers/drive", parameters { append("path", dir.resolve("missing").toString()) })
+        assertTrue("нет" in missing.bodyAsText())
+        val drive = Files.createDirectories(dir.resolve("My Drive"))
+        assertEquals(HttpStatusCode.Found, client.submitForm("/admin/peers/drive", parameters { append("path", "\"$drive\"") }).status)
     }
 
     @Test

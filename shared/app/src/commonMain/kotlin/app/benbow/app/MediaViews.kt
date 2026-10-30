@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -419,13 +418,10 @@ private fun MediaCarouselFrame(
     Box(
         modifier.clip(shape).background(MaterialTheme.colorScheme.surfaceContainerHigh).semantics { contentDescription = label },
     ) {
-        // In a wide window the next picture peeks in at the right edge (owner: with a mouse nothing told there were more),
-        // and a mouse drags the pages.
-        val peek = LocalWide.current && items.size > 1
+        // Each page the carousel's whole width (owner: no piece of the next one at the edge); the arrows and the count tell
+        // there are more, and a mouse drags the pages.
         HorizontalPager(
             pager,
-            contentPadding = PaddingValues(end = if (peek) PEEK else 0.dp),
-            pageSpacing = if (peek) 6.dp else 0.dp,
             key = { current.value[it].meta.id },
             modifier = Modifier.fillMaxSize().mouseSwipe(pager),
         ) { page ->
@@ -458,9 +454,6 @@ private fun MediaCarouselFrame(
         }
     }
 }
-
-/** How much of the next picture shows beside the current one in a wide window. */
-private val PEEK = 36.dp
 
 @Composable
 private fun Chip(text: String, modifier: Modifier = Modifier) {

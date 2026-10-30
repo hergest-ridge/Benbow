@@ -163,6 +163,8 @@ import app.benbow.client.placeOnBoard
 import app.benbow.client.searchBoard
 import app.benbow.client.tickOnBoard
 import app.benbow.ui.sideScroll
+import app.benbow.ui.theme.HueToken
+import app.benbow.ui.theme.SwatchColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flowOf
@@ -656,7 +658,9 @@ private fun SearchTop(words: String, onWords: (String) -> Unit, onBack: () -> Un
 /** Keep's search filters: kinds of notes, then the colors and tags the found notes have. */
 @Composable
 private fun FilterRow(found: List<BoardNote>, filter: BoardFilter, onFilter: (BoardFilter) -> Unit) {
-    val colors = found.mapNotNull { it.entry.background }.distinct().let { present -> SWATCHES.filter { it in present } }
+    val colors = found.mapNotNull { it.entry.background }.distinct().let { present ->
+        SWATCHES.filter { it in present } + present.filter { it == SwatchColors.BLACK || HueToken.of(it) != null }
+    }
     val tags = found.flatMap { it.entry.tags }.distinctBy { it.id }
     Row(
         Modifier.fillMaxWidth().sideScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),

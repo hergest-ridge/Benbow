@@ -26,17 +26,19 @@ import org.jetbrains.compose.resources.decodeToImageBitmap
 /** The picture at [path] under `files/looks/` (e.g. "openclipart/swallow-silhouette"), once read; null while it loads. */
 @Composable
 internal fun lookPicture(path: String): ImageVector? {
+    // produceState keeps its value when the path changes: the new path's picture is read whatever is shown.
     val vector by produceState(LookPictures.cached(path), path) {
-        if (value == null) value = LookPictures.load(path)
+        value = LookPictures.cached(path) ?: LookPictures.load(path)
     }
     return vector
 }
 
-/** A photo under `files/looks/` (a paper, a wallpaper; e.g. "paper/paper001.jpg"), decoded once; null while it loads. */
+/** A photo under `files/looks/` (a paper, a picture; e.g. "paper/paper001.jpg"), decoded once; null while it loads. */
 @Composable
 internal fun lookPhoto(path: String): ImageBitmap? {
+    // As above: one paper after another kept the first (owner).
     val bitmap by produceState(LookPictures.photo(path), path) {
-        if (value == null) value = LookPictures.loadPhoto(path)
+        value = LookPictures.photo(path) ?: LookPictures.loadPhoto(path)
     }
     return bitmap
 }

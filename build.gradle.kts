@@ -16,7 +16,8 @@ plugins {
 spotless {
     // Sources are LF (.gitattributes); explicit, so Spotless doesn't scan git attributes of every file.
     lineEndings = com.diffplug.spotless.LineEnding.UNIX
-    val excluded = listOf("**/build/**", "**/.gradle/**", "**/.kotlin/**", ".tmp/**", "kotlin-js-store/**")
+    // .claude/ holds the agent's worktrees: whole copies of the repository, not ours to format (and minutes to walk).
+    val excluded = listOf("**/build/**", "**/.gradle/**", "**/.kotlin/**", ".tmp/**", "kotlin-js-store/**", ".claude/**")
     kotlin {
         target("**/*.kt")
         targetExclude(excluded)

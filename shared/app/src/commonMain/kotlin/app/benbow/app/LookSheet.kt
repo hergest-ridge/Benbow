@@ -1,11 +1,5 @@
 package app.benbow.app
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -58,7 +52,6 @@ import app.benbow.app.resources.look_close
 import app.benbow.app.resources.look_color
 import app.benbow.app.resources.look_credit_ambient
 import app.benbow.app.resources.look_credit_hero
-import app.benbow.app.resources.look_credit_morris
 import app.benbow.app.resources.look_font
 import app.benbow.app.resources.look_font_plain
 import app.benbow.app.resources.look_font_sample
@@ -91,6 +84,9 @@ import app.benbow.client.IoDispatcher
 import app.benbow.client.LookFields
 import app.benbow.ui.editor.NoteFont
 import app.benbow.ui.editor.inFont
+import app.benbow.ui.theme.BenbowTheme
+import app.benbow.ui.theme.SwatchColors
+import app.benbow.ui.theme.isDarkColor
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.StringArrayResource
 import org.jetbrains.compose.resources.StringResource
@@ -127,14 +123,27 @@ internal class LookTarget(
     val base: Color @Composable get() = swatch(color) ?: page
 }
 
+/**
+ * The part of «Оформление» open now (null: the list), held by the screen it changes: a choice that changes the note may
+ * build its page anew, sheet or pane with it, and the part chosen in stays open (owner, 2026-10-30).
+ */
+internal class LookOpenPart {
+    var open by mutableStateOf<LookSection?>(null)
+}
+
 /** On a phone: a sheet opened whole, the note's preview on top, then the parts. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun LookSheet(target: LookTarget, onDismiss: () -> Unit, title: StringResource = Res.string.look_title) {
+internal fun LookSheet(
+    target: LookTarget,
+    onDismiss: () -> Unit,
+    title: StringResource = Res.string.look_title,
+    part: LookOpenPart = remember { LookOpenPart() },
+) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
             Text(stringResource(title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 20.dp))
-            LookParts(target, preview = true)
+            LookParts(target, preview = true, part)
         }
     }
 }
@@ -146,6 +155,7 @@ internal fun LookPanel(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     title: StringResource = Res.string.look_title,
+    part: LookOpenPart = remember { LookOpenPart() },
 ) {
     Surface(modifier, color = MaterialTheme.colorScheme.background) {
         Column {
@@ -157,7 +167,7 @@ internal fun LookPanel(
                 IconButton(onClose, Modifier.hand()) { Icon(Icons.Close, stringResource(Res.string.look_close)) }
             }
             Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-                LookParts(target, preview = false)
+                LookParts(target, preview = false, part)
             }
         }
     }
@@ -184,22 +194,14 @@ private val NOTE_PARTS = listOf(LookSection.Paper, LookSection.Pattern, LookSect
 private val SCREEN_PARTS = listOf(LookSection.ScreenPattern, LookSection.ScreenLight, LookSection.ScreenMotion)
 
 @Composable
-private fun LookParts(target: LookTarget, preview: Boolean) {
+private fun LookParts(target: LookTarget, preview: Boolean, part: LookOpenPart) {
     // The server's fonts as it lists them now (ADR-052): a font added on its page shows here the next time.
     val server = LocalServerFonts.current
     if (target.fonts && server != null) LaunchedEffect(server) { runCatching { withContext(IoDispatcher) { server.refresh() } } }
-    var open by remember { mutableStateOf<LookSection?>(null) }
-    AnimatedContent(
-        open,
-        transitionSpec = {
-            val inward = targetState != null
-            (slideInHorizontally { if (inward) it / 5 else -it / 5 } + fadeIn()) togetherWith fadeOut() using SizeTransform(clip = false)
-        },
-        label = "look section",
-    ) { part ->
-        Column(Modifier.fillMaxWidth()) {
-            if (part == null) PartList(target, preview) { open = it } else PartScreen(target, part) { open = null }
-        }
+    // A part opens in place, at once (owner: no sliding sideways between the list and a part).
+    Column(Modifier.fillMaxWidth()) {
+        val open = part.open
+        if (open == null) PartList(target, preview) { part.open = it } else PartScreen(target, open) { part.open = null }
     }
 }
 
@@ -208,7 +210,7 @@ private fun PartList(target: LookTarget, preview: Boolean, onOpen: (LookSection)
     val base = target.base
     if (preview) {
         if (target.screen == null) {
-            Preview(target.id, target.words, target.look, base)
+            NightNote(target.color) { Preview(target.id, target.words, target.look, base) }
         } else {
             Box(
                 Modifier.clipToBounds().background(target.screenPage)
@@ -327,16 +329,14 @@ private fun PartScreen(target: LookTarget, part: LookSection, onBack: () -> Unit
         )
     }
     when (part) {
-        LookSection.Color -> if (target.sheet != null) {
-            PaperColors(target.color, stringResource(Res.string.background_none), target.onColor)
-        } else {
-            SwatchPicker(
-                target.color,
-                stringResource(Res.string.background_none),
-                target.onColor,
-                Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-            )
-        }
+        // A note's colors as a tracker's (owner): the palette's many and one of one's own, and a note's black too.
+        LookSection.Color -> PaperColors(
+            target.color,
+            stringResource(Res.string.background_none),
+            target.onColor,
+            black =
+            target.sheet == null,
+        )
 
         LookSection.Ink -> target.sheet?.let { InkColors(it) }
 
@@ -376,7 +376,6 @@ private fun LayerGrid(target: LookTarget, part: LookSection) {
     when {
         layer == LookLayer.Paper && NoteLooks.isPhoto(chosen) -> Credit(Res.string.look_credit_ambient)
         layer == LookLayer.Pattern && NoteLooks.isHero(chosen) -> Credit(Res.string.look_credit_hero)
-        layer == LookLayer.Pattern && NoteLooks.isMorris(chosen) -> Credit(Res.string.look_credit_morris)
         layer == LookLayer.Motion -> Credit(Res.string.look_motion_hint)
     }
     if (layer == LookLayer.Scrap) {
@@ -501,7 +500,8 @@ private fun FontChoice(name: String, font: NoteFont?, on: Boolean, base: Color, 
             Text(
                 stringResource(Res.string.look_font_sample),
                 style = MaterialTheme.typography.headlineSmall.inFont(font),
-                color = MaterialTheme.colorScheme.onSurface,
+                // Light on a black note's tile, as its words are.
+                color = if (base.isDarkColor() && !BenbowTheme.colors.dark) SwatchColors.BLACK_INK else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
             )
         }

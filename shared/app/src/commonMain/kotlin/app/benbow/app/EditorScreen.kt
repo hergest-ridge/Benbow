@@ -142,6 +142,8 @@ import app.benbow.ui.editor.EditorToolbar
 import app.benbow.ui.editor.LocalNoteFont
 import app.benbow.ui.editor.inFont
 import app.benbow.ui.theme.BenbowTheme
+import app.benbow.ui.theme.InTheDark
+import app.benbow.ui.theme.SwatchColors
 import app.benbow.ui.theme.isDarkColor
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
@@ -488,6 +490,9 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     val gentleRules by remember { services.repo.gentleRules() }.collectAsStateWithLifecycle(GentleRules.NONE)
     var menu by remember { mutableStateOf(false) }
     var pickingBackground by remember { mutableStateOf(false) }
+    // «Оформление»'s open part, held here: a color picked may build the page anew, the pane or sheet with it.
+    val lookPart = remember { LookOpenPart() }
+    LaunchedEffect(pickingBackground) { if (!pickingBackground) lookPart.open = null }
     var postponing by remember { mutableStateOf(false) }
     var moving by remember { mutableStateOf(false) }
     // «В дневник на другой день…» (ADR-040): the moment picked, then the note goes into the journal there.
@@ -711,9 +716,10 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     } ?: Modifier
     val looked = backdrop != Modifier
     val wide = LocalWide.current
-    // «Оформление записки» (ADR-054): beside the note in a wide window that has room for both (owner), a sheet elsewhere.
+    // «Оформление записки» (ADR-054): beside the note in a wide window that has room for both (owner), a sheet elsewhere;
+    // a new note's too, before it has an entry (the first choice makes one).
     val lookPage = if (route.board) boardCardColor() else BenbowTheme.colors.paper
-    val beside = LocalDetailPane.current?.takeIf { pickingBackground && detail != null && it.roomy }
+    val beside = LocalDetailPane.current?.takeIf { pickingBackground && it.roomy }
     if (beside != null) {
         DisposableEffect(beside.beside) {
             beside.beside.open = true
@@ -733,424 +739,439 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
             ),
             onClose = { pickingBackground = false },
             modifier = panelModifier,
+            part = lookPart,
         )
     }
 
     LookBeside(beside, lookPanel) {
-        Scaffold(
-            // Files dragged in from the desktop are attached like picked ones.
-            modifier = Modifier.attachOnDrop(services, vm::ensureEntryId, onHover = { dropping = it }, onLink = { href ->
-                vm.editor?.takeIf { !vm.reading }?.insertAtom(Atom.LinkCard(href), atEnd = !editorFocused)
-            }).onGloballyPositioned { pageAt = it.positionInWindow() }.then(backdrop),
-            // A note on the board: its card's color, the sheet it grew from (ADR-040). With a look, the look draws it.
-            containerColor = if (looked) Color.Transparent else page,
-            // A color outside the scheme has no content color of its own: the page's words and icons, as on the card.
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            topBar = {
-                TopAppBar(
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = if (looked) {
-                            Color.Transparent
-                        } else {
-                            noteColor
-                                ?: if (route.board) boardCardColor() else BenbowTheme.colors.paper
+        // A black note's page in the theme's dark twin (InTheDark): its words, bars and editor light on it.
+        InTheDark(detail?.background == SwatchColors.BLACK) {
+            Scaffold(
+                // Files dragged in from the desktop are attached like picked ones.
+                modifier = Modifier.attachOnDrop(services, vm::ensureEntryId, onHover = { dropping = it }, onLink = { href ->
+                    vm.editor?.takeIf { !vm.reading }?.insertAtom(Atom.LinkCard(href), atEnd = !editorFocused)
+                }).onGloballyPositioned { pageAt = it.positionInWindow() }.then(backdrop),
+                // A note on the board: its card's color, the sheet it grew from (ADR-040). With a look, the look draws it.
+                containerColor = if (looked) Color.Transparent else page,
+                // A color outside the scheme has no content color of its own: the page's words and icons, as on the card.
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                topBar = {
+                    // Always see-through, the page under it (owner): a bar whose color went from the page's to none once the
+                    // note's look came faded through a dark grey (Material animates it), as the trackers' did (ADR-059).
+                    TopAppBar(
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent,
+                            scrolledContainerColor = Color.Transparent,
+                        ),
+                        navigationIcon = {
+                            BackButton {
+                                vm.commit()
+                                // On the board the note's sheet shrinks back into its card first (ADR-040).
+                                boardStage?.close() ?: nav.back()
+                            }
                         },
-                    ),
-                    navigationIcon = {
-                        BackButton {
-                            vm.commit()
-                            // On the board the note's sheet shrinks back into its card first (ADR-040).
-                            boardStage?.close() ?: nav.back()
-                        }
-                    },
-                    title = {
-                        // The entry's date and time, the weekday under them; while editing, a tap moves it in time.
-                        val (date, weekday) = dayTitle(detail?.day ?: route.day)
-                        val label = detail?.let { "$date, ${timeLabel(it.createdAt)}" } ?: date
-                        Column(if (vm.reading) Modifier else Modifier.clip(RoundedCornerShape(8.dp)).hand().clickable { moving = true }) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(label, style = MaterialTheme.typography.titleMedium, maxLines = 1)
-                                if (!vm.reading) Icon(Icons.ArrowDropDown, null, Modifier.size(20.dp)) // drawn: "▾" would need a web font
-                            }
-                            weekday?.let {
-                                Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    },
-                    actions = {
-                        if (attachments.isNotEmpty()) {
-                            TextButton({ ribbonChoice = !ribbon }, modifier = Modifier.hand()) {
-                                val tint = if (ribbon) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                Icon(Icons.Attach, stringResource(Res.string.attachments), tint = tint, modifier = Modifier.size(20.dp))
-                                Text(" ${attachments.size}", color = tint, style = MaterialTheme.typography.labelLarge)
-                            }
-                        }
-                        // A note on the board, Keep's way: its pin beside the star, or the way out of the archive (ADR-040).
-                        val boardNote = route.board || detail?.let { Board.onBoard(it.fields) } == true
-                        if (boardNote && !vm.reading && detail?.inTrash != true) {
-                            if (detail?.fields?.get(Board.ARCHIVED) == "true") {
-                                IconButton(vm::unarchive, modifier = Modifier.hand()) {
-                                    Icon(Icons.Unarchive, stringResource(Res.string.board_unarchive))
+                        title = {
+                            // The entry's date and time, the weekday under them; while editing, a tap moves it in time.
+                            val (date, weekday) = dayTitle(detail?.day ?: route.day)
+                            val label = detail?.let { "$date, ${timeLabel(it.createdAt)}" } ?: date
+                            val movable = Modifier.clip(RoundedCornerShape(8.dp)).hand().clickable { moving = true }
+                            Column(if (vm.reading) Modifier else movable) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(label, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                                    // Drawn: "▾" would need a web font.
+                                    if (!vm.reading) Icon(Icons.ArrowDropDown, null, Modifier.size(20.dp))
                                 }
-                            } else {
-                                val pinned = detail?.fields?.get(Board.PIN) == "true"
-                                IconButton(vm::togglePinnedOnBoard, modifier = Modifier.hand()) {
-                                    Icon(
-                                        if (pinned) Icons.Pin else Icons.PinOutline,
-                                        stringResource(if (pinned) Res.string.board_unpin else Res.string.board_pin),
-                                    )
-                                }
-                                // Into the archive and away, as the trash does (owner: no way to it from an open note).
-                                if (vm.entryId != null) {
-                                    IconButton({
-                                        vm.archive()
-                                        nav.back()
-                                    }, modifier = Modifier.hand()) { Icon(Icons.Archive, stringResource(Res.string.board_archive)) }
-                                }
-                            }
-                        }
-                        val favorite = detail?.favorite == true
-                        IconButton(vm::toggleFavorite, modifier = Modifier.hand()) {
-                            Icon(
-                                if (favorite) Icons.Star else Icons.StarOutline,
-                                stringResource(if (favorite) Res.string.favorite_remove else Res.string.favorite_add),
-                                tint = if (favorite) MaterialTheme.colorScheme.primary else LocalContentColor.current,
-                            )
-                        }
-                        // «Оформление записки» beside the star while writing (owner); reading, the note is only read.
-                        if (!vm.reading) {
-                            IconButton({ pickingBackground = true }, modifier = Modifier.hand()) {
-                                Icon(Icons.Palette, stringResource(Res.string.look_title))
-                            }
-                        }
-                        if (vm.entryId != null) {
-                            Box {
-                                IconButton({
-                                    menu = true
-                                }, modifier = Modifier.hand()) { Icon(Icons.More, stringResource(Res.string.menu)) }
-                                DropdownMenu(menu, { menu = false }) {
-                                    // Between the journal and the board (ADR-040): the same entry, one field; a note goes to
-                                    // the journal on the day it was made, or on another day picked for it.
-                                    if (detail != null && !detail.inTrash && !vm.reading) {
-                                        if (Board.onBoard(detail.fields)) {
-                                            DropdownMenuItem(text = { Text(stringResource(Res.string.board_to_journal)) }, onClick = {
-                                                menu = false
-                                                vm.commit()
-                                                services.toJournal(listOf(detail.id), detail.day)
-                                                nav.back()
-                                            }, modifier = Modifier.hand())
-                                            DropdownMenuItem(text = { Text(stringResource(Res.string.board_to_journal_day)) }, onClick = {
-                                                menu = false
-                                                toJournalOn = true
-                                                moving = true
-                                            }, modifier = Modifier.hand())
-                                        } else if (detail.kind !in NOT_IN_FEED) {
-                                            DropdownMenuItem(text = { Text(stringResource(Res.string.entry_to_board)) }, onClick = {
-                                                menu = false
-                                                vm.commit()
-                                                services.toBoard(listOf(detail.id))
-                                                nav.back()
-                                            }, modifier = Modifier.hand())
-                                        }
-                                    }
-                                    // A note on the board: its lines as boxes and back, as Keep's «Показать флажки».
-                                    if (route.board && !vm.reading) {
-                                        val list = vm.listDocument != null
-                                        if (list || vm.currentDocument()?.let(Checklists::canBeList) == true) {
-                                            DropdownMenuItem(text = {
-                                                Text(stringResource(if (list) Res.string.board_hide_boxes else Res.string.board_show_boxes))
-                                            }, onClick = {
-                                                menu = false
-                                                if (list) vm.hideBoxes() else vm.showBoxes()
-                                            }, modifier = Modifier.hand())
-                                        }
-                                    }
-                                    if (vm.reading) {
-                                        DropdownMenuItem(text = { Text(stringResource(Res.string.edit)) }, onClick = {
-                                            menu = false
-                                            vm.startEditing()
-                                        }, modifier = Modifier.hand())
-                                    }
-                                    if (!route.board) {
-                                        DropdownMenuItem(text = {
-                                            Text(stringResource(if (detail?.pinned == true) Res.string.unpin else Res.string.pin))
-                                        }, onClick = {
-                                            menu = false
-                                            vm.togglePinned()
-                                        }, modifier = Modifier.hand())
-                                    }
-                                    if (!vm.reading) {
-                                        DropdownMenuItem(
-                                            text = {
-                                                Text(
-                                                    if (comments >
-                                                        0
-                                                    ) {
-                                                        stringResource(Res.string.comments_count, comments.toInt())
-                                                    } else {
-                                                        stringResource(Res.string.comments)
-                                                    },
-                                                )
-                                            },
-                                            onClick = {
-                                                menu = false
-                                                vm.commit()
-                                                vm.entryId?.let { nav.open(Route.Comments(it)) }
-                                            },
-                                            modifier = Modifier.hand(),
-                                        )
-                                    }
-                                    DropdownMenuItem(text = { Text(stringResource(Res.string.copy_text)) }, onClick = {
-                                        menu = false
-                                        if (!copy(vm.plainText())) vm.copied()
-                                    }, modifier = Modifier.hand())
-                                    DropdownMenuItem(text = { Text(stringResource(Res.string.share)) }, onClick = {
-                                        menu = false
-                                        if (!share(vm.markdown())) vm.copied()
-                                    }, modifier = Modifier.hand())
-                                    val ruled = detail?.let { gentleRules.ruled(it.day, it.tagIds) }
-                                    VeilMenuItems(
-                                        effectiveVeil(detail?.ownVeil, ruled),
-                                        ruled,
-                                    ) { veil ->
-                                        menu = false
-                                        vm.entryId?.let { services.setVeil(it, veil, detail?.ownVeil) }
-                                    }
-                                    PostponeMenuItem(detail?.until) { choose ->
-                                        menu = false
-                                        if (choose) postponing = true else vm.entryId?.let { services.postpone(it, null, detail?.until) }
-                                    }
-                                    if (detail != null && detail.kind !in NOT_IN_FEED && !detail.inTrash) {
-                                        DropdownMenuItem(text = { Text(stringResource(Res.string.show_in_feed)) }, onClick = {
-                                            menu = false
-                                            vm.commit()
-                                            services.showInFeed.value = detail.id
-                                            nav.selectTab(Route.Feed)
-                                        }, modifier = Modifier.hand())
-                                    }
-                                    DropdownMenuItem(text = { Text(stringResource(Res.string.print)) }, onClick = {
-                                        menu = false
-                                        vm.commit()
-                                        val id = vm.entryId
-                                        if (id != null) scope.launch { services.entryPage(id)?.let(print) }
-                                    }, modifier = Modifier.hand())
-                                    DropdownMenuItem(text = { Text(stringResource(Res.string.history)) }, onClick = {
-                                        menu = false
-                                        openHistory()
-                                    }, modifier = Modifier.hand())
-                                    if (detail?.inTrash != true) {
-                                        DropdownMenuItem(text = { Text(stringResource(Res.string.move_to_trash)) }, onClick = {
-                                            menu = false
-                                            // A note that was a journal entry: the journal back first (ADR-040).
-                                            if (detail != null && Board.fromJournal(detail.fields)) {
-                                                guarding = true
-                                            } else {
-                                                vm.moveToTrash()
-                                                nav.back()
-                                            }
-                                        }, modifier = Modifier.hand())
-                                    }
-                                }
-                            }
-                        }
-                    },
-                )
-            },
-            bottomBar = {
-                if (vm.reading) {
-                    Column {
-                        // A post on a phone has no tab bar, so it shows what plays itself (wide windows have the app's strip).
-                        val openPlayer = LocalOpenPlayer.current
-                        if (!LocalWide.current && openPlayer != null) MiniPlayer(services, openPlayer, bottomInset = false)
-                        // In a wide window the field is in the thread, under the comments (owner).
-                        if (!wide) QuickNoteBar(services, onSend = vm::comment, hint = stringResource(Res.string.comment_hint))
-                    }
-                } else if (editor != null) {
-                    Column(Modifier.navigationBarsPadding().imePadding()) {
-                        MediaBar(services, vm::ensureEntryId, dictation.takeIf { vm.listDocument == null }) {
-                            IconButton({
-                                vm.drawingAtEnd = !editorFocused
-                                services.scope.launch { vm.ensureEntryId().let { id -> nav.open(Route.Drawing(id, null)) } }
-                            }, modifier = Modifier.hand()) { Icon(Icons.Brush, stringResource(Res.string.drawing_add)) }
-                        }
-                        // On the board a checklist is the note's own list (Keep's «Показать флажки»), never boxes in its text.
-                        if (vm.listDocument == null) EditorToolbar(editor, onChecklist = vm::showBoxes.takeIf { route.board })
-                    }
-                }
-            },
-        ) { padding ->
-            // The note's own font (ADR-047) for its title and words; the rest of the screen keeps the app's.
-            val font = noteFont(detail?.look?.get(LookFields.FONT))
-            CompositionLocalProvider(LocalNoteFont provides font) {
-                Column(Modifier.padding(padding).fillMaxSize()) {
-                    if (detail?.conflictHeads?.isNotEmpty() == true) {
-                        Banner(
-                            stringResource(Res.string.conflict_banner),
-                            stringResource(Res.string.conflict_choose),
-                            error = true,
-                            onAction = openHistory,
-                        )
-                    }
-                    if (detail?.inTrash == true) {
-                        Banner(
-                            stringResource(Res.string.in_trash_banner),
-                            stringResource(Res.string.restore),
-                            onAction = vm::restoreFromTrash,
-                        )
-                    }
-                    if (dropping) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-                        ) {
-                            Text(
-                                stringResource(Res.string.drop_to_attach),
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.padding(16.dp),
-                            )
-                        }
-                    }
-                    if (postponing) {
-                        PostponeDialog(onPick = { day ->
-                            postponing = false
-                            vm.entryId?.let { services.postpone(it, day.toString(), detail?.until) }
-                        }, onDismiss = { postponing = false })
-                    }
-                    if (pickingBackground && beside == null) {
-                        val words = remember { vm.plainText() }
-                        LookSheet(
-                            LookTarget(
-                                detail?.id.orEmpty(),
-                                words,
-                                detail?.background,
-                                detail?.look.orEmpty(),
-                                lookPage,
-                                vm::setBackground,
-                                vm::setLook,
-                            ),
-                            onDismiss = { pickingBackground = false },
-                        )
-                    }
-                    if (vm.reading && editor != null && detail != null && !vm.broken) {
-                        val thread by vm.comments.collectAsStateWithLifecycle()
-                        PostView(
-                            services,
-                            detail,
-                            editor,
-                            thread,
-                            onOpenMedia = { nav.open(Route.Media(detail.id, it)) },
-                            onOpenComment = { nav.open(Route.Editor(it.summary.id, it.summary.day)) },
-                            onOpenCommentMedia = { comment, attachment -> nav.open(Route.Media(comment, attachment)) },
-                            onReact = vm::react,
-                            ribbon = ribbon,
-                            pictures = pictures,
-                            scroll = readScroll,
-                            commentField = if (wide) {
-                                {
-                                    QuickNoteBar(
-                                        services,
-                                        onSend = vm::comment,
-                                        hint = stringResource(Res.string.comment_hint),
-                                        inline = true,
-                                    )
-                                }
-                            } else {
-                                null
-                            },
-                            modifier = Modifier.fillMaxSize().then(measureWords),
-                        )
-                        return@Column
-                    }
-                    if (editor != null && vm.isBlankNew && !route.board) {
-                        val context = templateContext(route.day)
-                        LaunchedEffect(route.template) { route.template?.let { vm.applyTemplate(it, context) } }
-                        LaunchedEffect(route.heading) { route.heading?.let(vm::applyHeading) }
-                        TemplateRow { vm.applyTemplate(it, context) }
-                    }
-                    if (editor != null && !vm.broken && !route.board) {
-                        MetadataRow(
-                            services,
-                            mood = detail?.mood,
-                            tags = detail?.tags.orEmpty(),
-                            onMood = vm::setMood,
-                            onAddTag = vm::addTag,
-                            onCreateTag = vm::createTag,
-                            onRemoveTag = vm::removeTag,
-                            withMood = !route.board,
-                        )
-                    }
-                    if (ribbon && detail != null) {
-                        AttachmentStrip(
-                            services.media,
-                            attachments,
-                            onOpen = { nav.open(Route.Media(detail.id, it.meta.id)) },
-                            placed = inline,
-                            onMove = vm::moveAttachment,
-                        )
-                    }
-                    // A note's title on top (Keep's «Название»), then its words; its tags at the foot.
-                    val title = vm.title
-                    if (title != null && editor != null && !vm.broken && !vm.reading) {
-                        LaunchedEffect(title) { snapshotFlow { title.text.toString() }.drop(1).collect { vm.titleChanged() } }
-                        NoteTitle(title)
-                    }
-                    val fill = if (route.board) Modifier.weight(1f).fillMaxWidth() else Modifier.fillMaxSize()
-                    when {
-                        vm.broken -> Text(
-                            stringResource(Res.string.entry_broken),
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(24.dp),
-                        )
-
-                        editor != null && vm.listDocument != null -> key(vm.listVersion) {
-                            ChecklistEditor(vm.listDocument!!, vm::listChanged, fill, focusFirst = route.entryId == null)
-                        }
-
-                        editor != null -> {
-                            val focus = remember { FocusRequester() }
-                            LaunchedEffect(editor) { snapshotFlow { editor.model }.drop(1).collect(vm::onEdited) }
-                            LaunchedEffect(Unit) { if (route.entryId == null) focus.requestFocus() }
-                            Box(fill) {
-                                // A note's empty words say what goes there, as Keep's «Заметка»: over a plain empty line only
-                                // (a list's marker or a heading there would show through it).
-                                val plain = editor.model.paragraphs.singleOrNull()?.let {
-                                    it.list == null && it.style == BlockStyle.Normal && it.callout == null && it.atom == null
-                                } == true
-                                if (route.board && plain && editor.model.text.isEmpty()) {
+                                weekday?.let {
                                     Text(
-                                        stringResource(Res.string.board_text_hint),
-                                        Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-                                        style = MaterialTheme.typography.bodyLarge.inFont(LocalNoteFont.current),
+                                        it,
+                                        style = MaterialTheme.typography.labelMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
-                                BenbowEditor(
-                                    state = editor,
-                                    atoms = pictures,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .onFocusChanged { editorFocused = it.hasFocus }
-                                        .focusRequester(focus)
-                                        .then(measureWords)
-                                        .verticalScroll(writeScroll)
-                                        .padding(horizontal = 20.dp, vertical = 12.dp)
-                                        .fillMaxWidth(),
+                            }
+                        },
+                        actions = {
+                            if (attachments.isNotEmpty()) {
+                                TextButton({ ribbonChoice = !ribbon }, modifier = Modifier.hand()) {
+                                    val tint = if (ribbon) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    Icon(Icons.Attach, stringResource(Res.string.attachments), tint = tint, modifier = Modifier.size(20.dp))
+                                    Text(" ${attachments.size}", color = tint, style = MaterialTheme.typography.labelLarge)
+                                }
+                            }
+                            // A note on the board, Keep's way: its pin beside the star, or the way out of the archive (ADR-040).
+                            val boardNote = route.board || detail?.let { Board.onBoard(it.fields) } == true
+                            if (boardNote && !vm.reading && detail?.inTrash != true) {
+                                if (detail?.fields?.get(Board.ARCHIVED) == "true") {
+                                    IconButton(vm::unarchive, modifier = Modifier.hand()) {
+                                        Icon(Icons.Unarchive, stringResource(Res.string.board_unarchive))
+                                    }
+                                } else {
+                                    val pinned = detail?.fields?.get(Board.PIN) == "true"
+                                    IconButton(vm::togglePinnedOnBoard, modifier = Modifier.hand()) {
+                                        Icon(
+                                            if (pinned) Icons.Pin else Icons.PinOutline,
+                                            stringResource(if (pinned) Res.string.board_unpin else Res.string.board_pin),
+                                        )
+                                    }
+                                    // Into the archive and away, as the trash does (owner: no way to it from an open note).
+                                    if (vm.entryId != null) {
+                                        IconButton({
+                                            vm.archive()
+                                            nav.back()
+                                        }, modifier = Modifier.hand()) { Icon(Icons.Archive, stringResource(Res.string.board_archive)) }
+                                    }
+                                }
+                            }
+                            val favorite = detail?.favorite == true
+                            IconButton(vm::toggleFavorite, modifier = Modifier.hand()) {
+                                Icon(
+                                    if (favorite) Icons.Star else Icons.StarOutline,
+                                    stringResource(if (favorite) Res.string.favorite_remove else Res.string.favorite_add),
+                                    tint = if (favorite) MaterialTheme.colorScheme.primary else LocalContentColor.current,
+                                )
+                            }
+                            // «Оформление записки» beside the star while writing (owner); reading, the note is only read.
+                            if (!vm.reading) {
+                                IconButton({ pickingBackground = true }, modifier = Modifier.hand()) {
+                                    Icon(Icons.Palette, stringResource(Res.string.look_title))
+                                }
+                            }
+                            if (vm.entryId != null) {
+                                Box {
+                                    IconButton({
+                                        menu = true
+                                    }, modifier = Modifier.hand()) { Icon(Icons.More, stringResource(Res.string.menu)) }
+                                    DropdownMenu(menu, { menu = false }) {
+                                        // Between the journal and the board (ADR-040): the same entry, one field; a note goes to
+                                        // the journal on the day it was made, or on another day picked for it.
+                                        if (detail != null && !detail.inTrash && !vm.reading) {
+                                            if (Board.onBoard(detail.fields)) {
+                                                DropdownMenuItem(text = { Text(stringResource(Res.string.board_to_journal)) }, onClick = {
+                                                    menu = false
+                                                    vm.commit()
+                                                    services.toJournal(listOf(detail.id), detail.day)
+                                                    nav.back()
+                                                }, modifier = Modifier.hand())
+                                                val onDay = stringResource(Res.string.board_to_journal_day)
+                                                DropdownMenuItem(text = { Text(onDay) }, onClick = {
+                                                    menu = false
+                                                    toJournalOn = true
+                                                    moving = true
+                                                }, modifier = Modifier.hand())
+                                            } else if (detail.kind !in NOT_IN_FEED) {
+                                                DropdownMenuItem(text = { Text(stringResource(Res.string.entry_to_board)) }, onClick = {
+                                                    menu = false
+                                                    vm.commit()
+                                                    services.toBoard(listOf(detail.id))
+                                                    nav.back()
+                                                }, modifier = Modifier.hand())
+                                            }
+                                        }
+                                        // A note on the board: its lines as boxes and back, as Keep's «Показать флажки».
+                                        if (route.board && !vm.reading) {
+                                            val list = vm.listDocument != null
+                                            if (list || vm.currentDocument()?.let(Checklists::canBeList) == true) {
+                                                DropdownMenuItem(text = {
+                                                    val boxes = if (list) Res.string.board_hide_boxes else Res.string.board_show_boxes
+                                                    Text(stringResource(boxes))
+                                                }, onClick = {
+                                                    menu = false
+                                                    if (list) vm.hideBoxes() else vm.showBoxes()
+                                                }, modifier = Modifier.hand())
+                                            }
+                                        }
+                                        if (vm.reading) {
+                                            DropdownMenuItem(text = { Text(stringResource(Res.string.edit)) }, onClick = {
+                                                menu = false
+                                                vm.startEditing()
+                                            }, modifier = Modifier.hand())
+                                        }
+                                        if (!route.board) {
+                                            DropdownMenuItem(text = {
+                                                Text(stringResource(if (detail?.pinned == true) Res.string.unpin else Res.string.pin))
+                                            }, onClick = {
+                                                menu = false
+                                                vm.togglePinned()
+                                            }, modifier = Modifier.hand())
+                                        }
+                                        if (!vm.reading) {
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(
+                                                        if (comments >
+                                                            0
+                                                        ) {
+                                                            stringResource(Res.string.comments_count, comments.toInt())
+                                                        } else {
+                                                            stringResource(Res.string.comments)
+                                                        },
+                                                    )
+                                                },
+                                                onClick = {
+                                                    menu = false
+                                                    vm.commit()
+                                                    vm.entryId?.let { nav.open(Route.Comments(it)) }
+                                                },
+                                                modifier = Modifier.hand(),
+                                            )
+                                        }
+                                        DropdownMenuItem(text = { Text(stringResource(Res.string.copy_text)) }, onClick = {
+                                            menu = false
+                                            if (!copy(vm.plainText())) vm.copied()
+                                        }, modifier = Modifier.hand())
+                                        DropdownMenuItem(text = { Text(stringResource(Res.string.share)) }, onClick = {
+                                            menu = false
+                                            if (!share(vm.markdown())) vm.copied()
+                                        }, modifier = Modifier.hand())
+                                        val ruled = detail?.let { gentleRules.ruled(it.day, it.tagIds) }
+                                        VeilMenuItems(
+                                            effectiveVeil(detail?.ownVeil, ruled),
+                                            ruled,
+                                        ) { veil ->
+                                            menu = false
+                                            vm.entryId?.let { services.setVeil(it, veil, detail?.ownVeil) }
+                                        }
+                                        PostponeMenuItem(detail?.until) { choose ->
+                                            menu = false
+                                            if (choose) {
+                                                postponing = true
+                                            } else {
+                                                vm.entryId?.let { services.postpone(it, null, detail?.until) }
+                                            }
+                                        }
+                                        if (detail != null && detail.kind !in NOT_IN_FEED && !detail.inTrash) {
+                                            DropdownMenuItem(text = { Text(stringResource(Res.string.show_in_feed)) }, onClick = {
+                                                menu = false
+                                                vm.commit()
+                                                services.showInFeed.value = detail.id
+                                                nav.selectTab(Route.Feed)
+                                            }, modifier = Modifier.hand())
+                                        }
+                                        DropdownMenuItem(text = { Text(stringResource(Res.string.print)) }, onClick = {
+                                            menu = false
+                                            vm.commit()
+                                            val id = vm.entryId
+                                            if (id != null) scope.launch { services.entryPage(id)?.let(print) }
+                                        }, modifier = Modifier.hand())
+                                        DropdownMenuItem(text = { Text(stringResource(Res.string.history)) }, onClick = {
+                                            menu = false
+                                            openHistory()
+                                        }, modifier = Modifier.hand())
+                                        if (detail?.inTrash != true) {
+                                            DropdownMenuItem(text = { Text(stringResource(Res.string.move_to_trash)) }, onClick = {
+                                                menu = false
+                                                // A note that was a journal entry: the journal back first (ADR-040).
+                                                if (detail != null && Board.fromJournal(detail.fields)) {
+                                                    guarding = true
+                                                } else {
+                                                    vm.moveToTrash()
+                                                    nav.back()
+                                                }
+                                            }, modifier = Modifier.hand())
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                    )
+                },
+                bottomBar = {
+                    if (vm.reading) {
+                        Column {
+                            // A post on a phone has no tab bar, so it shows what plays itself (wide windows have the app's strip).
+                            val openPlayer = LocalOpenPlayer.current
+                            if (!LocalWide.current && openPlayer != null) MiniPlayer(services, openPlayer, bottomInset = false)
+                            // In a wide window the field is in the thread, under the comments (owner).
+                            if (!wide) QuickNoteBar(services, onSend = vm::comment, hint = stringResource(Res.string.comment_hint))
+                        }
+                    } else if (editor != null) {
+                        Column(Modifier.navigationBarsPadding().imePadding()) {
+                            MediaBar(services, vm::ensureEntryId, dictation.takeIf { vm.listDocument == null }) {
+                                IconButton({
+                                    vm.drawingAtEnd = !editorFocused
+                                    services.scope.launch { vm.ensureEntryId().let { id -> nav.open(Route.Drawing(id, null)) } }
+                                }, modifier = Modifier.hand()) { Icon(Icons.Brush, stringResource(Res.string.drawing_add)) }
+                            }
+                            // On the board a checklist is the note's own list (Keep's «Показать флажки»), never boxes in its text.
+                            if (vm.listDocument == null) EditorToolbar(editor, onChecklist = vm::showBoxes.takeIf { route.board })
+                        }
+                    }
+                },
+            ) { padding ->
+                // The note's own font (ADR-047) for its title and words; the rest of the screen keeps the app's.
+                val font = noteFont(detail?.look?.get(LookFields.FONT))
+                CompositionLocalProvider(LocalNoteFont provides font) {
+                    Column(Modifier.padding(padding).fillMaxSize()) {
+                        if (detail?.conflictHeads?.isNotEmpty() == true) {
+                            Banner(
+                                stringResource(Res.string.conflict_banner),
+                                stringResource(Res.string.conflict_choose),
+                                error = true,
+                                onAction = openHistory,
+                            )
+                        }
+                        if (detail?.inTrash == true) {
+                            Banner(
+                                stringResource(Res.string.in_trash_banner),
+                                stringResource(Res.string.restore),
+                                onAction = vm::restoreFromTrash,
+                            )
+                        }
+                        if (dropping) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                            ) {
+                                Text(
+                                    stringResource(Res.string.drop_to_attach),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.padding(16.dp),
                                 )
                             }
                         }
-                    }
-                    if (route.board && editor != null && !vm.broken) {
-                        MetadataRow(
-                            services,
-                            mood = null,
-                            tags = detail?.tags.orEmpty(),
-                            onMood = vm::setMood,
-                            onAddTag = vm::addTag,
-                            onCreateTag = vm::createTag,
-                            onRemoveTag = vm::removeTag,
-                            withMood = false,
-                        )
+                        if (postponing) {
+                            PostponeDialog(onPick = { day ->
+                                postponing = false
+                                vm.entryId?.let { services.postpone(it, day.toString(), detail?.until) }
+                            }, onDismiss = { postponing = false })
+                        }
+                        if (pickingBackground && beside == null) {
+                            val words = remember { vm.plainText() }
+                            LookSheet(
+                                LookTarget(
+                                    detail?.id.orEmpty(),
+                                    words,
+                                    detail?.background,
+                                    detail?.look.orEmpty(),
+                                    lookPage,
+                                    vm::setBackground,
+                                    vm::setLook,
+                                ),
+                                onDismiss = { pickingBackground = false },
+                                part = lookPart,
+                            )
+                        }
+                        if (vm.reading && editor != null && detail != null && !vm.broken) {
+                            val thread by vm.comments.collectAsStateWithLifecycle()
+                            PostView(
+                                services,
+                                detail,
+                                editor,
+                                thread,
+                                onOpenMedia = { nav.open(Route.Media(detail.id, it)) },
+                                onOpenComment = { nav.open(Route.Editor(it.summary.id, it.summary.day)) },
+                                onOpenCommentMedia = { comment, attachment -> nav.open(Route.Media(comment, attachment)) },
+                                onReact = vm::react,
+                                ribbon = ribbon,
+                                pictures = pictures,
+                                scroll = readScroll,
+                                commentField = if (wide) {
+                                    {
+                                        QuickNoteBar(
+                                            services,
+                                            onSend = vm::comment,
+                                            hint = stringResource(Res.string.comment_hint),
+                                            inline = true,
+                                        )
+                                    }
+                                } else {
+                                    null
+                                },
+                                modifier = Modifier.fillMaxSize().then(measureWords),
+                            )
+                            return@Column
+                        }
+                        if (editor != null && vm.isBlankNew && !route.board) {
+                            val context = templateContext(route.day)
+                            LaunchedEffect(route.template) { route.template?.let { vm.applyTemplate(it, context) } }
+                            LaunchedEffect(route.heading) { route.heading?.let(vm::applyHeading) }
+                            TemplateRow { vm.applyTemplate(it, context) }
+                        }
+                        if (editor != null && !vm.broken && !route.board) {
+                            MetadataRow(
+                                services,
+                                mood = detail?.mood,
+                                tags = detail?.tags.orEmpty(),
+                                onMood = vm::setMood,
+                                onAddTag = vm::addTag,
+                                onCreateTag = vm::createTag,
+                                onRemoveTag = vm::removeTag,
+                                withMood = !route.board,
+                            )
+                        }
+                        if (ribbon && detail != null) {
+                            AttachmentStrip(
+                                services.media,
+                                attachments,
+                                onOpen = { nav.open(Route.Media(detail.id, it.meta.id)) },
+                                placed = inline,
+                                onMove = vm::moveAttachment,
+                            )
+                        }
+                        // A note's title on top (Keep's «Название»), then its words; its tags at the foot.
+                        val title = vm.title
+                        if (title != null && editor != null && !vm.broken && !vm.reading) {
+                            LaunchedEffect(title) { snapshotFlow { title.text.toString() }.drop(1).collect { vm.titleChanged() } }
+                            NoteTitle(title)
+                        }
+                        val fill = if (route.board) Modifier.weight(1f).fillMaxWidth() else Modifier.fillMaxSize()
+                        when {
+                            vm.broken -> Text(
+                                stringResource(Res.string.entry_broken),
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(24.dp),
+                            )
+
+                            editor != null && vm.listDocument != null -> key(vm.listVersion) {
+                                ChecklistEditor(vm.listDocument!!, vm::listChanged, fill, focusFirst = route.entryId == null)
+                            }
+
+                            editor != null -> {
+                                val focus = remember { FocusRequester() }
+                                LaunchedEffect(editor) { snapshotFlow { editor.model }.drop(1).collect(vm::onEdited) }
+                                LaunchedEffect(Unit) { if (route.entryId == null) focus.requestFocus() }
+                                Box(fill) {
+                                    // A note's empty words say what goes there, as Keep's «Заметка»: over a plain empty line only
+                                    // (a list's marker or a heading there would show through it).
+                                    val plain = editor.model.paragraphs.singleOrNull()?.let {
+                                        it.list == null && it.style == BlockStyle.Normal && it.callout == null && it.atom == null
+                                    } == true
+                                    if (route.board && plain && editor.model.text.isEmpty()) {
+                                        Text(
+                                            stringResource(Res.string.board_text_hint),
+                                            Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                                            style = MaterialTheme.typography.bodyLarge.inFont(LocalNoteFont.current),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    BenbowEditor(
+                                        state = editor,
+                                        atoms = pictures,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .onFocusChanged { editorFocused = it.hasFocus }
+                                            .focusRequester(focus)
+                                            .then(measureWords)
+                                            .verticalScroll(writeScroll)
+                                            .padding(horizontal = 20.dp, vertical = 12.dp)
+                                            .fillMaxWidth(),
+                                    )
+                                }
+                            }
+                        }
+                        if (route.board && editor != null && !vm.broken) {
+                            MetadataRow(
+                                services,
+                                mood = null,
+                                tags = detail?.tags.orEmpty(),
+                                onMood = vm::setMood,
+                                onAddTag = vm::addTag,
+                                onCreateTag = vm::createTag,
+                                onRemoveTag = vm::removeTag,
+                                withMood = false,
+                            )
+                        }
                     }
                 }
             }

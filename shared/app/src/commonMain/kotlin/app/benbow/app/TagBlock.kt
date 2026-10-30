@@ -132,12 +132,16 @@ internal fun EntryTile(entry: EntrySummary, media: Media, modifier: Modifier, on
                 (load as? MediaLoad.Ready)?.let { AsyncImage(it.file, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
             }
 
-            entry.mediaCount > 0 -> Column(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.SpaceBetween) {
-                Icon(Icons.MusicNote, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
-                TileText(entry.title.ifBlank { entry.preview }, lines = 2)
+            entry.mediaCount > 0 -> NightNote(entry.background) {
+                Column(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.SpaceBetween) {
+                    Icon(Icons.MusicNote, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TileText(entry.title.ifBlank { entry.preview }, lines = 2)
+                }
             }
 
-            else -> Box(Modifier.fillMaxSize().padding(8.dp)) { TileText(entry.title.ifBlank { entry.preview }, lines = 4) }
+            else -> NightNote(entry.background) {
+                Box(Modifier.fillMaxSize().padding(8.dp)) { TileText(entry.title.ifBlank { entry.preview }, lines = 4) }
+            }
         }
     }
 }

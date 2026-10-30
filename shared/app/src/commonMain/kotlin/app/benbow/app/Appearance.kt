@@ -37,6 +37,8 @@ data class Appearance(
     val feedCards: Boolean = true,
     /** The feed's date scrubber on its right edge (ADR-036 N3). */
     val feedScrubber: Boolean = true,
+    /** The feed's title: the day of the post in the middle of the screen beside the month in view, «Октябрь, 27» (owner: off). */
+    val feedDay: Boolean = false,
     /** How a post shows pictures that aren't placed in its text, when read. */
     val postMedia: PostMedia = PostMedia.Carousel,
     /** A link card reads its page once, as it goes in (ADR-038); off, cards show the address only. */
@@ -65,6 +67,7 @@ data class Appearance(
         settings.put(BLACK, black.toString())
         settings.put(FEED_CARDS, feedCards.toString())
         settings.put(FEED_SCRUBBER, feedScrubber.toString())
+        settings.put(FEED_DAY, feedDay.toString())
         settings.put(POST_MEDIA, postMedia.name)
         settings.put(LINK_PREVIEWS, linkPreviews.toString())
         settings.put(PICTURE_LINKS, pictureLinks.toString())
@@ -84,6 +87,7 @@ data class Appearance(
         private const val BLACK = "theme.black"
         private const val FEED_CARDS = "feed.cards"
         private const val FEED_SCRUBBER = "feed.scrubber"
+        private const val FEED_DAY = "feed.dayInTitle"
         private const val POST_MEDIA = "post.media"
         private const val LINK_PREVIEWS = "links.previews"
         private const val PICTURE_LINKS = "links.pictureLinks"
@@ -102,6 +106,7 @@ data class Appearance(
             black = settings.get(BLACK) == "true",
             feedCards = settings.get(FEED_CARDS) != "false",
             feedScrubber = settings.get(FEED_SCRUBBER) != "false",
+            feedDay = settings.get(FEED_DAY) == "true",
             postMedia = PostMedia.entries.firstOrNull { it.name == settings.get(POST_MEDIA) } ?: PostMedia.Carousel,
             linkPreviews = settings.get(LINK_PREVIEWS) != "false",
             pictureLinks = settings.get(PICTURE_LINKS) != "false",

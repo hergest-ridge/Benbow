@@ -120,6 +120,9 @@ internal fun TrackerSheetScreen(services: AppServices, nav: Navigator, trackerId
     val untitled = stringResource(Res.string.untitled)
     val figures = tracker?.get(TrackerField.FIGURES) != FIGURES_HIDDEN
     var looking by remember { mutableStateOf(false) }
+    // «Оформление трекера»'s open part, held here as a note's is (EditorScreen).
+    val lookPart = remember { LookOpenPart() }
+    LaunchedEffect(looking) { if (!looking) lookPart.open = null }
     val pager = rememberPagerState(initialPage = pageOf(today)) { MONTH_PAGES }
     val weeks = rememberPagerState(initialPage = WEEK_ORIGIN) { WEEK_PAGES }
     val years = rememberPagerState(initialPage = YEAR_ORIGIN) { YEAR_PAGES }
@@ -156,14 +159,16 @@ internal fun TrackerSheetScreen(services: AppServices, nav: Navigator, trackerId
         // «Оформление трекера» beside the sheet where both fit (owner, ADR-058), as a note's; else a sheet from below.
         val pane = DetailPane(maxWidth, beside).takeIf { looking && it.roomy && target != null }
         LookBeside(pane, { panelModifier ->
-            target?.let { LookPanel(it, onClose = { looking = false }, modifier = panelModifier, title = Res.string.trackers_look) }
+            target?.let {
+                LookPanel(it, onClose = { looking = false }, modifier = panelModifier, title = Res.string.trackers_look, part = lookPart)
+            }
         }) {
             SheetPage(services, nav, trackerId, back, tracker, columns, today, write, figures, view, { view = it }, yearColumn, {
                 yearColumn = it
             }, pager, weeks, years, active, todayPage, screen, ground, page, sheet, looking, { looking = !looking })
         }
         if (looking && pane == null && target != null) {
-            LookSheet(target, onDismiss = { looking = false }, title = Res.string.trackers_look)
+            LookSheet(target, onDismiss = { looking = false }, title = Res.string.trackers_look, part = lookPart)
         }
     }
 }

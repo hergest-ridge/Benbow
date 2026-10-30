@@ -83,9 +83,9 @@ internal fun BoardCard(
             .then(entryBackdrop(note.entry.id, note.entry.look, color ?: boardCardColor(), muted = true))
             .border(if (chosen) 2.dp else 1.dp, outline, CARD_SHAPE),
     ) {
-        // Its words in the note's own font (ADR-047), as the open note shows them.
+        // Its words in the note's own font (ADR-047), as the open note shows them; light on a black note.
         CompositionLocalProvider(LocalNoteFont provides noteFont(note.entry.look[LookFields.FONT])) {
-            Column(words.fillMaxWidth()) { CardWords(note, media, onTick) }
+            NightNote(note.entry.background) { Column(words.fillMaxWidth()) { CardWords(note, media, onTick) } }
         }
     }
 }

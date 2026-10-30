@@ -97,10 +97,12 @@ class SwatchColors private constructor(
     private val light: Map<String, Pair<Color, Color>>,
     private val dark: Map<String, Pair<Color, Color>>,
 ) {
-    /** A note color by name, or a color of one's own ([HueToken]) at a page's tone. */
-    fun fill(name: String?, dark: Boolean): Color? = (if (dark) this.dark else light)[name]?.first ?: HueToken.of(name)?.fill(dark)
+    /** A note color by name, black ([BLACK]), or a color of one's own ([HueToken]) at a page's tone. */
+    fun fill(name: String?, dark: Boolean): Color? =
+        (if (dark) this.dark else light)[name]?.first ?: if (name == BLACK) BLACK_FILL else HueToken.of(name)?.fill(dark)
 
-    fun mark(name: String?, dark: Boolean): Color? = (if (dark) this.dark else light)[name]?.second ?: HueToken.of(name)?.text(dark)
+    fun mark(name: String?, dark: Boolean): Color? = (if (dark) this.dark else light)[name]?.second
+        ?: if (name == BLACK) (if (dark) BLACK_MARK_DARK else BLACK_MARK_LIGHT) else HueToken.of(name)?.text(dark)
 
     companion object {
         /** Each color's hue on HCT's wheel, spread so no two look alike; the order is the pickers'. */
@@ -113,6 +115,21 @@ class SwatchColors private constructor(
         private val SOFTER = mapOf("storm" to 0.3, "clay" to 0.3)
 
         val names: List<String> = HUES.keys.toList()
+
+        /**
+         * A note's black (owner, 2026-10-30): a note's alone, never a tag's. The same black in either mode; in the light its
+         * words wear the theme's dark twin (InTheDark), so they read on it as on a dark page.
+         */
+        const val BLACK = "black"
+        private val BLACK_FILL = Color(0xFF111111)
+        private val BLACK_MARK_LIGHT = Color(0xFF3A3A3A)
+        private val BLACK_MARK_DARK = Color(0xFFB8B8B8)
+
+        /** A black note's look drawn outside its dark twin (its open page in the light): a light ink, as its words. */
+        val BLACK_INK = Color(0xFFE6E1DC)
+
+        /** Its quiet words there, which its look leaves readable too. */
+        val BLACK_QUIET = Color(0xFFC9C4BE)
 
         internal const val LIGHT_FILL = 90.0
         internal const val DARK_FILL = 30.0

@@ -160,6 +160,8 @@
     <string name="feed_scrubber">Ползунок с датой</string>
     <string name="feed_scrubber_hint">Справа в длинной ленте: потяните его, чтобы перейти к нужному месяцу</string>
     <string name="feed_scrubber_label">Ползунок по датам</string>
+    <string name="feed_day">Показывать день рядом с месяцем в заголовке ленты</string>
+    <string name="feed_day_hint">«Октябрь, 27»: число записи посреди экрана, пока листаете</string>
     <string name="attachment_gone">Вложение удалено</string>
     <string name="attachment_purged">Файл удалён навсегда</string>
     <string name="saved">Сохранено</string>
@@ -447,6 +449,7 @@
         <item>Розовый</item>
         <item>Красный</item>
     </string-array>
+    <string name="swatch_black">Чёрный</string>
     <string-array name="swatch_names">
         <item>Коралловый</item>
         <item>Персиковый</item>
@@ -1188,7 +1191,6 @@
     <string name="look_screen">Фон экрана</string>
     <string name="look_motion_hint">Только в открытой записке</string>
     <string name="look_credit_hero">Узоры Hero Patterns: Стив Шогер, CC BY 4.0</string>
-    <string name="look_credit_morris">Обои Уильяма Морриса из Метрополитен-музея, общественное достояние</string>
     <string name="look_credit_ambient">Бумага с ambientCG, CC0</string>
     <string-array name="look_papers">
         <item>Точки</item>
@@ -1218,17 +1220,12 @@
         <item>Звёздочки</item>
         <item>Осень</item>
         <item>Бамбук</item>
-        <item>Марокко</item>
         <item>Приглашение</item>
         <item>Кольца</item>
         <item>Дождь</item>
         <item>Линии</item>
         <item>Гламур</item>
         <item>Киви</item>
-        <item>Ивовая ветвь</item>
-        <item>Бархатцы</item>
-        <item>Маргаритки</item>
-        <item>Гранаты</item>
     </string-array>
     <string-array name="look_lights">
         <item>Тёплый угол</item>

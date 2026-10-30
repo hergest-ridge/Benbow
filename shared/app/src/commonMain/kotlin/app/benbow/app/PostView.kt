@@ -1,7 +1,6 @@
 package app.benbow.app
 
 import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,6 +27,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -120,8 +121,13 @@ internal fun PostView(
         Reactions(detail.reactions, onReact, Modifier.padding(horizontal = 16.dp))
         HorizontalDivider(Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
         // The thread on a slightly darker strip, apart from the note (owner); in a wide window its field is in it too.
-        val shade = if (BenbowTheme.colors.dark) THREAD_SHADE_DARK else THREAD_SHADE_LIGHT
-        Column(Modifier.fillMaxWidth().background(Color.Black.copy(alpha = shade)).padding(bottom = 16.dp)) {
+        // A short thread's strip goes on to the foot of the screen (owner): drawn a window's height further down, where
+        // the scroll's clip ends it.
+        val shade = Color.Black.copy(alpha = if (BenbowTheme.colors.dark) THREAD_SHADE_DARK else THREAD_SHADE_LIGHT)
+        val below = LocalWindowInfo.current.containerSize.height.toFloat()
+        Column(
+            Modifier.fillMaxWidth().drawBehind { drawRect(shade, size = Size(size.width, size.height + below)) }.padding(bottom = 16.dp),
+        ) {
             val count = comments?.size ?: 0
             Text(
                 if (count > 0) stringResource(Res.string.comments_count, count) else stringResource(Res.string.comments),

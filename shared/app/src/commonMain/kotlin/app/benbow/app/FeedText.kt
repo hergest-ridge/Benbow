@@ -98,7 +98,7 @@ private const val LINE_COST = 40
  * after a budget with "Показать ещё", which opens the rest in place.
  */
 @Composable
-internal fun FeedText(body: FeedBody?, expanded: Boolean, onExpand: () -> Unit, modifier: Modifier = Modifier) {
+internal fun FeedText(body: FeedBody?, expanded: Boolean, onExpand: () -> Unit, modifier: Modifier = Modifier, budget: Int = BUDGET) {
     if (body == null || body.blocks.isEmpty()) return
     val colors = MaterialTheme.colorScheme
     val theme = BenbowTheme.colors
@@ -113,16 +113,24 @@ internal fun FeedText(body: FeedBody?, expanded: Boolean, onExpand: () -> Unit, 
     } else {
         null
     }
-    CompositionLocalProvider(LocalFeedSpoilers provides spoilers) { FeedBlocks(body, expanded, onExpand, styles, dark, modifier) }
+    CompositionLocalProvider(LocalFeedSpoilers provides spoilers) { FeedBlocks(body, expanded, onExpand, styles, dark, modifier, budget) }
 }
 
 @Composable
-private fun FeedBlocks(body: FeedBody, expanded: Boolean, onExpand: () -> Unit, styles: EditorStyles, dark: Boolean, modifier: Modifier) {
+private fun FeedBlocks(
+    body: FeedBody,
+    expanded: Boolean,
+    onExpand: () -> Unit,
+    styles: EditorStyles,
+    dark: Boolean,
+    modifier: Modifier,
+    start: Int,
+) {
     val rich = body.rich
     val blocks = body.blocks
     val colors = MaterialTheme.colorScheme
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        var budget = BUDGET
+        var budget = start
         var cut = false
         for (block in blocks) {
             if (expanded) {

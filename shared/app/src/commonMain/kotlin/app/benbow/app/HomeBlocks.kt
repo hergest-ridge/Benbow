@@ -78,7 +78,16 @@ internal class HomeActions(
     /** Trackers' blocks (ADR-050): the trackers, a tracker's sheet. */
     val trackers: () -> Unit = {},
     val openTracker: (String) -> Unit = {},
-)
+    /** Posts opened in place with «Показать ещё», by «<block>/<entry>». */
+    val expanded: MutableMap<String, Boolean> = mutableMapOf(),
+) {
+    /** A post's text for its card (owner): in full with its paragraphs and marks, cut after a while with «Показать ещё». */
+    fun post(home: HomeState, block: HomeBlock, entry: EntrySummary): PostText? {
+        val body = home.bodies[entry.id] ?: return null
+        val key = "${block.id}/${entry.id}"
+        return PostText(body, expanded[key] == true) { expanded[key] = true }
+    }
+}
 
 /** A block (or a piece of a list block): a long press anywhere on it opens its menu and no click follows. */
 @Composable
@@ -199,7 +208,9 @@ private fun TileBlock(block: HomeBlock, home: HomeState, actions: HomeActions, s
             }
             Column {
                 SectionTitle(stringResource(Res.string.home_resurfaced))
-                EntryCard(entry, onClick = { actions.open(entry) }, media = services.media, showDay = true)
+                EntryCard(entry, onClick = {
+                    actions.open(entry)
+                }, media = services.media, showDay = true, post = actions.post(home, block, entry))
             }
         }
 
@@ -249,9 +260,9 @@ private fun TileBlock(block: HomeBlock, home: HomeState, actions: HomeActions, s
 private fun LazyListScope.listBlock(block: HomeBlock, home: HomeState, actions: HomeActions, services: AppServices) {
     val key = block.id
     when (block.kind) {
-        HomeBlockType.Pinned -> section(block, Res.string.home_pinned, home.pinned, actions, services)
+        HomeBlockType.Pinned -> section(block, Res.string.home_pinned, home.pinned, home, actions, services)
 
-        HomeBlockType.Drafts -> section(block, Res.string.home_drafts, home.drafts, actions, services, open = actions.edit)
+        HomeBlockType.Drafts -> section(block, Res.string.home_drafts, home.drafts, home, actions, services, open = actions.edit)
 
         HomeBlockType.Today -> {
             held(block, actions, "$key/title") { SectionTitle(stringResource(Res.string.home_today)) }
@@ -262,7 +273,7 @@ private fun LazyListScope.listBlock(block: HomeBlock, home: HomeState, actions: 
             } else {
                 heldItems(block, actions, home.todays, key = {
                     "$key/${it.id}"
-                }) { EntryCard(it, onClick = { actions.open(it) }, media = services.media) }
+                }) { EntryCard(it, onClick = { actions.open(it) }, media = services.media, post = actions.post(home, block, it)) }
             }
         }
 
@@ -278,7 +289,7 @@ private fun LazyListScope.listBlock(block: HomeBlock, home: HomeState, actions: 
                     )
                 }
                 heldItems(block, actions, items.map { it.entry }, key = { "$key/${it.id}" }) {
-                    EntryCard(it, onClick = { actions.open(it) }, media = services.media)
+                    EntryCard(it, onClick = { actions.open(it) }, media = services.media, post = actions.post(home, block, it))
                 }
             }
         }
@@ -291,6 +302,7 @@ private fun LazyListScope.section(
     block: HomeBlock,
     title: StringResource,
     entries: List<EntrySummary>,
+    home: HomeState,
     actions: HomeActions,
     services: AppServices,
     open: (EntrySummary) -> Unit = actions.open,
@@ -300,7 +312,7 @@ private fun LazyListScope.section(
     held(block, actions, "$key/title") { SectionTitle(stringResource(title)) }
     heldItems(block, actions, entries, key = {
         "$key/${it.id}"
-    }) { EntryCard(it, onClick = { open(it) }, media = services.media, showDay = true) }
+    }) { EntryCard(it, onClick = { open(it) }, media = services.media, showDay = true, post = actions.post(home, block, it)) }
 }
 
 /** A list block's pieces are lazy items, each with the block's long-press menu. */

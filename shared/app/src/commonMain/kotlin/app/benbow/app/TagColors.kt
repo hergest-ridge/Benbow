@@ -22,16 +22,21 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.benbow.app.resources.Res
+import app.benbow.app.resources.swatch_black
 import app.benbow.app.resources.swatch_names
 import app.benbow.client.SWATCHES
 import app.benbow.client.TagRegistry
 import app.benbow.ui.theme.BenbowPalette
 import app.benbow.ui.theme.BenbowTheme
+import app.benbow.ui.theme.InTheDark
+import app.benbow.ui.theme.SwatchColors
 import org.jetbrains.compose.resources.stringArrayResource
+import org.jetbrains.compose.resources.stringResource
 
-/** A note color ([SWATCHES]) on paper, as CSS for printed pages: the same whatever a device's theme. */
+/** A note color ([SWATCHES]) on paper, as CSS for printed pages: the same whatever a device's theme; a black note on white. */
 internal fun lightSwatch(name: String?): String? =
-    BenbowPalette.printSwatches.fill(name, dark = false)?.let { "#" + (it.toArgb() and 0xFFFFFF).toString(16).padStart(6, '0') }
+    name?.takeIf { it != SwatchColors.BLACK }?.let { BenbowPalette.printSwatches.fill(it, dark = false) }
+        ?.let { "#" + (it.toArgb() and 0xFFFFFF).toString(16).padStart(6, '0') }
 
 /** The tag registry (names, categories, colors by id) for the whole app, provided once at the root. */
 internal val LocalTags = compositionLocalOf { TagRegistry() }
@@ -39,6 +44,19 @@ internal val LocalTags = compositionLocalOf { TagRegistry() }
 /** A note color ([SWATCHES]) in the theme (ADR-057), for a note's page, a card or a chip under words. */
 @Composable
 internal fun swatch(name: String?): Color? = BenbowTheme.colors.let { it.swatches.fill(name, it.dark) }
+
+/**
+ * What is drawn on a note of [color]: a black note's words and controls in the theme's dark twin, so they read on it in a
+ * light theme too; any other color as it is. Lists use it, where a note turned black may build its card anew.
+ */
+@Composable
+internal fun NightNote(color: String?, content: @Composable () -> Unit) = if (color ==
+    SwatchColors.BLACK
+) {
+    InTheDark(true, content)
+} else {
+    content()
+}
 
 /** A note color that stands out on the page: a calendar's dots and bars, the day's strip, a category's dot or name. */
 @Composable
@@ -48,10 +66,19 @@ internal fun markColor(name: String?): Color? = BenbowTheme.colors.let { it.swat
 @Composable
 internal fun tagColor(tagId: String): Color = swatch(LocalTags.current.color(tagId)) ?: MaterialTheme.colorScheme.surfaceContainerHighest
 
-/** Pick one of the colors, or [noneLabel] for none (back to the default); without [noneLabel] a color is a must. */
+/**
+ * Pick one of the colors, or [noneLabel] for none (back to the default); without [noneLabel] a color is a must. [black]
+ * offers a note's black after them.
+ */
 @Composable
-internal fun SwatchPicker(selected: String?, noneLabel: String?, onPick: (String?) -> Unit, modifier: Modifier = Modifier) {
-    val names = stringArrayResource(Res.array.swatch_names)
+internal fun SwatchPicker(
+    selected: String?,
+    noneLabel: String?,
+    onPick: (String?) -> Unit,
+    modifier: Modifier = Modifier,
+    black: Boolean = false,
+) {
+    val names = stringArrayResource(Res.array.swatch_names) + if (black) listOf(stringResource(Res.string.swatch_black)) else emptyList()
     FlowRow(
         modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -59,7 +86,7 @@ internal fun SwatchPicker(selected: String?, noneLabel: String?, onPick: (String
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
         if (noneLabel != null) FilterChip(selected == null, { onPick(null) }, { Text(noneLabel) }, modifier = Modifier.hand())
-        SWATCHES.forEachIndexed { i, name ->
+        (if (black) SWATCHES + SwatchColors.BLACK else SWATCHES).forEachIndexed { i, name ->
             val on = name == selected
             Box(
                 Modifier

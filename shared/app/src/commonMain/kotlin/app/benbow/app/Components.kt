@@ -25,6 +25,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,9 +53,11 @@ import app.benbow.app.resources.sync_waiting
 import app.benbow.app.resources.sync_wrong_server
 import app.benbow.app.resources.untitled
 import app.benbow.client.EntrySummary
+import app.benbow.client.LookFields
 import app.benbow.client.Media
 import app.benbow.client.SyncResult
 import app.benbow.client.SyncStatus
+import app.benbow.ui.editor.LocalNoteFont
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -72,17 +75,37 @@ internal fun FavoriteMark(modifier: Modifier = Modifier, description: String? = 
     Icon(Icons.Star, description, modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
 }
 
-/** A journal entry in a list: time, title, a few lines of preview; while Бережно is on a veiled one shows its time and a curtain. */
+/** A post's text for a card (Home's posts): its [body], cut after a while until [expanded] by «Показать ещё». */
+internal class PostText(val body: FeedBody, val expanded: Boolean, val onExpand: () -> Unit)
+
+/**
+ * A journal entry in a list: time, title, a few lines of preview; with [post], its text as a post, paragraphs, marks and
+ * the note's font kept (owner). While Бережно is on a veiled one shows its time and a curtain.
+ */
 @Composable
 internal fun EntryCard(
     entry: EntrySummary,
     onClick: () -> Unit,
     media: Media? = null,
     showDay: Boolean = false,
+    post: PostText? = null,
     trailing: @Composable (() -> Unit)? = null,
 ) {
-    val colors = MaterialTheme.colorScheme
     val curtained = entry.curtained(LocalGentle.current)
+    NightNote(entry.background.takeUnless { curtained }) { EntryCardContent(entry, curtained, onClick, media, showDay, post, trailing) }
+}
+
+@Composable
+private fun EntryCardContent(
+    entry: EntrySummary,
+    curtained: Boolean,
+    onClick: () -> Unit,
+    media: Media?,
+    showDay: Boolean,
+    post: PostText?,
+    trailing: @Composable (() -> Unit)?,
+) {
+    val colors = MaterialTheme.colorScheme
     val paper = (if (curtained) null else swatch(entry.background)) ?: colors.surfaceContainerLow
     // The color and the look are drawn under the card (a Surface would paint over the look).
     Surface(
@@ -98,7 +121,12 @@ internal fun EntryCard(
         ).hand().clip(RoundedCornerShape(16.dp)).background(paper)
             .then(entryBackdrop(entry.id, if (curtained) emptyMap() else entry.look, paper, muted = true)),
     ) {
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        val text = post?.takeIf { it.body.blocks.isNotEmpty() && !curtained }
+        // A post's picture stands at its top; a line of preview's beside it, in the middle.
+        Row(
+            Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = if (text != null) Alignment.Top else Alignment.CenterVertically,
+        ) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 val time = if (showDay) "${dayLabel(entry.day)}, ${timeLabel(entry.createdAt)}" else timeLabel(entry.createdAt)
                 if (curtained) {
@@ -122,20 +150,28 @@ internal fun EntryCard(
                         Text(stringResource(Res.string.conflict_badge), style = MaterialTheme.typography.labelMedium, color = colors.error)
                     }
                 }
-                if (entry.title.isNotBlank()) {
-                    Text(entry.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                }
-                if (entry.preview.isNotBlank()) {
-                    Text(
-                        entry.preview,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.onSurfaceVariant,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                if (text != null) {
+                    // As the feed reads it, in the note's own font where the feed's posts take theirs.
+                    val font = if (LocalAppearance.current.feedFonts) noteFont(entry.look[LookFields.FONT]) else null
+                    CompositionLocalProvider(LocalNoteFont provides font) {
+                        FeedText(text.body, text.expanded, text.onExpand, Modifier.padding(top = 2.dp), budget = POST_BUDGET)
+                    }
+                } else {
+                    if (entry.title.isNotBlank()) {
+                        Text(entry.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                    if (entry.preview.isNotBlank()) {
+                        Text(
+                            entry.preview,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colors.onSurfaceVariant,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
                 if (entry.tags.isNotEmpty()) TagRibbon(entry.tags, Modifier.padding(top = 4.dp))
-                if (entry.title.isBlank() && entry.preview.isBlank()) {
+                if (text == null && entry.title.isBlank() && entry.preview.isBlank()) {
                     Text(
                         stringResource(Res.string.untitled),
                         style = MaterialTheme.typography.bodyMedium,
@@ -149,6 +185,9 @@ internal fun EntryCard(
         }
     }
 }
+
+/** How much of a post's text a card shows before «Показать ещё»: a little less than the feed, Home being a glance. */
+private const val POST_BUDGET = 320
 
 /** A calm notice above content with one action. */
 @Composable

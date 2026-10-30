@@ -2,9 +2,12 @@ package app.benbow.app
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.MouseButton
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
@@ -84,6 +87,21 @@ class FeedNavigationTest {
         // Back after five minutes away: today again.
         services.cameBack.tryEmit(Unit)
         waitUntil(timeoutMillis = 5_000) { shownPosts().contains(POSTS - 1) }
+    }
+
+    /** «Показывать день рядом с месяцем» (owner, 2026-10-30): off, the month alone; on, the middle post's day beside it. */
+    @Test
+    fun theDayInViewBesideItsMonthWithTheSwitch() = runDesktopComposeUiTest(width = 412, height = 860) {
+        services.seedPosts(120)
+        setContent { BenbowApp(services) }
+        onNodeWithText("Лента").click()
+        waitUntil(timeoutMillis = 5_000) { shownPosts().isNotEmpty() }
+        onNode(hasScrollToIndexAction()).performScrollToIndex(60)
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(monthInView).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(onAllNodes(dayInView).fetchSemanticsNodes().isEmpty(), "off by default: the month alone")
+        services.setAppearance(services.appearance.value.copy(feedDay = true))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(dayInView).fetchSemanticsNodes().isNotEmpty() }
+        screenshot("82-feed-day-in-view")
     }
 
     @Test
@@ -223,6 +241,18 @@ class FeedNavigationTest {
         assertEquals(1, rows.postNear(3))
         assertEquals(2, rows.postNear(4))
         assertNull(emptyList<FeedRow>().postNear(0))
+    }
+
+    /** Under the feed's title: a season's sign and a month's name («🍂 Октябрь», «🍂 Октябрь 2025»). */
+    private val monthInView = SemanticsMatcher("the month in view") { node ->
+        node.config.getOrNull(SemanticsProperties.Text).orEmpty().any { text -> MONTHS.any { text.text.contains(" $it") } }
+    }
+
+    /** The same with the day: «🍂 Октябрь, 27». */
+    private val dayInView = SemanticsMatcher("the month and day in view") { node ->
+        node.config.getOrNull(SemanticsProperties.Text).orEmpty().any { text ->
+            MONTHS.any { text.text.contains(" $it") } && Regex(""", \d{1,2}$""").containsMatchIn(text.text)
+        }
     }
 
     private companion object {

@@ -35,6 +35,8 @@ import app.benbow.app.resources.Res
 import app.benbow.app.resources.appearance
 import app.benbow.app.resources.feed_cards
 import app.benbow.app.resources.feed_cards_hint
+import app.benbow.app.resources.feed_day
+import app.benbow.app.resources.feed_day_hint
 import app.benbow.app.resources.feed_fonts
 import app.benbow.app.resources.feed_fonts_hint
 import app.benbow.app.resources.feed_scrubber
@@ -103,6 +105,9 @@ internal fun AppearanceScreen(services: AppServices, nav: Navigator) {
                     )
                 }
                 Switch(current.feedScrubber, { services.setAppearance(current.copy(feedScrubber = it)) }, modifier = Modifier.hand())
+            }
+            SettingSwitch(stringResource(Res.string.feed_day), stringResource(Res.string.feed_day_hint), current.feedDay) {
+                services.setAppearance(current.copy(feedDay = it))
             }
             // The web's own (owner): a tap on a post's picture or video opens the post.
             if (services.platform == "web") {

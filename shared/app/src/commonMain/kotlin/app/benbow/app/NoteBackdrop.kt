@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import app.benbow.ui.theme.BenbowTheme
+import app.benbow.ui.theme.SwatchColors
 import app.benbow.ui.theme.TokenColors
 import app.benbow.ui.theme.isDarkColor
 import app.benbow.ui.theme.lookBudget
@@ -88,7 +89,7 @@ internal enum class ArtPlace { Corner, Edge, Scatter }
 
 /**
  * A note's look (ADR-047). [paper]: dots, lines, grid, parchment; [paperPhoto] a photographed paper (`paper/`, tiled);
- * [wallpaper] an old wallpaper print (`morris/`, faded behind the words); [pattern]: circles, triangles, waves,
+ * [pattern]: circles, triangles, waves,
  * terrazzo, or "scatter" of [scatter] line pictures; [tile] a designer's repeating pattern (`hero/`, tinted); [art] a
  * picture path under `files/looks/` with [artPlace], [artTint] for line art that takes the page's ink (others keep
  * their colors); [lights]; [motion]: "drift"; [scrap] a scrapbook drawn in code (tape, scraps, stamp, stitch, torn,
@@ -98,7 +99,6 @@ internal enum class ArtPlace { Corner, Edge, Scatter }
 internal data class NoteLook(
     val paper: String? = null,
     val paperPhoto: String? = null,
-    val wallpaper: String? = null,
     val pattern: String? = null,
     val scatter: List<String> = emptyList(),
     val tile: String? = null,
@@ -162,7 +162,16 @@ internal fun noteBackdrop(
     if (look == null || look.isEmpty) return Modifier
     val dark = base.isDarkColor()
     val tokens = BenbowTheme.colors.tokens
-    val note = NoteInk(base, ink, MaterialTheme.colorScheme.onSurfaceVariant, dark, tokens)
+    // A black note in a light theme, drawn outside its dark twin (the open note's page): its words are light, so its
+    // look's ink is, and its budget is held to them, not to the theme's dark words that never stand on it.
+    val night = dark && !BenbowTheme.colors.dark
+    val note = NoteInk(
+        base,
+        if (night) SwatchColors.BLACK_INK else ink,
+        if (night) SwatchColors.BLACK_QUIET else MaterialTheme.colorScheme.onSurfaceVariant,
+        dark,
+        tokens,
+    )
     val scatter = look.scatter.mapNotNull { path -> key(path) { lookPicture("tabler/$path")?.let { rememberVectorPainter(it) } } }
     val drift: State<Float>? = if (look.motion == "drift" && moving && lightFrame == null && !reducedMotion()) {
         rememberInfiniteTransition().animateFloat(
@@ -176,10 +185,9 @@ internal fun noteBackdrop(
     val tile = look.tile?.let { name -> key(name) { lookPicture("hero/$name") } }
     val tilePainter = tile?.let { rememberVectorPainter(it) }
     val paperPhoto = look.paperPhoto?.let { lookPhoto("paper/$it.jpg") }
-    val wallpaper = look.wallpaper?.let { lookPhoto("morris/$it.jpg") }
     val strength = if (muted) MUTED else 1f
     val keys =
-        arrayOf(look, base, ink, tokens, seed, strength, drift, scatter, tile, tilePainter, paperPhoto, wallpaper, lightFrame, paperScroll)
+        arrayOf(look, base, ink, tokens, seed, strength, drift, scatter, tile, tilePainter, paperPhoto, lightFrame, paperScroll)
     return remember(*keys) {
         Modifier.drawWithCache {
             val layers = Layers(look, note, seed, size, scatter.size, 1.dp.toPx())
@@ -197,7 +205,6 @@ internal fun noteBackdrop(
                 // stay, as light does.
                 val shift = paperScroll?.offset?.invoke() ?: 0f
                 drawRect(base)
-                wallpaper?.let { faded(it, dark, strength, shift) }
                 // A photographed paper's grain over the note's color: multiplied in light, softly in the dark.
                 papers?.let {
                     translate(0f, -shift) {
@@ -607,33 +614,4 @@ private fun CacheDrawScope.tileBrush(vector: ImageVector, painter: VectorPainter
         with(painter) { draw(tile, colorFilter = ColorFilter.tint(color)) }
     }
     return ShaderBrush(ImageShader(bitmap, TileMode.Repeated, TileMode.Repeated))
-}
-
-/**
- * An old wallpaper print covering the note, faded so the words read: multiplied into a light color, dim in the dark.
- * Gone up by [shift] with the words, it goes on below, every other print turned over so the joins meet.
- */
-private fun DrawScope.faded(image: ImageBitmap, dark: Boolean, strength: Float, shift: Float = 0f) {
-    val zoom = max(size.width / image.width, size.height / image.height)
-    val shown = IntSize((image.width * zoom).roundToInt(), (image.height * zoom).roundToInt())
-    val left = ((size.width - shown.width) / 2).roundToInt()
-    val alpha = (if (dark) 0.2f else 0.32f) * strength
-    val blend = if (dark) BlendMode.SrcOver else BlendMode.Multiply
-    val height = shown.height.toFloat().coerceAtLeast(1f)
-    // Centred as it lies still; the print in view first, then the ones below it.
-    val origin = (size.height - height) / 2
-    var k = floor((shift - origin) / height).toInt()
-    var top = origin + k * height - shift
-    while (top < size.height) {
-        val at = IntOffset(left, top.roundToInt())
-        if ((k and 1) == 0) {
-            drawImage(image, dstOffset = at, dstSize = shown, alpha = alpha, blendMode = blend)
-        } else {
-            scale(1f, -1f, pivot = Offset(0f, top + height / 2)) {
-                drawImage(image, dstOffset = at, dstSize = shown, alpha = alpha, blendMode = blend)
-            }
-        }
-        top += height
-        k++
-    }
 }

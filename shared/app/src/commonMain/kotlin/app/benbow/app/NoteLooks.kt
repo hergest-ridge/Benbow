@@ -46,14 +46,11 @@ internal object NoteLooks {
     /** Hero Patterns (Steve Schoger, CC BY 4.0): credited in «Оформление записки» when one is chosen. */
     private val hero = listOf(
         "graph-paper", "topography", "leaf", "endless-clouds", "wiggle", "polka-dots", "texture", "wallpaper", "bubbles",
-        "four-point-stars", "autumn", "bamboo", "moroccan", "formal-invitation", "overlapping-circles", "rain",
+        "four-point-stars", "autumn", "bamboo", "formal-invitation", "overlapping-circles", "rain",
         "lines-in-motion", "glamorous", "kiwi",
     )
 
-    /** William Morris's wallpapers from The Met (public domain). */
-    private val morris = listOf("willow-bough", "marigold", "daisy", "fruit")
-
-    val patterns = ownPatterns + hero.map { HERO + it } + morris.map { MORRIS + it }
+    val patterns = ownPatterns + hero.map { HERO + it }
 
     /** Tabler Icons (MIT) scattered for "leaves" and "stars". */
     private val scatters = mapOf("leaves" to listOf("leaf", "plant-2", "seedling", "clover"), "stars" to listOf("star", "sparkles", "moon"))
@@ -73,8 +70,6 @@ internal object NoteLooks {
 
     fun isHero(token: String?) = token?.startsWith(HERO) == true
 
-    fun isMorris(token: String?) = token?.startsWith(MORRIS) == true
-
     fun isPhoto(token: String?) = token in photos
 
     /** What [tokens] (by layer field, as LookFields reads them) draw; unknown tokens and layers draw nothing. */
@@ -85,7 +80,6 @@ internal object NoteLooks {
         return NoteLook(
             paper = paper?.takeIf { it in papers && it !in photos },
             paperPhoto = photos[paper],
-            wallpaper = pattern?.takeIf(::isMorris)?.removePrefix(MORRIS)?.takeIf { it in morris },
             pattern = when (pattern) {
                 in scatters -> "scatter"
                 in ownPatterns -> pattern
@@ -121,5 +115,4 @@ internal object NoteLooks {
     fun shuffled(token: String, random: Random = Random.Default): String = "${scrapOf(token).first ?: token}.${random.nextInt(1, 1_000)}"
 
     private const val HERO = "hero-"
-    private const val MORRIS = "morris-"
 }

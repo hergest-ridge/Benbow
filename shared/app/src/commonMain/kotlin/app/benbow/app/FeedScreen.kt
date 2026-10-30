@@ -138,6 +138,9 @@ internal sealed interface FeedRow {
     /** "YYYY-MM": the month the row belongs to. */
     val month: String
 
+    /** "YYYY-MM-DD": the day of a post or a day's line; null for a month's title. */
+    val day: String? get() = null
+
     /** Rows of a kind reuse each other's composition while scrolling; posts with pictures and placeholders are their own kinds. */
     val contentType: Int get() = when (this) {
         is Month -> 0
@@ -158,9 +161,10 @@ internal sealed interface FeedRow {
     data class Item(val place: FeedKey, val pos: Int, val item: FeedItem? = null, val body: FeedBody? = null) : FeedRow {
         override val key get() = place.id
         override val month get() = place.day.take(7)
+        override val day get() = place.day
     }
 
-    data class Day(val day: String) : FeedRow {
+    data class Day(override val day: String) : FeedRow {
         override val key get() = "day:$day"
         override val month get() = day.take(7)
     }
@@ -348,6 +352,17 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
     val month by remember(state) {
         derivedStateOf { if (state.firstVisibleItemIndex == 0) null else rows?.getOrNull(state.firstVisibleItemIndex)?.month }
     }
+    // «Октябрь, 27» (owner, a switch in «Оформление»): the day of the post in the middle of the screen, and its month.
+    val middleDay by remember(state) {
+        derivedStateOf {
+            if (state.firstVisibleItemIndex == 0) return@derivedStateOf null
+            val info = state.layoutInfo
+            val middle = (info.viewportStartOffset + info.viewportEndOffset) / 2
+            val list = rows ?: return@derivedStateOf null
+            info.visibleItemsInfo.dropWhile { it.offset + it.size <= middle }.firstNotNullOfOrNull { list.getOrNull(it.index)?.day }
+        }
+    }
+    val inView = if (appearance.feedDay) middleDay ?: month else month
     val far by remember(state) { derivedStateOf { state.firstVisibleItemIndex >= TODAY_AFTER_ROWS } }
     // «К сегодня» shows only while the feed goes up toward today from far down, and goes once it stands still.
     var headingUp by remember { mutableStateOf(false) }
@@ -416,7 +431,7 @@ internal fun FeedScreen(services: AppServices, nav: Navigator) {
                 title = {
                     Column(Modifier.hand().clickable(interactionSource = null, indication = null) { scope.launch { pull.toggle() } }) {
                         Text(stringResource(Res.string.feed_title))
-                        MonthInView(month) { openJump(month) }
+                        MonthInView(inView) { openJump(month) }
                     }
                 },
                 actions = {
@@ -662,19 +677,26 @@ private fun FeedPost(
                     .then(backdrop).then(glowing).then(open),
             ) {
                 Revealing(curtained, entry) {
-                    Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (item.media.isNotEmpty()) MediaCarousel(services.media, item.media, onOpenMedia)
-                        PostBody(services, item, body, expanded, onExpand, onComments, queue, onReact)
+                    NightNote(entry.background) {
+                        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (item.media.isNotEmpty()) MediaCarousel(services.media, item.media, onOpenMedia)
+                            PostBody(services, item, body, expanded, onExpand, onComments, queue, onReact)
+                        }
                     }
                 }
             }
         } else {
             Column(Modifier.fillMaxWidth().background(tint ?: colors.background).then(backdrop).then(glowing).then(open)) {
                 Revealing(curtained, entry, Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-                    Column {
-                        if (item.media.isNotEmpty()) MediaCarousel(services.media, item.media, onOpenMedia, rounded = false)
-                        Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            PostBody(services, item, body, expanded, onExpand, onComments, queue, onReact)
+                    NightNote(entry.background) {
+                        Column {
+                            if (item.media.isNotEmpty()) MediaCarousel(services.media, item.media, onOpenMedia, rounded = false)
+                            Column(
+                                Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                PostBody(services, item, body, expanded, onExpand, onComments, queue, onReact)
+                            }
                         }
                     }
                 }
@@ -828,21 +850,27 @@ private fun MonthHeader(month: String, onClick: () -> Unit) {
     )
 }
 
-/** Under the feed's title, the month in view (ADR-036); it slides in once the newest posts scroll away. A tap: «Перейти». */
+/**
+ * Under the feed's title, the month in view (ADR-036); it slides in once the newest posts scroll away. A tap: «Перейти».
+ * [inView] is a month ("YYYY-MM"), or a day ("YYYY-MM-DD") with the switch for it, drawn «Октябрь, 27».
+ */
 @Composable
-private fun MonthInView(month: String?, onClick: () -> Unit) {
+private fun MonthInView(inView: String?, onClick: () -> Unit) {
     // The last month shown stays while the line slides away.
     val last = remember { arrayOf("") }
-    if (month != null) last[0] = month
-    AnimatedVisibility(month != null, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+    if (inView != null) last[0] = inView
+    val shown = inView ?: last[0]
+    // The day changes in place; only a new month fades in.
+    val day = shown.takeIf { it.length == 10 }?.drop(8)?.trimStart('0')?.let { ", $it" }.orEmpty()
+    AnimatedVisibility(inView != null, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
         AnimatedContent(
-            month ?: last[0],
+            shown.take(7),
             // Only the words change: no size animation, so a new month costs the bar no layout on every frame.
             transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(120)) using null },
             label = "month in view",
         ) {
             Text(
-                monthTitle(it).orEmpty(),
+                monthTitle(it).orEmpty() + day,
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.hand().clickable(interactionSource = null, indication = null, onClick = onClick),

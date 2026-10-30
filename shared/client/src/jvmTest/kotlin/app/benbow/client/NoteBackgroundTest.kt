@@ -7,6 +7,7 @@ import kotlinx.coroutines.test.runTest
 import java.util.Properties
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
 class NoteBackgroundTest {
     private var time = 1_000L
@@ -22,5 +23,19 @@ class NoteBackgroundTest {
 
         repo.setBackground(id, "#ff0000") // only palette names: they follow the theme, hex wouldn't
         assertEquals(null, repo.journal().first().single().background)
+    }
+
+    /** ADR-060: a note's colors as a tracker's (one's own hue) and black; still no hex, no hue out of range. */
+    @Test
+    fun aNoteTakesAHueOfItsOwnOrBlack() = runTest {
+        val id = repo.createNote("2026-10-30", "Ночь")
+        repo.setBackground(id, "hue:200:16")
+        assertEquals("hue:200:16", repo.entry(id).first()!!.background)
+        assertEquals("hue:200:16", repo.journal().first().single().background)
+        repo.setBackground(id, NOTE_BLACK)
+        assertEquals("black", repo.feed().first().single().summary.background)
+        for (bad in listOf("hue:360:10", "hue:20:121", "hue:20", "hue:a:b", "night")) {
+            assertFalse(isNoteColor(bad), bad)
+        }
     }
 }

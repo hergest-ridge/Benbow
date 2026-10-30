@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -19,10 +20,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -56,6 +60,7 @@ import app.benbow.client.homeLayout
 import app.benbow.client.homeStats
 import app.benbow.client.minusBlock
 import app.benbow.client.tagRegistry
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -64,6 +69,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -105,7 +111,13 @@ internal data class HomeState(
     val month: Pair<Int, Double?> = 0 to null,
     /** A put-off entry whose day has come (ADR-031), oldest first; one card at a time. */
     val returned: EntrySummary? = null,
-)
+    /** The texts of the entries shown as posts (owner): pinned, today's, drafts, on this day, the favorite; by id. */
+    val bodies: Map<String, FeedBody?> = emptyMap(),
+) {
+    /** The entries Home shows as posts, whose texts it reads in full. */
+    val posted: List<String>
+        get() = (pinned + todays + drafts + onThisDay.map { it.entry } + listOfNotNull(resurfaced)).map { it.id }.distinct()
+}
 
 internal class HomeViewModel(private val services: AppServices) : ViewModel() {
     private val today = services.today()
@@ -233,7 +245,33 @@ internal class HomeViewModel(private val services: AppServices) : ViewModel() {
             block.id to TagGallery(query.tag.orEmpty(), query, entries.size, ordered.take((block.blockSize ?: BlockSize.M).cells))
         }
 
-    val state: StateFlow<HomeState?> = combine(base, reviews, services.repo.returned(today)) { home, (week, month), returned ->
+    // Each post's text is parsed here, once per change, as the feed does.
+    private val parsed = HashMap<String, Pair<String, FeedBody?>>()
+
+    /** Home's posts with their texts in full (owner: their paragraphs, marks and fonts, not a line of preview). */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val posts = base.flatMapLatest { home ->
+        val ids = home.posted
+        if (ids.isEmpty()) {
+            flowOf(home)
+        } else {
+            services.repo.feedItems(ids).map { items ->
+                parsed.keys.retainAll(items.map { it.summary.id }.toSet())
+                home.copy(
+                    bodies = items.associate { item ->
+                        val id = item.summary.id
+                        id to
+                            (
+                                parsed[id]?.takeIf { it.first == item.body }?.second
+                                    ?: feedBody(item.body).also { parsed[id] = item.body to it }
+                                )
+                    },
+                )
+            }
+        }
+    }.flowOn(Dispatchers.Default)
+
+    val state: StateFlow<HomeState?> = combine(posts, reviews, services.repo.returned(today)) { home, (week, month), returned ->
         home.copy(week = week, month = month, returned = returned.firstOrNull())
     }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
@@ -270,6 +308,8 @@ internal fun HomeScreen(services: AppServices, nav: Navigator) {
 
     /** The editor's open with this block picked ("" for none); null while closed. */
     var editing by remember { mutableStateOf<String?>(null) }
+    // Posts opened in place with «Показать ещё», by block and entry; they close again when Home is left.
+    val expanded = remember { mutableStateMapOf<String, Boolean>() }
     val newEntry = { nav.open(Route.Editor(null, services.today(), opened = services.now())) }
     Scaffold(
         topBar = { HomeHeader(state?.today, status) { nav.open(Route.Server) } },
@@ -306,6 +346,7 @@ internal fun HomeScreen(services: AppServices, nav: Navigator) {
                 board = { nav.selectTab(Route.Board) },
                 trackers = { if (services.trackersTab) nav.selectTab(Route.Trackers) else nav.open(Route.Trackers) },
                 openTracker = { id -> openTracker(services, nav, id) },
+                expanded = expanded,
             )
             postponing?.let { entry ->
                 PostponeDialog(onPick = { day ->
@@ -317,7 +358,15 @@ internal fun HomeScreen(services: AppServices, nav: Navigator) {
             // beside an open entry it is the list's pane that counts).
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val columns = if (maxWidth >= WIDE_HOME) 4 else 2
-                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
+                // A card that comes at the top (an entry back from «Отложить до…») while Home is in view at its top: the
+                // list keeps its place by the first item it showed, which would leave the card above the screen.
+                val list = rememberLazyListState()
+                LaunchedEffect(home.returned?.id) {
+                    if (home.returned == null) return@LaunchedEffect
+                    withFrameNanos {} // the list laid out with the card: its first item shown is now the one after it
+                    if (list.firstVisibleItemIndex == 1 && list.firstVisibleItemScrollOffset == 0) list.scrollToItem(0)
+                }
+                LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = PaddingValues(bottom = 16.dp)) {
                     home.returned?.let { entry ->
                         item(key = "returned") {
                             ReturnedCard(

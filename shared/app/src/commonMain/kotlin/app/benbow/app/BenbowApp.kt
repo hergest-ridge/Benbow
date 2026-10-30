@@ -53,6 +53,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -679,14 +681,26 @@ private fun AppFrame(
     var playerOpen by rememberSaveable { mutableStateOf(false) }
     val openPlayer: () -> Unit = remember { { playerOpen = true } }
     val scope = rememberCoroutineScope()
+    var railWidth by remember { mutableIntStateOf(0) }
     BoxWithConstraints(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val wide = maxWidth >= WIDE
         val twoPane = maxWidth >= TWO_PANE
+        // Beside an open entry the list stays, and so does the rail. The viewer and a drawing take the whole window (owner:
+        // no rail in full screen), but the rail stays put beneath them as it was for the screen they opened from, so
+        // nothing under them jumps aside as they come and go (WholeWindow lays them out over it).
+        val under = backStack.lastOrNull { !it.fullWindow }
+        val rail = wide && (under in tabRoutes || (twoPane && under != null))
+        val covered = rail && top?.fullWindow == true
+        val density = LocalDensity.current
+        val railDp = if (rail) with(density) { railWidth.toDp() } else 0.dp
+        val column = maxWidth - railDp
+        val box = if (wide && !twoPane) minOf(column, READABLE) else column
+        val span = WindowSpan(left = railDp + (column - box) / 2, width = maxWidth)
         Row(Modifier.fillMaxSize()) {
-            // Beside an open entry the list stays, and so does the rail; the viewer and drawing take the whole window (owner:
-            // no rail in full screen).
-            if (wide && (tabs || (twoPane && top != null && !top.fullWindow))) {
-                NavigationRail {
+            if (rail) {
+                NavigationRail(
+                    Modifier.onSizeChanged { railWidth = it.width }.then(if (covered) Modifier.clearAndSetSemantics {} else Modifier),
+                ) {
                     Spacer(Modifier.height(8.dp))
                     tabList.forEach { tab ->
                         val label = stringResource(tab.label)
@@ -717,7 +731,11 @@ private fun AppFrame(
                     contentAlignment = Alignment.TopCenter,
                 ) {
                     Box(Modifier.fillMaxHeight().widthIn(max = if (wide && !twoPane) READABLE else Dp.Infinity)) {
-                        CompositionLocalProvider(LocalWide provides wide, LocalOpenPlayer provides openPlayer) {
+                        CompositionLocalProvider(
+                            LocalWide provides wide,
+                            LocalOpenPlayer provides openPlayer,
+                            LocalWindowSpan provides span,
+                        ) {
                             AppNavigation(services, backStack, nav, twoPane)
                         }
                     }
@@ -774,6 +792,28 @@ internal val READABLE = 820.dp
 
 private val Route.fullWindow get() = this is Route.Media || this is Route.LibraryMedia || this is Route.Drawing
 
+/** Where the screens' frame stands in the window: [left] from the window's edge (the rail, a centred column), and its [width]. */
+internal class WindowSpan(val left: Dp, val width: Dp)
+
+private val LocalWindowSpan = compositionLocalOf { WindowSpan(0.dp, 0.dp) }
+
+/**
+ * A screen over the whole window from inside the screens' frame (the viewer, a drawing): out over the rail and the
+ * margins, which stay put beneath it. What falls through it never reaches the rail.
+ */
+@Composable
+private fun WholeWindow(content: @Composable () -> Unit) {
+    val span = LocalWindowSpan.current
+    Box(
+        Modifier.layout { measurable, constraints ->
+            val left = span.left.roundToPx()
+            val width = maxOf(span.width.roundToPx(), constraints.maxWidth)
+            val placeable = measurable.measure(constraints.copy(minWidth = width, maxWidth = width))
+            layout(constraints.maxWidth, placeable.height) { placeable.place(-left, 0) }
+        }.pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } },
+    ) { content() }
+}
+
 @Composable
 private fun AppNavigation(services: AppServices, backStack: SnapshotStateList<Route>, nav: Navigator, twoPane: Boolean) {
     val pane by rememberUpdatedState(twoPane)
@@ -823,9 +863,9 @@ private fun Screens(
             }
             entry<Route.History> { HistoryScreen(services, nav, it) }
             entry<Route.Revision> { RevisionScreen(services, nav, it) }
-            entry<Route.Media>(metadata = FULL_WINDOW) { MediaScreen(services, nav, it) }
-            entry<Route.LibraryMedia>(metadata = FULL_WINDOW) { LibraryViewer(services, nav, it) }
-            entry<Route.Drawing>(metadata = FULL_WINDOW) { DrawingScreen(services, nav, it) }
+            entry<Route.Media>(metadata = FULL_WINDOW) { WholeWindow { MediaScreen(services, nav, it) } }
+            entry<Route.LibraryMedia>(metadata = FULL_WINDOW) { WholeWindow { LibraryViewer(services, nav, it) } }
+            entry<Route.Drawing>(metadata = FULL_WINDOW) { WholeWindow { DrawingScreen(services, nav, it) } }
             entry<Route.Search>(metadata = TAB) { SearchScreen(services, listNav) }
             entry<Route.Calendar>(metadata = TAB) { CalendarScreen(services, listNav) }
             // A grid wants the window, not a list's pane; a note opens on it in the board's own scene (ADR-040).

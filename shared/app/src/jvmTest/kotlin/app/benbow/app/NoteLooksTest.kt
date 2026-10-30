@@ -7,10 +7,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -26,16 +30,23 @@ import app.benbow.client.Connection
 import app.benbow.client.FolderFontShelf
 import app.benbow.client.JournalRepository
 import app.benbow.client.LookFields
+import app.benbow.client.NOTE_BLACK
 import app.benbow.client.Settings
 import app.benbow.client.calendar.db.CalendarDb
 import app.benbow.client.createBoardNote
 import app.benbow.client.db.BenbowDb
 import app.benbow.client.setLook
 import app.benbow.ui.editor.NoteFont
+import app.benbow.ui.theme.BenbowTheme
+import app.benbow.ui.theme.InTheDark
+import app.benbow.ui.theme.SwatchColors
 import app.benbow.ui.theme.ThemePalette
+import app.benbow.ui.theme.ThemeSpec
 import app.benbow.ui.theme.colorsOf
+import app.benbow.ui.theme.contrastRatio
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.nio.file.Files
@@ -43,6 +54,7 @@ import java.util.Properties
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /** The look of a note (ADR-047, 7.20 L1): its tokens, its names, and how it shows in the feed and in the open note. */
@@ -331,6 +343,102 @@ class NoteLooksTest {
         waitUntil(timeoutMillis = 5_000) { drawn === caveat }
     }
 
+    /** The owner, 2026-10-30: a new note's «Оформление» still came up from below; beside it, as any other note's. */
+    @Test
+    fun aNewNotesLookStandsBesideItToo() = runDesktopComposeUiTest(width = 1600, height = 900) {
+        val services = feedTestServices()
+        setContent { BenbowApp(services) }
+        onAllNodesWithText("Лента")[0].click()
+        waitUntilAtLeastOneExists(hasText("Новая запись"), 5_000)
+        onAllNodesWithText("Новая запись")[0].click()
+        waitUntilAtLeastOneExists(hasContentDescription("Оформление записки"), 5_000)
+        onNodeWithContentDescription("Оформление записки").performClick()
+        waitUntilAtLeastOneExists(hasContentDescription("Закрыть"), 5_000) // the pane's ✕: a sheet has none
+        onAllNodesWithText("Бумага")[0].assertExists()
+        waitForIdle()
+        screenshot("look-beside-new-note")
+    }
+
+    /** The owner, 2026-10-30: from one photographed paper straight to another, the first one stayed. */
+    @Test
+    fun aPaperAfterAnotherIsTheNewOne() = runDesktopComposeUiTest {
+        var path by mutableStateOf("paper/paper001.jpg")
+        var shown: ImageBitmap? = null
+        setContent { shown = lookPhoto(path) }
+        waitUntil(timeoutMillis = 5_000) { shown != null }
+        val white = shown
+        path = "paper/paper003.jpg"
+        waitUntil(timeoutMillis = 5_000) { shown != null && shown !== white }
+        assertSame(LookPictures.photo("paper/paper003.jpg"), shown)
+    }
+
+    /** Patterns the owner took out (2026-10-30) are no longer offered; a note that has one draws nothing and keeps it. */
+    @Test
+    fun patternsTakenOutDrawNothing() {
+        for (token in listOf("morris-willow-bough", "morris-marigold", "morris-daisy", "morris-fruit", "hero-moroccan")) {
+            assertFalse(token in NoteLooks.patterns, "$token is not offered")
+            assertTrue(NoteLooks.look(mapOf("pattern" to token)).isEmpty, "$token draws nothing")
+        }
+    }
+
+    /** A black note (owner, 2026-10-30): its words and its look's ink read on it in a light theme, the theme's dark twin. */
+    @Test
+    fun aBlackNoteReadsInTheLight() {
+        for (palette in ThemePalette.entries) {
+            runDesktopComposeUiTest {
+                var page = Color.Unspecified
+                var words = Color.Unspecified
+                var quiet = Color.Unspecified
+                var twin = false
+                setContent {
+                    BenbowTheme(darkTheme = false, spec = ThemeSpec(palette)) {
+                        page = swatch(SwatchColors.BLACK)!!
+                        InTheDark(true) {
+                            words = MaterialTheme.colorScheme.onSurface
+                            quiet = MaterialTheme.colorScheme.onSurfaceVariant
+                            twin = BenbowTheme.colors.dark
+                        }
+                    }
+                }
+                waitForIdle()
+                assertEquals(NOTE_BLACK, SwatchColors.BLACK, "the app and the data say the same black")
+                assertTrue(twin, "$palette: a black note wears the dark twin")
+                assertTrue(contrastRatio(words, page) >= 7.0, "$palette: words on black ${contrastRatio(words, page)}")
+                assertTrue(contrastRatio(quiet, page) >= 4.5, "$palette: quiet words on black ${contrastRatio(quiet, page)}")
+            }
+        }
+    }
+
+    /** The owner, 2026-10-30: a black note in the feed and open, in the light theme; «Цвет» offers it with the palette. */
+    @Test
+    fun aBlackNoteInTheFeedAndOpen() = runDesktopComposeUiTest(width = 1600, height = 900) {
+        val services = feedTestServices()
+        services.setAppearance(services.appearance.value.copy(mode = app.benbow.ui.theme.ThemeMode.Light))
+        val night = services.repo.createNote(services.today(), "Ночная запись\nЗвёзды над крышами, тишина.")
+        services.repo.setBackground(night, SwatchColors.BLACK)
+        services.repo.setLook(night, mapOf("pattern" to "stars"))
+        setContent { BenbowApp(services) }
+        onAllNodesWithText("Лента")[0].click()
+        waitUntilAtLeastOneExists(hasText("Ночная запись", substring = true), 5_000)
+        onAllNodesWithText("Ночная запись", substring = true)[0].click()
+        waitUntilAtLeastOneExists(hasContentDescription("Меню"), 5_000)
+        onAllNodes(hasContentDescription("Меню")).onLast().performClick()
+        onNodeWithText("Редактировать").performClick()
+        waitUntilAtLeastOneExists(hasContentDescription("Оформление записки"), 5_000)
+        onNodeWithContentDescription("Оформление записки").performClick()
+        waitUntilAtLeastOneExists(hasText("Цвет"), 5_000)
+        onAllNodesWithText("Цвет")[0].click()
+        waitUntilAtLeastOneExists(hasContentDescription("Чёрный"), 5_000)
+        waitUntilAtLeastOneExists(hasText("Ещё оттенки"), 5_000)
+        runBlocking { delay(300) } // the stars' pictures are read off the test's idling
+        waitForIdle()
+        screenshot("look-black-note")
+        // Its stars show on the black page: the look held to its light words, not to the theme's dark ones.
+        val shot = onAllNodes(isRoot()).onLast().captureToImage().toPixelMap()
+        val page = (500 until 1260 step 4).flatMap { x -> (200 until 800 step 4).map { y -> shot[x, y] } }.toSet()
+        assertTrue(page.size > 1, "the black page draws its pattern: ${page.size} colors")
+    }
+
     /** ADR-054: in a wide window «Оформление» stands beside the note, the page against the feed, nothing over anything. */
     @Test
     fun inAWideWindowTheLookStandsBesideTheNote() = runDesktopComposeUiTest(width = 1600, height = 900) {
@@ -352,6 +460,13 @@ class NoteLooksTest {
         val page = onAllNodes(hasText("Проснулась раньше", substring = true))[0].fetchSemanticsNode().boundsInRoot
         val panel = onAllNodesWithText("Бумага")[0].fetchSemanticsNode().boundsInRoot
         assertTrue(page.right < panel.left, "the page and the pane side by side: $page, $panel")
+        // A color picked keeps «Цвет» open (owner, 2026-10-30: the pane went back to its list).
+        onAllNodesWithText("Цвет")[0].click()
+        waitUntilAtLeastOneExists(hasContentDescription("Мятный"), 5_000)
+        onNodeWithContentDescription("Мятный").performClick()
+        waitUntil(timeoutMillis = 5_000) { runBlocking { services.repo.entry(sea).first()?.background == "mint" } }
+        waitForIdle()
+        onAllNodesWithText("Ещё оттенки")[0].assertExists()
         onNodeWithContentDescription("Закрыть").performClick()
         waitUntilDoesNotExist(hasContentDescription("Закрыть"), 5_000)
     }
@@ -365,7 +480,9 @@ class NoteLooksTest {
         // A file, as on desktop: paired, the services sync at once beside the search index, and one in-memory
         // connection can't hold both transactions.
         val dbFile = File(Files.createTempDirectory("benbow-db").toFile(), "benbow.db")
-        val driver = JdbcSqliteDriver("jdbc:sqlite:${dbFile.absolutePath}", Properties(), BenbowDb.Schema)
+        // WAL, as the desktop app opens it: Home reads its posts while sync writes, and neither waits on the other.
+        val wal = Properties().apply { put("journal_mode", "WAL") }
+        val driver = JdbcSqliteDriver("jdbc:sqlite:${dbFile.absolutePath}", wal, BenbowDb.Schema)
         val fonts = files.entries.joinToString(",") { (token, bytes) ->
             """{"token":"$token","name":"$token","group":"diary","scale":1.2,"files":[{"weight":400,"sha256":"${sha(
                 bytes,

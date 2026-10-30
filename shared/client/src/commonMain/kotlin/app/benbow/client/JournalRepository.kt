@@ -66,7 +66,7 @@ data class EntrySummary(
     val tags: List<TagRef> = emptyList(),
     /** The ids of the tags the entry carries, whatever became of them (Бережно's rules go by these). */
     val tagIds: List<String> = emptyList(),
-    /** A Keep-like note color, one of [SWATCHES]; null = the theme's own. */
+    /** The note's color ([isNoteColor]: a Keep-like name, black, or one of one's own); null = the theme's own. */
     val background: String? = null,
     /** The note's look by layer (ADR-047, [LookFields]): tokens the app draws over [background]. */
     val look: Map<String, String> = emptyMap(),
@@ -164,7 +164,7 @@ data class EntryDetail(
     /** For comments: the entry they answer. */
     val parentId: String? get() = fields[PARENT_FIELD]
     val mood: Int? get() = fields[MOOD_FIELD]?.toIntOrNull()
-    val background: String? get() = fields[BACKGROUND_FIELD]?.takeIf { it in SWATCHES }
+    val background: String? get() = fields[BACKGROUND_FIELD]?.takeIf(::isNoteColor)
 
     /** The note's look by layer (ADR-047, [LookFields]). */
     val look: Map<String, String> get() = LookFields.of(fields)
@@ -592,8 +592,8 @@ class JournalRepository(
     /** -2 (hard) .. 2 (great), null = not set. */
     fun setMood(id: String, mood: Int?) = setField(id, MOOD_FIELD, mood?.coerceIn(-2, 2)?.toString())
 
-    /** The note's color, one of [SWATCHES] (anything else, or null, clears it). */
-    fun setBackground(id: String, color: String?) = setField(id, BACKGROUND_FIELD, color?.takeIf { it in SWATCHES })
+    /** The note's color, as [isNoteColor] allows (anything else, or null, clears it). */
+    fun setBackground(id: String, color: String?) = setField(id, BACKGROUND_FIELD, color?.takeIf(::isNoteColor))
 
     /** Бережно (ADR-031): a view only; the entry's text, revisions, sync and exports stay as they are. */
     fun setVeil(id: String, veil: Veil?) = setField(id, VEIL_FIELD, veil?.value)
@@ -850,7 +850,7 @@ internal fun summaryOf(
         mood = f[MOOD_FIELD]?.toIntOrNull(),
         tags = tagsOf(f),
         tagIds = tagsOf(f).map { it.id },
-        background = f[BACKGROUND_FIELD]?.takeIf { it in SWATCHES },
+        background = f[BACKGROUND_FIELD]?.takeIf(::isNoteColor),
         look = LookFields.of(f),
         veil = effectiveVeil(Veil.of(f[VEIL_FIELD]), null),
         ownVeil = Veil.of(f[VEIL_FIELD]),

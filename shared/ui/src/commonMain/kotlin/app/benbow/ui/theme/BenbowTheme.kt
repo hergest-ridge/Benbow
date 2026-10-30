@@ -2,11 +2,14 @@ package app.benbow.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import com.materialkolor.PaletteStyle
@@ -171,8 +174,42 @@ fun BenbowTheme(
     val system = if (spec.palette == ThemePalette.System) systemColors else null
     val scheme = remember(spec, darkTheme, system) { schemeOf(spec, darkTheme, system) }
     val colors = remember(scheme, darkTheme, spec) { benbowColors(scheme, darkTheme, spec, spec.seeds(system).style) }
+    // The theme's dark twin for a black note in the light (InTheDark), made once, on the first such note.
+    val night = remember(spec, darkTheme, system) {
+        if (darkTheme) {
+            null
+        } else {
+            lazy {
+                schemeOf(spec, dark = true, system).let { Night(it, benbowColors(it, true, spec, spec.seeds(system).style)) }
+            }
+        }
+    }
     MaterialTheme(colorScheme = scheme) {
-        CompositionLocalProvider(LocalBenbowColors provides colors, content = content)
+        CompositionLocalProvider(LocalBenbowColors provides colors, LocalNight provides night, content = content)
+    }
+}
+
+private class Night(val scheme: ColorScheme, val colors: BenbowColors)
+
+private val LocalNight = staticCompositionLocalOf<Lazy<Night>?> { null }
+
+/**
+ * [content] in the theme's dark twin while [on] (a black note in a light theme: its words and controls go light), else
+ * as it is; in a dark theme always as it is. The tree is the same either way, so a note turned black rebuilds nothing.
+ */
+@Composable
+fun InTheDark(on: Boolean, content: @Composable () -> Unit) {
+    val night = LocalNight.current?.takeIf { on }?.value
+    val style = LocalTextStyle.current
+    val words = LocalContentColor.current
+    val colors = BenbowTheme.colors
+    MaterialTheme(colorScheme = night?.scheme ?: MaterialTheme.colorScheme) {
+        CompositionLocalProvider(
+            LocalBenbowColors provides (night?.colors ?: colors),
+            LocalContentColor provides (night?.scheme?.onSurface ?: words),
+            LocalTextStyle provides style,
+            content = content,
+        )
     }
 }
 

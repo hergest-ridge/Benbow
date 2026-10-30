@@ -7,6 +7,19 @@ import kotlin.math.absoluteValue
 /** Color names for tags and categories (Google Keep's note colors); the app maps each to a light and a dark shade. */
 val SWATCHES = listOf("coral", "peach", "sand", "mint", "sage", "fog", "storm", "dusk", "blossom", "clay")
 
+/** A note's black (ADR-060): a note's alone, never a tag's. */
+const val NOTE_BLACK = "black"
+
+/**
+ * A note's color as it may be stored (ADR-060): one of [SWATCHES], [NOTE_BLACK], or a color of one's own
+ * `hue:<degrees 0-359>:<chroma 0-120>` (ADR-058). Anything else (a newer app's) is kept in its field and drawn as none.
+ */
+fun isNoteColor(token: String): Boolean {
+    if (token in SWATCHES || token == NOTE_BLACK) return true
+    val parts = token.removePrefix("hue:").takeIf { it != token }?.split(':')?.takeIf { it.size == 2 } ?: return false
+    return parts[0].toIntOrNull() in 0..359 && parts[1].toIntOrNull() in 0..120
+}
+
 /** A tag on an entry or in a list: [id] never changes (ADR-032), [name] is what it shows as. */
 data class TagRef(val id: String, val name: String)
 

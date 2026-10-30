@@ -85,15 +85,17 @@ internal fun OnThisDayStrip(items: List<LookBack>, media: Media, onOpen: (EntryS
                     modifier = Modifier.width(200.dp).padding(vertical = 4.dp).hand().clip(RoundedCornerShape(16.dp)).background(paper)
                         .then(entryBackdrop(entry.id, entry.look, paper, muted = true)),
                 ) {
-                    Column {
-                        entry.cover?.let { cover -> Picture(media, cover, Modifier.fillMaxWidth().height(112.dp)) }
-                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(
-                                agoLabel(item.monthsAgo),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                            Words(entry, if (entry.cover == null) 4 else 2)
+                    NightNote(entry.background) {
+                        Column {
+                            entry.cover?.let { cover -> Picture(media, cover, Modifier.fillMaxWidth().height(112.dp)) }
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(
+                                    agoLabel(item.monthsAgo),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                Words(entry, if (entry.cover == null) 4 else 2)
+                            }
                         }
                     }
                 }
@@ -149,13 +151,15 @@ internal fun OnThisDayPager(items: List<LookBack>, media: Media, onOpen: (EntryS
                             }
                         }
                     } else {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                agoLabel(item.monthsAgo),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                            Words(entry, 8)
+                        NightNote(entry.background) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    agoLabel(item.monthsAgo),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                Words(entry, 8)
+                            }
                         }
                     }
                 }

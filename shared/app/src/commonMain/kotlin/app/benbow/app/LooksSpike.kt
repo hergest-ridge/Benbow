@@ -87,7 +87,6 @@ private val HERO_NAMES = listOf(
     "four-point-stars" to "Звёздочки",
     "autumn" to "Осень",
     "bamboo" to "Бамбук",
-    "moroccan" to "Марокко",
     "formal-invitation" to "Приглашение",
     "overlapping-circles" to "Кольца",
     "rain" to "Дождь",
@@ -138,15 +137,6 @@ private val PARTS = listOf(
                 DAY,
             ),
             sample("Россыпь звёзд", TABLER, "dusk", NoteLook(pattern = "scatter", scatter = listOf("star", "sparkles", "moon")), THOUGHT),
-        ),
-    ),
-    LookPart(
-        "Обои Морриса · The Met",
-        listOf(
-            sample("Ивовая ветвь", MET, "mint", NoteLook(wallpaper = "willow-bough"), DAY),
-            sample("Бархатцы", MET, "fog", NoteLook(wallpaper = "marigold"), THOUGHT),
-            sample("Маргаритки", MET, "sand", NoteLook(wallpaper = "daisy"), LIST),
-            sample("Гранаты", MET, "storm", NoteLook(wallpaper = "fruit"), RECIPE),
         ),
     ),
     LookPart(
@@ -260,7 +250,6 @@ private val PARTS = listOf(
                 NoteLook(motion = "drift", pattern = "scatter", scatter = listOf("sparkles", "moon")),
                 THOUGHT,
             ),
-            sample("Моррис", MET, "mint", NoteLook(wallpaper = "willow-bough", lights = listOf(LookLight(315f, "yellow", 1))), LIST),
             sample("Чертёжная тетрадь", "$HERO, $AMBIENT", null, NoteLook(tile = "graph-paper", paperPhoto = "paper001"), RECIPE),
         ),
     ),

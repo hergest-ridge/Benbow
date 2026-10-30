@@ -98,10 +98,13 @@ private fun MoreList(services: AppServices, nav: Navigator) {
         MoreItem(Icons.Server, stringResource(Res.string.server), look?.label, look?.tone) { nav.open(Route.Server) }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         val appearance by services.appearance.collectAsStateWithLifecycle()
+        // The palette every device wears (ADR-057), not this device's from before.
+        val choice by rememberThemeChoice(services)
+        val palette = themeSpecOf(choice, appearance, systemContrast = 0.0).palette
         MoreItem(
             Icons.Palette,
             stringResource(Res.string.appearance),
-            stringArrayResource(Res.array.palette_names).getOrNull(appearance.palette.ordinal),
+            stringArrayResource(Res.array.palette_names).getOrNull(palette.ordinal),
         ) { nav.open(Route.Appearance) }
         MoreItem(Icons.Bell, stringResource(Res.string.reminders), stringResource(Res.string.more_reminders)) {
             nav.open(Route.Reminders())

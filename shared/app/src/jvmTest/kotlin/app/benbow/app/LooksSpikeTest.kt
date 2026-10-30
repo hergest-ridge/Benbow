@@ -58,7 +58,6 @@ class LooksSpikeTest {
                     "Бумага · фото ambientCG" to "paper-photos",
                     "Узоры · Hero Patterns" to "hero",
                     "Гламур" to "hero-2",
-                    "Обои Морриса · The Met" to "morris",
                     "Россыпь звёзд" to "patterns",
                     "Скрапбук · рисуется кодом" to "scrap",
                     "Коллаж на бумаге" to "scrap-2",

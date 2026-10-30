@@ -168,12 +168,15 @@ internal fun GridGrid(parts: SheetParts, base: Color) {
     }
 }
 
-/** A tracker's paper: the note colors, then many more hues in three strengths and greys, and one of one's own. */
+/**
+ * A note's or a tracker's paper: the note colors ([black] after them, a note's), then many more hues in three strengths
+ * and greys, and one of one's own.
+ */
 @Composable
-internal fun PaperColors(selected: String?, noneLabel: String, onPick: (String?) -> Unit) {
+internal fun PaperColors(selected: String?, noneLabel: String, onPick: (String?) -> Unit, black: Boolean = false) {
     val dark = BenbowTheme.colors.dark
     Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
-        SwatchPicker(selected, noneLabel, onPick)
+        SwatchPicker(selected, noneLabel, onPick, black = black)
         HueChoices(selected, HuePalette.paper, { it.fill(dark) }, HuePalette.PAPER_CHROMA, onPick)
     }
 }

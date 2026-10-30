@@ -907,6 +907,8 @@
     <string name="pick_color_chroma">Насыщенность</string>
     <string name="pick_color_hint">Светлоту приложение подберёт само, для светлой и тёмной темы, чтобы надписи читались.</string>
     <string name="pick_color_done">Готово</string>
+    <string name="trackers_drawer_show">Показать колонки</string>
+    <string name="trackers_drawer_hide">Спрятать колонки</string>
     <string name="trackers_resize">Растягивать колонки</string>
     <string name="trackers_resize_hint">Границы колонок в шапке листа (и рядов, когда дни вправо) можно тянуть мышью или пальцем. Двойной щелчок возвращает как было.</string>
     <string name="trackers_resize_reset">Вернуть обычные размеры</string>

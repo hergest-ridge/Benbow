@@ -13,6 +13,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.unit.dp
 import app.benbow.ui.theme.BenbowTheme
 import kotlin.math.max
@@ -33,14 +35,20 @@ internal fun sheetGrid(ink: Color = MaterialTheme.colorScheme.primary): GridPain
     return if (style == GridStyle.None) null else GridPaint(style, gridInk(ink))
 }
 
-/** The grid's colors in this theme, with the marks' [ink]. */
+/**
+ * The grid's colors, with the marks' [ink]: the page's words mixed into the [paper] the grid lies on (owner, ADR-059:
+ * the theme's divider alone vanished on a dark card), so its lines read on any card in either mode.
+ */
 @Composable
-internal fun gridInk(ink: Color): GridInk {
-    val colors = MaterialTheme.colorScheme
-    return GridInk(BenbowTheme.colors.divider, colors.outlineVariant, colors.outline.copy(alpha = PENCIL_ALPHA), ink)
+internal fun gridInk(ink: Color, paper: Color = LocalSheetLook.current.paper): GridInk {
+    val words = MaterialTheme.colorScheme.onSurface
+    val ground = paper.takeOrElse { MaterialTheme.colorScheme.surface }
+    return GridInk(lerp(ground, words, LINE), lerp(ground, words, STRONG), lerp(ground, words, PENCIL), ink)
 }
 
-private const val PENCIL_ALPHA = 0.6f
+private const val LINE = 0.2f
+private const val STRONG = 0.38f
+private const val PENCIL = 0.3f
 
 /**
  * A cell's edges in the tracker's [grid]: its right one and its bottom one, [strongRight] and [strongBottom] drawn

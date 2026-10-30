@@ -27,6 +27,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -45,9 +47,12 @@ import app.benbow.core.tracker.TrackerRecord
 import app.benbow.core.tracker.TrackerSpans
 import app.benbow.ui.sideScroll
 import app.benbow.ui.theme.BenbowTheme
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.isoDayNumber
+import kotlinx.datetime.minus
+import kotlinx.datetime.plus
 import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -66,6 +71,8 @@ internal fun AcrossMonthPage(
     today: LocalDate,
     figures: Boolean,
     write: TrackerWrite,
+    turn: ((Int) -> Unit)? = null,
+    fromEnd: Boolean = false,
 ) {
     val days = remember(month) { monthDays(month) }
     val (cells, spans) = rememberMonthRecords(services, columns, days)
@@ -74,9 +81,13 @@ internal fun AcrossMonthPage(
     var asked by remember { mutableStateOf<Pair<TrackerColumn, LocalDate>?>(null) }
     var spansOf by remember { mutableStateOf<Pair<TrackerColumn, LocalDate>?>(null) }
     val scroll = rememberScrollState()
+    val rows = rememberScrollState()
+    val pull = turn?.let { rememberMonthPull(it) }
+    // The month before one pulled down from opens at its last rows.
+    if (fromEnd) LaunchedEffect(rows.maxValue > 0) { rows.scrollTo(rows.maxValue) }
     val density = LocalDensity.current
     val sizes = LocalSheetLook.current.sizes
-    BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = SheetSizes.SIDE)) {
+    BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = sheetSide())) {
         val names = if (maxWidth < Across.WIDE) Across.NAMES_NARROW else Across.NAMES
         val end = if (figures) Across.TOTAL else 0.dp
         val gaps = Across.WEEK_GAP * days.count { it.dayOfWeek == DayOfWeek.SUNDAY && it != days.last() }
@@ -98,41 +109,54 @@ internal fun AcrossMonthPage(
                 }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
-                columns.forEach { column ->
-                    val own = spans[column.id].orEmpty()
-                    val window = column.sheetHours
-                    val byDay = remember(cells, column.id, sofar) {
-                        sofar.mapNotNull { date -> cells[TrackerCells.id(column.id, date)]?.let { date to it } }.toMap()
-                    }
-                    val total = figureText(column, TrackerFigures.of(column, byDay, own, sofar))
-                    if (window == null) {
-                        Row(
-                            Modifier.fillMaxWidth().height(SheetSizes.ROW_HEIGHT * sizes.height(column)),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            ColumnName(column, SheetSizes.ROW_HEIGHT, write, Modifier.width(names))
-                            grid.Days(Modifier.weight(1f).fillMaxHeight(), last = { Figure(total) }) { date ->
-                                val id = "$date"
-                                DayCell(
-                                    column,
-                                    id,
-                                    cells[TrackerCells.id(column.id, id)],
-                                    own,
-                                    figures,
-                                    enabled = date <= today,
-                                    modifier = Modifier.fillMaxSize(),
-                                    write = write,
-                                    onSpans = { spansOf = column to date },
-                                    onAsk = { asked = column to date },
-                                )
-                            }
+            Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
+                Column(
+                    Modifier.fillMaxSize()
+                        .then(
+                            if (pull == null) {
+                                Modifier
+                            } else {
+                                Modifier.nestedScroll(pull.connection).monthPull(pull, rows::atTop, rows::atBottom)
+                            },
+                        )
+                        .verticalScroll(rows),
+                ) {
+                    columns.forEach { column ->
+                        val own = spans[column.id].orEmpty()
+                        val window = column.sheetHours
+                        val byDay = remember(cells, column.id, sofar) {
+                            sofar.mapNotNull { date -> cells[TrackerCells.id(column.id, date)]?.let { date to it } }.toMap()
                         }
-                    } else {
-                        SleepRows(column, window, own, grid, names, figures, total, write) { spansOf = column to it }
+                        val total = figureText(column, TrackerFigures.of(column, byDay, own, sofar))
+                        if (window == null) {
+                            Row(
+                                Modifier.fillMaxWidth().height(SheetSizes.ROW_HEIGHT * sizes.height(column)),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                ColumnName(column, SheetSizes.ROW_HEIGHT, write, Modifier.width(names))
+                                grid.Days(Modifier.weight(1f).fillMaxHeight(), last = { Figure(total) }) { date ->
+                                    val id = "$date"
+                                    DayCell(
+                                        column,
+                                        id,
+                                        cells[TrackerCells.id(column.id, id)],
+                                        own,
+                                        figures,
+                                        enabled = date <= today,
+                                        modifier = Modifier.fillMaxSize(),
+                                        write = write,
+                                        onSpans = { spansOf = column to date },
+                                        onAsk = { asked = column to date },
+                                    )
+                                }
+                            }
+                        } else {
+                            SleepRows(column, window, own, grid, names, figures, total, write) { spansOf = column to it }
+                        }
+                        HorizontalDivider(color = BenbowTheme.colors.divider)
                     }
-                    HorizontalDivider(color = BenbowTheme.colors.divider)
                 }
+                pull?.let { PullHint(it, monthName(month.minus(1, DateTimeUnit.MONTH)), monthName(month.plus(1, DateTimeUnit.MONTH))) }
             }
         }
     }

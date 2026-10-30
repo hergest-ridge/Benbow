@@ -36,6 +36,20 @@ class TrackerLooksTest {
     }
 
     @Test
+    fun aDragFromASnakesEndOutwardsStretchesIt() {
+        // hours: _ X X _ _ X _ _
+        assertEquals(false, dragErases(hours, from = 0, at = 0.5f), "an empty hour paints at once")
+        assertNull(dragErases(hours, from = 2, at = 2.7f), "still on its painted hour: not decided")
+        assertEquals(false, dragErases(hours, from = 2, at = 3.2f), "from the end out past it: stretched (owner)")
+        assertEquals(false, dragErases(hours, from = 1, at = 0.4f), "from the start out before it: stretched")
+        assertEquals(true, dragErases(hours, from = 2, at = 1.5f), "from the end along the snake: cut")
+        assertEquals(true, dragErases(hours, from = 1, at = 2.1f))
+        assertEquals(false, dragErases(hours, from = 5, at = 6.3f), "a one-hour snake stretches either way")
+        assertEquals(false, dragErases(hours, from = 5, at = 4.9f))
+        assertEquals(listOf(HourRun(1f, 6f)), dragRuns(hours, from = 2, at = 5.5f, erasing = false), "it reaches the next and joins")
+    }
+
+    @Test
     fun aRightClickClearsADayAndKnowsWhatToPutBack() {
         val check = column("check")
         val count = column("count")

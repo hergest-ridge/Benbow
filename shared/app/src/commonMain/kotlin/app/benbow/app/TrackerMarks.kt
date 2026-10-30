@@ -114,10 +114,16 @@ internal fun DayCell(
             CellTap.None -> Unit
         }
     }
+    // What «Вернуть» puts back is read from the store in the same transaction as the clearing, never from what the
+    // screen showed a moment before (a tap may have landed since).
     val clear by rememberUpdatedState {
-        dayClear(column, day, fields, spans)?.let { cleared ->
-            write { clearDay(column.id, day, cleared) }
-            look.onCleared { unclearDay(column.id, day, cleared) }
+        write {
+            together {
+                dayClear(column, day, cellNow(column.id, day), spans)?.let { cleared ->
+                    clearDay(column.id, day, cleared)
+                    look.onCleared { unclearDay(column.id, day, cleared) }
+                }
+            }
         }
     }
     val hover = remember { MutableInteractionSource() }

@@ -41,6 +41,16 @@ internal object SheetSizes {
     /** Hours narrower than this are numbered only every third (a whole day on a phone). */
     val HOUR_LABEL = 16.dp
 
+    /**
+     * A sleep sheet on a window narrower than [NARROW] (a phone, ADR-059): the hours take the row, and a day's length and
+     * the other columns slide out from the right, [DRAWER_FIGURE] and [DRAWER_COLUMN] wide, pulled by a [GRIP].
+     */
+    val NARROW = 600.dp
+    val DRAWER_FIGURE = 52.dp
+    val DRAWER_COLUMN = 46.dp
+    val GRIP = 14.dp
+    val FIGURE_TEXT = 12.sp
+
     /** A column no narrower than this while its border is dragged; a row of a month across no lower. */
     val LEAST_COLUMN = 24.dp
     val LEAST_ROW = 20.dp

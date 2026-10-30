@@ -23,14 +23,15 @@ internal fun timeOf(time: LocalDateTime): String = timeText(seconds(time))
 internal fun hourAt(x: Float, width: Int, count: Int): Int = if (width <= 0) 0 else (x / width * count).toInt().coerceIn(0, count - 1)
 
 /**
- * A drag along a day's hours ([starts]) from [from] to [to] (indexes, either way): it paints them when it started on an
- * empty hour, else takes them out of the spans; one long press with no drag opens the day's spans instead.
+ * A drag along a day's hours ([starts]) from [from] to [to] (indexes, either way): it takes them out of the spans when
+ * [erasing] ([dragErases]: it went along a snake), else paints them; one long press with no drag opens the day's spans
+ * instead.
  */
-internal fun dragEdits(spans: List<TrackerRecord>, starts: List<LocalDateTime>, from: Int, to: Int): List<SpanEdit> {
+internal fun dragEdits(spans: List<TrackerRecord>, starts: List<LocalDateTime>, from: Int, to: Int, erasing: Boolean): List<SpanEdit> {
     val low = minOf(from, to).coerceIn(starts.indices)
     val high = maxOf(from, to).coerceIn(starts.indices)
     val range = seconds(starts[low]) to seconds(starts[high]) + HOUR
-    return if (covered(spans, starts[from.coerceIn(starts.indices)])) {
+    return if (erasing) {
         eraseSpans(spans, range.first, range.second)
     } else {
         paintSpans(spans, range.first, range.second)

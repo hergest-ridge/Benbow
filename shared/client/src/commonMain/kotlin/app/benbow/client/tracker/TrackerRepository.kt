@@ -121,6 +121,9 @@ class TrackerRepository(
     /** [field] of [column]'s cell on [day]: a check's "true", a rating, an option's id, a note; null clears it. */
     fun setCell(column: String, day: String, value: String?, field: String = CellField.VALUE) = cell(column, day, mapOf(field to value))
 
+    /** [column]'s cell on [day] as the store has it now (none: empty), for a write that depends on it. */
+    fun cellNow(column: String, day: String): Map<String, String?> = db.recordState(TrackerKind.CELL, TrackerCells.id(column, day)).first
+
     /** A tap adding [delta] to a count: this device's own part only, so taps on two devices both count. */
     fun addToCount(column: String, day: String, delta: Double = 1.0) = db.transaction {
         val id = TrackerCells.id(column, day)

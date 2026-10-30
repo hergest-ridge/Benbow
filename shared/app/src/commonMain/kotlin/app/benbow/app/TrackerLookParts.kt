@@ -108,7 +108,7 @@ internal fun SheetPartRows(parts: SheetParts, base: Color, onOpen: (LookSection)
         Tile(base) { drawMarkSample(style, parts.sampleInk) }
     }
     val grid = GridStyle.of(parts.grid)
-    val gridColors = gridInk(parts.sampleInk)
+    val gridColors = gridInk(parts.sampleInk, base)
     PartRow(LookSection.Grid.title, grids.getOrElse(grid.ordinal) { grid.name }, { onOpen(LookSection.Grid) }) {
         Tile(base) { drawGridSample(grid, gridColors) }
     }
@@ -151,7 +151,7 @@ internal fun MarkGrid(parts: SheetParts, base: Color) {
 internal fun GridGrid(parts: SheetParts, base: Color) {
     val names = stringArrayResource(Res.array.tracker_grid_names)
     val chosen = GridStyle.of(parts.grid)
-    val colors = gridInk(parts.sampleInk)
+    val colors = gridInk(parts.sampleInk, base)
     Grid {
         GridStyle.entries.forEach { style ->
             Choice(

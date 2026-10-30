@@ -18,12 +18,19 @@ class TrackerTimeTest {
     @Test
     fun aDragPaintsTheHoursItPassesOrClearsThemWhenItStartsOnAPaintedOne() {
         val starts = hourStarts(HourWindow.of("21:00-11:00")!!, day, DayBy.End) // 21:00 the day before … 10:00
-        assertEquals(listOf(SpanEdit.Add("2026-10-26T23:00:00", "2026-10-27T07:00:00")), dragEdits(emptyList(), starts, 2, 9))
-        assertEquals(listOf(SpanEdit.Add("2026-10-26T23:00:00", "2026-10-27T07:00:00")), dragEdits(emptyList(), starts, 9, 2), "either way")
+        assertEquals(
+            listOf(SpanEdit.Add("2026-10-26T23:00:00", "2026-10-27T07:00:00")),
+            dragEdits(emptyList(), starts, 2, 9, erasing = false),
+        )
+        assertEquals(
+            listOf(SpanEdit.Add("2026-10-26T23:00:00", "2026-10-27T07:00:00")),
+            dragEdits(emptyList(), starts, 9, 2, erasing = false),
+            "either way",
+        )
         val night = listOf(span("n", "2026-10-26T23:00:00", "2026-10-27T03:00:00"), span("m", "2026-10-27T05:00:00", "2026-10-27T07:00:00"))
         assertEquals(
             listOf(SpanEdit.Change("n", mapOf("end" to "2026-10-27T07:00:00")), SpanEdit.Trash("m")),
-            dragEdits(night, starts, 6, 8),
+            dragEdits(night, starts, 6, 8, erasing = false),
             "a drag over the gap joins the night",
         )
         assertEquals(
@@ -31,8 +38,8 @@ class TrackerTimeTest {
                 SpanEdit.Change("n", mapOf("end" to "2026-10-27T01:00:00")),
                 SpanEdit.Change("m", mapOf("start" to "2026-10-27T06:00:00")),
             ),
-            dragEdits(night, starts, 4, 8),
-            "started on a painted hour: cleared",
+            dragEdits(night, starts, 4, 8, erasing = true),
+            "along a snake: cleared",
         )
         assertEquals(emptyList(), paintSpans(night, seconds(LocalDateTime(2026, 10, 27, 0, 0)), seconds(LocalDateTime(2026, 10, 27, 2, 0))))
     }

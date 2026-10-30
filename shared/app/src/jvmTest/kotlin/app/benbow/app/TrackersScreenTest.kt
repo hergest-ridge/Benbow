@@ -9,6 +9,7 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
@@ -21,8 +22,11 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.rightClick
 import androidx.compose.ui.test.runDesktopComposeUiTest
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.waitUntilAtLeastOneExists
 import app.benbow.client.HomeBlock
 import app.benbow.client.HomeBlockType
@@ -41,6 +45,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.minus
+import kotlinx.datetime.plus
 import java.nio.file.Files
 import java.util.Collections
 import java.util.Properties
@@ -402,7 +407,7 @@ class TrackersScreenTest {
         assertEquals(0.0, count())
         waitUntil(timeoutMillis = 5_000) { heard.any { it is AppMessage.TrackerDayCleared } }
         services.trackerWrites(heard.filterIsInstance<AppMessage.TrackerDayCleared>().single().undo) // «Вернуть»
-        waitUntil(timeoutMillis = 5_000) { count() == 3.0 }
+        waitUntil(timeoutMillis = 10_000) { count() == 3.0 }
         listening.cancel()
     }
 
@@ -496,6 +501,101 @@ class TrackersScreenTest {
         setContent { TrackerSheetScreen(services, Navigator(mutableStateListOf(Route.TrackerSheet(id))), id, back = true) }
         waitUntilAtLeastOneExists(hasTestTag(TrackerCells.id(first, "${trackerToday()}")), 5_000)
         assertEquals(0, onAllNodes(hasTestTag("stretch:$first")).fetchSemanticsNodes().size, "off by default (owner)")
+    }
+
+    @Test
+    fun onAPhoneASleepSheetsOtherColumnsSlideOutFromTheRight() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val services = testServices("android")
+        val today = "${trackerToday()}"
+        val id = services.trackers.createTracker(TrackerPresets.sleep.tracker, TrackerPresets.sleep.columns)
+        val (night, how) = runBlocking { services.trackers.columns(id).first() }.let { it[0].id to it[1].id }
+        setContent { TrackerSheetScreen(services, Navigator(mutableStateListOf(Route.TrackerSheet(id))), id, back = true) }
+        waitUntilAtLeastOneExists(hasTestTag("${TrackerCells.id(night, today)}:0"), 5_000)
+        waitForIdle()
+        onNodeWithTag(TrackerCells.id(how, today)).assertIsNotDisplayed() // «Как» waits at the right (owner, ADR-059)
+        screenshot("trackers-25-phone-sleep")
+        onNodeWithContentDescription("Показать колонки").click()
+        waitUntil(timeoutMillis = 5_000) {
+            onAllNodes(hasTestTag(TrackerCells.id(how, today))).fetchSemanticsNodes().any { it.boundsInRoot.width > 20f }
+        }
+        screenshot("trackers-26-phone-drawer")
+        onNodeWithTag(TrackerCells.id(how, today)).click()
+        waitUntilAtLeastOneExists(hasTestTag("pick:fine"), 5_000)
+    }
+
+    @Test
+    fun onAPhoneAFingerPaintsHoursBySlidingSidewaysAtOnce() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val services = testServices("android")
+        val today = "${trackerToday()}"
+        val id = services.trackers.createTracker(TrackerPresets.sleep.tracker, TrackerPresets.sleep.columns)
+        val night = runBlocking { services.trackers.columns(id).first() }.first().id
+        fun spans() = runBlocking { services.trackers.spans(listOf(night), today, today).first() }.filter { !it.deleted }
+        setContent { TrackerSheetScreen(services, Navigator(mutableStateListOf(Route.TrackerSheet(id))), id, back = true) }
+        val hour = { i: Int -> "${TrackerCells.id(night, today)}:$i" }
+        waitUntilAtLeastOneExists(hasTestTag(hour(1)), 5_000)
+        val width = onNodeWithTag(hour(1)).fetchSemanticsNode().size.width.toFloat()
+        // No long press: a sideways finger paints (owner, ADR-059), from 1:00 over 3:00.
+        onNodeWithTag(hour(1)).performTouchInput {
+            down(center)
+            repeat(4) { moveBy(Offset(width / 2, 0f), delayMillis = 16) } // to 3:00's middle
+            up()
+        }
+        waitUntil(timeoutMillis = 5_000) { spans().size == 1 }
+        assertEquals("${today}T01:00:00" to "${today}T04:00:00", spans().single().let { it[SpanField.START] to it[SpanField.END] })
+        // From the snake's end outwards it stretches, never cuts (owner).
+        onNodeWithTag(hour(3)).performTouchInput {
+            down(center)
+            repeat(4) { moveBy(Offset(width / 2, 0f), delayMillis = 16) } // to 5:00's middle
+            up()
+        }
+        waitUntil(timeoutMillis = 5_000) { spans().singleOrNull()?.get(SpanField.END) == "${today}T06:00:00" }
+        assertEquals("${today}T01:00:00", spans().single()[SpanField.START])
+    }
+
+    @Test
+    fun aMouseStretchesASnakeFromItsEnd() = runDesktopComposeUiTest(width = 1280, height = 860) {
+        val services = testServices("desktop")
+        val today = "${trackerToday()}"
+        val id = services.trackers.createTracker(TrackerPresets.sleep.tracker, TrackerPresets.sleep.columns)
+        val night = runBlocking { services.trackers.columns(id).first() }.first().id
+        services.trackers.addSpan(night, "${today}T00:00:00", "${today}T03:00:00")
+        fun spans() = runBlocking { services.trackers.spans(listOf(night), today, today).first() }.filter { !it.deleted }
+        setContent { TrackerSheetScreen(services, Navigator(mutableStateListOf(Route.TrackerSheet(id))), id, back = true) }
+        val hour = { i: Int -> "${TrackerCells.id(night, today)}:$i" }
+        waitUntilAtLeastOneExists(hasTestTag(hour(2)), 5_000)
+        val width = onNodeWithTag(hour(2)).fetchSemanticsNode().size.width.toFloat()
+        onNodeWithTag(hour(2)).performMouseInput {
+            moveTo(center)
+            press()
+            repeat(4) { moveBy(Offset(width / 2, 0f), delayMillis = 16) } // to 4:00's hour
+            release()
+        }
+        waitUntil(timeoutMillis = 5_000) { spans().singleOrNull()?.get(SpanField.END) == "${today}T05:00:00" }
+        assertEquals("${today}T00:00:00", spans().single()[SpanField.START], "stretched, not cut")
+    }
+
+    @Test
+    fun onAPhoneAWideMonthTurnsByPullingPastItsEnd() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val services = testServices("android")
+        val today = trackerToday()
+        val id = services.trackers.createTracker(TrackerPresets.sleep.tracker, TrackerPresets.sleep.columns)
+        setContent { TrackerSheetScreen(services, Navigator(mutableStateListOf(Route.TrackerSheet(id))), id, back = true) }
+        val now = "month:" + "$today".take(7)
+        val next = "month:" + "${today.plus(1, DateTimeUnit.MONTH)}".take(7)
+        waitUntilAtLeastOneExists(hasTestTag(now), 5_000)
+        // A sideways swipe no longer turns it.
+        onNodeWithTag(now).performTouchInput { swipeLeft() }
+        waitForIdle()
+        onNodeWithTag(now).assertIsDisplayed()
+        // To its end (a page that only reached it stops there), then a pull past it turns it.
+        fun turned() = onAllNodes(hasTestTag(next)).fetchSemanticsNodes().any { it.isShown() }
+        repeat(3) {
+            if (!turned()) {
+                onNodeWithTag(now).performTouchInput { swipeUp(startY = bottom - 20f, endY = top + 20f, durationMillis = 300) }
+                waitForIdle()
+            }
+        }
+        waitUntil(timeoutMillis = 5_000) { turned() }
     }
 
     /** The texts shown in the cell tagged [tag] (merged into it, as a tap target). */

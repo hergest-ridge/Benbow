@@ -83,24 +83,38 @@ internal enum class GridStyle(val token: String?) {
 
 /**
  * What a sheet's cells are drawn with: [ink] every column's marks (the tracker's `color`; null: each column's own), the
- * marks' [mark] style, the [grid], the columns' [sizes]; [onCleared] offers «Вернуть» after a right click cleared a day.
+ * marks' [mark] style, the [grid] on the [paper] (the card's color), the columns' [sizes]; [drawer] holds the columns
+ * beside a sleep sheet's hours on a narrow window; [onCleared] offers «Вернуть» after a right click cleared a day.
  */
 internal class SheetLook(
     val ink: String? = null,
     val mark: MarkStyle = MarkStyle.Soft,
     val grid: GridStyle = GridStyle.None,
     val sizes: ColumnSizes = ColumnSizes(false),
+    val paper: Color = Color.Unspecified,
+    val drawer: SideDrawer? = null,
     val onCleared: (undo: TrackerRepository.() -> Unit) -> Unit = {},
-)
+) {
+    /** The same look with its drawer at work, or put by ([drawer] null: a wide window, or no columns to slide out). */
+    fun withDrawer(drawer: SideDrawer? = this.drawer) = SheetLook(ink, mark, grid, sizes, paper, drawer, onCleared)
+}
 
 internal val LocalSheetLook = staticCompositionLocalOf { SheetLook() }
 
-/** [tracker]'s look as its record says. */
-internal fun sheetLookOf(tracker: TrackerRecord, sizes: ColumnSizes, onCleared: (TrackerRepository.() -> Unit) -> Unit) = SheetLook(
+/** [tracker]'s look as its record says, on [paper]. */
+internal fun sheetLookOf(
+    tracker: TrackerRecord,
+    sizes: ColumnSizes,
+    paper: Color,
+    drawer: SideDrawer?,
+    onCleared: (TrackerRepository.() -> Unit) -> Unit,
+) = SheetLook(
     ink = tracker[TrackerField.COLOR],
     mark = MarkStyle.of(tracker[TrackerField.MARK]),
     grid = GridStyle.of(tracker[TrackerField.GRID]),
     sizes = sizes,
+    paper = paper,
+    drawer = drawer,
     onCleared = onCleared,
 )
 

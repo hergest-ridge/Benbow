@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
@@ -44,6 +45,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -139,8 +143,12 @@ internal fun TrackerSheetScreen(services: AppServices, nav: Navigator, trackerId
     val sizes =
         remember(trackerId, tracker?.get(TrackerField.RESIZE) == RESIZE_ON) { ColumnSizes(tracker?.get(TrackerField.RESIZE) == RESIZE_ON) }
     LaunchedEffect(allColumns) { sizes.settle() }
-    val sheet = remember(tracker, sizes) {
-        tracker?.let { record -> sheetLookOf(record, sizes) { undo -> services.messages.tryEmit(AppMessage.TrackerDayCleared(undo)) } }
+    val paper = swatch(tracker?.get(TrackerField.BACKGROUND)) ?: page
+    val drawer = rememberSideDrawer(trackerId)
+    val sheet = remember(tracker, sizes, paper) {
+        tracker?.let { record ->
+            sheetLookOf(record, sizes, paper, drawer) { undo -> services.messages.tryEmit(AppMessage.TrackerDayCleared(undo)) }
+        }
     } ?: SheetLook()
     val beside = remember(services) { BesidePane(services.settings, TRACKER_LOOK_WIDTH) }
     val target = tracker?.let { lookTarget(it, columns.orEmpty(), page, ground, untitled, write) }
@@ -195,24 +203,18 @@ private fun SheetPage(
     val shownMonth = monthOfPage(pager.currentPage)
     var menu by remember { mutableStateOf(false) }
     Scaffold(
-        modifier = if (screen.isEmpty()) {
-            Modifier
-        } else {
-            // Clipped: a pattern's shapes would reach over the list beside it.
-            Modifier.clipToBounds().background(ground).then(entryBackdrop(screenId(trackerId), screen, ground, muted = true, moving = true))
-        },
-        containerColor = if (screen.isEmpty()) ground else Color.Transparent,
+        // The page's ground under everything, the screen's look over it once the tracker has come; clipped: a pattern's
+        // shapes would reach over the list beside it.
+        modifier = Modifier.clipToBounds().background(ground)
+            .then(if (screen.isEmpty()) Modifier else entryBackdrop(screenId(trackerId), screen, ground, muted = true, moving = true)),
+        containerColor = Color.Transparent,
         // A see-through page has no content color of its own: the page's words, so none goes black (owner, ADR-058).
         contentColor = MaterialTheme.colorScheme.onSurface,
         topBar = {
+            // Always see-through, from its first frame (owner, ADR-059): a bar that changed its colors once the tracker
+            // came faded from the page's tone to nothing over its screen look, a dark flash.
             TopAppBar(
-                colors = if (screen.isEmpty()) {
-                    TopAppBarDefaults.topAppBarColors()
-                } else {
-                    TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent,
-                    )
-                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent, scrolledContainerColor = Color.Transparent),
                 navigationIcon = { if (back) BackButton(nav::back) },
                 title = {
                     Column {
@@ -321,51 +323,76 @@ private fun SheetPage(
                 val base = swatch(tracker[TrackerField.BACKGROUND]) ?: page
                 val look = remember(tracker) { LookFields.of(tracker.fields) }
                 val wide = view == SheetView.Month && (tracker.across || columns.any { it.sheetHours != null })
-                CompositionLocalProvider(LocalSheetLook provides sheet, LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
-                    Column(
-                        Modifier.widthIn(max = if (wide) SheetSizes.WIDE_SHEET else SheetSizes.SHEET)
-                            .fillMaxSize()
-                            .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 8.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(base)
-                            .then(entryBackdrop(tracker.id, look, base, muted = true, moving = true)),
-                    ) {
-                        when (view) {
-                            // Days down the page, or along its top (the tracker's `layout`, ADR-051).
-                            SheetView.Month -> if (tracker.across) {
-                                HorizontalPager(pager, beyondViewportPageCount = 1, modifier = Modifier.weight(1f).fillMaxWidth()) { at ->
-                                    AcrossMonthPage(services, columns, monthOfPage(at), today, figures, write)
+                // A wide month (a sleep sheet's hours, or days across) turns by pulling past its end, never sideways: a
+                // sideways move paints there (owner, ADR-059). The month after comes from below.
+                val turn: (Int) -> Unit = { delta -> scope.launch { pager.animateScrollToPage(pager.currentPage + delta) } }
+                BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+                    // On a phone a wide month goes edge to edge, and a sleep sheet's other columns slide out from the right.
+                    val narrow = maxWidth < SheetSizes.NARROW
+                    val edge = wide && narrow
+                    val (hourColumns, others) = columns.partition { it.sheetHours != null }
+                    val slides = drawerWidth(hourColumns, others, figures) > 0.dp
+                    val drawn = edge && !tracker.across && hourColumns.isNotEmpty() && slides
+                    val local = remember(sheet, drawn) { if (drawn) sheet.withDrawer() else sheet.withDrawer(null) }
+                    val words = MaterialTheme.colorScheme.onSurface
+                    CompositionLocalProvider(LocalSheetLook provides local, LocalContentColor provides words) {
+                        Column(
+                            Modifier.widthIn(max = if (wide) SheetSizes.WIDE_SHEET else SheetSizes.SHEET)
+                                .fillMaxSize()
+                                .padding(horizontal = if (edge) 0.dp else 8.dp)
+                                .padding(top = 4.dp, bottom = if (edge) 0.dp else 8.dp)
+                                .clip(if (edge) RectangleShape else RoundedCornerShape(16.dp))
+                                .background(base)
+                                .then(entryBackdrop(tracker.id, look, base, muted = true, moving = true)),
+                        ) {
+                            val pages = Modifier.weight(1f).fillMaxWidth()
+                            when (view) {
+                                // Days down the page, or along its top (the tracker's `layout`, ADR-051).
+                                SheetView.Month -> if (tracker.across) {
+                                    VerticalPager(pager, pages, beyondViewportPageCount = 1, userScrollEnabled = false) { at ->
+                                        val month = monthOfPage(at)
+                                        val before = at < pager.currentPage
+                                        AcrossMonthPage(services, columns, month, today, figures, write, turn, fromEnd = before)
+                                    }
+                                } else {
+                                    SheetHeader(columns, figures, write)
+                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                    if (wide) {
+                                        VerticalPager(pager, pages, beyondViewportPageCount = 1, userScrollEnabled = false) { at ->
+                                            val month = monthOfPage(at)
+                                            val before = at < pager.currentPage
+                                            MonthPage(services, columns, month, today, figures, write, turn, fromEnd = before)
+                                        }
+                                    } else {
+                                        HorizontalPager(pager, pages, beyondViewportPageCount = 1) { at ->
+                                            MonthPage(services, columns, monthOfPage(at), today, figures, write)
+                                        }
+                                    }
                                 }
-                            } else {
-                                SheetHeader(columns, figures, write)
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                                HorizontalPager(pager, beyondViewportPageCount = 1, modifier = Modifier.weight(1f).fillMaxWidth()) { at ->
-                                    MonthPage(services, columns, monthOfPage(at), today, figures, write)
+
+                                SheetView.Week -> HorizontalPager(
+                                    weeks,
+                                    beyondViewportPageCount = 1,
+                                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                                ) { at ->
+                                    WeekPage(services, columns, weekOfPage(today, at), today, figures, write)
                                 }
-                            }
 
-                            SheetView.Week -> HorizontalPager(
-                                weeks,
-                                beyondViewportPageCount = 1,
-                                modifier = Modifier.weight(1f).fillMaxWidth(),
-                            ) { at ->
-                                WeekPage(services, columns, weekOfPage(today, at), today, figures, write)
-                            }
-
-                            SheetView.Year -> HorizontalPager(years, modifier = Modifier.weight(1f).fillMaxWidth()) { at ->
-                                YearPage(
-                                    services,
-                                    columns,
-                                    yearColumn,
-                                    yearOfPage(today, at),
-                                    today,
-                                    figures,
-                                    onChoose = onYearColumn,
-                                    onMonth = { month ->
-                                        onView(SheetView.Month)
-                                        scope.launch { pager.scrollToPage(pageOf(month)) }
-                                    },
-                                )
+                                SheetView.Year -> HorizontalPager(years, modifier = Modifier.weight(1f).fillMaxWidth()) { at ->
+                                    YearPage(
+                                        services,
+                                        columns,
+                                        yearColumn,
+                                        yearOfPage(today, at),
+                                        today,
+                                        figures,
+                                        onChoose = onYearColumn,
+                                        onMonth = { month ->
+                                            onView(SheetView.Month)
+                                            scope.launch { pager.scrollToPage(pageOf(month)) }
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
@@ -425,7 +452,11 @@ internal const val RESIZE_ON = "true"
 /** The sheet's width beside «Оформление трекера», this device's own (a note's is apart, ADR-054). */
 private const val TRACKER_LOOK_WIDTH = "ui.trackerLookWidth"
 
-/** One month of the sheet: its days down the page (today a few rows from the top), then its figures. */
+/**
+ * One month of the sheet: its days down the page (today a few rows from the top), then its figures. With [turn] (a wide
+ * month) a finger pulling past its top or bottom turns to the month before or after ([MonthPull]); [fromEnd]: it opens
+ * at its last day, as the month before one pulled down from.
+ */
 @Composable
 internal fun MonthPage(
     services: AppServices,
@@ -434,24 +465,51 @@ internal fun MonthPage(
     today: LocalDate,
     figures: Boolean,
     write: TrackerWrite,
+    turn: ((Int) -> Unit)? = null,
+    fromEnd: Boolean = false,
 ) {
     val days = remember(month) { monthDays(month) }
     val (cells, spans) = rememberMonthRecords(services, columns, days)
-    val list = rememberLazyListState(initialFirstVisibleItemIndex = (days.indexOf(today) - SheetSizes.TODAY_ABOVE).coerceAtLeast(0))
+    val first = if (fromEnd && today !in days) days.lastIndex else (days.indexOf(today) - SheetSizes.TODAY_ABOVE).coerceAtLeast(0)
+    val list = rememberLazyListState(initialFirstVisibleItemIndex = first)
+    val pull = turn?.let { rememberMonthPull(it) }
     val weekdays = stringArrayResource(Res.array.weekdays_short)
     var asked by remember { mutableStateOf<Pair<TrackerColumn, LocalDate>?>(null) }
     var spansOf by remember { mutableStateOf<Pair<TrackerColumn, LocalDate>?>(null) }
     Column(Modifier.fillMaxSize()) {
-        LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = list) {
-            items(days, key = { it.toString() }) { day ->
-                val weekday = weekdays.getOrElse(day.dayOfWeek.isoDayNumber - 1) { "" }
-                DayRow(columns, day, weekday, today, figures, cells, spans, write, onSpans = { spansOf = it to day }) { asked = it to day }
-                // A week's figures under its Sunday, and under the month's last day for the week it cuts.
-                if (figures && (day.dayOfWeek == DayOfWeek.SUNDAY || day == days.last())) {
-                    val week = weekOf(day, days).filter { it <= today }
-                    if (week.isNotEmpty()) WeekRow(columns, week, cells, spans)
+        Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
+            LazyColumn(
+                Modifier.fillMaxSize().testTag("month:" + "$month".take(7))
+                    .then(
+                        if (pull == null) {
+                            Modifier
+                        } else {
+                            Modifier.nestedScroll(pull.connection).monthPull(pull, list::atTop, list::atBottom)
+                        },
+                    ),
+                state = list,
+            ) {
+                items(days, key = { it.toString() }) { day ->
+                    val weekday = weekdays.getOrElse(day.dayOfWeek.isoDayNumber - 1) { "" }
+                    DayRow(
+                        columns,
+                        day,
+                        weekday,
+                        today,
+                        figures,
+                        cells,
+                        spans,
+                        write,
+                        onSpans = { spansOf = it to day },
+                    ) { asked = it to day }
+                    // A week's figures under its Sunday, and under the month's last day for the week it cuts.
+                    if (figures && (day.dayOfWeek == DayOfWeek.SUNDAY || day == days.last())) {
+                        val week = weekOf(day, days).filter { it <= today }
+                        if (week.isNotEmpty()) WeekRow(columns, week, cells, spans)
+                    }
                 }
             }
+            pull?.let { PullHint(it, monthName(month.minus(1, DateTimeUnit.MONTH)), monthName(month.plus(1, DateTimeUnit.MONTH))) }
         }
         if (figures) TotalsRow(columns, days.filter { it <= today }, cells, spans)
     }
@@ -487,6 +545,11 @@ internal fun rememberMonthRecords(
     val spans = remember(spanRecords) { spanRecords.groupBy { it[SpanField.COLUMN].orEmpty() } }
     return cells to spans
 }
+
+/** A month's name for a pull's hint, «Сентябрь» or «Январь 2027» for another year's. */
+@Composable
+internal fun monthName(month: LocalDate): String =
+    monthTitle(month.toString().take(7), withYear = month.year != trackerToday().year).orEmpty()
 
 /** `figures` when the eye has hidden them. */
 internal const val FIGURES_HIDDEN = "hidden"

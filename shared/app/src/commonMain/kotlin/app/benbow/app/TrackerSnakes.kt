@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
 import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -84,6 +85,18 @@ internal fun dragRuns(painted: List<Boolean>, from: Int, at: Float, erasing: Boo
     val high = maxOf(from + 1f, at).coerceIn(0f, count)
     val runs = runsOf(painted)
     return if (erasing) cut(runs, low, high) else join(runs + HourRun(low, high))
+}
+
+/**
+ * Whether a drag from the hour [from] to [at] (hours, fractional) takes hours out (owner, ADR-059): one that starts on
+ * an empty hour paints; one that starts on a painted hour and goes on along its snake cuts it; one that starts at a
+ * snake's end and goes out past it stretches the snake. Null while the pointer is still on a painted hour it started
+ * on: nothing is decided yet.
+ */
+internal fun dragErases(painted: List<Boolean>, from: Int, at: Float): Boolean? {
+    if (!painted.getOrElse(from) { false }) return false
+    if (at >= from && at < from + 1) return null
+    return painted.getOrElse(if (at >= from + 1) from + 1 else from - 1) { false }
 }
 
 /** Where a drag from [from] to the hour [to] lands once let go: whole hours, as [dragEdits] writes them. */
@@ -183,12 +196,13 @@ private suspend fun spring(run: RubberRun, goal: HourRun, spec: AnimationSpec<Fl
 }
 
 /** A drag on a strip: the hour it started on, where the pointer is now (in hours), whether it takes hours out. */
-private data class HourDrag(val from: Int, val at: Float, val erasing: Boolean)
+private data class HourDrag(val from: Int, val at: Float, val erasing: Boolean?)
 
 /**
  * A day's hours of a sleep column, along a row ([DayRow]) or down a day's column when [down] (a month across): a tap
- * paints or clears one, a drag the hours it passes ([hourGestures], [dragEdits]), a long press alone opens the day's
- * spans ([onSpans]), a right click clears the day's row with «Вернуть». A mouse lights the hour under it.
+ * paints or clears one, a drag the hours it passes ([hourGestures], [dragEdits]; from a snake's end outwards it
+ * stretches the snake, [dragErases]), a long press alone opens the day's spans ([onSpans]), a right click clears the
+ * day's row with «Вернуть». A mouse lights the hour under it; each hour a drag reaches ticks under a finger.
  */
 @Composable
 internal fun HourStrip(
@@ -218,7 +232,7 @@ internal fun HourStrip(
     var hovered by remember(column.id, date) { mutableStateOf<Int?>(null) }
     LaunchedEffect(painted) { dropped = null }
     LaunchedEffect(dropped) { if (dropped != null) delay(DROP_HOLD_MILLIS).also { dropped = null } }
-    val target = drag?.let { dragRuns(painted, it.from, it.at, it.erasing) } ?: dropped ?: runsOf(painted)
+    val target = drag?.let { d -> d.erasing?.let { dragRuns(painted, d.from, d.at, it) } ?: runsOf(painted) } ?: dropped ?: runsOf(painted)
     val runs = rubberRuns(target, dragging = drag != null)
     val hoveredRun = hovered?.takeIf { painted.getOrElse(it) { false } && drag == null }
     val hoverSwell by animateFloatAsState(if (hoveredRun != null) HOVER_SWELL else 1f, RUBBER)
@@ -235,15 +249,21 @@ internal fun HourStrip(
             down,
             onTap = tapHour,
             onHold = { onSpans() },
-            onDrag = { from, at ->
-                if (drag == null) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                drag = HourDrag(from, at, painted.getOrElse(from) { false })
+            onDrag = { from, at, held ->
+                val was = drag
+                when {
+                    was == null -> haptic.performHapticFeedback(if (held) HapticFeedbackType.LongPress else HapticFeedbackType.SegmentTick)
+                    was.at.toInt() != at.toInt() -> haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                }
+                // Decided once, as the pointer first leaves the hour it started on, and kept for the whole drag.
+                drag = HourDrag(from, at, was?.erasing ?: dragErases(painted, from, at))
             },
             onCancel = { drag = null },
             onDrop = { from, to ->
-                dropped = droppedRuns(painted, from, to, painted.getOrElse(from) { false })
+                val erasing = drag?.erasing ?: dragErases(painted, from, to + 0.5f) ?: false
+                dropped = droppedRuns(painted, from, to, erasing)
                 drag = null
-                val edits = dragEdits(own, starts, from, to)
+                val edits = dragEdits(own, starts, from, to, erasing)
                 write { together { edits.forEach { editSpan(column.id, it) } } }
             },
             onHover = { hovered = it },
@@ -309,9 +329,11 @@ internal fun HourStrip(
 
 /**
  * Taps and drags on a day's hours ([count] of them along the row, or down when [down]; gestures restarting when [key]
- * changes): a tap on one ([onTap]); a drag over them ([onDrag] with where it started and where the pointer is, in hours,
- * as it goes; [onDrop] with where it started and ended), which a mouse starts by pressing and moving (owner, ADR-051) and
- * a finger after a long press, so a finger still scrolls the sheet; a long press with no drag, by either, opens the
+ * changes): a tap on one ([onTap]); a drag over them ([onDrag] with where it started, where the pointer is, in hours, as
+ * it goes, and whether it began with a long press; [onDrop] with where it started and ended). A mouse starts one by
+ * pressing and moving (owner, ADR-051); a finger along a row by moving sideways at once (owner, ADR-059: months no
+ * longer swipe there, so a sideways finger is free), while an upright move still scrolls the sheet; a finger down a
+ * day's column (a month across, whose days scroll sideways) after a long press. A long press with no drag opens the
  * day's spans ([onHold]). A mouse's hover tells its hour ([onHover]) and its right click clears the day ([onClear]),
  * seen before the taps and drags, which then let that press be.
  */
@@ -321,7 +343,7 @@ private fun Modifier.hourGestures(
     down: Boolean,
     onTap: (Int) -> Unit,
     onHold: (Int) -> Unit,
-    onDrag: (Int, Float) -> Unit,
+    onDrag: (Int, Float, Boolean) -> Unit,
     onCancel: () -> Unit,
     onDrop: (Int, Int) -> Unit,
     onHover: (Int?) -> Unit,
@@ -361,20 +383,28 @@ private fun Modifier.hourGestures(
         val press = awaitFirstDown(requireUnconsumed = false)
         if (press.isConsumed) return@awaitEachGesture // a right click, taken above
         var clicked = false
-        val start = if (press.type == PointerType.Mouse) {
-            withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+        // The move that passed the slop: a drag from the start. None: held still, a long press.
+        val moving = when {
+            press.type == PointerType.Mouse -> withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
                 awaitTouchSlopOrCancellation(press.id) { change, _ -> change.consume() }.also { clicked = it == null }
             }
-        } else {
-            awaitLongPressOrCancellation(press.id).also { clicked = it == null }
+
+            !down -> withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                awaitHorizontalTouchSlopOrCancellation(press.id) { change, _ -> change.consume() }.also { clicked = it == null }
+            }
+
+            else -> {
+                clicked = awaitLongPressOrCancellation(press.id) == null
+                null
+            }
         }
         if (clicked) return@awaitEachGesture // a tap, or a finger scrolling the sheet
-        // A mouse that moved paints at once; one held still, or a finger's long press, may still be only a hold.
-        val held = start == null || press.type != PointerType.Mouse
+        // One that moved paints at once; one held still may still be only a hold.
+        val held = moving == null
         val from = at(press.position)
-        var to = at((start ?: press).position)
+        var to = at((moving ?: press).position)
         var moved = !held
-        onDrag(from, fraction((start ?: press).position))
+        onDrag(from, fraction((moving ?: press).position), held)
         while (true) {
             val change = awaitPointerEvent().changes.firstOrNull { it.id == press.id }
             if (change == null) {
@@ -388,7 +418,7 @@ private fun Modifier.hourGestures(
                 to = now
                 moved = true
             }
-            onDrag(from, fraction(change.position))
+            onDrag(from, fraction(change.position), held)
         }
         if (moved) {
             onDrop(from, to)
@@ -399,8 +429,8 @@ private fun Modifier.hourGestures(
     }
 }
 
-/** A run's ends spring back past where they belong and settle (owner: rubbery). */
-private val RUBBER = spring<Float>(dampingRatio = 0.42f, stiffness = 420f)
+/** A run's ends spring a little past where they belong and settle (owner: rubbery, but firm: once past, then home). */
+private val RUBBER = spring<Float>(dampingRatio = 0.62f, stiffness = 700f)
 
 /** While dragged, the ends keep close to the pointer, with a little give. */
 private val FOLLOW = spring<Float>(dampingRatio = 0.62f, stiffness = 900f)

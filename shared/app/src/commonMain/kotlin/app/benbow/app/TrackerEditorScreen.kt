@@ -22,13 +22,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -46,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -70,6 +71,9 @@ import app.benbow.app.resources.trackers_layout
 import app.benbow.app.resources.trackers_layout_across
 import app.benbow.app.resources.trackers_layout_down
 import app.benbow.app.resources.trackers_name
+import app.benbow.app.resources.trackers_resize
+import app.benbow.app.resources.trackers_resize_hint
+import app.benbow.app.resources.trackers_resize_reset
 import app.benbow.app.resources.trackers_setup
 import app.benbow.app.resources.trackers_type_check
 import app.benbow.app.resources.trackers_type_check_about
@@ -212,6 +216,25 @@ private fun TrackerForm(
                         write { updateTracker(tracker.id, mapOf(TrackerField.LAYOUT to if (across) LAYOUT_ACROSS else null)) }
                     }, { Text(stringResource(label)) }, modifier = Modifier.hand())
                 }
+            }
+        }
+        // Columns that stretch on the sheet (owner, ADR-058): off by default; sizes set before hold either way.
+        Section(stringResource(Res.string.trackers_resize)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) { Hint(stringResource(Res.string.trackers_resize_hint)) }
+                Switch(
+                    tracker[TrackerField.RESIZE] == RESIZE_ON,
+                    { on -> write { updateTracker(tracker.id, mapOf(TrackerField.RESIZE to if (on) RESIZE_ON else null)) } },
+                    Modifier.padding(start = 12.dp).hand().testTag("resize"),
+                )
+            }
+            val sized = columns.filter { it.record[ColumnField.WIDTH] != null || it.record[ColumnField.HEIGHT] != null }
+            if (sized.isNotEmpty()) {
+                TextButton({
+                    write {
+                        together { sized.forEach { updateColumn(it.id, mapOf(ColumnField.WIDTH to null, ColumnField.HEIGHT to null)) } }
+                    }
+                }, Modifier.hand()) { Text(stringResource(Res.string.trackers_resize_reset)) }
             }
         }
         Section(stringResource(Res.string.trackers_columns)) {

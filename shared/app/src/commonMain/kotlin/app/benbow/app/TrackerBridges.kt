@@ -8,44 +8,16 @@ import app.benbow.core.tracker.SpanField
 import app.benbow.core.tracker.TrackerCells
 import app.benbow.core.tracker.TrackerField
 import app.benbow.core.tracker.TrackerSpans
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
 
-// Trackers seen from outside the app's screens (ADR-050, B6/B8): a running timer's notification and its «Стоп» on
-// Android. The platform code gets ready words and times; the records stay behind TrackerRepository.
-
-/** A timer running on a tracker, as an ongoing notification shows it: its column's emoji and name, its tracker's. */
-class RunningTimer(val columnId: String, val title: String, val tracker: String, val startedAtMillis: Long)
-
-/** Timers running on trackers outside the trash and the archive. */
-fun AppServices.runningTimers(): Flow<List<RunningTimer>> {
-    return combine(trackers.trackers(), trackers.runningColumns()) { list, columns ->
-        val shown = list.filter { !it.archived }.associateBy { it.id }
-        columns.mapNotNull { column ->
-            val tracker = column.tracker?.let(shown::get) ?: return@mapNotNull null
-            val since = column.running?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() } ?: return@mapNotNull null
-            RunningTimer(
-                column.id,
-                columnTitle(column, tracker[TrackerField.NAME].orEmpty()),
-                trackerTitle(tracker, ""),
-                since.toInstant(TimeZone.currentSystemDefault()).toEpochMilliseconds(),
-            )
-        }
-    }
-}
-
-/** Stops [columnId]'s timer now (a notification's «Стоп»); done when it returns. */
-suspend fun AppServices.stopTimerNow(columnId: String) {
-    withContext(IoDispatcher) { trackers.stopTimer(columnId, localNow()) }
-}
+// Trackers seen from outside the app's screens (ADR-050, B8): Android's widget. The platform code gets ready words;
+// the records stay behind TrackerRepository.
 
 /** A column's mark today on a widget: its words (an emoji, a number), whether it is marked, whether a tap marks it. */
 class WidgetMark(val columnId: String, val text: String, val marked: Boolean, val tickable: Boolean)
@@ -96,13 +68,10 @@ suspend fun AppServices.tickToday(columnId: String) {
     }
 }
 
-/** Now on this device's clock, as spans and timers keep it. */
-internal fun localNow(): String = timeOf(localDateTimeNow())
-
 internal fun localDateTimeNow(): LocalDateTime = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
 
 /**
- * Trackers' today: the clock's date, the day a timer's span and the sleep sheet's midnight count by (ADR-053), not the
+ * Trackers' today: the clock's date, the day a span and the sleep sheet's midnight count by (ADR-053), not the
  * journal's day from [DAY_START_HOUR].
  */
 internal fun trackerToday(): LocalDate = localDateTimeNow().date

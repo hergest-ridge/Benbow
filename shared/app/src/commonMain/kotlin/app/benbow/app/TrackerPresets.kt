@@ -148,23 +148,6 @@ internal object TrackerPresets {
         ),
     )
 
-    /** Time on what matters, by timer: one at a time, a day's total in each cell. */
-    val time = TrackerPreset(
-        "time",
-        mapOf(
-            TrackerField.NAME to "Время",
-            TrackerField.ICON to "emoji:🕒",
-            TrackerField.VIEW to "month",
-            TrackerField.BACKGROUND to "storm",
-            TrackerField.PRESET to "time",
-        ),
-        listOf(
-            column("Работа", "emoji:💻", "blue", ColumnType.Time, extra = mapOf(ColumnField.TIMER to "one")),
-            column("Учёба", "emoji:🧠", "purple", ColumnType.Time, extra = mapOf(ColumnField.TIMER to "one")),
-            column("Своё дело", "emoji:🎨", "orange", ColumnType.Time, short = "Своё", extra = mapOf(ColumnField.TIMER to "one")),
-        ),
-    )
-
     /** A sheet with no columns: «Настроить трекер» opens on it. */
     val blank = TrackerPreset(
         "blank",
@@ -173,7 +156,7 @@ internal object TrackerPresets {
     )
 
     /** The presets in the order «Новый трекер» offers them; [blank] comes apart, last. */
-    val all = listOf(habits, water, reading, sport, sleep, time)
+    val all = listOf(habits, water, reading, sport, sleep)
 
     private fun column(
         name: String,

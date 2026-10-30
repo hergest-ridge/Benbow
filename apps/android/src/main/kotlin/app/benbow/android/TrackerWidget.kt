@@ -34,19 +34,15 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import app.benbow.app.AppServices
-import app.benbow.app.RunningTimer
 import app.benbow.app.WidgetTracker
-import app.benbow.app.runningTimers
-import app.benbow.app.stopTimerNow
 import app.benbow.app.tickToday
 import app.benbow.app.trackersToday
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
  * Trackers on the home screen (ADR-050, B8): today's marks of the first trackers, a check flipped or a count added in
- * one tap without opening the app, the rest opening the trackers; a running timer with «Стоп». Labs builds only: the
- * receiver is turned on at start where trackers show ([enable]).
+ * one tap without opening the app, the rest opening the trackers. Labs builds only: the receiver is turned on at start
+ * where trackers show ([enable]).
  */
 class TrackerWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Exact
@@ -54,9 +50,8 @@ class TrackerWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val services = (context.applicationContext as BenbowApplication).services
         val trackers = services.trackersToday()
-        val timers = services.runningTimers().first()
         val colors = AndroidTheme.widgetColors(context, services)
-        provideContent { GlanceTheme(colors) { Content(trackers, timers) } }
+        provideContent { GlanceTheme(colors) { Content(trackers) } }
     }
 
     companion object {
@@ -81,21 +76,10 @@ class TickAction : ActionCallback {
     }
 }
 
-/** «Стоп» on a running timer. */
-class StopTimerAction : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        val column = parameters[COLUMN] ?: return
-        val services = (context.applicationContext as BenbowApplication).services
-        services.stopTimerNow(column)
-        TimerNotifications.cancel(context, column)
-        TrackerWidget().updateAll(context)
-    }
-}
-
 private val COLUMN = ActionParameters.Key<String>("column")
 
 @Composable
-private fun Content(trackers: List<WidgetTracker>, timers: List<RunningTimer>) {
+private fun Content(trackers: List<WidgetTracker>) {
     val context = LocalContext.current
     val colors = GlanceTheme.colors
     val open = actionStartActivity(BenbowWidget.appIntent(context, ACTION_OPEN_TRACKERS))
@@ -103,31 +87,13 @@ private fun Content(trackers: List<WidgetTracker>, timers: List<RunningTimer>) {
         GlanceModifier.fillMaxSize().appWidgetBackground().cornerRadius(24.dp).background(colors.widgetBackground)
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
-        if (trackers.isEmpty() && timers.isEmpty()) {
+        if (trackers.isEmpty()) {
             Text(
                 context.getString(R.string.tracker_widget_empty),
                 style = TextStyle(color = colors.onSurfaceVariant, fontSize = 13.sp),
                 modifier = GlanceModifier.fillMaxWidth().clickable(open),
             )
             return@Column
-        }
-        timers.forEach { timer ->
-            Row(GlanceModifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    timer.title,
-                    style = TextStyle(color = colors.onSurface, fontSize = 14.sp),
-                    maxLines = 1,
-                    modifier = GlanceModifier.defaultWeight().clickable(open),
-                )
-                Text(
-                    context.getString(R.string.timer_stop),
-                    style = TextStyle(color = colors.primary, fontSize = 14.sp, fontWeight = FontWeight.Medium),
-                    modifier = GlanceModifier.cornerRadius(
-                        12.dp,
-                    ).background(colors.primaryContainer).padding(horizontal = 12.dp, vertical = 4.dp)
-                        .clickable(actionRunCallback<StopTimerAction>(actionParametersOf(COLUMN to timer.columnId))),
-                )
-            }
         }
         trackers.forEach { tracker ->
             Text(

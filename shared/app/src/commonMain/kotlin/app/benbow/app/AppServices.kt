@@ -192,6 +192,9 @@ sealed interface AppMessage {
 
     /** A tracker went to the trash with its columns and marks (ADR-050); "Вернуть" brings it all back. */
     data class TrackerTrashed(val id: String, val name: String) : AppMessage
+
+    /** A right click cleared a tracker's day (ADR-058); "Вернуть" writes [undo]. */
+    class TrackerDayCleared(val undo: TrackerRepository.() -> Unit) : AppMessage
 }
 
 /**

@@ -42,7 +42,8 @@ class TokenColors private constructor(private val light: Map<String, Shades>, pr
 
     fun text(token: String, dark: Boolean): Color? = shades(token, dark)?.text
 
-    fun mark(token: String, dark: Boolean): Color? = shades(token, dark)?.mark
+    /** A token's own color, or a color of one's own ([HueToken]) at a mark's tone. */
+    fun mark(token: String, dark: Boolean): Color? = shades(token, dark)?.mark ?: HueToken.of(token)?.mark(dark)
 
     fun highlight(token: String, dark: Boolean): Color? = shades(token, dark)?.highlight
 
@@ -96,9 +97,10 @@ class SwatchColors private constructor(
     private val light: Map<String, Pair<Color, Color>>,
     private val dark: Map<String, Pair<Color, Color>>,
 ) {
-    fun fill(name: String?, dark: Boolean): Color? = (if (dark) this.dark else light)[name]?.first
+    /** A note color by name, or a color of one's own ([HueToken]) at a page's tone. */
+    fun fill(name: String?, dark: Boolean): Color? = (if (dark) this.dark else light)[name]?.first ?: HueToken.of(name)?.fill(dark)
 
-    fun mark(name: String?, dark: Boolean): Color? = (if (dark) this.dark else light)[name]?.second
+    fun mark(name: String?, dark: Boolean): Color? = (if (dark) this.dark else light)[name]?.second ?: HueToken.of(name)?.text(dark)
 
     companion object {
         /** Each color's hue on HCT's wheel, spread so no two look alike; the order is the pickers'. */
@@ -129,6 +131,40 @@ class SwatchColors private constructor(
                 dark = HUES.mapValues { (name, hue) -> pair(name, hue, dark = true) },
             )
         }
+    }
+}
+
+/**
+ * A color of one's own (owner, ADR-058): `hue:<degrees>:<chroma>`, HCT's hue and chroma picked from a palette or a wheel.
+ * Its tone stays the theme's for each use, a page's ([fill], 90 light, 30 dark, as the note colors), a mark's ([mark]) or
+ * words' ([text], 40 and 80), so words keep their contrast on it whatever was picked and it reads in either mode.
+ */
+data class HueToken(val hue: Int, val chroma: Int) {
+    override fun toString() = "$PREFIX$hue:$chroma"
+
+    fun fill(dark: Boolean): Color = hct(hue.toDouble(), chroma.toDouble(), if (dark) SwatchColors.DARK_FILL else SwatchColors.LIGHT_FILL)
+
+    fun mark(dark: Boolean): Color = hct(hue.toDouble(), chroma.toDouble(), if (dark) MARK_DARK else MARK_LIGHT)
+
+    fun text(dark: Boolean): Color = hct(hue.toDouble(), maxOf(chroma.toDouble(), TEXT_CHROMA), if (dark) 80.0 else 40.0)
+
+    companion object {
+        const val PREFIX = "hue:"
+        const val MAX_CHROMA = 120
+
+        /** The token's hue and chroma; null for anything else (a note color's name, a newer form). */
+        fun of(token: String?): HueToken? {
+            if (token == null || !token.startsWith(PREFIX)) return null
+            val (hue, chroma) = token.removePrefix(PREFIX).split(':').takeIf { it.size == 2 } ?: return null
+            return HueToken(
+                hue.toIntOrNull()?.takeIf { it in 0..359 } ?: return null,
+                chroma.toIntOrNull()?.takeIf { it in 0..MAX_CHROMA } ?: return null,
+            )
+        }
+
+        private const val MARK_LIGHT = 52.0
+        private const val MARK_DARK = 72.0
+        private const val TEXT_CHROMA = 24.0
     }
 }
 

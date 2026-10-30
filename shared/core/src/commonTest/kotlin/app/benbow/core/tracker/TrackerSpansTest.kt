@@ -4,7 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/** Spans of time (ADR-050): a night over midnight, the day a span counts for, a timer stopped twice. */
+/** Spans of time (ADR-050): a night over midnight, the day a span counts for. */
 class TrackerSpansTest {
     private val night = span("n1", "2026-10-26T23:10:00", "2026-10-27T07:05:00")
 
@@ -35,16 +35,6 @@ class TrackerSpansTest {
             span("n4", "2026-10-27T23:00:00", "2026-10-28T06:00:00"),
         )
         assertEquals((7 * 3600 + 55 * 60 + 30 * 60).toLong(), TrackerSpans.total(spans, "2026-10-27", DayBy.End))
-    }
-
-    @Test
-    fun aTimerStoppedTwiceLeavesOneSpan() {
-        val (onPhone, clear) = TrackerSpans.stop("work", "2026-10-27T09:00:00", "2026-10-27T10:30:00")
-        val (onPc, _) = TrackerSpans.stop("work", "2026-10-27T09:00:00", "2026-10-27T10:31:00")
-        assertEquals(onPhone.id, onPc.id, "the same record: its id is its start")
-        assertEquals("work:2026-10-27T09:00:00", onPhone.id)
-        assertEquals(mapOf("column" to "work", "start" to "2026-10-27T09:00:00", "end" to "2026-10-27T10:30:00"), onPhone.fields)
-        assertEquals(mapOf("running" to null), clear)
     }
 
     private fun span(id: String, start: String, end: String?) =

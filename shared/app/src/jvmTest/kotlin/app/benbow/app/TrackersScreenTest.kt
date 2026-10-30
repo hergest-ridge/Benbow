@@ -9,6 +9,7 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -20,6 +21,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.rightClick
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.test.waitUntilAtLeastOneExists
 import app.benbow.client.HomeBlock
@@ -32,9 +34,15 @@ import app.benbow.core.tracker.SpanField
 import app.benbow.core.tracker.TrackerCells
 import app.benbow.core.tracker.TrackerField
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.minus
 import java.nio.file.Files
+import java.util.Collections
 import java.util.Properties
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -114,31 +122,27 @@ class TrackersScreenTest {
     }
 
     @Test
-    fun aTimerRunsFromItsHeaderAndADaysSpansAreTypedByHand() = runDesktopComposeUiTest(width = 412, height = 860) {
+    fun aDaysSpansAreTypedByHandWithNoTimerAnywhere() = runDesktopComposeUiTest(width = 412, height = 860) {
         val services = testServices("android")
-        val today = "${trackerToday()}" // the clock's, as the timer's span: at 02:00 too (ADR-053)
-        val id = services.trackers.createTracker(TrackerPresets.time.tracker, TrackerPresets.time.columns)
+        val today = "${trackerToday()}" // the clock's (ADR-053)
+        val id = services.trackers.createTracker(
+            mapOf("name" to "Время", "icon" to "emoji:🕒"),
+            listOf(mapOf("name" to "Работа", "icon" to "emoji:💻", "type" to "time", "timer" to "one")),
+        )
         fun work() = runBlocking { services.trackers.columns(id).first() }.first()
         fun spans() = runBlocking { services.trackers.spans(listOf(work().id), today, today).first() }
         setContent { TrackerSheetScreen(services, Navigator(mutableStateListOf(Route.TrackerSheet(id))), id, back = true) }
-        val timer = "timer:" + work().id
-        waitUntilAtLeastOneExists(hasTestTag(timer), 5_000)
-        onNodeWithTag(timer).click()
-        waitUntil(timeoutMillis = 5_000) { work().running != null }
-        val started = work().running
-        waitUntilAtLeastOneExists(hasContentDescription("Остановить таймер"), 5_000)
-        screenshot("trackers-10-timer")
-        onNodeWithTag(timer).click()
-        waitUntil(timeoutMillis = 5_000) { work().running == null && spans().singleOrNull()?.get(SpanField.START) == started }
-
+        waitUntilAtLeastOneExists(hasTestTag(TrackerCells.id(work().id, today)), 5_000)
+        assertEquals(0, onAllNodes(hasTestTag("timer:" + work().id)).fetchSemanticsNodes().size, "the timers are gone (ADR-058)")
         onNodeWithTag(TrackerCells.id(work().id, today)).performSemanticsAction(SemanticsActions.OnLongClick)
         waitUntilAtLeastOneExists(hasText("Добавить отрезок"), 5_000)
         onNodeWithText("Добавить отрезок").click()
-        waitUntilAtLeastOneExists(hasTestTag("span-start:1"), 5_000) // after the timer's
+        waitUntilAtLeastOneExists(hasTestTag("span-start:0"), 5_000)
         screenshot("trackers-11-spans")
         onNodeWithText("Сохранить").click()
-        waitUntil(timeoutMillis = 5_000) { spans().size == 2 }
+        waitUntil(timeoutMillis = 5_000) { spans().size == 1 }
         assertTrue(spans().any { it[SpanField.START] == "${today}T09:00:00" && it[SpanField.END] == "${today}T10:00:00" })
+        assertEquals("one", work().record["timer"], "a field the timers left stays as it was")
     }
 
     @Test
@@ -376,6 +380,122 @@ class TrackersScreenTest {
         waitUntil(timeoutMillis = 5_000) { tracker()["screen_pattern"] == "circles" }
         assertEquals(null, tracker()["look_pattern"], "the sheet keeps its own")
         screenshot("trackers-21-screen-look")
+    }
+
+    @Test
+    fun aRightClickClearsADayAndVernutBringsItBack() = runDesktopComposeUiTest(width = 1280, height = 860) {
+        val services = testServices("desktop")
+        val today = "${trackerToday()}"
+        val id = services.trackers.createTracker(TrackerPresets.habits.tracker, TrackerPresets.habits.columns)
+        val water = runBlocking { services.trackers.columns(id).first() }[3].id
+        val heard = Collections.synchronizedList(mutableListOf<AppMessage>())
+        val listening = CoroutineScope(Dispatchers.Default).launch { services.messages.collect { heard += it } }
+        setContent { TrackerSheetScreen(services, Navigator(mutableStateListOf(Route.TrackerSheet(id))), id, back = true) }
+        val tag = TrackerCells.id(water, today)
+        fun count() = cell(services, tag)?.let { TrackerCells.count(it) } ?: 0.0
+        waitUntilAtLeastOneExists(hasTestTag(tag), 5_000)
+        repeat(3) { onNodeWithTag(tag).performMouseInput { click(center) } }
+        waitUntil(timeoutMillis = 5_000) { count() == 3.0 }
+        // A right click is no tap: the count goes to nothing, not to four.
+        onNodeWithTag(tag).performMouseInput { rightClick(center) }
+        waitUntil(timeoutMillis = 5_000) { count() != 3.0 }
+        assertEquals(0.0, count())
+        waitUntil(timeoutMillis = 5_000) { heard.any { it is AppMessage.TrackerDayCleared } }
+        services.trackerWrites(heard.filterIsInstance<AppMessage.TrackerDayCleared>().single().undo) // «Вернуть»
+        waitUntil(timeoutMillis = 5_000) { count() == 3.0 }
+        listening.cancel()
+    }
+
+    @Test
+    fun aRightClickOnASleepRowClearsItsNight() = runDesktopComposeUiTest(width = 1280, height = 860) {
+        val services = testServices("desktop")
+        val today = "${trackerToday()}"
+        val id = services.trackers.createTracker(TrackerPresets.sleep.tracker, TrackerPresets.sleep.columns)
+        val night = runBlocking { services.trackers.columns(id).first() }.first().id
+        services.trackers.addSpan(night, "${today}T00:00:00", "${today}T06:00:00")
+        fun live() = runBlocking { services.trackers.spans(listOf(night), today, today).first() }.filter { !it.deleted }
+        setContent { TrackerSheetScreen(services, Navigator(mutableStateListOf(Route.TrackerSheet(id))), id, back = true) }
+        val hour = "${TrackerCells.id(night, today)}:9"
+        waitUntilAtLeastOneExists(hasTestTag(hour), 5_000)
+        waitUntilAtLeastOneExists(hasText("6:00"), 5_000)
+        onNodeWithTag(hour).performMouseInput { rightClick(center) } // on an empty hour of the row: the row's night goes
+        waitUntil(timeoutMillis = 5_000) { live().isEmpty() }
+    }
+
+    @Test
+    fun theLookOpensBesideTheSheetWithMarksAGridAndManyColors() = runDesktopComposeUiTest(width = 1440, height = 900) {
+        val services = testServices("desktop")
+        val today = trackerToday()
+        val id = services.trackers.createTracker(TrackerPresets.sleep.tracker, TrackerPresets.sleep.columns)
+        val night = runBlocking { services.trackers.columns(id).first() }.first().id
+        for (back in 0..3) {
+            val day = today.minus(back, DateTimeUnit.DAY)
+            services.trackers.addSpan(night, "${day.minus(1, DateTimeUnit.DAY)}T23:00:00", "${day}T0${6 + back % 3}:00:00")
+        }
+        fun tracker() = runBlocking { services.trackers.trackers().first() }.single()
+        setContent { TrackerSheetScreen(services, Navigator(mutableStateListOf(Route.TrackerSheet(id))), id, back = false) }
+        waitUntilAtLeastOneExists(hasContentDescription("Оформление трекера"), 5_000)
+        onNodeWithContentDescription("Оформление трекера").click()
+        waitUntilAtLeastOneExists(hasText("Стиль отметок"), 5_000)
+        // Beside the sheet (owner): the sheet stays in sight and in reach.
+        onNodeWithTag("${TrackerCells.id(night, "$today")}:0").assertIsDisplayed()
+        onNodeWithText("Стиль отметок").click()
+        waitUntilAtLeastOneExists(hasContentDescription("Змейка"), 5_000)
+        onNodeWithContentDescription("Змейка").click()
+        waitUntil(timeoutMillis = 5_000) { tracker()[TrackerField.MARK] == "snake" }
+        onNodeWithContentDescription("Назад").click()
+        waitUntilAtLeastOneExists(hasText("Сетка"), 5_000)
+        onNodeWithText("Сетка").click()
+        waitUntilAtLeastOneExists(hasContentDescription("Таблица"), 5_000)
+        onNodeWithContentDescription("Таблица").click()
+        waitUntil(timeoutMillis = 5_000) { tracker()[TrackerField.GRID] == "table" }
+        onNodeWithContentDescription("Назад").click()
+        waitUntilAtLeastOneExists(hasText("Цвет"), 5_000)
+        onNodeWithText("Цвет").click()
+        waitUntilAtLeastOneExists(hasTestTag("color:hue:200:16"), 5_000)
+        onNodeWithTag("color:hue:200:16").click()
+        waitUntil(timeoutMillis = 5_000) { tracker()[TrackerField.BACKGROUND] == "hue:200:16" }
+        onNodeWithContentDescription("Назад").click()
+        waitForIdle()
+        screenshot("trackers-23-look-beside")
+    }
+
+    @Test
+    fun aBorderStretchesTwoColumnsWhereTheTrackerSaysSo() = runDesktopComposeUiTest(width = 1280, height = 860) {
+        val services = testServices("desktop")
+        val id = services.trackers.createTracker(
+            TrackerPresets.habits.tracker + mapOf(TrackerField.RESIZE to "true", TrackerField.GRID to "lines", TrackerField.MARK to "tube"),
+            TrackerPresets.habits.columns,
+        )
+        fun columns() = runBlocking { services.trackers.columns(id).first() }
+        val (first, second) = columns().let { it[0].id to it[1].id }
+        val today = "${trackerToday()}"
+        services.trackers.setCell(first, today, "true")
+        setContent { TrackerSheetScreen(services, Navigator(mutableStateListOf(Route.TrackerSheet(id))), id, back = true) }
+        val border = "stretch:$first"
+        waitUntilAtLeastOneExists(hasTestTag(border), 5_000)
+        onNodeWithTag(border).performMouseInput {
+            moveTo(center)
+            press()
+            repeat(4) { moveBy(Offset(15f, 0f), delayMillis = 16) }
+            release()
+        }
+        waitUntil(timeoutMillis = 5_000) { columns()[0].record["width"] != null }
+        assertTrue(factorOf(columns().first { it.id == first }.record["width"]) > 1f, "the column grew")
+        assertTrue(factorOf(columns().first { it.id == second }.record["width"]) < 1f, "its neighbour gave the room")
+        onNodeWithTag(TrackerCells.id(second, today)).performMouseInput { moveTo(center) } // a mouse lights the cell
+        waitForIdle()
+        screenshot("trackers-24-stretched")
+    }
+
+    @Test
+    fun columnsDontStretchUnlessTheTrackerSaysSo() = runDesktopComposeUiTest(width = 1280, height = 860) {
+        val services = testServices("desktop")
+        val id = services.trackers.createTracker(TrackerPresets.habits.tracker, TrackerPresets.habits.columns)
+        val first = runBlocking { services.trackers.columns(id).first() }.first().id
+        setContent { TrackerSheetScreen(services, Navigator(mutableStateListOf(Route.TrackerSheet(id))), id, back = true) }
+        waitUntilAtLeastOneExists(hasTestTag(TrackerCells.id(first, "${trackerToday()}")), 5_000)
+        assertEquals(0, onAllNodes(hasTestTag("stretch:$first")).fetchSemanticsNodes().size, "off by default (owner)")
     }
 
     /** The texts shown in the cell tagged [tag] (merged into it, as a tap target). */

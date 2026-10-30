@@ -11,7 +11,7 @@ import kotlin.test.assertNull
 class TrackerViewsTest {
     private val today = LocalDate(2026, 10, 27) // a Tuesday
     private val columns = TrackerPresets.habits.columns.mapIndexed { i, fields -> TrackerColumn(TrackerRecord("c$i", fields)) }
-    private val work = TrackerColumn(TrackerRecord("w", TrackerPresets.time.columns.first()))
+    private val work = TrackerColumn(TrackerRecord("w", mapOf("name" to "Работа", "icon" to "emoji:💻", "type" to "time")))
 
     @Test
     fun aTrackerOpensWhereItSaysAndPagesGoByWeeksAndYears() {

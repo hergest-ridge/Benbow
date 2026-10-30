@@ -16,12 +16,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -68,7 +66,6 @@ import app.benbow.app.resources.trackers_option_remove
 import app.benbow.app.resources.trackers_options
 import app.benbow.app.resources.trackers_range
 import app.benbow.app.resources.trackers_short
-import app.benbow.app.resources.trackers_timer_one
 import app.benbow.app.resources.trackers_type
 import app.benbow.app.resources.trackers_type_hint
 import app.benbow.app.resources.trackers_unarchive
@@ -90,7 +87,7 @@ import org.jetbrains.compose.resources.stringResource
 /**
  * A column's editor (ADR-050, B5): its header texts and emoji, its ink, its type and what the type asks for (a unit and
  * a goal, a rating's range, a choice's options with their colors and emoji, the sleep sheet's hours, which day a span
- * counts for, one timer at a time), and the archive. Choices are saved at once, texts a moment after typing stops and
+ * counts for), and the archive. Choices are saved at once, texts a moment after typing stops and
  * when the editor closes. Changing the type rewrites no cell: values read again if the type comes back.
  */
 @Composable
@@ -295,7 +292,7 @@ private fun OptionsEditor(options: List<ChoiceOption>, newId: () -> String, onCh
     }
 }
 
-/** A time column: the sleep sheet's hours (none: a day's total), which day a span counts for, one timer at a time. */
+/** A time column: the sleep sheet's hours (none: a day's total) and which day a span counts for. */
 @Composable
 private fun TimeFields(column: TrackerColumn, draft: ColumnDraft, onDraft: (ColumnDraft) -> Unit, set: (Map<String, String?>) -> Unit) {
     Section(stringResource(Res.string.trackers_hours)) {
@@ -330,11 +327,6 @@ private fun TimeFields(column: TrackerColumn, draft: ColumnDraft, onDraft: (Colu
             }
         }
     }
-    val one = column.record[ColumnField.TIMER] == TIMER_ONE
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(stringResource(Res.string.trackers_timer_one), Modifier.weight(1f))
-        Switch(one, { on -> set(mapOf(ColumnField.TIMER to if (on) TIMER_ONE else null)) }, Modifier.hand())
-    }
 }
 
 private val GoalPer.label: StringResource get() = when (this) {
@@ -342,9 +334,6 @@ private val GoalPer.label: StringResource get() = when (this) {
     GoalPer.Week -> Res.string.trackers_goal_week
     GoalPer.Month -> Res.string.trackers_goal_month
 }
-
-/** `timer = one`: starting this column's timer stops the tracker's others. */
-private const val TIMER_ONE = "one"
 
 private val GOAL_FIELD = 96.dp
 private val OPTION_EMOJI = 72.dp

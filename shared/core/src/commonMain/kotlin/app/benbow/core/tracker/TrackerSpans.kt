@@ -4,17 +4,6 @@ import app.benbow.core.LocalDays
 
 /** Spans of time a time column holds (ADR-050): local floating times, "YYYY-MM-DDTHH:MM:SS". */
 object TrackerSpans {
-    /** A stopped timer's span is keyed by its start, so stopping twice (two devices, a crash between) leaves one. */
-    fun stopId(column: String, running: String) = "$column:$running"
-
-    /**
-     * What stopping [column]'s timer at [now] writes: the span (first) and the column's cleared `running` (then), in
-     * that order, so a crash between the two leaves a running timer whose next stop writes the same span again.
-     */
-    fun stop(column: String, running: String, now: String): Pair<TrackerRecord, Map<String, String?>> =
-        TrackerRecord(stopId(column, running), mapOf(SpanField.COLUMN to column, SpanField.START to running, SpanField.END to now)) to
-            mapOf(ColumnField.RUNNING to null)
-
     /** How long [span] lasts in seconds; null while it has no end, or if its times don't read or run backwards. */
     fun seconds(span: TrackerRecord): Long? {
         val start = span[SpanField.START]?.let(LocalDays::seconds) ?: return null

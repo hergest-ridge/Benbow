@@ -12,24 +12,12 @@ import kotlinx.datetime.isoDayNumber
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 
-// The trackers' time (ADR-050, B6): a timer's running time, the hours a drag on the sleep sheet covers, a day's spans as
-// typed in its sheet, a week's days. Plain functions; TrackerSheetScreen.kt and DaySpansDialog.kt draw them. Times are
+// The trackers' time (ADR-050, B6): the hours a drag on the sleep sheet covers, a day's spans as typed in its sheet,
+// a week's days. Plain functions; TrackerSheetScreen.kt and DaySpansDialog.kt draw them. Times are
 // local and floating ("YYYY-MM-DDTHH:MM:SS"), as spans keep them (ADR-028).
 
-/** A local time as spans and timers keep it. */
+/** A local time as spans keep it. */
 internal fun timeOf(time: LocalDateTime): String = timeText(seconds(time))
-
-/** Seconds a timer started at [running] has run by [now]; none for a start that doesn't read or lies ahead. */
-internal fun runningSeconds(running: String, now: LocalDateTime): Long =
-    runCatching { LocalDateTime.parse(running) }.getOrNull()?.let { (seconds(now) - seconds(it)).coerceAtLeast(0) } ?: 0
-
-/** A timer's running time as its header ticks: "4:05" under an hour (minutes and seconds), "1:04:05" over one. */
-internal fun tickText(seconds: Long): String {
-    fun two(n: Long) = n.toString().padStart(2, '0')
-    val hours = seconds / HOUR
-    val minutes = seconds % HOUR / 60
-    return if (hours > 0) "$hours:${two(minutes)}:${two(seconds % 60)}" else "$minutes:${two(seconds % 60)}"
-}
 
 /** The hour under [x] in a row of [count] hours [width] wide. */
 internal fun hourAt(x: Float, width: Int, count: Int): Int = if (width <= 0) 0 else (x / width * count).toInt().coerceIn(0, count - 1)

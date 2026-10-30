@@ -34,7 +34,6 @@ class TrackerColumn(val record: TrackerRecord) {
     val max: Int get() = record[ColumnField.MAX]?.toIntOrNull()?.takeIf { it > min } ?: maxOf(min + 1, 5)
     val hours: HourWindow? get() = HourWindow.of(record[ColumnField.HOURS])
     val dayBy: DayBy get() = DayBy.of(record[ColumnField.DAY_BY])
-    val running: String? get() = record[ColumnField.RUNNING]
 }
 
 /** One of a choice column's own options: cells hold its [id], so renaming or recoloring it changes no cell. */

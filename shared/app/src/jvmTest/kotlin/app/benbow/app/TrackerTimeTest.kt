@@ -16,20 +16,6 @@ class TrackerTimeTest {
     private fun span(id: String, start: String, end: String?) = TrackerRecord(id, mapOf("column" to "c", "start" to start, "end" to end))
 
     @Test
-    fun aTimerTicksInWords() {
-        assertEquals("0:05", tickText(5))
-        assertEquals("4:05", tickText(4 * 60 + 5))
-        assertEquals("1:04:05", tickText(3600 + 4 * 60 + 5))
-        assertEquals(90, runningSeconds("2026-10-27T09:00:00", LocalDateTime(2026, 10, 27, 9, 1, 30)))
-        assertEquals(0, runningSeconds("2026-10-27T10:00:00", LocalDateTime(2026, 10, 27, 9, 0)), "a clock set back counts none")
-        assertEquals(0, runningSeconds("soon", LocalDateTime(2026, 10, 27, 9, 0)))
-        assertEquals("2026-10-27T09:05:00", timeOf(LocalDateTime(2026, 10, 27, 9, 5)))
-        assertEquals(0, hourAt(-3f, 140, 14))
-        assertEquals(3, hourAt(35f, 140, 14))
-        assertEquals(13, hourAt(500f, 140, 14))
-    }
-
-    @Test
     fun aDragPaintsTheHoursItPassesOrClearsThemWhenItStartsOnAPaintedOne() {
         val starts = hourStarts(HourWindow.of("21:00-11:00")!!, day, DayBy.End) // 21:00 the day before … 10:00
         assertEquals(listOf(SpanEdit.Add("2026-10-26T23:00:00", "2026-10-27T07:00:00")), dragEdits(emptyList(), starts, 2, 9))

@@ -321,6 +321,28 @@ fieldset.choice input { margin-top: 3px; accent-color: var(--md-primary); }
 .font-sample { line-height: 1.4; margin: 2px 0 4px; overflow-wrap: anywhere; }
 .item.font { align-items: center; }
 .item.font form.scale { gap: 4px; }
+.item.font { flex-wrap: wrap; }
+.item.font .body { min-width: 240px; }
+.item.font .chip { white-space: normal; height: auto; min-height: 28px; padding: 4px 12px; margin-top: 4px; }
+.item.font form.scale select { height: 36px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--md-outline);
+  background: transparent; color: var(--md-on-surface); font: inherit; cursor: pointer; }
+.item.font form.scale.saving { opacity: .6; }
+
+/* A drop zone for files (owner, ADR-058): the page's own look instead of the browser's file field. */
+.drop { display: grid; justify-items: center; gap: 4px; padding: 24px 16px; border: 2px dashed var(--md-outline-variant);
+  border-radius: 16px; text-align: center; cursor: pointer; color: var(--md-on-surface-variant);
+  transition: border-color .15s, background-color .15s; }
+.drop .icon { width: 32px; height: 32px; color: var(--md-primary); }
+.drop .drop-title { font-weight: 500; font-size: 15px; color: var(--md-primary); }
+.drop .drop-hint { font-size: 12px; line-height: 16px; max-width: 520px; }
+.drop .drop-busy { display: none; font-weight: 500; color: var(--md-on-secondary-container); }
+.drop:hover, .drop.over { border-color: var(--md-primary); background: color-mix(in srgb, var(--md-primary) 6%, transparent); }
+.drop:focus-within { outline: 2px solid var(--md-primary); outline-offset: 2px; }
+.drop.busy { cursor: progress; border-style: solid; border-color: var(--md-secondary-container); background: var(--md-secondary-container); }
+.drop.busy .drop-title, .drop.busy .drop-hint { display: none; }
+.drop.busy .drop-busy { display: block; }
+.drop input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.drop-form { margin: 8px 0 0; position: relative; }
 .card h4 { font: 500 14px/20px inherit; margin: 16px 0 4px; color: var(--md-on-surface-variant); }
 select { height: 36px; border-radius: 8px; border: 1px solid var(--md-outline); background: var(--md-surface);
   color: var(--md-on-surface); padding: 0 8px; font: inherit; }

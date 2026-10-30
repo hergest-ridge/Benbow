@@ -1,6 +1,7 @@
 package app.benbow.app
 
 import app.benbow.client.LookFields
+import app.benbow.client.tracker.TrackerRepository
 import app.benbow.core.tracker.CellField
 import app.benbow.core.tracker.ColumnField
 import app.benbow.core.tracker.ColumnType
@@ -41,7 +42,7 @@ internal sealed interface CellTap {
     /** A note: its text is asked for. */
     data object Ask : CellTap
 
-    /** Nothing here (a day's time is put in on the sleep sheet, or by a timer later). */
+    /** Nothing here (a day's time is put in on the sleep sheet or in its day's spans). */
     data object None : CellTap
 }
 
@@ -52,6 +53,52 @@ internal fun tapOf(column: TrackerColumn, fields: Map<String, String?>?): CellTa
     ColumnType.Scale, ColumnType.Choice -> CellTap.Pick
     ColumnType.Note -> CellTap.Ask
     ColumnType.Time, null -> CellTap.None
+}
+
+/**
+ * What a right click on a day clears (owner, ADR-058), back to blank paper, and what «Вернуть» puts back: a value as it
+ * was, a count's total, or the day's spans (to the trash and out again). A day's note stays: it isn't the column's value.
+ */
+internal sealed interface DayClear {
+    data class Value(val was: String) : DayClear
+
+    data class Count(val was: Double) : DayClear
+
+    data class Spans(val ids: List<String>) : DayClear
+}
+
+/** A right click on [day]'s cell: null when it holds nothing to clear (a time column's spans counted for that day). */
+internal fun dayClear(column: TrackerColumn, day: String, fields: Map<String, String?>?, spans: List<TrackerRecord>): DayClear? =
+    when (column.type) {
+        ColumnType.Check, ColumnType.Scale, ColumnType.Choice, ColumnType.Note -> fields?.get(CellField.VALUE)?.let(DayClear::Value)
+        ColumnType.Count -> fields?.let(TrackerCells::count)?.takeIf { it != 0.0 }?.let(DayClear::Count)
+        ColumnType.Time -> spansOn(spans, day, column.dayBy).map { it.id }.takeIf { it.isNotEmpty() }?.let(DayClear::Spans)
+        null -> null
+    }
+
+/** A right click on a sleep row: every span drawn in its hours ([starts]), so the row is blank after; null when it is. */
+internal fun rowClear(spans: List<TrackerRecord>, starts: List<LocalDateTime>): DayClear? {
+    if (starts.isEmpty()) return null
+    val from = seconds(starts.first())
+    val to = seconds(starts.last()) + HOUR
+    return bounds(spans).filter { (_, b) -> b.first < to && b.second > from }.map { (span, _) -> span.id }
+        .takeIf { it.isNotEmpty() }?.let(DayClear::Spans)
+}
+
+internal fun TrackerRepository.clearDay(column: String, day: String, clear: DayClear) {
+    when (clear) {
+        is DayClear.Value -> setCell(column, day, null)
+        is DayClear.Count -> setCount(column, day, 0.0)
+        is DayClear.Spans -> together { clear.ids.forEach(::moveSpanToTrash) }
+    }
+}
+
+internal fun TrackerRepository.unclearDay(column: String, day: String, clear: DayClear) {
+    when (clear) {
+        is DayClear.Value -> setCell(column, day, clear.was)
+        is DayClear.Count -> setCount(column, day, clear.was)
+        is DayClear.Spans -> together { clear.ids.forEach { updateSpan(it, mapOf(SpanField.DELETED to null)) } }
+    }
 }
 
 /** The values a rating or a choice offers, in order: its levels, or its options' ids. */

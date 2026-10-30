@@ -22,6 +22,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
@@ -168,10 +169,13 @@ internal fun TrackerBlock(services: AppServices, trackerId: String, size: BlockS
     val records = trackerDays(services, trackerId, days)
     val figures = tracker[TrackerField.FIGURES] != FIGURES_HIDDEN
     BlockCard(trackerTitle(tracker, stringResource(Res.string.untitled)), { onOpen(trackerId) }, modifier) {
-        if (size == BlockSize.S) {
-            TodayMarks(services, records, today, figures) { onOpen(trackerId) }
-        } else {
-            MiniSheet(records, days, today, if (size == BlockSize.M) WEEK_SQUARE else MONTH_SQUARE)
+        // The tracker's marks' color, as its sheet draws them (ADR-058).
+        CompositionLocalProvider(LocalSheetLook provides SheetLook(ink = tracker[TrackerField.COLOR])) {
+            if (size == BlockSize.S) {
+                TodayMarks(services, records, today, figures) { onOpen(trackerId) }
+            } else {
+                MiniSheet(records, days, today, if (size == BlockSize.M) WEEK_SQUARE else MONTH_SQUARE)
+            }
         }
     }
 }
@@ -180,13 +184,12 @@ internal fun TrackerBlock(services: AppServices, trackerId: String, size: BlockS
 @Composable
 private fun TodayMarks(services: AppServices, records: TrackerDays, today: LocalDate, figures: Boolean, onOpen: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val dark = BenbowTheme.colors.dark
     val day = "$today"
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         records.columns.take(TODAY_MARKS).forEach { column ->
             val fields = records.cells[TrackerCells.id(column.id, day)]
             val fill = pixelFill(column, fields, records.seconds(column, day))
-            val ink = column.record[ColumnField.COLOR]?.let { BenbowTheme.colors.tokens.mark(it, dark) } ?: colors.primary
+            val ink = columnInk(column)
             val icon = column.record[ColumnField.ICON]?.let(::iconEmoji) ?: column.short.take(1)
             Box(
                 Modifier.weight(1f).height(TODAY_HEIGHT).clip(RoundedCornerShape(10.dp))
@@ -225,10 +228,9 @@ private fun TodayMarks(services: AppServices, records: TrackerDays, today: Local
 @Composable
 private fun MiniSheet(records: TrackerDays, days: List<LocalDate>, today: LocalDate, square: Dp) {
     val colors = MaterialTheme.colorScheme
-    val dark = BenbowTheme.colors.dark
     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
         records.columns.take(MINI_ROWS).forEach { column ->
-            val ink = column.record[ColumnField.COLOR]?.let { BenbowTheme.colors.tokens.mark(it, dark) } ?: colors.primary
+            val ink = columnInk(column)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     column.record[ColumnField.ICON]?.let(::iconEmoji) ?: column.short.take(1),

@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -84,7 +83,7 @@ internal fun YearPage(
     val colors = MaterialTheme.colorScheme
     val dark = BenbowTheme.colors.dark
     val tokens = BenbowTheme.colors.tokens
-    val ink = column.record[ColumnField.COLOR]?.let { tokens.mark(it, dark) } ?: colors.primary
+    val ink = columnInk(column)
     val empty = colors.outline.copy(alpha = SheetSizes.FRAME_ALPHA)
     // Each day's color once per change of its records, not on every frame.
     val pixels = remember(byDay, spanRecords, column, ink, dark, tokens) {

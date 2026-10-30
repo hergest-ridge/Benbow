@@ -121,6 +121,7 @@ import app.benbow.app.resources.tab_trackers
 import app.benbow.app.resources.tag_trashed
 import app.benbow.app.resources.tags_merged
 import app.benbow.app.resources.tags_trashed
+import app.benbow.app.resources.tracker_cleared
 import app.benbow.app.resources.tracker_trashed
 import app.benbow.app.resources.transcript_removed
 import app.benbow.app.resources.veil_undo
@@ -388,7 +389,7 @@ private fun AppRoot(services: AppServices) {
                 // The update's notification (ADR-042): «Ещё», where «Обновить» is the first line.
                 AppLaunch.Update -> nav.selectTab(Route.More)
 
-                // A tracker's timer notification or widget (ADR-050): the trackers, a tab or a page from «Ещё».
+                // A tracker's widget (ADR-050): the trackers, a tab or a page from «Ещё».
                 AppLaunch.Trackers -> if (services.trackersTab) {
                     nav.selectTab(Route.Trackers)
                 } else {
@@ -541,6 +542,11 @@ private fun AppRoot(services: AppServices) {
                         duration = SnackbarDuration.Long,
                     )
                     if (result == SnackbarResult.ActionPerformed) services.trackers.restore(message.id)
+                }
+
+                is AppMessage.TrackerDayCleared -> {
+                    val result = snackbar.showSnackbar(getString(Res.string.tracker_cleared), getString(Res.string.veil_undo))
+                    if (result == SnackbarResult.ActionPerformed) services.trackerWrites(message.undo)
                 }
 
                 is AppMessage.MovedToBoard -> {

@@ -102,11 +102,11 @@ internal class ListPane(private val settings: Settings) {
  * whole, the note's page against the list's edge, then a line that moves, then the pane, all side by side and never
  * one over another. The page's width is dragged by that line and kept in the device's settings.
  */
-internal class BesidePane(private val settings: Settings) {
+internal class BesidePane(private val settings: Settings, private val key: String = KEY) {
     var open by mutableStateOf(false)
-    var page by mutableStateOf(settings.get(KEY)?.toFloatOrNull()?.dp ?: READABLE)
+    var page by mutableStateOf(settings.get(key)?.toFloatOrNull()?.dp ?: READABLE)
 
-    fun save() = settings.put(KEY, page.value.toString())
+    fun save() = settings.put(key, page.value.toString())
 
     fun reset() {
         page = READABLE
@@ -133,6 +133,9 @@ private val LINE = 9.dp
 
 /** The pointer over the divider: a left-right arrow where the platform has one. */
 internal expect val ResizeColumnIcon: PointerIcon
+
+/** The pointer over a border dragged up or down (a tracker's row, ADR-058). */
+internal expect val ResizeRowIcon: PointerIcon
 
 /** Screens that cover the whole window even when the list could stay. */
 internal val FULL_WINDOW = mapOf("benbow.full" to true)

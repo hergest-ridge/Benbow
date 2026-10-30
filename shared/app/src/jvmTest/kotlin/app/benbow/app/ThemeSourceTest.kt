@@ -21,6 +21,8 @@ class ThemeSourceTest {
         "RecorderKey.kt" to "the dictaphone keys' lamps, as hardware",
         "LookPictures.kt" to "colors read from a picture's SVG",
         "InkPicture.kt" to "a drawing's ink in its SVG file, for viewers outside the app",
+        "TrackerInk.kt" to "a snake's red tongue and the sunrise at a night's end, things drawn as things",
+        "TrackerLookParts.kt" to "the rainbow on «Свой цвет», a sign for the wheel the same in every theme",
     )
 
     /** Faded quiet colors kept on purpose: marks, not words (how many per file). */
@@ -46,6 +48,11 @@ class ThemeSourceTest {
             .filterValues { it > 0 }
         val over = found.filter { (name, count) -> count > (fadeAllowed[name] ?: 0) }
         assertTrue(over.isEmpty(), "onSurfaceVariant faded by hand (use textQuiet or disabled): $over")
+    }
+
+    @Test
+    fun chipsStayFlat() = assertNone("Material's filter chip, which lifts when hovered (use Chips.kt's)") { _, line ->
+        line.trim() == "import androidx.compose.material3.FilterChip"
     }
 
     private fun assertNone(what: String, bad: (File, String) -> Boolean) {

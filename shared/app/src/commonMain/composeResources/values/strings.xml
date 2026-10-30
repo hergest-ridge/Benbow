@@ -836,6 +836,7 @@
     <string name="trackers_empty_hint">Лист на месяц, как в бумажном ежедневнике: привычки по дням, сон по часам. Начните с готового.</string>
     <string name="trackers_archived">В архиве</string>
     <string name="tracker_trashed">Трекер «%1$s» в корзине</string>
+    <string name="tracker_cleared">День сброшен</string>
     <string name="trackers_cell_count">Сколько</string>
     <string name="trackers_cell_text">Текст</string>
     <string name="trackers_cell_note">Заметка к дню</string>
@@ -867,10 +868,48 @@
     <string name="trackers_type_count_about">Стаканы, страницы, разы: касание прибавляет одно</string>
     <string name="trackers_type_scale_about">От 1 до 5 или свой размах, глубже цветом</string>
     <string name="trackers_type_choice_about">Свои варианты, у каждого цвет и эмодзи</string>
-    <string name="trackers_type_time_about">Таймер или часы на листе, как в трекере сна</string>
+    <string name="trackers_type_time_about">Часы на листе, как в трекере сна, или время за день отрезками</string>
     <string name="trackers_type_note_about">Пара слов к дню</string>
     <string name="trackers_short">Коротко в шапке</string>
     <string name="trackers_ink">Цвет отметок</string>
+    <string name="trackers_ink_columns">Как у колонок</string>
+    <string name="trackers_marks">Стиль отметок</string>
+    <string name="trackers_grid">Сетка</string>
+    <string-array name="tracker_mark_names">
+        <item>Мягкий</item>
+        <item>Сплошной</item>
+        <item>Маркер</item>
+        <item>Карандаш</item>
+        <item>Акварель</item>
+        <item>Объёмный</item>
+        <item>Глянец</item>
+        <item>Неон</item>
+        <item>Контур</item>
+        <item>Бусины</item>
+        <item>Змейка</item>
+        <item>Полоски</item>
+        <item>Стежки</item>
+        <item>Скотч</item>
+        <item>Рассвет</item>
+    </string-array>
+    <string-array name="tracker_grid_names">
+        <item>Без сетки</item>
+        <item>Линии</item>
+        <item>Таблица</item>
+        <item>Пунктир</item>
+        <item>Точки</item>
+        <item>Карандаш</item>
+        <item>Цветом отметок</item>
+    </string-array>
+    <string name="look_more_colors">Ещё оттенки</string>
+    <string name="pick_color">Свой цвет</string>
+    <string name="pick_color_hue">Оттенок</string>
+    <string name="pick_color_chroma">Насыщенность</string>
+    <string name="pick_color_hint">Светлоту приложение подберёт само, для светлой и тёмной темы, чтобы надписи читались.</string>
+    <string name="pick_color_done">Готово</string>
+    <string name="trackers_resize">Растягивать колонки</string>
+    <string name="trackers_resize_hint">Границы колонок в шапке листа (и рядов, когда дни вправо) можно тянуть мышью или пальцем. Двойной щелчок возвращает как было.</string>
+    <string name="trackers_resize_reset">Вернуть обычные размеры</string>
     <string name="trackers_unit">Единица</string>
     <string name="trackers_goal">Цель</string>
     <string name="trackers_goal_day">в день</string>
@@ -890,9 +929,6 @@
     <string name="trackers_day_by">Отрезок считается за день</string>
     <string name="trackers_day_start">начала</string>
     <string name="trackers_day_end">окончания (сон)</string>
-    <string name="trackers_timer_one">Один таймер за раз</string>
-    <string name="trackers_timer_start">Запустить таймер</string>
-    <string name="trackers_timer_stop">Остановить таймер</string>
     <string name="trackers_week">неделя</string>
     <string name="trackers_view_month">Месяц</string>
     <string name="trackers_view_week">Неделя</string>

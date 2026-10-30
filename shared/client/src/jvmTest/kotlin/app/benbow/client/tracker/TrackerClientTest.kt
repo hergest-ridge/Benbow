@@ -159,59 +159,6 @@ class TrackerClientTest {
     }
 
     @Test
-    fun aTimerStartedOnThePhoneAndStoppedOnBothLeavesOneSpan() = runTest {
-        val server = FakeServer()
-        val phone = Device(FakeApi(server))
-        val desktop = Device(FakeApi(server))
-        val tracker = phone.trackers.createTracker(mapOf(TrackerField.NAME to "Время"), listOf(column("Работа", "time")))
-        val work = phone.trackers.columns(tracker).first().single().id
-        phone.trackers.startTimer(work, "${day}T09:00:00")
-        phone.sync()
-        desktop.sync()
-        assertEquals("${day}T09:00:00", desktop.trackers.columns(tracker).first().single().running, "started elsewhere, seen here")
-
-        desktop.trackers.stopTimer(work, "${day}T10:30:00")
-        phone.trackers.stopTimer(work, "${day}T10:31:00") // offline: it doesn't know yet
-        desktop.sync()
-        phone.sync()
-        desktop.sync()
-
-        for (device in listOf(phone, desktop)) {
-            assertEquals(1, device.trackers.spans(listOf(work), day, day).first().size)
-            assertNull(device.trackers.columns(tracker).first().single().running)
-        }
-    }
-
-    @Test
-    fun runningTimersAreListedUntilStopped() = runTest {
-        val repo = TrackerRepository(calendarDb(), now)
-        val tracker = repo.createTracker(mapOf(TrackerField.NAME to "Время"), listOf(column("Работа", "time"), column("Чтение", "time")))
-        val (work, reading) = repo.columns(tracker).first().map { it.id }
-        assertEquals(emptyList(), repo.runningColumns().first())
-        repo.startTimer(reading, "${day}T09:00:00")
-        assertEquals(listOf(reading), repo.runningColumns().first().map { it.id })
-        repo.updateColumn(reading, mapOf(ColumnField.ARCHIVED to "true"))
-        assertEquals(emptyList(), repo.runningColumns().first(), "an archived column's timer waits unseen")
-        repo.startTimer(work, "${day}T10:00:00")
-        repo.stopTimer(work, "${day}T11:00:00")
-        assertEquals(emptyList(), repo.runningColumns().first())
-    }
-
-    @Test
-    fun startingAnotherTimerOfAOneAtATimeTrackerStopsTheFirst() = runTest {
-        val repo = TrackerRepository(calendarDb(), now)
-        val tracker = repo.createTracker(
-            mapOf(TrackerField.NAME to "Время"),
-            listOf(column("Работа", "time", ColumnField.TIMER to "one"), column("Чтение", "time", ColumnField.TIMER to "one")),
-        )
-        val (work, reading) = repo.columns(tracker).first().map { it.id }
-        repo.startTimer(work, "${day}T09:00:00")
-        repo.startTimer(reading, "${day}T11:00:00")
-        assertEquals(listOf(null, "${day}T11:00:00"), repo.columns(tracker).first().map { it.running })
-        assertEquals(listOf("${day}T11:00:00"), repo.spans(listOf(work), day, day).first().map { it["end"] })
-    }
-
-    @Test
     fun anOlderServerGetsNoTrackersOpsAndTheyWaitForOneThatKeepsThem() = runTest {
         val server = FakeServer().apply { calendarKinds = emptyList() }
         val phone = Device(FakeApi(server))

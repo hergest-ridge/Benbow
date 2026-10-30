@@ -16,7 +16,6 @@ import app.benbow.core.tracker.TrackerExport
 import app.benbow.core.tracker.TrackerField
 import app.benbow.core.tracker.TrackerKind
 import app.benbow.core.tracker.TrackerRecord
-import app.benbow.core.tracker.TrackerSpans
 import app.benbow.core.uuidV7
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
@@ -55,13 +54,6 @@ class TrackerRepository(
     /** One column as it is now; null when there is none or it is in the trash. */
     fun column(id: String): TrackerColumn? =
         q.selectTrackerRecord(TrackerKind.COLUMN, id).executeAsOneOrNull()?.let(::record)?.takeIf { !it.deleted }?.let(::TrackerColumn)
-
-    /** Columns whose timer runs, on any tracker; outside the trash and the archive (a notification, a widget). */
-    fun runningColumns(): Flow<List<TrackerColumn>> = q.trackerRecords(TrackerKind.COLUMN).asFlow().mapToList(context).map { rows ->
-        rows.map(::record).filter { !it.deleted && it[ColumnField.ARCHIVED] != "true" && it[ColumnField.RUNNING] != null }
-            .sortedWith(TrackerRecord.byRank)
-            .map(::TrackerColumn)
-    }
 
     /** The cells of [columns] on [fromDay]..[toDay]. */
     fun cells(columns: Collection<String>, fromDay: String, toDay: String): Flow<List<TrackerRecord>> =
@@ -141,25 +133,6 @@ class TrackerRepository(
         writeCell(column, day, TrackerCells.setTotal(db.recordState(TrackerKind.CELL, id).first, device(), total))
     }
 
-    /**
-     * Starts [column]'s timer at [at] ("YYYY-MM-DDTHH:MM:SS"); only its start is kept, so it survives a closed app and
-     * can be stopped elsewhere. A column set to `timer = one` stops its tracker's other running timers first.
-     */
-    fun startTimer(column: String, at: String) = db.transaction {
-        val values = db.recordState(TrackerKind.COLUMN, column).first
-        if (values[ColumnField.RUNNING] != null) return@transaction
-        val tracker = values[ColumnField.TRACKER]
-        if (values[ColumnField.TIMER] == "one" && tracker != null) {
-            q.trackerRecordsOf(TrackerKind.COLUMN, listOf(tracker)).executeAsList()
-                .filter { it.id != column && decodeValues(it.fields)[ColumnField.RUNNING] != null }
-                .forEach { stopInTransaction(it.id, at) }
-        }
-        db.putRecord(TrackerKind.COLUMN, column, mapOf(ColumnField.RUNNING to at), now)
-    }
-
-    /** Stops [column]'s timer at [at]: its span, then the cleared start (one span even when two devices stop it). */
-    fun stopTimer(column: String, at: String) = db.transaction { stopInTransaction(column, at) }
-
     /** A span of time put in by hand ([end] null: still going); its id. */
     fun addSpan(column: String, start: String, end: String?, note: String? = null): String {
         val id = uuidV7(now())
@@ -176,13 +149,6 @@ class TrackerRepository(
 
     /** Every tracker outside the trash as files readable without the app, for the archive (`trackers/` in the ZIP). */
     fun exportFiles(): List<TrackerExport.File> = db.trackerExportFiles()
-
-    private fun stopInTransaction(column: String, at: String) {
-        val running = db.recordState(TrackerKind.COLUMN, column).first[ColumnField.RUNNING] ?: return
-        val (span, clear) = TrackerSpans.stop(column, running, at)
-        db.putRecord(TrackerKind.SPAN, span.id, span.fields, now)
-        db.putRecord(TrackerKind.COLUMN, column, clear, now)
-    }
 
     private fun cell(column: String, day: String, fields: Map<String, String?>) = db.transaction { writeCell(column, day, fields) }
 

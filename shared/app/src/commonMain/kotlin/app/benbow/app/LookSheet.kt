@@ -84,6 +84,9 @@ import app.benbow.app.resources.look_scraps
 import app.benbow.app.resources.look_screen
 import app.benbow.app.resources.look_shuffle
 import app.benbow.app.resources.look_title
+import app.benbow.app.resources.trackers_grid
+import app.benbow.app.resources.trackers_ink
+import app.benbow.app.resources.trackers_marks
 import app.benbow.client.IoDispatcher
 import app.benbow.client.LookFields
 import app.benbow.ui.editor.NoteFont
@@ -99,7 +102,8 @@ import org.jetbrains.compose.resources.stringResource
  * each with what is chosen now; a tap opens the part as a grid of every choice, drawn over the note's color, the chosen
  * one framed (owner: no sideways galleries). Every choice is saved at once, a field of its own, so the note behind
  * changes with it. On a phone it is a sheet with the note's preview on top; in a wide window a pane beside the open
- * note (LookPanel), which is in sight, so no preview. With a tracker's screen (ADR-051), «Фон экрана» follows.
+ * note (LookPanel), which is in sight, so no preview. With a tracker's screen (ADR-051), «Фон экрана» follows; a
+ * tracker also has its marks' color and style and its grid (ADR-058), and many more colors for its paper.
  */
 
 /** What «Оформление» shows and changes: a note's look, or a tracker's with the screen behind its sheet. */
@@ -117,6 +121,8 @@ internal class LookTarget(
     val onScreen: (Map<String, String?>) -> Unit = {},
     /** «Шрифт»: a note's words take a font, a tracker's sheet doesn't. */
     val fonts: Boolean = true,
+    /** A tracker's own parts: its marks and its grid. */
+    val sheet: SheetParts? = null,
 ) {
     val base: Color @Composable get() = swatch(color) ?: page
 }
@@ -158,8 +164,11 @@ internal fun LookPanel(
 }
 
 /** The parts of a look and its screen's, each a grid of its own once opened. */
-private enum class LookSection(val title: StringResource, val layer: LookLayer? = null, val screen: Boolean = false) {
+internal enum class LookSection(val title: StringResource, val layer: LookLayer? = null, val screen: Boolean = false) {
     Color(Res.string.look_color),
+    Ink(Res.string.trackers_ink),
+    Marks(Res.string.trackers_marks),
+    Grid(Res.string.trackers_grid),
     Font(Res.string.look_font),
     Paper(Res.string.look_paper, LookLayer.Paper),
     Pattern(Res.string.look_pattern, LookLayer.Pattern),
@@ -220,6 +229,7 @@ private fun PartList(target: LookTarget, preview: Boolean, onOpen: (LookSection)
     ) {
         Box(Modifier.size(22.dp).clip(CircleShape).background(base).border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape))
     }
+    target.sheet?.let { parts -> SheetPartRows(parts, base, onOpen) }
     if (target.fonts) {
         val token = target.look[LookFields.FONT]
         PartRow(LookSection.Font.title, fontName(token), { onOpen(LookSection.Font) }) {
@@ -247,8 +257,9 @@ private fun PartList(target: LookTarget, preview: Boolean, onOpen: (LookSection)
             {
                 target.onLook(LookFields.LAYERS.associateWith { null })
                 if (!screen.isNullOrEmpty()) target.onScreen(SCREEN_LAYERS.associate { it.field to null })
+                target.sheet?.reset()
             },
-            enabled = target.look.keys.any { it in LookFields.LAYERS } || !screen.isNullOrEmpty(),
+            enabled = target.look.keys.any { it in LookFields.LAYERS } || !screen.isNullOrEmpty() || target.sheet?.set == true,
             modifier = Modifier.hand(),
         ) { Text(stringResource(Res.string.look_reset)) }
     }
@@ -256,7 +267,7 @@ private fun PartList(target: LookTarget, preview: Boolean, onOpen: (LookSection)
 
 /** A part in the list: its name, what is chosen now in words and in a small picture, and a way in. */
 @Composable
-private fun PartRow(title: StringResource, chosen: String?, onOpen: () -> Unit, picture: @Composable () -> Unit) {
+internal fun PartRow(title: StringResource, chosen: String?, onOpen: () -> Unit, picture: @Composable () -> Unit) {
     Row(
         Modifier.fillMaxWidth().hand().clickable(onClick = onOpen).padding(start = 20.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -316,12 +327,22 @@ private fun PartScreen(target: LookTarget, part: LookSection, onBack: () -> Unit
         )
     }
     when (part) {
-        LookSection.Color -> SwatchPicker(
-            target.color,
-            stringResource(Res.string.background_none),
-            target.onColor,
-            Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-        )
+        LookSection.Color -> if (target.sheet != null) {
+            PaperColors(target.color, stringResource(Res.string.background_none), target.onColor)
+        } else {
+            SwatchPicker(
+                target.color,
+                stringResource(Res.string.background_none),
+                target.onColor,
+                Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+            )
+        }
+
+        LookSection.Ink -> target.sheet?.let { InkColors(it) }
+
+        LookSection.Marks -> target.sheet?.let { MarkGrid(it, target.base) }
+
+        LookSection.Grid -> target.sheet?.let { GridGrid(it, target.base) }
 
         LookSection.Font -> FontGrid(target)
 
@@ -388,7 +409,7 @@ private fun FontGrid(target: LookTarget) {
 }
 
 @Composable
-private fun Grid(content: @Composable () -> Unit) {
+internal fun Grid(content: @Composable () -> Unit) {
     FlowRow(
         Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -495,7 +516,7 @@ private fun FontChoice(name: String, font: NoteFont?, on: Boolean, base: Color, 
 }
 
 @Composable
-private fun Choice(name: String, on: Boolean, base: Color, backdrop: Modifier, onPick: () -> Unit) {
+internal fun Choice(name: String, on: Boolean, base: Color, backdrop: Modifier, onPick: () -> Unit) {
     val shape = RoundedCornerShape(10.dp)
     Column(Modifier.width(TILE_WIDTH), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(

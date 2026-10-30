@@ -3,6 +3,7 @@ package app.benbow.app
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,15 +14,16 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -29,6 +31,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,12 +69,14 @@ import app.benbow.app.resources.untitled
 import app.benbow.app.resources.weekdays_short
 import app.benbow.client.LookFields
 import app.benbow.client.tracker.TrackerRepository
+import app.benbow.core.tracker.ColumnField
 import app.benbow.core.tracker.ColumnType
 import app.benbow.core.tracker.SpanField
 import app.benbow.core.tracker.TrackerCells
 import app.benbow.core.tracker.TrackerColumn
 import app.benbow.core.tracker.TrackerField
 import app.benbow.core.tracker.TrackerRecord
+import app.benbow.ui.theme.BenbowTheme
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DateTimeUnit
@@ -93,8 +99,10 @@ internal typealias TrackerWrite = (TrackerRepository.() -> Unit) -> Unit
 /**
  * A tracker's sheet (ADR-050, B4): the month as on paper, days down the page and its columns across, on the records in
  * the calendar's file. Months swipe as in the calendar; a cell answers by its column's type ([tapOf]), a long press opens
- * its exact number and a note; the eye hides the tracker's numbers on every device (`figures`); «Оформление трекера»
- * gives it a note's look, drawn muted under the marks. [back]: a page of its own (narrow), not beside the list.
+ * its exact number and a note, a right click clears it with «Вернуть»; the eye hides the tracker's numbers on every
+ * device (`figures`); «Оформление трекера» gives it a note's look, drawn muted under the marks, its marks' color and
+ * style and a grid (ADR-058): a pane beside the sheet where there is room for both (as a note's, ADR-054), else a sheet.
+ * [back]: a page of its own (narrow), not beside the list.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -108,7 +116,6 @@ internal fun TrackerSheetScreen(services: AppServices, nav: Navigator, trackerId
     val untitled = stringResource(Res.string.untitled)
     val figures = tracker?.get(TrackerField.FIGURES) != FIGURES_HIDDEN
     var looking by remember { mutableStateOf(false) }
-    var menu by remember { mutableStateOf(false) }
     val pager = rememberPagerState(initialPage = pageOf(today)) { MONTH_PAGES }
     val weeks = rememberPagerState(initialPage = WEEK_ORIGIN) { WEEK_PAGES }
     val years = rememberPagerState(initialPage = YEAR_ORIGIN) { YEAR_PAGES }
@@ -125,13 +132,68 @@ internal fun TrackerSheetScreen(services: AppServices, nav: Navigator, trackerId
         SheetView.Week -> WEEK_ORIGIN
         SheetView.Year -> YEAR_ORIGIN
     }
-    val scope = rememberCoroutineScope()
-    val shownMonth = monthOfPage(pager.currentPage)
     val page = MaterialTheme.colorScheme.surfaceVariant
-    val months = stringArrayResource(Res.array.months_genitive)
     // The screen behind the sheet (ADR-051): under the bar and around the sheet alike, which let it show through.
     val screen = remember(tracker) { tracker?.let { screenLook(it.fields) }.orEmpty() }
     val ground = MaterialTheme.colorScheme.background
+    val sizes =
+        remember(trackerId, tracker?.get(TrackerField.RESIZE) == RESIZE_ON) { ColumnSizes(tracker?.get(TrackerField.RESIZE) == RESIZE_ON) }
+    LaunchedEffect(allColumns) { sizes.settle() }
+    val sheet = remember(tracker, sizes) {
+        tracker?.let { record -> sheetLookOf(record, sizes) { undo -> services.messages.tryEmit(AppMessage.TrackerDayCleared(undo)) } }
+    } ?: SheetLook()
+    val beside = remember(services) { BesidePane(services.settings, TRACKER_LOOK_WIDTH) }
+    val target = tracker?.let { lookTarget(it, columns.orEmpty(), page, ground, untitled, write) }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        // «Оформление трекера» beside the sheet where both fit (owner, ADR-058), as a note's; else a sheet from below.
+        val pane = DetailPane(maxWidth, beside).takeIf { looking && it.roomy && target != null }
+        LookBeside(pane, { panelModifier ->
+            target?.let { LookPanel(it, onClose = { looking = false }, modifier = panelModifier, title = Res.string.trackers_look) }
+        }) {
+            SheetPage(services, nav, trackerId, back, tracker, columns, today, write, figures, view, { view = it }, yearColumn, {
+                yearColumn = it
+            }, pager, weeks, years, active, todayPage, screen, ground, page, sheet, looking, { looking = !looking })
+        }
+        if (looking && pane == null && target != null) {
+            LookSheet(target, onDismiss = { looking = false }, title = Res.string.trackers_look)
+        }
+    }
+}
+
+/** The sheet's page: its bar and the month, the week or the year on the tracker's paper. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SheetPage(
+    services: AppServices,
+    nav: Navigator,
+    trackerId: String,
+    back: Boolean,
+    tracker: TrackerRecord?,
+    columns: List<TrackerColumn>?,
+    today: LocalDate,
+    write: TrackerWrite,
+    figures: Boolean,
+    view: SheetView,
+    onView: (SheetView) -> Unit,
+    yearColumn: String?,
+    onYearColumn: (String?) -> Unit,
+    pager: PagerState,
+    weeks: PagerState,
+    years: PagerState,
+    active: PagerState,
+    todayPage: Int,
+    screen: Map<String, String>,
+    ground: Color,
+    page: Color,
+    sheet: SheetLook,
+    looking: Boolean,
+    onLook: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val untitled = stringResource(Res.string.untitled)
+    val months = stringArrayResource(Res.array.months_genitive)
+    val shownMonth = monthOfPage(pager.currentPage)
+    var menu by remember { mutableStateOf(false) }
     Scaffold(
         modifier = if (screen.isEmpty()) {
             Modifier
@@ -140,6 +202,8 @@ internal fun TrackerSheetScreen(services: AppServices, nav: Navigator, trackerId
             Modifier.clipToBounds().background(ground).then(entryBackdrop(screenId(trackerId), screen, ground, muted = true, moving = true))
         },
         containerColor = if (screen.isEmpty()) ground else Color.Transparent,
+        // A see-through page has no content color of its own: the page's words, so none goes black (owner, ADR-058).
+        contentColor = MaterialTheme.colorScheme.onSurface,
         topBar = {
             TopAppBar(
                 colors = if (screen.isEmpty()) {
@@ -172,8 +236,12 @@ internal fun TrackerSheetScreen(services: AppServices, nav: Navigator, trackerId
                                 TodayIcon(today.day, stringResource(Res.string.today))
                             }
                         }
-                        IconButton({ looking = true }, modifier = Modifier.hand()) {
-                            Icon(Icons.Palette, stringResource(Res.string.trackers_look))
+                        IconButton(onLook, modifier = Modifier.hand()) {
+                            Icon(
+                                Icons.Palette,
+                                stringResource(Res.string.trackers_look),
+                                tint = if (looking) MaterialTheme.colorScheme.primary else LocalContentColor.current,
+                            )
                         }
                         IconButton({
                             write { updateTracker(trackerId, mapOf(TrackerField.FIGURES to if (figures) FIGURES_HIDDEN else null)) }
@@ -243,7 +311,7 @@ internal fun TrackerSheetScreen(services: AppServices, nav: Navigator, trackerId
                 Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     SheetView.entries.forEach { each ->
                         FilterChip(view == each, {
-                            view = each
+                            onView(each)
                             write { updateTracker(trackerId, mapOf(TrackerField.VIEW to each.token)) }
                         }, { Text(stringResource(each.label)) }, modifier = Modifier.hand())
                     }
@@ -253,76 +321,109 @@ internal fun TrackerSheetScreen(services: AppServices, nav: Navigator, trackerId
                 val base = swatch(tracker[TrackerField.BACKGROUND]) ?: page
                 val look = remember(tracker) { LookFields.of(tracker.fields) }
                 val wide = view == SheetView.Month && (tracker.across || columns.any { it.sheetHours != null })
-                Column(
-                    Modifier.widthIn(max = if (wide) SheetSizes.WIDE_SHEET else SheetSizes.SHEET)
-                        .fillMaxSize()
-                        .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 8.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(base)
-                        .then(entryBackdrop(tracker.id, look, base, muted = true, moving = true)),
-                ) {
-                    when (view) {
-                        // Days down the page, or along its top (the tracker's `layout`, ADR-051).
-                        SheetView.Month -> if (tracker.across) {
-                            HorizontalPager(pager, beyondViewportPageCount = 1, modifier = Modifier.weight(1f).fillMaxWidth()) { at ->
-                                AcrossMonthPage(services, columns, monthOfPage(at), today, figures, write)
+                CompositionLocalProvider(LocalSheetLook provides sheet, LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
+                    Column(
+                        Modifier.widthIn(max = if (wide) SheetSizes.WIDE_SHEET else SheetSizes.SHEET)
+                            .fillMaxSize()
+                            .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 8.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(base)
+                            .then(entryBackdrop(tracker.id, look, base, muted = true, moving = true)),
+                    ) {
+                        when (view) {
+                            // Days down the page, or along its top (the tracker's `layout`, ADR-051).
+                            SheetView.Month -> if (tracker.across) {
+                                HorizontalPager(pager, beyondViewportPageCount = 1, modifier = Modifier.weight(1f).fillMaxWidth()) { at ->
+                                    AcrossMonthPage(services, columns, monthOfPage(at), today, figures, write)
+                                }
+                            } else {
+                                SheetHeader(columns, figures, write)
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                HorizontalPager(pager, beyondViewportPageCount = 1, modifier = Modifier.weight(1f).fillMaxWidth()) { at ->
+                                    MonthPage(services, columns, monthOfPage(at), today, figures, write)
+                                }
                             }
-                        } else {
-                            SheetHeader(columns, figures, write)
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                            HorizontalPager(pager, beyondViewportPageCount = 1, modifier = Modifier.weight(1f).fillMaxWidth()) { at ->
-                                MonthPage(services, columns, monthOfPage(at), today, figures, write)
+
+                            SheetView.Week -> HorizontalPager(
+                                weeks,
+                                beyondViewportPageCount = 1,
+                                modifier = Modifier.weight(1f).fillMaxWidth(),
+                            ) { at ->
+                                WeekPage(services, columns, weekOfPage(today, at), today, figures, write)
                             }
-                        }
 
-                        SheetView.Week -> HorizontalPager(
-                            weeks,
-                            beyondViewportPageCount = 1,
-                            modifier = Modifier.weight(1f).fillMaxWidth(),
-                        ) { at ->
-                            WeekPage(services, columns, weekOfPage(today, at), today, figures, write)
-                        }
-
-                        SheetView.Year -> HorizontalPager(years, modifier = Modifier.weight(1f).fillMaxWidth()) { at ->
-                            YearPage(
-                                services,
-                                columns,
-                                yearColumn,
-                                yearOfPage(today, at),
-                                today,
-                                figures,
-                                onChoose = { yearColumn = it },
-                                onMonth = { month ->
-                                    view = SheetView.Month
-                                    scope.launch { pager.scrollToPage(pageOf(month)) }
-                                },
-                            )
+                            SheetView.Year -> HorizontalPager(years, modifier = Modifier.weight(1f).fillMaxWidth()) { at ->
+                                YearPage(
+                                    services,
+                                    columns,
+                                    yearColumn,
+                                    yearOfPage(today, at),
+                                    today,
+                                    figures,
+                                    onChoose = onYearColumn,
+                                    onMonth = { month ->
+                                        onView(SheetView.Month)
+                                        scope.launch { pager.scrollToPage(pageOf(month)) }
+                                    },
+                                )
+                            }
                         }
                     }
                 }
             }
         }
     }
-    if (looking && tracker != null) {
-        LookSheet(
-            LookTarget(
-                id = tracker.id,
-                words = trackerTitle(tracker, untitled) + "\n" + columns.orEmpty().joinToString(" · ") { it.name },
-                color = tracker[TrackerField.BACKGROUND],
-                look = LookFields.of(tracker.fields),
-                page = page,
-                onColor = { color -> write { updateTracker(trackerId, mapOf(TrackerField.BACKGROUND to color)) } },
-                onLook = { layers -> write { updateTracker(trackerId, trackerLook(layers)) } },
-                screen = screenLook(tracker.fields),
-                screenPage = ground,
-                onScreen = { layers -> write { updateTracker(trackerId, trackerScreen(layers)) } },
-                fonts = false,
-            ),
-            onDismiss = { looking = false },
-            title = Res.string.trackers_look,
-        )
-    }
 }
+
+/** «Оформление трекера»: a note's look for its paper and its screen, and its marks' color and style and its grid. */
+@Composable
+private fun lookTarget(
+    tracker: TrackerRecord,
+    columns: List<TrackerColumn>,
+    page: Color,
+    ground: Color,
+    untitled: String,
+    write: TrackerWrite,
+): LookTarget {
+    val id = tracker.id
+    val sample = columns.firstOrNull()
+    return LookTarget(
+        id = id,
+        words = trackerTitle(tracker, untitled) + "\n" + columns.joinToString(" · ") { it.name },
+        color = tracker[TrackerField.BACKGROUND],
+        look = LookFields.of(tracker.fields),
+        page = page,
+        onColor = { color -> write { updateTracker(id, mapOf(TrackerField.BACKGROUND to color)) } },
+        onLook = { layers -> write { updateTracker(id, trackerLook(layers)) } },
+        screen = screenLook(tracker.fields),
+        screenPage = ground,
+        onScreen = { layers -> write { updateTracker(id, trackerScreen(layers)) } },
+        fonts = false,
+        sheet = SheetParts(
+            ink = tracker[TrackerField.COLOR],
+            mark = tracker[TrackerField.MARK],
+            grid = tracker[TrackerField.GRID],
+            sampleInk = sampleInk(tracker[TrackerField.COLOR], sample),
+            onInk = { token -> write { updateTracker(id, mapOf(TrackerField.COLOR to token)) } },
+            onMark = { token -> write { updateTracker(id, mapOf(TrackerField.MARK to token)) } },
+            onGrid = { token -> write { updateTracker(id, mapOf(TrackerField.GRID to token)) } },
+        ),
+    )
+}
+
+/** The ink the look's samples are drawn in: the tracker's, else its first column's, else the theme's. */
+@Composable
+private fun sampleInk(trackerInk: String?, first: TrackerColumn?): Color {
+    val theme = BenbowTheme.colors
+    val token = trackerInk ?: first?.record?.get(ColumnField.COLOR)
+    return token?.let { theme.tokens.mark(it, theme.dark) } ?: MaterialTheme.colorScheme.primary
+}
+
+/** `resize` when the tracker's columns stretch. */
+internal const val RESIZE_ON = "true"
+
+/** The sheet's width beside «Оформление трекера», this device's own (a note's is apart, ADR-054). */
+private const val TRACKER_LOOK_WIDTH = "ui.trackerLookWidth"
 
 /** One month of the sheet: its days down the page (today a few rows from the top), then its figures. */
 @Composable

@@ -4,6 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,15 +28,22 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
@@ -50,8 +60,6 @@ import app.benbow.app.resources.trackers_cell_count
 import app.benbow.app.resources.trackers_cell_note
 import app.benbow.app.resources.trackers_cell_text
 import app.benbow.app.resources.trackers_clear
-import app.benbow.app.resources.trackers_timer_start
-import app.benbow.app.resources.trackers_timer_stop
 import app.benbow.client.tracker.TrackerRepository
 import app.benbow.core.tracker.CellField
 import app.benbow.core.tracker.ColumnField
@@ -61,16 +69,16 @@ import app.benbow.core.tracker.TrackerColumn
 import app.benbow.core.tracker.TrackerRecord
 import app.benbow.core.tracker.TrackerSpans
 import app.benbow.ui.theme.BenbowTheme
-import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * A day's cell, drawn from the column's tokens: blank paper with a faint frame when empty; a check filled with the
- * column's ink; a count filling up towards its goal; a rating deeper with its level; a choice in its option's color with
- * its emoji; a note's first words. Numbers show only with the figures; a dot in the corner tells of a note to the day.
- * A tap answers by type ([tapOf]); a long press opens the exact number and the note. A time column's cell opens the
- * day's spans ([onSpans]) either way.
+ * A day's cell, drawn from the column's tokens in the tracker's mark style (ADR-058): blank paper with a faint frame when
+ * empty (or the grid's lines); a check filled with the column's ink; a count filling up towards its goal; a rating
+ * deeper with its level; a choice in its option's color with its emoji; a note's first words. Numbers show only with the
+ * figures; a dot in the corner tells of a note to the day. A tap answers by type ([tapOf]); a long press opens the exact
+ * number and the note; a right click clears the day ([dayClear]) with «Вернуть». A time column's cell opens the day's
+ * spans ([onSpans]) either way. A mouse lights the cell under it.
  */
 @Composable
 internal fun DayCell(
@@ -84,10 +92,13 @@ internal fun DayCell(
     write: TrackerWrite,
     onSpans: () -> Unit,
     onAsk: () -> Unit,
+    strongBottom: Boolean = false,
 ) {
     val colors = MaterialTheme.colorScheme
+    val look = LocalSheetLook.current
     val dark = BenbowTheme.colors.dark
-    val ink = column.record[ColumnField.COLOR]?.let { BenbowTheme.colors.tokens.mark(it, dark) } ?: colors.primary
+    val ink = columnInk(column)
+    val grid = sheetGrid(ink)
     val shape = RoundedCornerShape(SheetSizes.CELL_CORNER)
     val value = fields?.get(CellField.VALUE)
     var picking by remember { mutableStateOf(false) }
@@ -103,16 +114,36 @@ internal fun DayCell(
             CellTap.None -> Unit
         }
     }
+    val clear by rememberUpdatedState {
+        dayClear(column, day, fields, spans)?.let { cleared ->
+            write { clearDay(column.id, day, cleared) }
+            look.onCleared { unclearDay(column.id, day, cleared) }
+        }
+    }
+    val hover = remember { MutableInteractionSource() }
+    val hovered by hover.collectIsHoveredAsState()
+    val mark = cellMark(column, fields, spans, day, ink, dark)
+    val layer = colors.onSurface.copy(alpha = SheetSizes.HOVER_ALPHA)
     Box(
         modifier.fillMaxHeight()
-            .padding(SheetSizes.CELL_GAP)
+            .gridCell(grid, strongBottom = strongBottom)
+            .padding(if (grid == null) SheetSizes.CELL_GAP else SheetSizes.GRID_GAP)
             .clip(shape)
-            .border(1.dp, colors.outline.copy(alpha = SheetSizes.FRAME_ALPHA), shape)
+            .then(if (grid == null) Modifier.border(1.dp, colors.outline.copy(alpha = SheetSizes.FRAME_ALPHA), shape) else Modifier)
+            .drawBehind {
+                mark?.let { (color, strength, height) ->
+                    val inset = if (look.mark in RAISED) SheetSizes.RAISED_INSET.toPx() else 0f
+                    val room = Rect(inset, inset, size.width - inset, size.height - inset)
+                    val rect = Rect(room.left, room.bottom - room.height * height, room.right, room.bottom)
+                    val corner = if (look.mark in RAISED) minOf(rect.width, rect.height) / 2 else SheetSizes.CELL_CORNER.toPx()
+                    drawMark(look.mark, color, rect, vertical = false, corner = corner, strength = strength)
+                }
+                if (hovered && enabled && known) drawHover(Rect(Offset.Zero, size), SheetSizes.CELL_CORNER.toPx(), ink, layer)
+            }
             .then(
-                if (enabled &&
-                    known
-                ) {
-                    Modifier.hand().combinedClickable(onClick = tap, onLongClick = if (time) onSpans else onAsk)
+                if (enabled && known) {
+                    Modifier.onSecondaryClick { clear() }.hoverable(hover).hand()
+                        .combinedClickable(onClick = tap, onLongClick = if (time) onSpans else onAsk)
                 } else {
                     Modifier
                 },
@@ -121,56 +152,27 @@ internal fun DayCell(
         contentAlignment = Alignment.Center,
     ) {
         val number = @Composable { text: String ->
-            Text(text, color = colors.onSurface, maxLines = 1, style = MaterialTheme.typography.labelMedium)
+            Text(text, color = colors.onSurface, maxLines = 1, style = MaterialTheme.typography.labelLarge)
         }
         when (column.type) {
-            ColumnType.Check -> if (value == "true") Box(Modifier.fillMaxSize().background(ink.copy(alpha = SheetSizes.MARK_ALPHA)))
-
             ColumnType.Count -> {
-                val fill = column.fill(fields)
-                if (fill > 0f) {
-                    Box(
-                        Modifier.align(Alignment.BottomCenter).fillMaxWidth().fillMaxHeight(fill)
-                            .background(ink.copy(alpha = if (fill >= 1f) SheetSizes.MARK_ALPHA else SheetSizes.PART_ALPHA)),
-                    )
-                }
                 val count = fields?.let(TrackerCells::count) ?: 0.0
                 if (figures && count != 0.0) number(countText(count))
             }
 
-            ColumnType.Scale -> value?.toIntOrNull()?.let { level ->
-                Box(
-                    Modifier.fillMaxSize().background(
-                        ink.copy(
-                            alpha =
-                            SheetSizes.PART_ALPHA + (SheetSizes.MARK_ALPHA - SheetSizes.PART_ALPHA) * column.fill(fields),
-                        ),
-                    ),
-                )
-                if (figures) number("$level")
-            }
+            ColumnType.Scale -> value?.toIntOrNull()?.let { level -> if (figures) number("$level") }
 
             ColumnType.Choice -> column.options.find { it.id == value }?.let { option ->
-                Box(
-                    Modifier.fillMaxSize().background(
-                        (
-                            option.color?.let {
-                                BenbowTheme.colors.tokens.mark(it, dark)
-                            } ?: ink
-                            ).copy(alpha = SheetSizes.PART_ALPHA),
-                    ),
-                )
-                Text(option.icon?.let(::iconEmoji) ?: option.name.take(1), fontSize = 16.sp, maxLines = 1)
+                Text(option.icon?.let(::iconEmoji) ?: option.name.take(1), fontSize = 18.sp, maxLines = 1)
             }
 
             ColumnType.Note -> if (!value.isNullOrBlank()) {
-                Box(Modifier.fillMaxSize().background(ink.copy(alpha = SheetSizes.PART_ALPHA)))
                 Text(
                     value,
                     Modifier.padding(horizontal = 2.dp),
                     color = colors.onSurface,
-                    fontSize = 9.sp,
-                    lineHeight = 10.sp,
+                    fontSize = 10.sp,
+                    lineHeight = 11.sp,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -179,13 +181,10 @@ internal fun DayCell(
             // Time without a window of hours: the day's time (its spans open on a tap).
             ColumnType.Time -> {
                 val seconds = TrackerSpans.total(spans, day, column.dayBy)
-                if (seconds > 0) {
-                    Box(Modifier.fillMaxSize().background(ink.copy(alpha = SheetSizes.PART_ALPHA)))
-                    if (figures) number(clockText(seconds))
-                }
+                if (seconds > 0 && figures) number(clockText(seconds))
             }
 
-            null -> Unit
+            ColumnType.Check, null -> Unit
         }
         if (!fields?.get(CellField.NOTE).isNullOrBlank()) {
             Box(Modifier.align(Alignment.TopEnd).padding(3.dp).size(SheetSizes.NOTE_DOT).background(ink, CircleShape))
@@ -194,6 +193,58 @@ internal fun DayCell(
             ValueRow(column, value, ink, dark) { picked ->
                 picking = false
                 write { setCell(column.id, day, picked) }
+            }
+        }
+    }
+}
+
+/** What a cell's mark is: its color, how strong (a part of a full mark), and how high it fills from the bottom. */
+private data class CellMark(val color: Color, val strength: Float, val height: Float = 1f)
+
+@Composable
+private fun cellMark(
+    column: TrackerColumn,
+    fields: Map<String, String?>?,
+    spans: List<TrackerRecord>,
+    day: String,
+    ink: Color,
+    dark: Boolean,
+): CellMark? {
+    val value = fields?.get(CellField.VALUE)
+    val part = SheetSizes.PART_ALPHA / SheetSizes.MARK_ALPHA
+    return when (column.type) {
+        ColumnType.Check -> if (value == "true") CellMark(ink, 1f) else null
+
+        ColumnType.Count -> column.fill(fields).takeIf { it > 0f }?.let { CellMark(ink, if (it >= 1f) 1f else part, it) }
+
+        ColumnType.Scale -> value?.toIntOrNull()?.let { CellMark(ink, part + (1f - part) * column.fill(fields)) }
+
+        ColumnType.Choice -> column.options.find { it.id == value }?.let { option ->
+            CellMark(option.color?.let { BenbowTheme.colors.tokens.mark(it, dark) } ?: ink, part)
+        }
+
+        ColumnType.Note -> if (value.isNullOrBlank()) null else CellMark(ink, part)
+
+        ColumnType.Time -> if (TrackerSpans.total(spans, day, column.dayBy) > 0) CellMark(ink, part) else null
+
+        null -> null
+    }
+}
+
+/** Styles drawn raised or glowing: a little room around them in a cell, for the shadow or the glow. */
+private val RAISED = setOf(MarkStyle.Tube, MarkStyle.Glossy, MarkStyle.Neon, MarkStyle.Beads, MarkStyle.Snake)
+
+/**
+ * A mouse's right click (owner, ADR-058), seen before any tap or long press below it, which then let that press be: a
+ * finger has no right click, so nothing changes on a phone.
+ */
+internal fun Modifier.onSecondaryClick(action: () -> Unit): Modifier = pointerInput(Unit) {
+    awaitPointerEventScope {
+        while (true) {
+            val event = awaitPointerEvent(PointerEventPass.Initial)
+            if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
+                event.changes.forEach { it.consume() }
+                action()
             }
         }
     }
@@ -233,34 +284,11 @@ internal fun ValueRow(column: TrackerColumn, value: String?, ink: Color, dark: B
 }
 
 /**
- * An hour of the sleep sheet: painted hours join into one bar with round ends; an empty hour is a faint dot; hours a
- * drag passes show a lighter bar until it ends. Taps and drags are the row's (DayRow); [onTap] is the hour's action for
- * accessibility and tests. [vertical]: the hours go down a day's column (a month across, ADR-051), the bar with them.
+ * An hour of the sleep sheet as a target: its strip draws the hours and their snakes ([HourStrip]) and takes the taps
+ * and drags; [onTap] is the hour's action for accessibility and tests. [vertical]: the hours go down a day's column.
  */
 @Composable
-internal fun HourCell(
-    column: TrackerColumn,
-    painted: Boolean,
-    first: Boolean,
-    last: Boolean,
-    previewed: Boolean,
-    enabled: Boolean,
-    tag: String,
-    modifier: Modifier,
-    vertical: Boolean = false,
-    onTap: () -> Unit,
-) {
-    val colors = MaterialTheme.colorScheme
-    val theme = BenbowTheme.colors
-    val ink = column.record[ColumnField.COLOR]?.let { theme.tokens.mark(it, theme.dark) } ?: colors.primary
-    // The bar's thickness across the way the hours go, and its length along it.
-    val bar = if (vertical) {
-        Modifier.fillMaxHeight().fillMaxWidth(
-            SheetSizes.BAR_HEIGHT,
-        )
-    } else {
-        Modifier.fillMaxWidth().fillMaxHeight(SheetSizes.BAR_HEIGHT)
-    }
+internal fun HourCell(enabled: Boolean, tag: String, modifier: Modifier, vertical: Boolean = false, onTap: () -> Unit) {
     Box(
         modifier.then(if (vertical) Modifier.fillMaxWidth() else Modifier.fillMaxHeight())
             .then(
@@ -276,80 +304,8 @@ internal fun HourCell(
                 },
             )
             .testTag(tag),
-        contentAlignment = Alignment.Center,
-    ) {
-        when {
-            previewed -> Box(bar.background(ink.copy(alpha = SheetSizes.PART_ALPHA)))
-
-            painted -> {
-                val round = { at: Boolean -> if (at) SheetSizes.BAR_CORNER else 0.dp }
-                val gap = { at: Boolean -> if (at) 1.dp else 0.dp }
-                Box(
-                    bar.then(
-                        if (vertical) {
-                            Modifier.padding(top = gap(first), bottom = gap(last))
-                        } else {
-                            Modifier.padding(start = gap(first), end = gap(last))
-                        },
-                    ).background(
-                        ink.copy(alpha = SheetSizes.MARK_ALPHA),
-                        if (vertical) {
-                            RoundedCornerShape(
-                                topStart = round(first),
-                                topEnd = round(first),
-                                bottomEnd = round(last),
-                                bottomStart = round(last),
-                            )
-                        } else {
-                            RoundedCornerShape(
-                                topStart = round(first),
-                                topEnd = round(last),
-                                bottomEnd = round(last),
-                                bottomStart = round(first),
-                            )
-                        },
-                    ),
-                )
-            }
-
-            else -> Box(Modifier.size(3.dp).background(colors.outline.copy(alpha = SheetSizes.DOT_ALPHA), CircleShape))
-        }
-    }
+    )
 }
-
-/** A time column's timer in its header: ▶ starts it now, ■ stops it; while it runs, its time ticks beside. */
-@Composable
-internal fun TimerButton(column: TrackerColumn, write: TrackerWrite) {
-    val colors = MaterialTheme.colorScheme
-    val theme = BenbowTheme.colors
-    val ink = column.record[ColumnField.COLOR]?.let { theme.tokens.text(it, theme.dark) } ?: colors.primary
-    val running = column.running
-    var now by remember { mutableStateOf(localDateTimeNow()) }
-    if (running != null) {
-        LaunchedEffect(running) {
-            while (true) {
-                now = localDateTimeNow()
-                delay(TICK_MILLIS)
-            }
-        }
-    }
-    val label = stringResource(if (running == null) Res.string.trackers_timer_start else Res.string.trackers_timer_stop)
-    Row(
-        Modifier.clip(RoundedCornerShape(12.dp))
-            .hand()
-            .clickable { if (running == null) write { startTimer(column.id, localNow()) } else write { stopTimer(column.id, localNow()) } }
-            .semantics { contentDescription = label }
-            .testTag("timer:${column.id}")
-            .padding(horizontal = 4.dp, vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(if (running == null) Icons.Play else Icons.Stop, null, Modifier.size(16.dp), tint = ink)
-        if (running != null) Text(tickText(runningSeconds(running, now)), color = ink, fontSize = 10.sp, maxLines = 1)
-    }
-}
-
-/** A running timer's time is drawn again this often. */
-private const val TICK_MILLIS = 1_000L
 
 /**
  * A long press on a day's cell: a count's exact number, a note column's text, or a note to the day for the others.

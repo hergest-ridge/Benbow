@@ -9,8 +9,6 @@
     <string name="shortcut_note">Заметка</string>
     <string name="shortcut_entry">Запись</string>
     <string name="tile_note">Заметка</string>
-    <string name="timers_channel">Таймеры трекеров</string>
-    <string name="timer_stop">Стоп</string>
     <string name="tracker_widget_label">Трекеры</string>
     <string name="tracker_widget_description">Сегодняшние отметки трекеров и таймер в одно касание</string>
     <string name="tracker_widget_empty">Трекеров пока нет. Нажмите, чтобы открыть их в Benbow.</string>

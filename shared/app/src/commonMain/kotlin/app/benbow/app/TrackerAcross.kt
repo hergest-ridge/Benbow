@@ -37,7 +37,6 @@ import app.benbow.app.resources.Res
 import app.benbow.app.resources.trackers_total
 import app.benbow.app.resources.weekdays_short
 import app.benbow.core.tracker.ColumnField
-import app.benbow.core.tracker.ColumnType
 import app.benbow.core.tracker.HourWindow
 import app.benbow.core.tracker.TrackerCells
 import app.benbow.core.tracker.TrackerColumn
@@ -56,7 +55,8 @@ import org.jetbrains.compose.resources.stringResource
  * A month across (owner, ADR-051; the tracker's `layout`): its days along the top and the tracker's columns down the
  * side, a sleep column's hours each a row of their own, painted down a day's column. Too wide for the window (a phone),
  * the days scroll sideways under names that stay, today a few days from the left; the month's figures end each row.
- * Cells answer as on the page down ([DayCell], [HourStrip]).
+ * Cells answer as on the page down ([DayCell], [HourStrip]). Where the tracker's columns stretch, a row's lower border
+ * under its name makes it taller or lower (owner, ADR-058), written once let go.
  */
 @Composable
 internal fun AcrossMonthPage(
@@ -75,6 +75,7 @@ internal fun AcrossMonthPage(
     var spansOf by remember { mutableStateOf<Pair<TrackerColumn, LocalDate>?>(null) }
     val scroll = rememberScrollState()
     val density = LocalDensity.current
+    val sizes = LocalSheetLook.current.sizes
     BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = SheetSizes.SIDE)) {
         val names = if (maxWidth < Across.WIDE) Across.NAMES_NARROW else Across.NAMES
         val end = if (figures) Across.TOTAL else 0.dp
@@ -106,8 +107,11 @@ internal fun AcrossMonthPage(
                     }
                     val total = figureText(column, TrackerFigures.of(column, byDay, own, sofar))
                     if (window == null) {
-                        Row(Modifier.fillMaxWidth().height(SheetSizes.ROW_HEIGHT), verticalAlignment = Alignment.CenterVertically) {
-                            ColumnName(column, write, Modifier.width(names))
+                        Row(
+                            Modifier.fillMaxWidth().height(SheetSizes.ROW_HEIGHT * sizes.height(column)),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            ColumnName(column, SheetSizes.ROW_HEIGHT, write, Modifier.width(names))
                             grid.Days(Modifier.weight(1f).fillMaxHeight(), last = { Figure(total) }) { date ->
                                 val id = "$date"
                                 DayCell(
@@ -157,8 +161,9 @@ private fun SleepRows(
     onSpans: (LocalDate) -> Unit,
 ) {
     val hours = window.hours
-    Row(Modifier.fillMaxWidth().height(Across.HOUR * hours.size)) {
-        ColumnName(column, write, Modifier.width(names - Across.HOUR_NUMBERS))
+    val sizes = LocalSheetLook.current.sizes
+    Row(Modifier.fillMaxWidth().height(Across.HOUR * hours.size * sizes.height(column))) {
+        ColumnName(column, Across.HOUR * hours.size, write, Modifier.width(names - Across.HOUR_NUMBERS))
         Column(Modifier.width(Across.HOUR_NUMBERS).fillMaxHeight()) {
             hours.forEach { hour ->
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Label("$hour") }
@@ -211,21 +216,47 @@ private class DayGrid(val days: List<LocalDate>, val today: LocalDate, val day: 
     }
 }
 
-/** A column's name down the side: its emoji and short text; a time column's timer beside. */
+/**
+ * A column's name down the side: its emoji and short text; where the columns stretch, its row's lower border ([usual]
+ * high at its usual size) drags it taller or lower, and a double click puts it back.
+ */
 @Composable
-private fun ColumnName(column: TrackerColumn, write: TrackerWrite, modifier: Modifier) {
-    Row(modifier.fillMaxHeight().padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        column.record[ColumnField.ICON]?.let(::iconEmoji)?.let { Text(it, fontSize = 16.sp, maxLines = 1) }
-        Text(
-            column.short,
-            Modifier.weight(1f).padding(start = 4.dp),
-            fontSize = 11.sp,
-            lineHeight = 12.sp,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            style = MaterialTheme.typography.labelSmall,
-        )
-        if (column.type == ColumnType.Time) TimerButton(column, write)
+private fun ColumnName(column: TrackerColumn, usual: Dp, write: TrackerWrite, modifier: Modifier) {
+    val sizes = LocalSheetLook.current.sizes
+    val density = LocalDensity.current
+    val grid = sheetGrid(columnInk(column))
+    Box(modifier.fillMaxHeight().gridCell(grid)) {
+        Row(Modifier.fillMaxSize().padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            column.record[ColumnField.ICON]?.let(::iconEmoji)?.let { Text(it, fontSize = 18.sp, maxLines = 1) }
+            Text(
+                column.short,
+                Modifier.weight(1f).padding(start = 4.dp),
+                fontSize = 13.sp,
+                lineHeight = 14.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.labelMedium,
+            )
+        }
+        if (sizes.stretchable) {
+            StretchBorder(
+                vertical = false,
+                tag = "stretch:${column.id}",
+                onDrag = { dy ->
+                    val (px, least) = with(density) { usual.toPx() to SheetSizes.LEAST_ROW.toPx() }
+                    sizes.setHeight(column.id, resizeRow(sizes.height(column), px, dy, least))
+                },
+                onStop = {
+                    val factor = sizes.height(column)
+                    write { updateColumn(column.id, mapOf(ColumnField.HEIGHT to factorText(factor))) }
+                },
+                onReset = {
+                    sizes.setHeight(column.id, 1f)
+                    write { updateColumn(column.id, mapOf(ColumnField.HEIGHT to null)) }
+                },
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
+        }
     }
 }
 
@@ -233,28 +264,28 @@ private fun ColumnName(column: TrackerColumn, write: TrackerWrite, modifier: Mod
 private fun Label(text: String) = Text(
     text,
     color = MaterialTheme.colorScheme.onSurfaceVariant,
-    fontSize = 9.sp,
+    fontSize = SheetSizes.HOUR_NUMBER,
     textAlign = TextAlign.Center,
     maxLines = 1,
     style = MaterialTheme.typography.labelSmall,
 )
 
 @Composable
-private fun Figure(text: String) = Text(text, textAlign = TextAlign.Center, maxLines = 1, style = MaterialTheme.typography.labelMedium)
+private fun Figure(text: String) = Text(text, textAlign = TextAlign.Center, maxLines = 1, style = MaterialTheme.typography.labelLarge)
 
 private object Across {
     /** The names down the side, narrower on a phone; a sleep column's hour numbers take a strip of them. */
-    val NAMES = 120.dp
-    val NAMES_NARROW = 84.dp
-    val HOUR_NUMBERS = 22.dp
+    val NAMES = 140.dp
+    val NAMES_NARROW = 96.dp
+    val HOUR_NUMBERS = 26.dp
     val WIDE = 600.dp
 
     /** No narrower a day than this (a whole month fits the widest sheet); on a phone the days scroll then. */
-    val MIN_DAY = 24.dp
+    val MIN_DAY = 28.dp
     val WEEK_GAP = 4.dp
-    val TOTAL = 48.dp
+    val TOTAL = 56.dp
 
     /** An hour's row of a sleep column. */
-    val HOUR = 20.dp
+    val HOUR = 24.dp
     const val TODAY_LEFT = 3
 }

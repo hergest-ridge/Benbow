@@ -16,9 +16,23 @@ object TrackerField {
     /** A look token: `emoji:<emoji>` for now; other schemes (a hand-drawn set) come later. */
     const val ICON = "icon"
 
-    /** An editor palette token (`BenbowPalette`) for its marks. */
+    /**
+     * Its marks' color, every column's (owner, ADR-058): an editor palette token (`BenbowPalette`) or a color of one's own
+     * (`hue:<degrees>:<chroma>`); none: each column's own.
+     */
     const val COLOR = "color"
+
+    /** A note color's name or a color of one's own (`hue:<degrees>:<chroma>`, ADR-058). */
     const val BACKGROUND = "background"
+
+    /** How its marks are drawn (ADR-058): `solid`, `marker`, `tube`, `snake`, …; none: soft, as at first. */
+    const val MARK = "mark"
+
+    /** Lines between its cells (ADR-058): `lines`, `table`, `dashed`, `dots`, `pencil`, `ink`; none: a faint frame each. */
+    const val GRID = "grid"
+
+    /** "true": its columns (rows, in a month across) can be stretched on the sheet; their sizes hold either way. */
+    const val RESIZE = "resize"
     const val LOOK_PREFIX = "look_"
 
     /** The screen behind its sheet (ADR-051): `screen_pattern`, `screen_light`, `screen_motion`, tokens of a note's look. */
@@ -72,14 +86,19 @@ object ColumnField {
     /** A [DayBy] token: which day a span counts for. */
     const val DAY_BY = "day_by"
 
-    /** "one": starting its timer stops the tracker's other timers. */
+    /**
+     * The timers' fields (0.17-0.20; dropped by the owner, ADR-058): "one", and when a timer started. Nothing writes or
+     * reads them now; a record keeps whatever it held, as with any field.
+     */
     const val TIMER = "timer"
-
-    /** When its timer started, "YYYY-MM-DDTHH:MM:SS"; null: stopped. */
     const val RUNNING = "running"
 
-    /** The look of a filled cell: `tick`, `fill`, `dot`, … */
+    /** The look of a filled cell: `tick`, `fill`, `dot`, … (not drawn yet: the tracker's `mark` is, ADR-058). */
     const val MARK = "mark"
+
+    /** Its width in a month down the page, a multiple of the usual ("1.5"); [HEIGHT] its row's in a month across (ADR-058). */
+    const val WIDTH = "width"
+    const val HEIGHT = "height"
     const val RANK = "rank"
     const val ARCHIVED = "archived"
     const val DELETED = "deleted"

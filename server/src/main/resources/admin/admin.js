@@ -36,13 +36,35 @@
     }
   }, true);
 
-  // Picking a file sends it.
+  // Picking a file sends it; a drop zone shows it is busy meanwhile. A size picked is saved as it is picked.
+  const send = (input) => {
+    const names = [...input.files].map((f) => "«" + f.name + "»").join(", ");
+    snack((input.dataset.send || "Шифрую и отправляю %s…").replace("%s", names));
+    input.closest("[data-drop]")?.classList.add("busy");
+    input.form.requestSubmit();
+  };
   document.addEventListener("change", (e) => {
     const input = e.target;
-    if (input.matches("input[type=file][data-send]") && input.files.length) {
-      snack("Шифрую и отправляю «" + input.files[0].name + "»…");
+    if (input.matches("input[type=file][data-send]") && input.files.length) send(input);
+    if (input.matches("form[data-autosave] select")) {
+      input.form.classList.add("saving");
       input.form.requestSubmit();
     }
+  });
+  // Files dropped on a drop zone go as if picked.
+  document.querySelectorAll("[data-drop]").forEach((zone) => {
+    const input = zone.querySelector("input[type=file]");
+    ["dragenter", "dragover"].forEach((type) => zone.addEventListener(type, (e) => {
+      e.preventDefault();
+      zone.classList.add("over");
+    }));
+    ["dragleave", "drop"].forEach((type) => zone.addEventListener(type, () => zone.classList.remove("over")));
+    zone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      if (!e.dataTransfer || !e.dataTransfer.files.length) return;
+      input.files = e.dataTransfer.files;
+      send(input);
+    });
   });
 
   // The drawer's item of the section on screen (CSS shows it by :target; the first one without an address).

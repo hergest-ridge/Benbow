@@ -1,6 +1,7 @@
 package app.benbow.android
 
 import android.app.Application
+import android.app.NotificationManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.os.Build
@@ -65,8 +66,8 @@ class BenbowApplication : Application() {
             fontShelf = FolderFontShelf(File(filesDir, "fonts")),
             labs = packageName != "app.benbow", // the dev and bench builds show unfinished work, the owner's app never
         ).also {
-            // Trackers' running timers are notifications (ADR-050).
-            TimerNotifications.start(this, it)
+            // Trackers' timers are gone (ADR-058): so is their channel, with any notification still in the shade.
+            getSystemService(NotificationManager::class.java)?.deleteNotificationChannel("timers")
         }
     }
 

@@ -10,8 +10,8 @@ import kotlin.test.assertTrue
 /**
  * Tracker records merged field by field, the newest HLC winning, as the calendar store merges every record (ADR-027):
  * whatever order the ops come in, some lost and sent again, devices end with the same records; and the rules made for
- * trackers keep every input (ADR-050): a day's cell is one record on every device, a count adds up every device's taps,
- * a timer stopped on two devices leaves one span. (The channel itself is simulated against the store in B2.)
+ * trackers keep every input (ADR-050): a day's cell is one record on every device, a count adds up every device's taps.
+ * (The channel itself is simulated against the store in B2.)
  */
 class TrackerMergeTest {
     private class Op(val kind: String, val id: String, val fields: Map<String, String?>, val hlc: Hlc)
@@ -95,25 +95,5 @@ class TrackerMergeTest {
         phone.apply(set)
         assertEquals(6.0, TrackerCells.count(phone.fields(TrackerKind.CELL, cell)), "five as set, and the tap made meanwhile")
         assertEquals(phone.records, pc.records)
-    }
-
-    @Test
-    fun aTimerStoppedOnTwoDevicesLeavesOneSpan() {
-        val phone = Device("phone", Random(3))
-        val pc = Device("pc", Random(4))
-        val start = phone.write(TrackerKind.COLUMN, "work", mapOf(ColumnField.RUNNING to "2026-10-27T09:00:00"))
-        pc.apply(start)
-        val stops = listOf(phone to "2026-10-27T10:30:00", pc to "2026-10-27T10:32:00").flatMap { (device, now) ->
-            val running = device.fields(TrackerKind.COLUMN, "work").getValue(ColumnField.RUNNING)!!
-            val (span, clear) = TrackerSpans.stop("work", running, now)
-            listOf(device.write(TrackerKind.SPAN, span.id, span.fields), device.write(TrackerKind.COLUMN, "work", clear))
-        }
-        stops.forEach {
-            phone.apply(it)
-            pc.apply(it)
-        }
-        assertEquals(phone.records, pc.records)
-        assertEquals(listOf("work:2026-10-27T09:00:00"), phone.records.keys.filter { it.first == TrackerKind.SPAN }.map { it.second })
-        assertEquals(null, phone.fields(TrackerKind.COLUMN, "work")[ColumnField.RUNNING], "stopped")
     }
 }

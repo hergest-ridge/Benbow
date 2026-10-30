@@ -177,8 +177,6 @@ internal object Icons {
         )
     val Pause = icon("Pause", "M6,19h4V5H6v14zM14,5v14h4V5h-4z")
 
-    /** A timer's stop (trackers, ADR-050): Material's "Stop". */
-    val Stop = icon("Stop", "M6,6h12v12H6z")
     val Bell = icon(
         "Bell",
         "M12,22c1.1,0 2,-0.9 2,-2h-4c0,1.1 0.89,2 2,2zM18,16v-5c0,-3.07 -1.64,-5.64 -4.5,-6.32V4c0,-0.83 -0.67,-1.5 -1.5,-1.5" +

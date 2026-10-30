@@ -100,7 +100,11 @@ internal fun Route.fontRoutes(ctx: ServerContext) {
     }
 }
 
-/** The section: the owner's fonts with the form that adds one, then the pack by its groups. */
+/**
+ * The section: a card that adds fonts (owner, ADR-058: a drop zone of the page's own, files sent as soon as they are
+ * picked or dropped, its state in words while the server checks them), the owner's fonts in a card of their own (a
+ * size saved as soon as it is picked), then the pack by its groups.
+ */
 internal fun fontsSection(fonts: Fonts): String = buildString {
     append("<section id=\"fonts\" class=\"page\">")
     append(
@@ -112,12 +116,17 @@ internal fun fontsSection(fonts: Fonts): String = buildString {
         ),
     )
     append("<link rel=\"stylesheet\" href=\"/admin/fonts/faces.css\">")
-    append("<div class=\"card\"><h3>${icon("font")}Свои шрифты</h3>")
-    append("<p class=\"lead\">TTF, OTF или WOFF, до 12 МБ. Прямое и жирное начертание одного шрифта становятся одним шрифтом.</p>")
-    append("<form method=\"post\" action=\"/admin/fonts\" enctype=\"multipart/form-data\" data-busy=\"Проверяю…\" class=\"row\">")
-    append("<input type=\"file\" name=\"font\" accept=\".ttf,.otf,.woff\" multiple required>")
-    append("<button class=\"btn\">${icon("up")}Добавить</button></form>")
+    append("<div class=\"card\"><h3>${icon("up")}Добавить шрифт</h3>")
+    append("<form method=\"post\" action=\"/admin/fonts\" enctype=\"multipart/form-data\" class=\"drop-form\">")
+    append("<label class=\"drop\" data-drop>")
+    append("<input type=\"file\" name=\"font\" accept=\".ttf,.otf,.woff\" multiple required data-send=\"Проверяю и добавляю: %s…\">")
+    append("${icon("font")}<span class=\"drop-title\">Выберите файлы шрифта или перетащите их сюда</span>")
+    append("<span class=\"drop-hint\">TTF, OTF или WOFF, до 12 МБ. Прямое и жирное начертание одного шрифта станут одним ")
+    append("шрифтом. Файл добавится сразу, как только вы его выберете.</span>")
+    append("<span class=\"drop-busy\">Проверяю и добавляю…</span></label>")
+    append("<noscript><button class=\"btn\">${icon("up")}Добавить</button></noscript></form></div>")
     val own = fonts.own.all()
+    append("<div class=\"card\"><h3>${icon("font")}Свои шрифты</h3>")
     if (own.isEmpty()) append("<p class=\"muted\">Своих шрифтов пока нет.</p>")
     append("<div class=\"list\">")
     for (font in own) {
@@ -128,11 +137,11 @@ internal fun fontsSection(fonts: Fonts): String = buildString {
         append(font.files.joinToString(", ") { (if (it.weight >= 600) "жирное" else "прямое") + " — " + esc(it.original) })
         append("</div>")
         if (!font.cyrillic) append(chip("err", "error", "нет русских букв: русские слова будут обычным шрифтом"))
-        append("</div><form class=\"row scale\" method=\"post\" action=\"/admin/fonts/scale\">")
+        append("</div><form class=\"row scale\" method=\"post\" action=\"/admin/fonts/scale\" data-autosave>")
         append("<input type=\"hidden\" name=\"token\" value=\"${esc(font.token)}\"><label>Размер <select name=\"scale\">")
         val now = (font.scale * 100).toInt()
         for (s in SCALES) append("<option value=\"$s\"${if (s == nearest(now)) " selected" else ""}>$s%</option>")
-        append("</select></label><button class=\"btn text\">Сохранить</button></form>")
+        append("</select></label><noscript><button class=\"btn text\">Сохранить</button></noscript></form>")
         append("<form class=\"inline\" method=\"post\" action=\"/admin/fonts/remove\" data-confirm=\"")
         append(esc("Убрать «${font.name}»? Записки с ним покажутся обычным шрифтом; файл останется в папке fonts\\removed."))
         append("\"><input type=\"hidden\" name=\"token\" value=\"${esc(font.token)}\">")

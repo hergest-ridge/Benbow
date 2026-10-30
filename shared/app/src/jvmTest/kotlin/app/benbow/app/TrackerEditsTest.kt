@@ -96,7 +96,7 @@ class TrackerEditsTest {
         assertEquals(mapOf("icon" to null), TrackerDraft("Привычки", "").changes(tracker))
         assertEquals(emptyMap(), TrackerDraft("", "🌱").changes(tracker))
 
-        assertEquals(listOf("habits", "water", "reading", "sport", "sleep", "time"), TrackerPresets.all.map { it.id })
+        assertEquals(listOf("habits", "water", "reading", "sport", "sleep"), TrackerPresets.all.map { it.id }, "no timers (ADR-058)")
         for (preset in TrackerPresets.all + TrackerPresets.blank) {
             assertTrue(preset.columns.all { ColumnType.of(it["type"]) != null }, "${preset.id}: types this app knows")
             assertTrue(preset.tracker["icon"]?.let(::iconEmoji) != null, "${preset.id}: an emoji")

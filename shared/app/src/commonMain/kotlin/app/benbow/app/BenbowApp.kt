@@ -133,6 +133,7 @@ import app.benbow.app.resources.veiled_curtain
 import app.benbow.app.resources.veiled_none
 import app.benbow.app.resources.veiled_quiet
 import app.benbow.app.resources.voice_replaced
+import app.benbow.client.IoDispatcher
 import app.benbow.client.TagRegistry
 import app.benbow.client.Templates
 import app.benbow.client.Veil
@@ -148,6 +149,7 @@ import app.benbow.ui.editor.Removal
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.getStringArray
@@ -352,6 +354,11 @@ private fun AppRoot(services: AppServices) {
         services.lock.onLeave()
         services.gentle.onLeave()
         services.updates.inBackground() // a quiet update may go in now (ADR-042, U3)
+    }
+    // Android 17 keeps the app off the home network, and so from its server, until this is granted (ADR-062).
+    val network = rememberLocalNetworkAccess()
+    LaunchedEffect(Unit) {
+        if (network.missing && withContext(IoDispatcher) { services.settings.connection } != null) network.ask(services.sync::requestSync)
     }
     val backStack = remember { mutableStateListOf<Route>(Route.Home) }
     val nav = remember(backStack) { Navigator(backStack) }

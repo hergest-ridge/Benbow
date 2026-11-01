@@ -644,6 +644,8 @@
     <string name="server_last_sync">Последняя синхронизация: %1$s</string>
     <string name="server_never">ещё не было</string>
     <string name="server_sync_now">Синхронизировать</string>
+    <string name="server_local_network">Android пускает приложения в домашнюю сеть только с разрешением «Устройства поблизости». Без него Benbow не достучится до сервера, а изменения подождут на устройстве.</string>
+    <string name="server_local_network_allow">Разрешить</string>
     <string name="server_wrong_store">По этому адресу отвечает другое хранилище. Синхронизация остановлена, ваши изменения сохранены на устройстве.</string>
     <string name="update_title">Обновление %1$s</string>
     <string name="update_available">Доступна версия %1$s</string>

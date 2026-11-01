@@ -53,6 +53,9 @@ internal actual fun rememberDeviceAuth(): DeviceAuth? = null
 @Composable
 internal actual fun rememberNotificationPermission(): () -> Unit = ::askForNotifications
 
+@Composable
+internal actual fun rememberLocalNetworkAccess(): LocalNetworkAccess = LocalNetworkAccess(missing = false) { it() }
+
 /** Prints through a new tab: the browser's Print there also saves a PDF. */
 @Composable
 internal actual fun rememberPrint(): (PrintPage) -> Unit = { page -> openHtml(page.html) }

@@ -94,7 +94,7 @@ private fun open(context: Context, href: String, toolbar: Int, dark: Boolean) {
     }
 }
 
-private tailrec fun Context.findActivity(): Activity? = when (this) {
+internal tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null

@@ -59,6 +59,8 @@ import app.benbow.app.resources.server_host
 import app.benbow.app.resources.server_incompatible
 import app.benbow.app.resources.server_intro
 import app.benbow.app.resources.server_last_sync
+import app.benbow.app.resources.server_local_network
+import app.benbow.app.resources.server_local_network_allow
 import app.benbow.app.resources.server_never
 import app.benbow.app.resources.server_pair
 import app.benbow.app.resources.server_paired
@@ -199,7 +201,9 @@ private fun FindServer(vm: ServerViewModel) {
         }
         return
     }
+    val network = rememberLocalNetworkAccess()
     Text(stringResource(Res.string.server_intro), style = MaterialTheme.typography.bodyLarge)
+    LocalNetworkNote(network) { if (vm.host.isNotBlank()) vm.connect() }
     OutlinedTextField(
         vm.host,
         { vm.host = it },
@@ -218,7 +222,7 @@ private fun FindServer(vm: ServerViewModel) {
         modifier = Modifier.fillMaxWidth(),
     )
     Button(
-        vm::connect,
+        { network.ask(vm::connect) },
         enabled = vm.host.isNotBlank() && vm.port.isNotBlank() && !vm.busy,
         modifier = Modifier.fillMaxWidth().hand(vm.host.isNotBlank() && vm.port.isNotBlank() && !vm.busy),
     ) {
@@ -272,11 +276,13 @@ private fun Paired(services: AppServices, vm: ServerViewModel, connection: Conne
     val rejected = rejectedEntries + rejectedEvents
     val calendar by services.calendarStatus.collectAsStateWithLifecycle()
     var confirmForget by remember { mutableStateOf(false) }
+    val network = rememberLocalNetworkAccess()
 
     Text(
         stringResource(Res.string.server_paired, connection.baseUrl.substringAfter("://")),
         style = MaterialTheme.typography.titleMedium,
     )
+    LocalNetworkNote(network, services.sync::requestSync)
     syncLook(status)?.let { Text(it.label, color = it.tone, style = MaterialTheme.typography.bodyLarge) }
     Text(
         stringResource(
@@ -390,6 +396,18 @@ private fun Paired(services: AppServices, vm: ServerViewModel, connection: Conne
             },
         )
     }
+}
+
+/** Android 17 keeps the app off the home network, and so from the server, until this is granted (ADR-062). */
+@Composable
+private fun LocalNetworkNote(network: LocalNetworkAccess, granted: () -> Unit) {
+    if (!network.missing) return
+    Text(
+        stringResource(Res.string.server_local_network),
+        color = MaterialTheme.colorScheme.error,
+        style = MaterialTheme.typography.bodyLarge,
+    )
+    Button({ network.ask(granted) }, Modifier.fillMaxWidth().hand()) { Text(stringResource(Res.string.server_local_network_allow)) }
 }
 
 @Composable

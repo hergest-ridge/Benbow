@@ -12,6 +12,7 @@ import app.benbow.core.content.Span
 import app.benbow.core.content.TagNames
 import app.benbow.core.content.TextBlock
 import app.benbow.core.content.toPlainText
+import app.benbow.core.media.MediaLook
 import app.benbow.core.sync.AttachmentMeta
 import app.benbow.core.sync.AttachmentState
 import app.benbow.core.sync.CreateEntry
@@ -99,6 +100,8 @@ data class FeedItem(
     val transcripts: Map<String, String> = emptyMap(),
     /** What each sound file says it is (ADR-035), by attachment id. */
     val tracks: Map<String, TrackTags> = emptyMap(),
+    /** How each attachment shows (owner, 2026-10-30), by attachment id. */
+    val mediaLooks: Map<String, MediaLook> = emptyMap(),
 )
 
 /**
@@ -184,6 +187,9 @@ data class EntryDetail(
 
     /** What each sound file says it is (ADR-035), by attachment id. */
     val tracks: Map<String, TrackTags> get() = TrackTags.of(fields)
+
+    /** How each attachment shows in the post (owner, 2026-10-30), by attachment id; those as by default are left out. */
+    val mediaLooks: Map<String, MediaLook> get() = MediaLook.of(fields)
 }
 
 // Entry metadata as namespaced LWW fields (ADR-021).
@@ -412,6 +418,18 @@ class JournalRepository(
         // A sound's tags (ADR-035) go with it, after the link, so a device never sees them without the file.
         if (track != null && !track.isEmpty) setField(entryId, TrackTags.FIELD_PREFIX + meta.id, track.encode())
         meta.id
+    }
+
+    /**
+     * A copy of [from] on entry [entryId] as attachment [id]: the same file (the server holds it by its SHA-256, so
+     * nothing uploads again) under a link of its own. A template's pictures on what is made from it (ADR-061).
+     */
+    internal fun copyAttachment(entryId: String, from: AttachmentState, id: String) = db.transaction {
+        val entry = q.selectEntry(entryId).executeAsOneOrNull() ?: return@transaction
+        val current = decodeAttachments(entry.attachments)
+        val state = AttachmentState(from.meta.copy(id = id), from.position, from.caption, hlc = clock.next())
+        enqueue(PutAttachment(newId(), entryId, state.meta, state.position, state.caption, state.present, state.hlc))
+        putAttachments(entryId, current + (id to state))
     }
 
     /** Keeps a file no attachment names (a link card's picture, ADR-038): it uploads and stays like a preview. */
@@ -669,7 +687,7 @@ class JournalRepository(
             reactions.map {
                 it.removePrefix(REACTION_PREFIX)
             }.toSet(),
-            comments.toInt(), media, body, audio, transcriptsOf(decoded), TrackTags.of(decoded),
+            comments.toInt(), media, body, audio, transcriptsOf(decoded), TrackTags.of(decoded), MediaLook.of(decoded),
         )
     }.asFlow().mapToList(context).let { feed ->
         combine(feed, gentleRules()) { items, rules -> items.map { it.copy(summary = rules.apply(it.summary)) } }

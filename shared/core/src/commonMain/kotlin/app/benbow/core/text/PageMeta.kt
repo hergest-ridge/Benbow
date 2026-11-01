@@ -8,6 +8,10 @@ data class PageMeta(
     val image: String? = null,
     val icon: String? = null,
 ) {
+    /** Within the lengths a card keeps (an oEmbed answer may name things at any length). */
+    internal fun trimmed(): PageMeta =
+        copy(title = title?.cut(TITLE_MAX), description = description?.cut(DESCRIPTION_MAX), site = site?.cut(TITLE_MAX))
+
     companion object {
         private const val TITLE_MAX = 200
         private const val DESCRIPTION_MAX = 300

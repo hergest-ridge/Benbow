@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
@@ -29,10 +30,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
@@ -47,6 +51,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
@@ -59,6 +64,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -66,15 +73,28 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.zIndex
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.attachments
+import app.benbow.app.resources.cancel
 import app.benbow.app.resources.in_text
+import app.benbow.app.resources.media_look_open
 import app.benbow.app.resources.media_next
 import app.benbow.app.resources.media_previous
+import app.benbow.app.resources.strip_remove
+import app.benbow.app.resources.strip_remove_ask
+import app.benbow.app.resources.strip_remove_yes
+import app.benbow.app.resources.strip_settings
 import app.benbow.client.LocalFile
 import app.benbow.client.Media
+import app.benbow.core.media.MediaLook
 import app.benbow.core.sync.AttachmentState
 import app.benbow.ui.mouseSwipe
 import app.benbow.ui.sideScroll
@@ -85,6 +105,7 @@ import coil3.size.Size
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
+import kotlin.math.roundToInt
 
 internal sealed interface MediaLoad {
     data object Loading : MediaLoad
@@ -133,7 +154,10 @@ internal fun MediaThumb(media: Media, attachment: AttachmentState, size: Dp, onC
         if (attachment.meta.kind == "drawing") DrawingPicture(media, attachment, Modifier.fillMaxSize().padding(4.dp))
         if (visual != null) {
             val load by rememberMediaFile(media, visual)
-            (load as? MediaLoad.Ready)?.let { AsyncImage(it.file, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
+            val focus = LocalMediaLooks.current[attachment.meta.id]?.focus
+            (load as? MediaLoad.Ready)?.let {
+                AsyncImage(it.file, null, Modifier.fillMaxSize(), alignment = focus.alignment(), contentScale = ContentScale.Crop)
+            }
         }
         val meta = attachment.meta
         val awaiting by remember(meta.sha256) { media.awaitingUpload(meta.sha256) }.collectAsState(false)
@@ -172,7 +196,8 @@ private fun Badge(icon: androidx.compose.ui.graphics.vector.ImageVector, duratio
 /**
  * The entry's attachments as a row of thumbnails above the text, in gallery order. Those placed in the text come first
  * (marked, in the text's order); the rest can be put in order by a long press and drag ([onMove] gets the item and its
- * new neighbours), when the entry is being edited.
+ * new neighbours), when the entry is being edited. With [onSettings] a tap offers «Открыть» and «Настроить», and with
+ * [onRemove] those outside the text have ✕, asked about once (owner, 2026-10-30).
  */
 @Composable
 internal fun AttachmentStrip(
@@ -181,6 +206,14 @@ internal fun AttachmentStrip(
     onOpen: (AttachmentState) -> Unit,
     placed: Set<String> = emptySet(),
     onMove: ((id: String, after: String?, before: String?) -> Unit)? = null,
+    onSettings: ((AttachmentState) -> Unit)? = null,
+    onRemove: ((AttachmentState) -> Unit)? = null,
+    /**
+     * One outside the text pulled down out of the strip is carried (owner, 2026-10-30): where the pointer is in the
+     * window as it goes, null once it ends or is let go of; [onPlace] at the end says whether it went into the text there.
+     */
+    onCarry: ((AttachmentState, Offset?) -> Unit)? = null,
+    onPlace: ((AttachmentState, Offset) -> Boolean)? = null,
 ) {
     if (attachments.isEmpty()) return
     val fixed = attachments.filter { it.meta.id in placed }
@@ -188,7 +221,13 @@ internal fun AttachmentStrip(
     var order by remember(loose.map { it.meta.id }) { mutableStateOf(loose) }
     var dragging by remember { mutableStateOf<String?>(null) }
     var dragX by remember { mutableFloatStateOf(0f) }
+    var dragY by remember { mutableFloatStateOf(0f) }
+    // Pulled out of the strip: which one, and where the pointer is in the window; each thumbnail's place there.
+    var torn by remember { mutableStateOf<String?>(null) }
+    var carried by remember { mutableStateOf<Offset?>(null) }
+    val corners = remember { HashMap<String, Offset>() }
     val step = with(LocalDensity.current) { (THUMB + GAP).toPx() }
+    val tearAt = with(LocalDensity.current) { (THUMB * 0.6f).toPx() }
     val haptics = LocalHapticFeedback.current
     val inText = stringResource(Res.string.in_text)
     Row(
@@ -197,7 +236,7 @@ internal fun AttachmentStrip(
     ) {
         fixed.forEach { attachment ->
             Box {
-                MediaThumb(media, attachment, THUMB) { onOpen(attachment) }
+                StripThumb(media, attachment, onOpen, onSettings, onRemove = null)
                 Chip(inText, Modifier.align(Alignment.BottomStart).padding(4.dp))
             }
         }
@@ -215,10 +254,28 @@ internal fun AttachmentStrip(
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                 dragging = id
                                 dragX = 0f
+                                dragY = 0f
                             },
                             onDrag = { change, amount ->
                                 change.consume()
+                                val corner = corners[id] ?: Offset.Zero
+                                if (torn == id) {
+                                    carried = corner + change.position
+                                    onCarry?.invoke(attachment, carried)
+                                    return@detectDragGesturesAfterLongPress
+                                }
                                 dragX += amount.x
+                                dragY += amount.y
+                                // Down out of the strip: the gesture's first part takes it out, the rest carries it.
+                                if (onCarry != null && dragY > tearAt) {
+                                    order = loose
+                                    torn = id
+                                    dragX = 0f
+                                    carried = corner + change.position
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onCarry(attachment, carried)
+                                    return@detectDragGesturesAfterLongPress
+                                }
                                 val i = order.indexOfFirst { it.meta.id == id }
                                 if (dragX > step / 2 && i < order.lastIndex) {
                                     order = order.toMutableList().apply { add(i + 1, removeAt(i)) }
@@ -229,14 +286,24 @@ internal fun AttachmentStrip(
                                 }
                             },
                             onDragEnd = {
-                                val i = order.indexOfFirst { it.meta.id == id }
-                                if (order.map { it.meta.id } != loose.map { it.meta.id }) {
-                                    onMove(id, order.getOrNull(i - 1)?.meta?.id, order.getOrNull(i + 1)?.meta?.id)
+                                val at = carried
+                                if (torn == id) {
+                                    if (at == null || onPlace?.invoke(attachment, at) != true) onCarry?.invoke(attachment, null)
+                                } else {
+                                    val i = order.indexOfFirst { it.meta.id == id }
+                                    if (order.map { it.meta.id } != loose.map { it.meta.id }) {
+                                        onMove(id, order.getOrNull(i - 1)?.meta?.id, order.getOrNull(i + 1)?.meta?.id)
+                                    }
                                 }
+                                torn = null
+                                carried = null
                                 dragging = null
                                 dragX = 0f
                             },
                             onDragCancel = {
+                                if (torn == id) onCarry?.invoke(attachment, null)
+                                torn = null
+                                carried = null
                                 order = loose
                                 dragging = null
                                 dragX = 0f
@@ -245,13 +312,82 @@ internal fun AttachmentStrip(
                     }
                 }
                 Box(
-                    Modifier.zIndex(if (lifted) 1f else 0f).graphicsLayer {
-                        translationX = if (lifted) dragX else 0f
-                        val scale = if (lifted) 1.06f else 1f
+                    Modifier.onGloballyPositioned { corners[id] = it.positionInWindow() }.zIndex(if (lifted) 1f else 0f).graphicsLayer {
+                        val out = id == torn
+                        translationX = if (lifted && !out) dragX else 0f
+                        val scale = if (lifted && !out) 1.06f else 1f
                         scaleX = scale
                         scaleY = scale
+                        // Its place in the strip stays, faint, while it is carried.
+                        alpha = if (out) 0.35f else 1f
                     }.then(drag),
-                ) { MediaThumb(media, attachment, THUMB) { onOpen(attachment) } }
+                ) { StripThumb(media, attachment, onOpen, onSettings, onRemove) }
+            }
+        }
+    }
+    // What is carried follows the pointer over everything, a little lifted.
+    val ghost = torn?.let { t -> loose.firstOrNull { it.meta.id == t } }
+    val at = carried
+    if (ghost != null && at != null) {
+        Popup(popupPositionProvider = remember(at) { CarriedAt(at) }) {
+            Box(
+                Modifier.graphicsLayer {
+                    alpha = 0.92f
+                    rotationZ = -3f
+                    shadowElevation = 12f
+                    shape = RoundedCornerShape(12.dp)
+                    clip = true
+                },
+            ) { MediaThumb(media, ghost, THUMB) {} }
+        }
+    }
+}
+
+/** A thumbnail of the strip: a tap opens it, or offers «Открыть» and «Настроить»; ✕ in its corner takes it off, asked once. */
+@Composable
+private fun StripThumb(
+    media: Media,
+    attachment: AttachmentState,
+    onOpen: (AttachmentState) -> Unit,
+    onSettings: ((AttachmentState) -> Unit)?,
+    onRemove: ((AttachmentState) -> Unit)?,
+) {
+    var menu by remember { mutableStateOf(false) }
+    var asking by remember { mutableStateOf(false) }
+    Box {
+        MediaThumb(media, attachment, THUMB) { if (onSettings == null) onOpen(attachment) else menu = true }
+        if (onRemove != null) {
+            val label = stringResource(Res.string.strip_remove)
+            Box(
+                Modifier.align(Alignment.TopEnd).padding(4.dp).size(24.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f))
+                    .hand().clickable { asking = true }.semantics { contentDescription = label },
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Close, null, Modifier.size(16.dp), tint = Color.White) }
+        }
+        DropdownMenu(menu, { menu = false }) {
+            DropdownMenuItem(text = { Text(stringResource(Res.string.media_look_open)) }, onClick = {
+                menu = false
+                onOpen(attachment)
+            }, modifier = Modifier.hand())
+            onSettings?.let { settings ->
+                DropdownMenuItem(text = { Text(stringResource(Res.string.strip_settings)) }, onClick = {
+                    menu = false
+                    settings(attachment)
+                }, modifier = Modifier.hand())
+            }
+        }
+        DropdownMenu(asking, { asking = false }) {
+            Text(
+                stringResource(Res.string.strip_remove_ask),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).widthIn(max = 240.dp),
+            )
+            Row(Modifier.padding(horizontal = 8.dp), horizontalArrangement = Arrangement.End) {
+                TextButton({ asking = false }, modifier = Modifier.hand()) { Text(stringResource(Res.string.cancel)) }
+                TextButton({
+                    asking = false
+                    onRemove?.invoke(attachment)
+                }, modifier = Modifier.hand()) { Text(stringResource(Res.string.strip_remove_yes)) }
             }
         }
     }
@@ -259,6 +395,16 @@ internal fun AttachmentStrip(
 
 private val THUMB = 96.dp
 private val GAP = 8.dp
+
+/** A carried thumbnail's place: centred on the pointer, at [at] in the window. */
+private class CarriedAt(private val at: Offset) : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize,
+    ) = IntOffset((at.x - popupContentSize.width / 2f).roundToInt(), (at.y - popupContentSize.height / 2f).roundToInt())
+}
 
 /** A cover in the journal list, with "+N" when the entry has more. */
 @Composable
@@ -432,9 +578,8 @@ private fun MediaCarouselFrame(
                 },
                 contentAlignment = Alignment.Center,
             ) {
-                FittedPicture(media, item, carousel = ratio)
+                FramedPicture(media, item, frame = ratio)
                 if (item.meta.kind == "video") {
-                    PlayBadge()
                     item.meta.durationMs?.let { ms -> Chip(durationLabel(ms), Modifier.align(Alignment.BottomStart).padding(8.dp)) }
                 }
             }
@@ -465,7 +610,8 @@ private fun Chip(text: String, modifier: Modifier = Modifier) {
 /**
  * A picture at its best: the small preview shows at once and the original (images) fades in over it as soon as it's
  * on hand, decoded at the size it's shown, so nothing in view looks compressed. Offline, a file that isn't on the device
- * keeps its preview. [previewOnly] is for backdrops that are blurred anyway.
+ * keeps its preview. [previewOnly] is for backdrops that are blurred anyway; cropped, [alignment] keeps its focus in
+ * sight; a GIF not [moving] stands still on its first frame.
  */
 @Composable
 internal fun BestPicture(
@@ -475,6 +621,8 @@ internal fun BestPicture(
     contentScale: ContentScale = ContentScale.Crop,
     alpha: Float = 1f,
     previewOnly: Boolean = false,
+    alignment: Alignment = Alignment.Center,
+    moving: Boolean = true,
 ) {
     val meta = attachment.meta
     if (meta.kind == "drawing") return DrawingPicture(media, attachment, modifier)
@@ -482,34 +630,64 @@ internal fun BestPicture(
     val gif = meta.kind == "image" && meta.mime == "image/gif"
     Box(modifier) {
         val preview by rememberMediaFile(media, attachment.visual)
-        (preview as? MediaLoad.Ready)?.let { AsyncImage(it.file, null, Modifier.fillMaxSize(), contentScale = contentScale, alpha = alpha) }
+        (preview as? MediaLoad.Ready)?.let {
+            AsyncImage(it.file, null, Modifier.fillMaxSize(), alignment = alignment, contentScale = contentScale, alpha = alpha)
+        }
         if (!previewOnly && meta.kind == "image" && (meta.previewSha256 != null || gif)) {
             val original by rememberMediaFile(media, meta.sha256)
             (original as? MediaLoad.Ready)?.let {
                 if (gif) {
-                    MovingPicture(it.file, Modifier.fillMaxSize(), contentScale)
+                    MovingPicture(it.file, Modifier.fillMaxSize(), contentScale, playing = moving)
                 } else {
-                    AsyncImage(it.file, null, Modifier.fillMaxSize(), contentScale = contentScale, alpha = alpha)
+                    AsyncImage(it.file, null, Modifier.fillMaxSize(), alignment = alignment, contentScale = contentScale, alpha = alpha)
                 }
             }
         }
     }
 }
 
+/** How each attachment shows in its post, by id (owner, 2026-10-30): provided around a post, read by its pictures. */
+internal val LocalMediaLooks = compositionLocalOf<Map<String, MediaLook>> { emptyMap() }
+
+/** Where a picture cropped keeps its [MediaLook.focus] in sight: that point of it, or its middle. */
+internal fun MediaLook.Focus?.alignment(): Alignment = this?.let { BiasAlignment(it.x * 2 - 1, it.y * 2 - 1) } ?: Alignment.Center
+
 /**
- * A picture in a frame of another shape: cropped when the shapes are close, otherwise shown whole over a blurred,
- * dimmed copy of itself (a tall photo after a wide one doesn't lose most of its sides).
+ * A picture or a video in a frame of [frame]'s shape (width over height), as its look says ([LocalMediaLooks]): filling
+ * the frame cropped around its focus; whole over a blurred, dimmed copy of itself; or by its own shape, the default:
+ * cropped when the shapes are close, otherwise whole like that (a tall photo after a wide one doesn't lose most of its
+ * sides). A GIF moves and a video plays by itself only when it is to ([MediaLook.plays]); else, with [badge], ▶ says so.
  */
 @Composable
-internal fun FittedPicture(media: Media, attachment: AttachmentState, carousel: Float) {
-    val w = attachment.meta.width ?: 0
-    val h = attachment.meta.height ?: 0
+internal fun FramedPicture(media: Media, attachment: AttachmentState, frame: Float, badge: Boolean = true) {
+    val meta = attachment.meta
+    val look = LocalMediaLooks.current[meta.id] ?: MediaLook()
+    val gif = meta.kind == "image" && meta.mime == "image/gif"
+    val video = meta.kind == "video"
+    val plays = look.plays(gif)
+    val w = meta.width ?: 0
+    val h = meta.height ?: 0
     val own = if (w > 0 && h > 0) w.toFloat() / h else null
-    val far = own != null && maxOf(own / carousel, carousel / own) > 1.3f
-    if (!far || attachment.meta.kind == "drawing") {
-        BestPicture(media, attachment, Modifier.fillMaxSize())
-        return
+    val crop = when (look.fit) {
+        MediaLook.Fit.Fill -> true
+        MediaLook.Fit.Whole -> false
+        MediaLook.Fit.Natural -> own == null || meta.kind == "drawing" || maxOf(own / frame, frame / own) <= 1.3f
     }
-    BestPicture(media, attachment, Modifier.fillMaxSize().blur(24.dp), alpha = 0.5f, previewOnly = true)
-    BestPicture(media, attachment, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+    val playing = video && plays && inlineVideos
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        if (!crop) BestPicture(media, attachment, Modifier.fillMaxSize().blur(24.dp), alpha = 0.5f, previewOnly = true)
+        BestPicture(
+            media,
+            attachment,
+            Modifier.fillMaxSize(),
+            contentScale = if (crop) ContentScale.Crop else ContentScale.Fit,
+            alignment = look.focus.alignment(),
+            moving = plays,
+        )
+        if (playing) {
+            val file by rememberMediaFile(media, meta.sha256)
+            (file as? MediaLoad.Ready)?.let { InlineVideo(it.file, crop, Modifier.fillMaxSize()) }
+        }
+        if (badge && ((video && !playing) || (gif && !plays))) PlayBadge()
+    }
 }

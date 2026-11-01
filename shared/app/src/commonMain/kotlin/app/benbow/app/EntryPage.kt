@@ -14,6 +14,7 @@ import app.benbow.client.LookFields
 import app.benbow.client.tagRegistry
 import app.benbow.client.uri
 import app.benbow.core.content.AttachmentBlock
+import app.benbow.core.content.AttachmentRowBlock
 import app.benbow.core.content.DocumentCodec
 import app.benbow.core.content.DocumentFormatException
 import app.benbow.core.content.HtmlExporter
@@ -22,6 +23,7 @@ import app.benbow.core.content.LinkCardBlock
 import app.benbow.core.content.STYLE_NORMAL
 import app.benbow.core.content.Span
 import app.benbow.core.content.TextBlock
+import app.benbow.core.content.attachmentRefs
 import app.benbow.core.sync.AttachmentState
 import app.benbow.ui.theme.BenbowPalette
 import kotlinx.coroutines.CancellationException
@@ -87,7 +89,14 @@ internal suspend fun AppServices.entryPage(id: String): PrintPage? = withContext
     ).export(
         // A note's first line reads as its title on paper, as it does in the lists.
         document.copy(
-            blocks = document.blocks.map { block ->
+            blocks = document.blocks.flatMap { block ->
+                // A row with a sound or a file in it (ADR-061) prints as its attachments one under another.
+                if (block is AttachmentRowBlock && block.refs.any { pictures[it] == null }) {
+                    block.refs.mapIndexed { i, ref -> AttachmentBlock(block.key + "-" + i, ref) }
+                } else {
+                    listOf(block)
+                }
+            }.map { block ->
                 // In the text, a sound or a file (or a picture that couldn't be fetched) is a line naming it.
                 if (block !is AttachmentBlock || pictures[block.ref] != null) return@map block
                 val a = entry.attachments.firstOrNull { it.meta.id == block.ref }
@@ -104,7 +113,7 @@ internal suspend fun AppServices.entryPage(id: String): PrintPage? = withContext
             },
         ),
     )
-    val inline = document.blocks.filterIsInstance<AttachmentBlock>().mapTo(HashSet()) { it.ref }
+    val inline = document.attachmentRefs().toHashSet()
     val tail = buildString {
         for (a in entry.attachments.filter { it.meta.id !in inline }) {
             val label = escape(label(a))

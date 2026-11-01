@@ -42,6 +42,7 @@ import app.benbow.client.editThemeChoice
 import app.benbow.client.moveToBoard
 import app.benbow.client.moveToJournal
 import app.benbow.client.removeAttachments
+import app.benbow.client.saveAsTemplate
 import app.benbow.client.themeChoice
 import app.benbow.client.tracker.TrackerRepository
 import app.benbow.client.upcoming
@@ -141,6 +142,12 @@ sealed interface AppMessage {
 
     /** Tags were merged into the one named [into]; "Вернуть" splits them off again. */
     data class TagsMerged(val ids: List<String>, val into: String) : AppMessage
+
+    /** One's own template was saved (ADR-061); «Открыть» opens it. */
+    data class TemplateSaved(val id: String, val name: String) : AppMessage
+
+    /** One's own template went to the trash; «Вернуть» brings it back. */
+    data class TemplateTrashed(val id: String, val name: String) : AppMessage
 
     /** A category went to the trash; "Вернуть" brings it back. */
     data class CategoryTrashed(val id: String, val name: String) : AppMessage
@@ -420,6 +427,22 @@ class AppServices(
         messages.tryEmit(AppMessage.MovedToJournal(ids, day))
     }
 
+    /**
+     * A new template of one's own (ADR-061) called [name] from [body], with the look, tags and pictures of entry [from]
+     * when it comes from one; a snackbar says so and opens it.
+     */
+    fun saveAsTemplate(name: String, body: String, from: String? = null, open: Boolean = false): String {
+        val id = repo.saveAsTemplate(name, body, today(), from)
+        if (!open) messages.tryEmit(AppMessage.TemplateSaved(id, name))
+        return id
+    }
+
+    /** One's own template into the trash; a snackbar offers it back. */
+    fun trashTemplate(id: String, name: String) {
+        scope.launch { repo.moveToTrash(id) }
+        messages.tryEmit(AppMessage.TemplateTrashed(id, name))
+    }
+
     /** Attachments off their entries into the trash, all at once (ADR-041); a snackbar offers them back. */
     fun trashMedia(keys: List<AttachmentKey>) {
         if (keys.isEmpty()) return
@@ -501,13 +524,21 @@ class AppServices(
     @Volatile
     private var reminders: List<ReminderItem> = emptyList()
 
+    /** The start's own work on the journal (old events moved, the search index and summaries made); tests wait for it. */
+    internal lateinit var started: Job
+        private set
+
     init {
         repo.commitLeftoverDrafts()
-        scope.launch { moveJournalEvents(db, repo, calendar) }
+        val moved = scope.launch { moveJournalEvents(db, repo, calendar) }
         sync.start()
-        scope.launch {
+        val prepared = scope.launch {
             repo.prepareSearch()
             repo.prepareSummaries()
+        }
+        started = scope.launch {
+            moved.join()
+            prepared.join()
         }
         if (reminderClock != null) {
             scope.launch {

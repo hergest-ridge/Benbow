@@ -450,6 +450,29 @@
         <item>Красный</item>
     </string-array>
     <string name="swatch_black">Чёрный</string>
+    <string name="media_look_title">Вложение</string>
+    <string name="media_fit">Кадр</string>
+    <string name="media_fit_natural">По размеру</string>
+    <string name="media_fit_natural_hint">Своей формы, ничего не обрезано. Очень высокая — целиком на размытом фоне.</string>
+    <string name="media_fit_fill">Заполнить</string>
+    <string name="media_fit_fill_hint">Кадр поста, обрезано вокруг главного. Нажмите на картинку ниже, чтобы выбрать, что останется в кадре.</string>
+    <string name="media_fit_whole">Целиком</string>
+    <string name="media_fit_whole_hint">Кадр поста, вся картинка на размытом фоне.</string>
+    <string name="media_play">Играть само</string>
+    <string name="media_play_hint">Без звука и по кругу, в посте и в ленте. Выключено — играет по нажатию на кнопку посередине.</string>
+    <string name="media_look_open">Открыть</string>
+    <string name="media_frame">Рамка</string>
+    <string name="media_frame_none">Без рамки</string>
+    <string name="media_frame_tape">Скотч</string>
+    <string name="media_frame_strip">Полоска</string>
+    <string name="media_frame_polaroid">Полароид</string>
+    <string name="media_frame_corners">Уголки</string>
+    <string name="media_frame_in_text">Рамка бывает у картинок в тексте: перетащите эту из ленты в текст.</string>
+    <string name="media_frame_in_row">В ряду картинки без рамок. Выньте эту из ряда, чтобы выбрать рамку.</string>
+    <string name="strip_settings">Настроить</string>
+    <string name="strip_remove">Убрать вложение</string>
+    <string name="strip_remove_ask">Убрать вложение в корзину? Вернуть его можно оттуда.</string>
+    <string name="strip_remove_yes">Убрать</string>
     <string-array name="swatch_names">
         <item>Коралловый</item>
         <item>Персиковый</item>
@@ -951,6 +974,26 @@
     <string name="trackers_span_remove">Убрать отрезок</string>
     <string name="trackers_spans_empty">Времени за этот день пока нет.</string>
     <string name="trash_trackers">Трекеры</string>
+    <string name="trash_templates">Шаблоны</string>
+    <string name="more_templates">Свои и стандартные начала записей</string>
+    <string name="templates_mine">Мои</string>
+    <string name="templates_standard">Стандартные</string>
+    <string name="templates_hint">Шаблон — начало записи: заголовки, вопросы, оформление, теги и вложения. {{date}}, {{weekday}}, {{month}} и {{prompt}} в его тексте становятся датой, днём недели, месяцем и вопросом дня.</string>
+    <string name="templates_none">Своих шаблонов пока нет. Сохраните запись как шаблон из её меню или создайте новый.</string>
+    <string name="templates_manage">Шаблоны…</string>
+    <string name="template_new">Новый шаблон</string>
+    <string name="template_write">Начать запись</string>
+    <string name="template_rename">Переименовать</string>
+    <string name="template_duplicate">Дублировать</string>
+    <string name="template_duplicate_hint">Дублировать, чтобы изменить</string>
+    <string name="template_trash">В корзину</string>
+    <string name="template_name">Название шаблона</string>
+    <string name="template_save_as">Сохранить как шаблон</string>
+    <string name="template_saved">Шаблон «%1$s» сохранён</string>
+    <string name="template_trashed">Шаблон «%1$s» в корзине</string>
+    <string name="template_title">Шаблон</string>
+    <string name="template_copy_name">%1$s, копия</string>
+    <string name="template_placeholders">{{date}}, {{weekday}}, {{month}} и {{prompt}} подставятся при записи</string>
     <string name="trash_tracker_item">Трекер «%1$s»</string>
     <string name="board_as_list">Списком</string>
     <string name="board_as_grid">Сеткой</string>
@@ -1234,6 +1277,9 @@
         <item>Три света</item>
         <item>Фонарь</item>
         <item>Сумеречный</item>
+        <item>Яркий акцент вложений</item>
+        <item>Палитра вложений</item>
+        <item>Размытая обложка</item>
     </string-array>
     <string-array name="look_motions">
         <item>Сумерки</item>

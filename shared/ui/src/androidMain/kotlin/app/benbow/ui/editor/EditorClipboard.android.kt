@@ -32,3 +32,6 @@ internal actual fun EditorClipboardFix(recentlySelected: () -> Boolean, content:
 }
 
 internal actual fun plainTextClipEntry(text: String): ClipEntry? = ClipEntry(ClipData.newPlainText("Benbow", text))
+
+@Composable
+actual fun PasteFallback(enabled: Boolean, onText: (String) -> Unit) = Unit

@@ -64,6 +64,19 @@ internal object EditorIcons {
     )
     val Delete = icon("Delete", "M6,19c0,1.1 0.9,2 2,2h8c1.1,0 2,-0.9 2,-2V7H6v12zM8,9h8v10H8V9zM15.5,4l-1,-1h-5l-1,1H5v2h14V4z")
 
+    /** Material "tune": how a picture shows in its post. */
+    val Tune = icon(
+        "Tune",
+        "M3,17v2h6v-2H3zM3,5v2h10V5H3zM13,21v-2h8v-2h-8v-2h-2v6h2zM7,9v2H3v2h4v2h2V9H7zM21,13v-2H11v2h10zM15,9h2V7h4V5h-4V3h-2v6z",
+    )
+
+    /** Material "refresh": a card's page read anew. */
+    val Refresh = icon(
+        "Refresh",
+        "M17.65,6.35C16.2,4.9 14.21,4 12,4c-4.42,0 -7.99,3.58 -7.99,8s3.57,8 7.99,8c3.73,0 6.84,-2.55 7.73,-6h-2.08c-0.82,2.33 " +
+            "-3.04,4 -5.65,4 -3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6c1.66,0 3.14,0.69 4.22,1.78L13,11h7V4l-2.35,2.35z",
+    )
+
     /** Material "image": the card's big look. */
     val Large = icon(
         "Large",
@@ -73,6 +86,19 @@ internal object EditorIcons {
 
     /** Material "view_agenda" halved: the card as a row. */
     val Row = icon("Row", "M3,9h18c0.55,0 1,-0.45 1,-1V5c0,-0.55 -0.45,-1 -1,-1H3c-0.55,0 -1,0.45 -1,1v3c0,0.55 0.45,1 1,1z")
+
+    /** Material "view_column": pictures side by side in a row (ADR-061). */
+    val Columns = icon("Columns", "M10,18h5V5h-5V18zM4,18h5V5H4V18zM16,5v13h5V5H16z")
+
+    /** Material "view_agenda": a row back to pictures one under another. */
+    val Split = icon(
+        "Split",
+        "M20,13H3c-0.55,0 -1,0.45 -1,1v6c0,0.55 0.45,1 1,1h17c0.55,0 1,-0.45 1,-1v-6c0,-0.55 -0.45,-1 -1,-1z" +
+            "M20,3H3c-0.55,0 -1,0.45 -1,1v6c0,0.55 0.45,1 1,1h17c0.55,0 1,-0.45 1,-1V4c0,-0.55 -0.45,-1 -1,-1z",
+    )
+
+    /** Material "south": a picture out of its row, on a line of its own under it. */
+    val Below = icon("Below", "M19,15l-1.41,-1.41L13,18.17V2H11v16.17l-4.59,-4.59L5,15l7,7L19,15z")
 
     /** Material "subject": lines of text, for a card going down into the text. */
     val ToText = icon("ToText", "M14,17H4v2h10v-2zM20,9H4v2h16V9zM4,15h16v-2H4v2zM4,5v2h16V5H4z")

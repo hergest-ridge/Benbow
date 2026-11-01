@@ -2,9 +2,32 @@ package app.benbow.core.text
 
 import app.benbow.core.media.PictureSize
 
-/** One GET of [url] that doesn't follow redirects; at most [maxBytes] of the body are read. */
+/**
+ * One GET of [url] that doesn't follow redirects; at most [maxBytes] of the body are read, and of a page ([PageReader.isPage])
+ * no more than its head ([HeadEnd]).
+ */
 fun interface PageGet {
     suspend fun get(url: String, maxBytes: Int, accept: String): PageResponse
+}
+
+/**
+ * Watches a page's bytes as they come for the end of its head, past which a card has nothing to read: YouTube's comes
+ * some 0.8 MB in, after its scripts (owner, 2026-10-30: its links showed their address alone).
+ */
+class HeadEnd {
+    private var tail = ""
+
+    /** Whether the [count] bytes just read into [buffer] close the head. */
+    fun reached(buffer: ByteArray, count: Int): Boolean {
+        val text = tail + CharArray(count) { (buffer[it].toInt() and 0xFF).toChar() }.concatToString()
+        if (text.contains("</head", ignoreCase = true)) return true
+        tail = text.takeLast(MARK.length - 1)
+        return false
+    }
+
+    private companion object {
+        const val MARK = "</head"
+    }
 }
 
 class PageResponse(val status: Int, val location: String?, val contentType: String?, val body: ByteArray)
@@ -30,7 +53,8 @@ class PictureHint(val mime: String, val width: Int? = null, val height: Int? = n
  * before the whole file comes. [decode] turns bytes into text in the named charset (UTF-8 when null).
  */
 object PageReader {
-    const val HTML_MAX = 512 * 1024
+    const val HTML_MAX = 2 * 1024 * 1024
+    private const val JSON_MAX = 64 * 1024
     const val IMAGE_MAX = 5 * 1024 * 1024
     const val PICTURE_MAX = 25 * 1024 * 1024
     const val REDIRECTS = 5
@@ -42,6 +66,11 @@ object PageReader {
     // A picture kept whole is shown by the app's own decoders: a GIF stays one.
     private const val PICTURE = "image/gif,image/jpeg,image/png,image/webp;q=0.9,image/*;q=0.5"
 
+    private const val JSON = "application/json"
+
+    /** Whether a GET asking for [accept] reads a page: then its head is enough. */
+    fun isPage(accept: String): Boolean = accept == HTML
+
     suspend fun read(
         href: String,
         get: PageGet,
@@ -51,6 +80,13 @@ object PageReader {
         },
         onPicture: (PictureHint) -> Unit = {},
     ): PageRead? {
+        // A site that answers oEmbed says what its link is there; its page only when it doesn't answer.
+        val provider = Oembed.providerOf(href)
+        if (provider != null) {
+            val meta = follow(Oembed.endpoint(provider, href), get, JSON_MAX, JSON, allowed)?.second
+                ?.takeIf { it.status in 200..299 }?.let { Oembed.meta(provider, decode(it.body, null), href) }
+            if (meta != null) return PageRead(href, meta, meta.image?.let { picture(it, get, allowed) })
+        }
         val (url, page) = follow(href, get, HTML_MAX, HTML, allowed) ?: return null
         if (page.status !in 200..299) return null
         val type = page.contentType?.lowercase().orEmpty()
@@ -65,7 +101,9 @@ object PageReader {
         if (type.isNotEmpty() && "html" !in type && "xml" !in type) return PageRead(url, PageMeta(), null)
         val head = page.body.copyOfRange(0, minOf(page.body.size, 4096)).decodeToString()
         val charset = Regex("""charset=([^\s;]+)""").find(type)?.groupValues?.get(1)?.trim('"', '\'') ?: PageMeta.charsetIn(head)
-        val meta = PageMeta.read(decode(page.body, charset), url)
+        val read = PageMeta.read(decode(page.body, charset), url)
+        // Such a site's page, when its oEmbed didn't answer, has no description worth keeping (YouTube's is ads).
+        val meta = if (provider != null) read.copy(description = null) else read
         val gif = if (Links.isGifSite(url)) {
             meta.image?.let {
                 onPicture(PictureHint("image/gif"))

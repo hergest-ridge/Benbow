@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -167,7 +168,7 @@ private fun LargeStrip(services: AppServices, items: List<AttachmentState>, onOp
 
 @Composable
 private fun Tile(services: AppServices, item: AttachmentState, modifier: Modifier, more: Int = 0, onOpen: (AttachmentState) -> Unit) {
-    Box(
+    BoxWithConstraints(
         modifier.background(
             MaterialTheme.colorScheme.surfaceContainerHigh,
         ).hand().clickable(interactionSource = null, indication = mediaIndication()) {
@@ -175,8 +176,7 @@ private fun Tile(services: AppServices, item: AttachmentState, modifier: Modifie
         },
         contentAlignment = Alignment.Center,
     ) {
-        BestPicture(services.media, item, Modifier.fillMaxSize())
-        if (item.meta.kind == "video") PlayBadge()
+        FramedPicture(services.media, item, frame = if (maxHeight > 0.dp) maxWidth / maxHeight else 1f, badge = more == 0)
         if (more > 0) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)), contentAlignment = Alignment.Center) {
                 Text("+$more", style = MaterialTheme.typography.headlineSmall, color = Color.White)

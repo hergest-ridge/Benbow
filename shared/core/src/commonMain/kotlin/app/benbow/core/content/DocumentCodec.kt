@@ -58,7 +58,7 @@ object DocumentCodec {
             view = view?.takeIf { it != "row" },
         )
 
-        is CodeBlock, is DividerBlock, is UnknownBlock -> this
+        is CodeBlock, is DividerBlock, is AttachmentRowBlock, is UnknownBlock -> this
     }
 
     private fun TextBlock.canonical(): TextBlock {
@@ -170,6 +170,11 @@ object DocumentCodec {
                 block.caption?.let { field("caption", q(it)) }
             }
 
+            is AttachmentRowBlock -> {
+                field("_type", q("attachmentRow"))
+                field("items", block.refs.joinToString(",", "[", "]") { "{\"ref\":${q(it)}}" })
+            }
+
             is LinkCardBlock -> {
                 field("_type", q("linkCard"))
                 field("href", q(block.href))
@@ -239,6 +244,7 @@ object DocumentCodec {
                 "code" -> decodeCode(key, obj)
                 "divider" -> decodeDivider(key, obj)
                 "attachment" -> decodeAttachment(key, obj)
+                "attachmentRow" -> decodeAttachmentRow(key, obj)
                 "linkCard" -> decodeLinkCard(key, obj)
                 else -> UnknownBlock(key, obj)
             }
@@ -334,6 +340,17 @@ object DocumentCodec {
         obj.allow("_key", "_type", "ref", "width", "caption")
         val width = obj["width"]?.double()?.also { if (it !in 0.0..1.0) unrecognized() }
         return AttachmentBlock(key, (obj["ref"] ?: unrecognized()).str(), width, obj["caption"]?.str())
+    }
+
+    private fun decodeAttachmentRow(key: String, obj: JsonObject): AttachmentRowBlock {
+        obj.allow("_key", "_type", "items")
+        val refs = (obj["items"] ?: unrecognized()).arr().map { item ->
+            val o = item.obj()
+            o.allow("ref")
+            (o["ref"] ?: unrecognized()).str().also { if (it.isEmpty()) unrecognized() }
+        }
+        if (refs.size !in 2..ROW_MAX || refs.toSet().size != refs.size) unrecognized()
+        return AttachmentRowBlock(key, refs)
     }
 
     private fun decodeLinkCard(key: String, obj: JsonObject): LinkCardBlock {

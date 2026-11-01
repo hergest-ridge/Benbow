@@ -123,6 +123,8 @@ import app.benbow.app.resources.tab_trackers
 import app.benbow.app.resources.tag_trashed
 import app.benbow.app.resources.tags_merged
 import app.benbow.app.resources.tags_trashed
+import app.benbow.app.resources.template_saved
+import app.benbow.app.resources.template_trashed
 import app.benbow.app.resources.tracker_cleared
 import app.benbow.app.resources.tracker_trashed
 import app.benbow.app.resources.transcript_removed
@@ -212,6 +214,9 @@ internal sealed interface Route {
     data class Reminders(val day: String? = null) : Route
 
     data object Trash : Route
+
+    /** One's own templates and the standard ones (ADR-061). */
+    data object Templates : Route
 
     /** «Облик записки (проба)» (ADR-047, 7.20 L0), in [AppServices.labs] builds only. */
     data object LooksSpike : Route
@@ -330,6 +335,7 @@ fun BenbowApp(services: AppServices) {
             LocalGentle provides gentle,
             LocalPagerArrows provides (services.platform != "android"), // a mouse: side buttons on pictures
             LocalServerFonts provides services.fonts, // the fonts notes take from the server (ADR-052)
+            LocalMediaStore provides services.media, // a note's light from its pictures
         ) { AppRoot(services) }
     }
 }
@@ -577,6 +583,24 @@ private fun AppRoot(services: AppServices) {
                         ?: getString(Res.string.board_archived_many, message.ids.size)
                     val result = snackbar.showSnackbar(text, getString(Res.string.veil_undo), duration = SnackbarDuration.Long)
                     if (result == SnackbarResult.ActionPerformed) message.ids.forEach { services.repo.archiveOnBoard(it, false) }
+                }
+
+                is AppMessage.TemplateSaved -> {
+                    val result = snackbar.showSnackbar(
+                        getString(Res.string.template_saved, message.name),
+                        getString(Res.string.moved_open),
+                        duration = SnackbarDuration.Long,
+                    )
+                    if (result == SnackbarResult.ActionPerformed) nav.open(Route.Editor(message.id, services.today()))
+                }
+
+                is AppMessage.TemplateTrashed -> {
+                    val result = snackbar.showSnackbar(
+                        getString(Res.string.template_trashed, message.name),
+                        getString(Res.string.veil_undo),
+                        duration = SnackbarDuration.Long,
+                    )
+                    if (result == SnackbarResult.ActionPerformed) services.repo.restore(message.id)
                 }
 
                 is AppMessage.BoardTrashed -> {
@@ -887,6 +911,7 @@ private fun Screens(
             entry<Route.Tag> { TagPage(services, nav, it) }
             entry<Route.Reminders> { RemindersScreen(services, nav, it) }
             entry<Route.Trash> { TrashScreen(services, nav) }
+            entry<Route.Templates> { TemplatesScreen(services, nav) }
             entry<Route.LooksSpike> { LooksSpikeScreen(nav) }
             entry<Route.Library> { LibraryScreen(services, nav) }
             entry<Route.Storage> { StorageScreen(services, nav) }

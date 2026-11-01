@@ -115,4 +115,74 @@ class PageMetaTest {
         }, { b, _ -> b.decodeToString() })
         assertNull(loop)
     }
+
+    /** Owner, 2026-10-30: YouTube's card showed its address, Spotify's a wall of its own; their oEmbed says what they are. */
+    @Test
+    fun sitesThatAnswerOembedAreAskedThere() = runTest {
+        val youtube = "https://youtu.be/nyQWhoBRp1A?si=AS24NHKFAG-VtLG9"
+        val spotify = "https://open.spotify.com/album/7jtq1PqAd5akkf51oSGDnP"
+        val asked = ArrayList<String>()
+        val pages = mapOf(
+            Oembed.endpoint(Oembed.providerOf(youtube)!!, youtube) to PageResponse(
+                200,
+                null,
+                "application/json",
+                """{"title":"ДЖОН ЛЕННОН: настоящий рокер?","author_name":"Александр Пушной","provider_name":"YouTube",
+                "thumbnail_url":"https://i.ytimg.com/vi/nyQWhoBRp1A/hqdefault.jpg"}""".encodeToByteArray(),
+            ),
+            Oembed.endpoint(Oembed.providerOf(spotify)!!, spotify) to PageResponse(
+                200,
+                null,
+                "application/json",
+                """{"title":"ÉGRÉGORE","provider_name":"Spotify","thumbnail_url":"https://image-cdn-ak.spotifycdn.com/image/ab67"}"""
+                    .encodeToByteArray(),
+            ),
+            "https://i.ytimg.com/vi/nyQWhoBRp1A/hqdefault.jpg" to PageResponse(200, null, "image/jpeg", byteArrayOf(1, 2, 3)),
+            "https://image-cdn-ak.spotifycdn.com/image/ab67" to PageResponse(200, null, "image/jpeg", byteArrayOf(4, 5)),
+        )
+        val get = PageGet { url, _, _ ->
+            asked += url
+            pages.getValue(url)
+        }
+        val video = PageReader.read(youtube, get, { b, _ -> b.decodeToString() })!!
+        assertEquals("ДЖОН ЛЕННОН: настоящий рокер?", video.meta.title)
+        assertEquals("Александр Пушной", video.meta.description, "the channel on the second line, not its ads")
+        assertEquals("YouTube", video.meta.site)
+        assertEquals(3, video.image?.size)
+        assertEquals(
+            "https://www.youtube.com/oembed?format=json&url=https%3A%2F%2Fyoutu.be%2FnyQWhoBRp1A%3Fsi%3DAS24NHKFAG-VtLG9",
+            asked.first(),
+        )
+        val album = PageReader.read(spotify, get, { b, _ -> b.decodeToString() })!!
+        assertEquals("ÉGRÉGORE", album.meta.title)
+        assertNull(album.meta.description)
+        assertEquals(2, album.image?.size)
+    }
+
+    /** Its oEmbed silent, such a site's page is read, but its description (YouTube's ads) is left out. */
+    @Test
+    fun aSiteWhoseOembedDoesntAnswerIsReadWithoutItsDescription() = runTest {
+        val url = "https://www.youtube.com/watch?v=nyQWhoBRp1A"
+        val page = """<html><head><title>T - YouTube</title><meta property="og:title" content="ДЖОН ЛЕННОН">
+            <meta property="og:description" content="Зимние шины"></head>""".encodeToByteArray()
+        val get = PageGet { asked, _, _ ->
+            if (asked == url) PageResponse(200, null, "text/html; charset=utf-8", page) else PageResponse(500, null, null, ByteArray(0))
+        }
+        val read = PageReader.read(url, get, { b, _ -> b.decodeToString() })!!
+        assertEquals("ДЖОН ЛЕННОН", read.meta.title)
+        assertNull(read.meta.description)
+    }
+
+    /** A page is read up to the end of its head, wherever the chunks part (YouTube's comes some 0.8 MB in). */
+    @Test
+    fun theHeadsEndIsFoundAcrossChunks() {
+        fun chunk(text: String) = text.encodeToByteArray()
+        val split = HeadEnd()
+        assertEquals(false, split.reached(chunk("<script>…</script></HE"), chunk("<script>…</script></HE").size))
+        assertEquals(true, split.reached(chunk("AD><body>"), chunk("AD><body>").size), "the mark parted between two chunks")
+        assertEquals(false, HeadEnd().reached(chunk("AD><body>"), chunk("AD><body>").size), "half a mark is none")
+        assertEquals(true, HeadEnd().reached(chunk("<title>x</title></head>"), chunk("<title>x</title></head>").size))
+        assertEquals(null, Oembed.providerOf("https://example.com/watch?v=1"))
+        assertEquals(true, Oembed.providerOf("https://m.youtube.com/watch?v=1") != null)
+    }
 }

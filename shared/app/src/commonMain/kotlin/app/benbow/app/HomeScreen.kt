@@ -313,7 +313,15 @@ internal fun HomeScreen(services: AppServices, nav: Navigator) {
     val newEntry = { nav.open(Route.Editor(null, services.today(), opened = services.now())) }
     Scaffold(
         topBar = { HomeHeader(state?.today, status) { nav.open(Route.Server) } },
-        bottomBar = { QuickNoteBar(services, onSend = vm::quickNote, onNewEntry = newEntry) },
+        bottomBar = {
+            QuickNoteBar(
+                services,
+                onSend = vm::quickNote,
+                onNewEntry = newEntry,
+                onTemplate = { nav.open(Route.Editor(null, services.today(), opened = services.now(), template = it)) },
+                onTemplates = { nav.open(Route.Templates) },
+            )
+        },
     ) { padding ->
         SyncPull(
             enabled = services.platform == "android",

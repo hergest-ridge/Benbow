@@ -83,7 +83,7 @@ internal fun OnThisDayStrip(items: List<LookBack>, media: Media, onOpen: (EntryS
                     color = Color.Transparent,
                     contentColor = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.width(200.dp).padding(vertical = 4.dp).hand().clip(RoundedCornerShape(16.dp)).background(paper)
-                        .then(entryBackdrop(entry.id, entry.look, paper, muted = true)),
+                        .then(entryBackdrop(entry.id, entry.look, paper, muted = true, picture = entry.cover)),
                 ) {
                     NightNote(entry.background) {
                         Column {
@@ -127,7 +127,7 @@ internal fun OnThisDayPager(items: List<LookBack>, media: Media, onOpen: (EntryS
                 val paper = swatch(entry.background) ?: MaterialTheme.colorScheme.surfaceContainerLow
                 Box(
                     Modifier.fillMaxWidth().aspectRatio(4f / 3f).clip(RoundedCornerShape(16.dp)).background(paper)
-                        .then(entryBackdrop(entry.id, entry.look, paper, muted = true))
+                        .then(entryBackdrop(entry.id, entry.look, paper, muted = true, picture = entry.cover))
                         .clickable { onOpen(entry) }.hand(),
                 ) {
                     val cover = entry.cover

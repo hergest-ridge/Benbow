@@ -75,6 +75,29 @@ class DocumentCodecTest {
         )
     }
 
+    /** Rows of attachments (ADR-061): two or three different ones; anything else stays as it came, read-only. */
+    @Test
+    fun attachmentRowsRoundTripAndBadOnesStayVerbatim() {
+        val json = """{"v":1,"blocks":[
+            {"_key":"r1","_type":"attachmentRow","items":[{"ref":"a"},{"ref":"b"}]},
+            {"_key":"r2","_type":"attachmentRow","items":[{"ref":"a"},{"ref":"b"},{"ref":"c"}]},
+            {"_key":"r3","_type":"attachmentRow","items":[{"ref":"a"}]},
+            {"_key":"r4","_type":"attachmentRow","items":[{"ref":"a"},{"ref":"b"},{"ref":"c"},{"ref":"d"}]},
+            {"_key":"r5","_type":"attachmentRow","items":[{"ref":"a"},{"ref":"a"}]},
+            {"_key":"r6","_type":"attachmentRow","items":[{"ref":"a"},{"ref":"b","caption":"later"}]},
+            {"_key":"r7","_type":"attachmentRow","items":[{"ref":"a"},{"ref":"b"}],"gap":"wide"}
+            ]}"""
+        val doc = DocumentCodec.decode(json)
+        assertEquals(AttachmentRowBlock("r1", listOf("a", "b")), doc.blocks[0])
+        assertEquals(AttachmentRowBlock("r2", listOf("a", "b", "c")), doc.blocks[1])
+        doc.blocks.drop(2).forEach { assertIs<UnknownBlock>(it) }
+        val encoded = DocumentCodec.encode(doc)
+        assertTrue("""{"_key":"r1","_type":"attachmentRow","items":[{"ref":"a"},{"ref":"b"}]}""" in encoded)
+        assertTrue(""""gap":"wide"""" in encoded && """"caption":"later"""" in encoded, "a later app's row comes back whole")
+        assertEquals(encoded, DocumentCodec.encode(DocumentCodec.decode(encoded)))
+        assertEquals(listOf("a", "b", "a", "b", "c"), doc.attachmentRefs(), "the text's attachments, a row's left to right")
+    }
+
     @Test
     fun newerFormatIsReadOnly() {
         val newer = DocumentCodec.decode("""{"v":2,"blocks":[]}""")

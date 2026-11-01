@@ -41,6 +41,8 @@ internal fun Route.path(): String = when (this) {
 
     Route.Trash -> "trash"
 
+    Route.Templates -> "templates"
+
     Route.LooksSpike -> "looks"
 
     Route.Library, is Route.LibraryMedia -> "media"
@@ -90,6 +92,7 @@ internal fun linkOf(path: String): Link? {
         "tags" -> Link.Page(Route.Tags)
         "reminders" -> Link.Page(Route.Reminders())
         "trash" -> Link.Page(Route.Trash)
+        "templates" -> Link.Page(Route.Templates)
         "media" -> Link.Page(Route.Library)
         "space" -> Link.Page(Route.Storage)
         "server" -> Link.Page(Route.Server)

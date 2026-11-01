@@ -20,6 +20,17 @@ internal fun mediaElement(tag: String, url: String): HTMLElement = js(
 
 internal fun pauseMedia(element: HTMLElement): Unit = js("{ element.pause(); }")
 
+/** A video playing in a post by itself: muted (so the browser lets it start), round and round, no controls. */
+internal fun inlineVideoElement(url: String, crop: Boolean): HTMLElement = js(
+    """(() => {
+        const el = document.createElement('video');
+        el.src = url; el.muted = true; el.loop = true; el.autoplay = true; el.playsInline = true; el.controls = false;
+        el.style.width = '100%'; el.style.height = '100%'; el.style.objectFit = crop ? 'cover' : 'contain';
+        el.style.pointerEvents = 'none';
+        return el;
+    })()""",
+)
+
 /**
  * The page's one <audio> under the app's player (ADR-035). The browser's media keys and its media panel reach the
  * queue through the Media Session API, which also shows the track's title, artist and cover there.

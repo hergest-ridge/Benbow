@@ -36,3 +36,6 @@ private fun ClipEntry.plainText(): String? {
 }
 
 internal actual fun plainTextClipEntry(text: String): ClipEntry? = ClipEntry(StringSelection(text))
+
+@Composable
+actual fun PasteFallback(enabled: Boolean, onText: (String) -> Unit) = Unit

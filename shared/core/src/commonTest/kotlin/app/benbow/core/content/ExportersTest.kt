@@ -74,6 +74,16 @@ class ExportersTest {
     }
 
     @Test
+    fun aRowOfPicturesExportsSideBySide() {
+        val doc = Document(listOf(AttachmentRowBlock("r", listOf("a", "b"))))
+        val markdown = MarkdownExporter(attachmentUrl = { "media/$it.jpg" }).export(doc)
+        assertEquals("![](media/a.jpg) ![](media/b.jpg)", markdown.trim())
+        assertEquals("", doc.toPlainText())
+        val html = HtmlExporter(attachmentUrl = { "media/$it.jpg" }).export(doc)
+        assertTrue("<div class=\"row\"><figure><img src=\"media/a.jpg\" alt=\"\"></figure><figure><img src=\"media/b.jpg\"" in html, html)
+    }
+
+    @Test
     fun linkCardsExportReadably() {
         val card = Document(
             listOf(

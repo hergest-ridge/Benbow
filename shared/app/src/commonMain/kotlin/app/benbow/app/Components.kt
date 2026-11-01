@@ -119,7 +119,7 @@ private fun EntryCardContent(
             horizontal = 12.dp,
             vertical = 4.dp,
         ).hand().clip(RoundedCornerShape(16.dp)).background(paper)
-            .then(entryBackdrop(entry.id, if (curtained) emptyMap() else entry.look, paper, muted = true)),
+            .then(entryBackdrop(entry.id, if (curtained) emptyMap() else entry.look, paper, muted = true, picture = entry.cover)),
     ) {
         val text = post?.takeIf { it.body.blocks.isNotEmpty() && !curtained }
         // A post's picture stands at its top; a line of preview's beside it, in the middle.

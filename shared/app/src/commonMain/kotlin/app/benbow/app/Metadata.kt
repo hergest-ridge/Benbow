@@ -6,8 +6,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,7 +23,9 @@ import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -149,18 +153,31 @@ internal fun TagRibbon(tags: List<TagRef>, modifier: Modifier = Modifier) {
     }
 }
 
-/** Built-in templates to start a new, empty entry from; optional, one tap. */
+/** Templates to start a new, empty entry from, one's [own] first (ADR-061), then the standard ones; optional, one tap. */
 @Composable
-internal fun TemplateRow(onPick: (String) -> Unit) {
+internal fun TemplateRow(own: List<app.benbow.client.OwnTemplate>, onPick: (String) -> Unit) {
     val swipeRow = rememberLazyListState()
+    // One's own come in after the standard ones are drawn: the row starts at them, not where the standard ones began.
+    LaunchedEffect(own.size) { swipeRow.scrollToItem(0) }
     androidx.compose.foundation.lazy.LazyRow(
         state = swipeRow,
         modifier = Modifier.mouseSwipe(swipeRow),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        items(app.benbow.client.Templates.builtIn.size) { i ->
-            val template = app.benbow.client.Templates.builtIn[i]
+        items(own, key = { it.id }) { template ->
+            SuggestionChip(
+                onClick = { onPick(template.id) },
+                label = { Text(template.name) },
+                icon = { Icon(Icons.Template, null, Modifier.size(16.dp)) },
+                modifier = Modifier.hand(),
+            )
+        }
+        if (own.isNotEmpty()) {
+            item(key = "between") { VerticalDivider(Modifier.height(24.dp).padding(horizontal = 4.dp)) }
+        }
+        items(app.benbow.client.Templates.builtIn, key = { "s:" + it.id }) { template ->
             SuggestionChip(onClick = { onPick(template.id) }, label = { Text(template.name) }, modifier = Modifier.hand())
         }
     }

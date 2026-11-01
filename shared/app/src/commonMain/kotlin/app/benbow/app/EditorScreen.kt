@@ -1,6 +1,7 @@
 package app.benbow.app
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -45,6 +46,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,6 +61,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
@@ -104,6 +107,11 @@ import app.benbow.app.resources.print
 import app.benbow.app.resources.restore
 import app.benbow.app.resources.share
 import app.benbow.app.resources.show_in_feed
+import app.benbow.app.resources.template_placeholders
+import app.benbow.app.resources.template_rename
+import app.benbow.app.resources.template_save_as
+import app.benbow.app.resources.template_title
+import app.benbow.app.resources.template_write
 import app.benbow.app.resources.unpin
 import app.benbow.client.DraftSession
 import app.benbow.client.EntryDetail
@@ -118,9 +126,17 @@ import app.benbow.client.archiveOnBoard
 import app.benbow.client.createBoardNote
 import app.benbow.client.createTag
 import app.benbow.client.effectiveVeil
+import app.benbow.client.fillFromTemplate
+import app.benbow.client.ownTemplates
 import app.benbow.client.pinOnBoard
 import app.benbow.client.removeTag
+import app.benbow.client.renameTemplate
 import app.benbow.client.setLook
+import app.benbow.client.setMediaFit
+import app.benbow.client.setMediaFocus
+import app.benbow.client.setMediaFrame
+import app.benbow.client.setMediaPlay
+import app.benbow.client.templateStart
 import app.benbow.core.board.Board
 import app.benbow.core.content.Checklists
 import app.benbow.core.content.Document
@@ -128,10 +144,13 @@ import app.benbow.core.content.DocumentCodec
 import app.benbow.core.content.DocumentFormatException
 import app.benbow.core.content.MarkdownExporter
 import app.benbow.core.content.Span
+import app.benbow.core.content.TemplateSpace
 import app.benbow.core.content.TextBlock
 import app.benbow.core.content.toDocument
 import app.benbow.core.content.toPlainText
 import app.benbow.core.content.toRichText
+import app.benbow.core.media.AttachmentKey
+import app.benbow.core.media.MediaLook
 import app.benbow.core.text.Atom
 import app.benbow.core.text.BlockKeys
 import app.benbow.core.text.BlockStyle
@@ -140,6 +159,7 @@ import app.benbow.ui.editor.BenbowEditor
 import app.benbow.ui.editor.EditorState
 import app.benbow.ui.editor.EditorToolbar
 import app.benbow.ui.editor.LocalNoteFont
+import app.benbow.ui.editor.PasteFallback
 import app.benbow.ui.editor.inFont
 import app.benbow.ui.theme.BenbowTheme
 import app.benbow.ui.theme.InTheDark
@@ -147,6 +167,7 @@ import app.benbow.ui.theme.SwatchColors
 import app.benbow.ui.theme.isDarkColor
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -285,10 +306,15 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
         return Document(listOfNotNull(head) + body.blocks)
     }
 
-    /** Fills a new, still empty entry with a template; the draft starts right away. */
+    /**
+     * Fills a new, still empty entry with a template, a standard one or one's own (ADR-061): the draft starts right away,
+     * and one's own puts its look, tags and pictures on the entry made for it.
+     */
     fun applyTemplate(id: String, context: TemplateContext) {
-        val template = Templates.byId(id) ?: return
-        start(Templates.render(template, context))
+        Templates.byId(id)?.let { return start(Templates.render(it, context)) }
+        val made = repo.templateStart(id, context) ?: return
+        start(made.body)
+        services.scope.launch { repo.fillFromTemplate(ensureEntryId(), made) }
     }
 
     /** Starts a new, still empty entry with [text] as its heading ("Написать об этом" from an event). */
@@ -359,6 +385,14 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
 
     fun setLook(layers: Map<String, String?>) = withEntry { repo.setLook(it, layers) }
 
+    fun setMediaFit(attachmentId: String, fit: MediaLook.Fit) = withEntry { repo.setMediaFit(it, attachmentId, fit) }
+
+    fun setMediaFocus(attachmentId: String, focus: MediaLook.Focus?) = withEntry { repo.setMediaFocus(it, attachmentId, focus) }
+
+    fun setMediaPlay(attachmentId: String, play: Boolean?) = withEntry { repo.setMediaPlay(it, attachmentId, play) }
+
+    fun setMediaFrame(attachmentId: String, frame: String?) = withEntry { repo.setMediaFrame(it, attachmentId, frame) }
+
     fun addTag(tagId: String, name: String) = withEntry { repo.addTag(it, name, tagId) }
 
     /** A new tag from the picker's «Создать», straight onto this entry. */
@@ -400,6 +434,10 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
             (p.atom as? Atom.LinkCard)?.takeIf { it.fetched == null }?.let { p.key to it }
         }
         if (cards.isEmpty()) return
+        // Cards asked to read their pages anew: read again this run, what they say now replacing what they said.
+        val again = state.takeReread()
+        services.triedPages -= again
+        val renew = cards.filter { it.second.href in again }.map { it.first }.toSet()
         services.readCards(cards) { key, preview ->
             val picture = preview?.picture
             if (picture != null) {
@@ -425,7 +463,10 @@ internal class EditorViewModel(private val services: AppServices, route: Route.E
                 }
                 return@readCards
             }
-            val filled = withContext(ui) { alive && editor?.fillCard(key) { it.filled(preview, services.today()) } == true }
+            val today = services.today()
+            val filled = withContext(ui) {
+                alive && editor?.fillCard(key) { if (key in renew) it.renewed(preview, today) else it.filled(preview, today) } == true
+            }
             if (!filled) entryId?.let { services.fillStoredCard(it, key, preview) }
         }
     }
@@ -490,6 +531,8 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     val gentleRules by remember { services.repo.gentleRules() }.collectAsStateWithLifecycle(GentleRules.NONE)
     var menu by remember { mutableStateOf(false) }
     var pickingBackground by remember { mutableStateOf(false) }
+    // «Вложение» (owner, 2026-10-30): the attachment whose look is being chosen, where «Оформление» stands; one at a time.
+    var mediaLooking by remember { mutableStateOf<String?>(null) }
     // «Оформление»'s open part, held here: a color picked may build the page anew, the pane or sheet with it.
     val lookPart = remember { LookOpenPart() }
     LaunchedEffect(pickingBackground) { if (!pickingBackground) lookPart.open = null }
@@ -498,6 +541,25 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     // «В дневник на другой день…» (ADR-040): the moment picked, then the note goes into the journal there.
     var toJournalOn by remember { mutableStateOf(false) }
     var guarding by remember { mutableStateOf(false) }
+    // One's own templates (ADR-061): a note saved as one; a template open here, its name changed.
+    var savingTemplate by remember { mutableStateOf(false) }
+    var renamingTemplate by remember { mutableStateOf(false) }
+    val isTemplate = detail?.fields?.let(TemplateSpace::isTemplate) == true
+    if (savingTemplate && detail != null) {
+        val first = remember { (vm.currentDocument()?.blocks?.firstOrNull() as? TextBlock)?.let(Checklists::words)?.trim()?.take(NAME_MAX) }
+        TemplateNameDialog(first?.takeIf { it.isNotEmpty() } ?: stringResource(Res.string.template_title), onDismiss = {
+            savingTemplate = false
+        }) { name ->
+            savingTemplate = false
+            vm.currentDocument()?.let { services.saveAsTemplate(name, DocumentCodec.encode(it), from = detail.id) }
+        }
+    }
+    if (renamingTemplate && detail != null) {
+        TemplateNameDialog(detail.fields[TemplateSpace.NAME].orEmpty(), onDismiss = { renamingTemplate = false }) { name ->
+            renamingTemplate = false
+            services.repo.renameTemplate(detail.id, name)
+        }
+    }
     if (moving) {
         val at = detail?.createdAt?.let { Instant.fromEpochMilliseconds(it).toLocalDateTime(TimeZone.currentSystemDefault()).time }
             ?: LocalTime(12, 0)
@@ -584,7 +646,13 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     val inline = if (vm.listDocument != null) {
         emptySet()
     } else {
-        editor?.model?.paragraphs?.mapNotNullTo(HashSet()) { (it.atom as? Atom.Attachment)?.ref }.orEmpty()
+        editor?.model?.paragraphs?.flatMapTo(HashSet()) { p ->
+            when (val atom = p.atom) {
+                is Atom.Attachment -> listOf(atom.ref)
+                is Atom.AttachmentRow -> atom.refs
+                else -> emptyList()
+            }
+        }.orEmpty()
     }
     val ribbon = attachments.isNotEmpty() && (ribbonChoice ?: !attachments.all { it.meta.id in inline })
     val measurer = rememberTextMeasurer()
@@ -592,7 +660,9 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     val transcriptStyle = MaterialTheme.typography.bodyMedium
     val transcripts = detail?.transcripts.orEmpty()
     val tracks = detail?.tracks.orEmpty()
-    val pictures = remember(attachments, detail?.id, detail?.purged, transcripts, tracks, transcriptStyle, vm.reading) {
+    val looks = detail?.mediaLooks.orEmpty()
+    val tallest = with(density) { (LocalWindowInfo.current.containerSize.height * TALLEST).toDp() }.coerceAtLeast(320.dp)
+    val pictures = remember(attachments, detail?.id, detail?.purged, transcripts, tracks, transcriptStyle, vm.reading, looks, tallest) {
         EntryPictures(
             services,
             attachments,
@@ -605,6 +675,16 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
             onRename = { id, names -> detail?.id?.let { entry -> services.nameSound(entry, id, names) } },
             entryId = detail?.id,
             purged = detail?.purged.orEmpty(),
+            looks = looks,
+            tallest = tallest,
+            onSettings = if (vm.reading) {
+                null
+            } else {
+                { id ->
+                    pickingBackground = false
+                    mediaLooking = id
+                }
+            },
             transcripts = transcripts,
             tracks = tracks,
             textHeight = { text, width ->
@@ -677,8 +757,13 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     val page = noteColor ?: if (route.board) boardCardColor() else BenbowTheme.colors.paper
     val glow = LocalPaneGlow.current
     var pageAt by remember { mutableStateOf(Offset.Zero) }
+    var pageHeight by remember { mutableFloatStateOf(0f) }
+    // An attachment carried from the strip over the words (owner, 2026-10-30): where the pointer is in the window.
+    var carriedAt by remember { mutableStateOf<Offset?>(null) }
+    // The note's first picture: a light from it (owner, 2026-10-30: «Свет из вложений»).
+    val firstPicture = attachments.firstOrNull { it.meta.kind == "image" || it.meta.kind == "video" }?.visual
     if (glow != null && detail != null) {
-        val drawn = remember(detail.look) { NoteLooks.look(detail.look) }
+        val drawn = pictureLook(remember(detail.look) { NoteLooks.look(detail.look) }, firstPicture)
         val drift = drawn.motion == "drift"
         val dark = page.isDarkColor()
         DisposableEffect(glow, detail.id, drawn.lights, drift, dark) {
@@ -693,6 +778,27 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     var wordsTop by remember { mutableFloatStateOf(0f) }
     var wordsHeight by remember { mutableFloatStateOf(0f) }
     val words = if (vm.reading) readScroll else writeScroll
+    // Carried near the page's top or bottom edge, the words scroll under it, its place following (owner, 2026-10-30);
+    // frame by frame only while it is there.
+    val edge = with(density) { CARRY_EDGE.toPx() }
+    LaunchedEffect(Unit) {
+        snapshotFlow {
+            val at = carriedAt
+            when {
+                at == null -> 0f
+                at.y > pageAt.y + pageHeight - edge -> CARRY_STEP
+                at.y < pageAt.y + edge * 2 -> -CARRY_STEP
+                else -> 0f
+            }
+        }.collectLatest { by ->
+            while (by != 0f) {
+                withFrameNanos {}
+                writeScroll.scrollBy(by)
+                val state = editor ?: break
+                state.carry(carriedAt)
+            }
+        }
+    }
     val still = LocalAppearance.current.staticBackdrop
     val paperScroll = PaperScroll(
         offset = { if (still) 0f else words.value.toFloat() },
@@ -712,6 +818,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
             moving = true,
             lightFrame = glow?.let { g -> { g.frameAt(pageAt) } },
             paperScroll = paperScroll,
+            picture = firstPicture,
         )
     } ?: Modifier
     val looked = backdrop != Modifier
@@ -719,7 +826,23 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
     // «Оформление записки» (ADR-054): beside the note in a wide window that has room for both (owner), a sheet elsewhere;
     // a new note's too, before it has an entry (the first choice makes one).
     val lookPage = if (route.board) boardCardColor() else BenbowTheme.colors.paper
-    val beside = LocalDetailPane.current?.takeIf { pickingBackground && it.roomy }
+    val beside = LocalDetailPane.current?.takeIf { (pickingBackground || mediaLooking != null) && it.roomy }
+    val mediaTarget = mediaLooking?.let { id -> attachments.firstOrNull { it.meta.id == id } }?.let { attachment ->
+        val id = attachment.meta.id
+        MediaTarget(
+            attachment,
+            looks[id] ?: MediaLook(),
+            onFit = { vm.setMediaFit(id, it) },
+            onFocus = { vm.setMediaFocus(id, it) },
+            onPlay = { vm.setMediaPlay(id, it) },
+            onOpen = { detail?.id?.let { entry -> nav.open(Route.Media(entry, id)) } },
+            inText = id in inline,
+            onFrame = { vm.setMediaFrame(id, it) },
+            inRow = editor?.model?.paragraphs?.any { (it.atom as? Atom.AttachmentRow)?.refs?.contains(id) == true } == true,
+        )
+    }
+    // An attachment gone (taken off, the entry left) takes its «Вложение» with it.
+    if (mediaLooking != null && mediaTarget == null && detail != null) LaunchedEffect(Unit) { mediaLooking = null }
     if (beside != null) {
         DisposableEffect(beside.beside) {
             beside.beside.open = true
@@ -727,20 +850,26 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
         }
     }
     val lookPanel: @Composable (Modifier) -> Unit = { panelModifier ->
-        LookPanel(
-            LookTarget(
-                detail?.id.orEmpty(),
-                "",
-                detail?.background,
-                detail?.look.orEmpty(),
-                lookPage,
-                vm::setBackground,
-                vm::setLook,
-            ),
-            onClose = { pickingBackground = false },
-            modifier = panelModifier,
-            part = lookPart,
-        )
+        val media = mediaTarget
+        if (media != null) {
+            MediaLookPanel(services, media, onClose = { mediaLooking = null }, modifier = panelModifier)
+        } else {
+            LookPanel(
+                LookTarget(
+                    detail?.id.orEmpty(),
+                    "",
+                    detail?.background,
+                    detail?.look.orEmpty(),
+                    lookPage,
+                    vm::setBackground,
+                    vm::setLook,
+                    picture = firstPicture,
+                ),
+                onClose = { pickingBackground = false },
+                modifier = panelModifier,
+                part = lookPart,
+            )
+        }
     }
 
     LookBeside(beside, lookPanel) {
@@ -750,7 +879,10 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                 // Files dragged in from the desktop are attached like picked ones.
                 modifier = Modifier.attachOnDrop(services, vm::ensureEntryId, onHover = { dropping = it }, onLink = { href ->
                     vm.editor?.takeIf { !vm.reading }?.insertAtom(Atom.LinkCard(href), atEnd = !editorFocused)
-                }).onGloballyPositioned { pageAt = it.positionInWindow() }.then(backdrop),
+                }).onGloballyPositioned {
+                    pageAt = it.positionInWindow()
+                    pageHeight = it.size.height.toFloat()
+                }.then(backdrop),
                 // A note on the board: its card's color, the sheet it grew from (ADR-040). With a look, the look draws it.
                 containerColor = if (looked) Color.Transparent else page,
                 // A color outside the scheme has no content color of its own: the page's words and icons, as on the card.
@@ -771,22 +903,27 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                             }
                         },
                         title = {
-                            // The entry's date and time, the weekday under them; while editing, a tap moves it in time.
-                            val (date, weekday) = dayTitle(detail?.day ?: route.day)
-                            val label = detail?.let { "$date, ${timeLabel(it.createdAt)}" } ?: date
-                            val movable = Modifier.clip(RoundedCornerShape(8.dp)).hand().clickable { moving = true }
-                            Column(if (vm.reading) Modifier else movable) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(label, style = MaterialTheme.typography.titleMedium, maxLines = 1)
-                                    // Drawn: "▾" would need a web font.
-                                    if (!vm.reading) Icon(Icons.ArrowDropDown, null, Modifier.size(20.dp))
-                                }
-                                weekday?.let {
-                                    Text(
-                                        it,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
+                            // One's own template (ADR-061): its name and what it is, a tap renames it; it has no day to show.
+                            if (isTemplate) {
+                                TemplateTitle(detail?.fields?.get(TemplateSpace.NAME).orEmpty()) { renamingTemplate = true }
+                            } else {
+                                // The entry's date and time, the weekday under them; while editing, a tap moves it in time.
+                                val (date, weekday) = dayTitle(detail?.day ?: route.day)
+                                val label = detail?.let { "$date, ${timeLabel(it.createdAt)}" } ?: date
+                                val movable = Modifier.clip(RoundedCornerShape(8.dp)).hand().clickable { moving = true }
+                                Column(if (vm.reading) Modifier else movable) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(label, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                                        // Drawn: "▾" would need a web font.
+                                        if (!vm.reading) Icon(Icons.ArrowDropDown, null, Modifier.size(20.dp))
+                                    }
+                                    weekday?.let {
+                                        Text(
+                                            it,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
                                 }
                             }
                         },
@@ -823,16 +960,21 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                 }
                             }
                             val favorite = detail?.favorite == true
-                            IconButton(vm::toggleFavorite, modifier = Modifier.hand()) {
-                                Icon(
-                                    if (favorite) Icons.Star else Icons.StarOutline,
-                                    stringResource(if (favorite) Res.string.favorite_remove else Res.string.favorite_add),
-                                    tint = if (favorite) MaterialTheme.colorScheme.primary else LocalContentColor.current,
-                                )
+                            if (!isTemplate) {
+                                IconButton(vm::toggleFavorite, modifier = Modifier.hand()) {
+                                    Icon(
+                                        if (favorite) Icons.Star else Icons.StarOutline,
+                                        stringResource(if (favorite) Res.string.favorite_remove else Res.string.favorite_add),
+                                        tint = if (favorite) MaterialTheme.colorScheme.primary else LocalContentColor.current,
+                                    )
+                                }
                             }
                             // «Оформление записки» beside the star while writing (owner); reading, the note is only read.
                             if (!vm.reading) {
-                                IconButton({ pickingBackground = true }, modifier = Modifier.hand()) {
+                                IconButton({
+                                    mediaLooking = null
+                                    pickingBackground = true
+                                }, modifier = Modifier.hand()) {
                                     Icon(Icons.Palette, stringResource(Res.string.look_title))
                                 }
                             }
@@ -844,7 +986,21 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                     DropdownMenu(menu, { menu = false }) {
                                         // Between the journal and the board (ADR-040): the same entry, one field; a note goes to
                                         // the journal on the day it was made, or on another day picked for it.
-                                        if (detail != null && !detail.inTrash && !vm.reading) {
+                                        // A template: an entry made from it, its name (ADR-061).
+                                        if (isTemplate && detail != null && !detail.inTrash) {
+                                            DropdownMenuItem(text = { Text(stringResource(Res.string.template_write)) }, onClick = {
+                                                menu = false
+                                                vm.commit()
+                                                nav.open(
+                                                    Route.Editor(null, services.today(), opened = services.now(), template = detail.id),
+                                                )
+                                            }, modifier = Modifier.hand())
+                                            DropdownMenuItem(text = { Text(stringResource(Res.string.template_rename)) }, onClick = {
+                                                menu = false
+                                                renamingTemplate = true
+                                            }, modifier = Modifier.hand())
+                                        }
+                                        if (detail != null && !detail.inTrash && !vm.reading && !isTemplate) {
                                             if (Board.onBoard(detail.fields)) {
                                                 DropdownMenuItem(text = { Text(stringResource(Res.string.board_to_journal)) }, onClick = {
                                                     menu = false
@@ -886,7 +1042,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                                 vm.startEditing()
                                             }, modifier = Modifier.hand())
                                         }
-                                        if (!route.board) {
+                                        if (!route.board && !isTemplate) {
                                             DropdownMenuItem(text = {
                                                 Text(stringResource(if (detail?.pinned == true) Res.string.unpin else Res.string.pin))
                                             }, onClick = {
@@ -894,7 +1050,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                                 vm.togglePinned()
                                             }, modifier = Modifier.hand())
                                         }
-                                        if (!vm.reading) {
+                                        if (!vm.reading && !isTemplate) {
                                             DropdownMenuItem(
                                                 text = {
                                                     Text(
@@ -915,6 +1071,13 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                                 modifier = Modifier.hand(),
                                             )
                                         }
+                                        // The note's words, look, tags and pictures as a template of one's own (ADR-061).
+                                        if (detail != null && !detail.inTrash && !isTemplate && detail.kind !in NOT_IN_FEED) {
+                                            DropdownMenuItem(text = { Text(stringResource(Res.string.template_save_as)) }, onClick = {
+                                                menu = false
+                                                savingTemplate = true
+                                            }, modifier = Modifier.hand())
+                                        }
                                         DropdownMenuItem(text = { Text(stringResource(Res.string.copy_text)) }, onClick = {
                                             menu = false
                                             if (!copy(vm.plainText())) vm.copied()
@@ -924,22 +1087,24 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                             if (!share(vm.markdown())) vm.copied()
                                         }, modifier = Modifier.hand())
                                         val ruled = detail?.let { gentleRules.ruled(it.day, it.tagIds) }
-                                        VeilMenuItems(
-                                            effectiveVeil(detail?.ownVeil, ruled),
-                                            ruled,
-                                        ) { veil ->
-                                            menu = false
-                                            vm.entryId?.let { services.setVeil(it, veil, detail?.ownVeil) }
-                                        }
-                                        PostponeMenuItem(detail?.until) { choose ->
-                                            menu = false
-                                            if (choose) {
-                                                postponing = true
-                                            } else {
-                                                vm.entryId?.let { services.postpone(it, null, detail?.until) }
+                                        if (!isTemplate) {
+                                            VeilMenuItems(
+                                                effectiveVeil(detail?.ownVeil, ruled),
+                                                ruled,
+                                            ) { veil ->
+                                                menu = false
+                                                vm.entryId?.let { services.setVeil(it, veil, detail?.ownVeil) }
+                                            }
+                                            PostponeMenuItem(detail?.until) { choose ->
+                                                menu = false
+                                                if (choose) {
+                                                    postponing = true
+                                                } else {
+                                                    vm.entryId?.let { services.postpone(it, null, detail?.until) }
+                                                }
                                             }
                                         }
-                                        if (detail != null && detail.kind !in NOT_IN_FEED && !detail.inTrash) {
+                                        if (detail != null && detail.kind !in NOT_IN_FEED && !detail.inTrash && !isTemplate) {
                                             DropdownMenuItem(text = { Text(stringResource(Res.string.show_in_feed)) }, onClick = {
                                                 menu = false
                                                 vm.commit()
@@ -963,6 +1128,10 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                                 // A note that was a journal entry: the journal back first (ADR-040).
                                                 if (detail != null && Board.fromJournal(detail.fields)) {
                                                     guarding = true
+                                                } else if (isTemplate && detail != null) {
+                                                    vm.commit()
+                                                    services.trashTemplate(detail.id, detail.fields[TemplateSpace.NAME].orEmpty())
+                                                    nav.back()
                                                 } else {
                                                     vm.moveToTrash()
                                                     nav.back()
@@ -1000,7 +1169,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
             ) { padding ->
                 // The note's own font (ADR-047) for its title and words; the rest of the screen keeps the app's.
                 val font = noteFont(detail?.look?.get(LookFields.FONT))
-                CompositionLocalProvider(LocalNoteFont provides font) {
+                CompositionLocalProvider(LocalNoteFont provides font, LocalMediaLooks provides looks) {
                     Column(Modifier.padding(padding).fillMaxSize()) {
                         if (detail?.conflictHeads?.isNotEmpty() == true) {
                             Banner(
@@ -1036,6 +1205,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                 vm.entryId?.let { services.postpone(it, day.toString(), detail?.until) }
                             }, onDismiss = { postponing = false })
                         }
+                        if (beside == null) mediaTarget?.let { MediaLookSheet(services, it, onDismiss = { mediaLooking = null }) }
                         if (pickingBackground && beside == null) {
                             val words = remember { vm.plainText() }
                             LookSheet(
@@ -1047,6 +1217,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                     lookPage,
                                     vm::setBackground,
                                     vm::setLook,
+                                    picture = firstPicture,
                                 ),
                                 onDismiss = { pickingBackground = false },
                                 part = lookPart,
@@ -1086,7 +1257,17 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                             val context = templateContext(route.day)
                             LaunchedEffect(route.template) { route.template?.let { vm.applyTemplate(it, context) } }
                             LaunchedEffect(route.heading) { route.heading?.let(vm::applyHeading) }
-                            TemplateRow { vm.applyTemplate(it, context) }
+                            val own by remember { services.repo.ownTemplates() }.collectAsStateWithLifecycle(emptyList())
+                            TemplateRow(own) { vm.applyTemplate(it, context) }
+                        }
+                        // A template's placeholders, said where it is written (ADR-061).
+                        if (isTemplate && !vm.reading) {
+                            Text(
+                                stringResource(Res.string.template_placeholders),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                            )
                         }
                         if (editor != null && !vm.broken && !route.board) {
                             MetadataRow(
@@ -1097,7 +1278,7 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                 onAddTag = vm::addTag,
                                 onCreateTag = vm::createTag,
                                 onRemoveTag = vm::removeTag,
-                                withMood = !route.board,
+                                withMood = !route.board && !isTemplate,
                             )
                         }
                         if (ribbon && detail != null) {
@@ -1107,6 +1288,31 @@ internal fun EditorScreen(services: AppServices, nav: Navigator, route: Route.Ed
                                 onOpen = { nav.open(Route.Media(detail.id, it.meta.id)) },
                                 placed = inline,
                                 onMove = vm::moveAttachment,
+                                // While writing (owner, 2026-10-30): «Настроить» its look, ✕ into the trash with «Вернуть».
+                                onSettings = if (vm.reading) {
+                                    null
+                                } else {
+                                    {
+                                        pickingBackground = false
+                                        mediaLooking = it.meta.id
+                                    }
+                                },
+                                onRemove = if (vm.reading) {
+                                    null
+                                } else {
+                                    { services.trashMedia(listOf(AttachmentKey(detail.id, it.meta.id))) }
+                                },
+                                onCarry = editor?.takeIf { !vm.reading }?.let { state ->
+                                    { attachment, at ->
+                                        carriedAt = at
+                                        state.carry(at, rowable = attachment.meta.kind in ROWABLE)
+                                    }
+                                },
+                                // Between paragraphs, or beside a picture into a row with it (ADR-061).
+                                onPlace = { attachment, at ->
+                                    carriedAt = null
+                                    editor?.place(at, attachment.meta.id, rowable = attachment.meta.kind in ROWABLE) == true
+                                },
                             )
                         }
                         // A note's title on top (Keep's «Название»), then its words; its tags at the foot.
@@ -1235,9 +1441,12 @@ private fun NoteTitle(state: TextFieldState) {
         }
     }
     val hint = stringResource(Res.string.board_title_hint)
+    // As in the editor (PasteFallback): a paste the browser's Compose didn't hand over, put in here, on one line.
+    var focused by remember { mutableStateOf(false) }
+    PasteFallback(focused) { text -> state.edit { replace(selection.min, selection.max, text.replace('\n', ' ')) } }
     BasicTextField(
         state,
-        Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 8.dp),
+        Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 8.dp).onFocusChanged { focused = it.isFocused },
         inputTransformation = onward,
         textStyle = MaterialTheme.typography.titleLarge.copy(color = MaterialTheme.colorScheme.onSurface).inFont(LocalNoteFont.current),
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
@@ -1255,3 +1464,16 @@ private fun NoteTitle(state: TextFieldState) {
         },
     )
 }
+
+/** How much of the window's height a picture of its own shape may take in a post (owner, 2026-10-30). */
+private const val TALLEST = 0.75f
+
+/** How near the page's edge a carried attachment scrolls the words, and how far each frame. */
+private val CARRY_EDGE = 72.dp
+private const val CARRY_STEP = 14f
+
+/** The longest name a note's first line gives the template saved from it. */
+private const val NAME_MAX = 60
+
+/** What joins a row of pictures (ADR-061): pictures, videos and drawings, never a sound or a file. */
+private val ROWABLE = setOf("image", "video", "drawing")

@@ -59,6 +59,9 @@ sealed interface Atom {
     data class Divider(val variant: String? = null) : Atom
     data class Attachment(val ref: String, val width: Double? = null, val caption: String? = null) : Atom
 
+    /** Two or three attachments side by side, one height for all (ADR-061). */
+    data class AttachmentRow(val refs: List<String>) : Atom
+
     /**
      * A link shown as a card (ADR-038) with what its page said when the link went in: [image] is the SHA-256 of a JPEG
      * blob, [large] the big look (else a row), [fetched] the day the page was read (null: not yet).

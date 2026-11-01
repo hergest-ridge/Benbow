@@ -9,7 +9,9 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.TextRange
+import app.benbow.core.content.ROW_MAX
 import app.benbow.core.speech.fitPhrase
 import app.benbow.core.text.Align
 import app.benbow.core.text.Atom
@@ -145,18 +147,157 @@ class EditorState(initial: RichText, private val keys: BlockKeys = BlockKeys()) 
         textFieldState.edit { syncText(result.text.text, TextRange(result.selectionStart), forceSelection = true) }
     }
 
-    /** Points the atom of attachment [old] at [new] (a redrawn drawing), keeping its width and caption; undoable. */
-    fun replaceAttachment(old: String, new: String) {
+    /**
+     * An attachment carried from the strip over the text (owner, 2026-10-30): the paragraph it would go in before
+     * ([model]'s paragraphs' count: after the last), while it is over the text; the editor draws its place there.
+     */
+    var dropAt: Int? by mutableStateOf(null)
+
+    /** Set by the editor as it lays out: which paragraph a window position falls before, or null outside the text. */
+    var dropLocator: ((Offset) -> Int?)? = null
+
+    /** Puts [atom] on its own line before paragraph [index] (after the last when past it); undoable. */
+    fun insertAtomAt(index: Int, atom: Atom) {
         val before = model
-        val i = before.paragraphs.indexOfFirst { (it.atom as? Atom.Attachment)?.ref == old }.takeIf { it >= 0 } ?: return
-        val atom = before.paragraphs[i].atom as Atom.Attachment
+        val at = if (index < before.paragraphs.size) before.paragraphStarts[index] else before.text.length
+        val result = before.insertAtom(at, atom, keys)
         record(Snapshot(before, selection), typing = false)
-        model = before.withParagraph(i, before.paragraphs[i].copy(atom = atom.copy(ref = new)))
+        model = result.text
+        textFieldState.edit { syncText(result.text.text, TextRange(result.selectionStart), forceSelection = true) }
     }
 
-    /** Takes the atom of attachment [ref] out of the text with its line; undoable. */
+    /** A side of a picture, or of a row with room, in the text: a carried attachment joins it there in a row (ADR-061). */
+    data class RowDrop(val key: String, val before: Boolean)
+
+    /** Where a carried attachment would join a row, drawn by the editor beside that picture; null for none. */
+    var rowDropAt: RowDrop? by mutableStateOf(null)
+
+    /** Set by the editor as it lays out: the picture side a window position is over, if any. */
+    var rowLocator: ((Offset) -> RowDrop?)? = null
+
+    /** The picture chosen in a selected row ([selectedAtom]): its bubble acts on it. */
+    var selectedPart: String? by mutableStateOf(null)
+
+    /**
+     * An attachment carried over the text at [window] (null: off it): beside a picture when it is one too ([rowable]),
+     * or between paragraphs.
+     */
+    fun carry(window: Offset?, rowable: Boolean = true) {
+        val side = window?.takeIf { rowable }?.let { rowLocator?.invoke(it) }
+        rowDropAt = side
+        dropAt = if (side != null) null else window?.let { dropLocator?.invoke(it) }
+    }
+
+    /** Attachment [ref] let go at [window]: into a row beside a picture ([rowable]), or on a line of its own; false off the text. */
+    fun place(window: Offset, ref: String, rowable: Boolean = true): Boolean {
+        val side = if (rowable) rowLocator?.invoke(window) else null
+        val index = if (side == null) dropLocator?.invoke(window) else null
+        dropAt = null
+        rowDropAt = null
+        when {
+            side != null -> placeInRow(side.key, ref, side.before)
+            index != null -> insertAtomAt(index, Atom.Attachment(ref))
+            else -> return false
+        }
+        return true
+    }
+
+    /** Attachment [ref] beside the picture or row [key], [before] or after it: a row of at most [ROW_MAX]; undoable. */
+    fun placeInRow(key: String, ref: String, before: Boolean) {
+        val m = model
+        val i = m.paragraphs.indexOfFirst { it.key == key }.takeIf { it >= 0 } ?: return
+        val refs = rowRefs(m.paragraphs[i].atom)?.takeIf { it.size < ROW_MAX && ref !in it } ?: return
+        replaceModel(m, m.withParagraph(i, m.paragraphs[i].copy(atom = Atom.AttachmentRow(if (before) listOf(ref) + refs else refs + ref))))
+    }
+
+    /** Whether picture [key] can join the picture ([picture]: not a sound or a file) or the row right above it («В ряд»). */
+    fun canJoinAbove(key: String, picture: (Atom.Attachment) -> Boolean = { true }): Boolean {
+        val i = model.paragraphs.indexOfFirst { it.key == key }
+        if (i <= 0 || model.paragraphs[i].atom !is Atom.Attachment) return false
+        return when (val above = model.paragraphs[i - 1].atom) {
+            is Atom.Attachment -> picture(above)
+            is Atom.AttachmentRow -> above.refs.size < ROW_MAX
+            else -> false
+        }
+    }
+
+    /** «В ряд»: picture [key] joins the picture or row right above it, its line gone; undoable. */
+    fun joinAbove(key: String, picture: (Atom.Attachment) -> Boolean = { true }) {
+        if (!canJoinAbove(key, picture)) return
+        val m = model
+        val i = m.paragraphs.indexOfFirst { it.key == key }
+        val ref = (m.paragraphs[i].atom as Atom.Attachment).ref
+        val row = Atom.AttachmentRow(rowRefs(m.paragraphs[i - 1].atom)!! + ref)
+        val joined = m.withParagraph(i - 1, m.paragraphs[i - 1].copy(atom = row)).removeAtom(i, keys) ?: return
+        commit(m, joined, moveCursor = true)
+        selectedAtom = m.paragraphs[i - 1].key
+        selectedPart = ref
+    }
+
+    /** «Разделить ряд»: row [key] back to pictures on lines of their own, in its order; undoable. */
+    fun splitRow(key: String) {
+        val m = model
+        val i = m.paragraphs.indexOfFirst { it.key == key }.takeIf { it >= 0 } ?: return
+        val refs = (m.paragraphs[i].atom as? Atom.AttachmentRow)?.refs ?: return
+        var next = m.withParagraph(i, m.paragraphs[i].copy(atom = Atom.Attachment(refs.first())))
+        refs.drop(1).forEachIndexed { n, ref -> next = next.atomBefore(i + 1 + n, Atom.Attachment(ref)) }
+        replaceModel(m, next)
+        selectedAtom = null
+    }
+
+    /** «Вынуть из ряда»: picture [ref] out of row [key], on a line of its own under it; one left is a picture again. */
+    fun takeOutOfRow(key: String, ref: String) {
+        val m = model
+        val i = m.paragraphs.indexOfFirst { it.key == key }.takeIf { it >= 0 } ?: return
+        val left = (m.paragraphs[i].atom as? Atom.AttachmentRow)?.refs?.minus(ref) ?: return
+        val atom = left.singleOrNull()?.let { Atom.Attachment(it) } ?: Atom.AttachmentRow(left)
+        replaceModel(m, m.withParagraph(i, m.paragraphs[i].copy(atom = atom)).atomBefore(i + 1, Atom.Attachment(ref)))
+        selectedAtom = null
+    }
+
+    private fun rowRefs(atom: Atom?): List<String>? = when (atom) {
+        is Atom.Attachment -> listOf(atom.ref)
+        is Atom.AttachmentRow -> atom.refs
+        else -> null
+    }
+
+    /** [atom] on a line of its own before paragraph [index] (after the last when past it). */
+    private fun RichText.atomBefore(index: Int, atom: Atom): RichText =
+        insertAtom(if (index < paragraphs.size) paragraphStarts[index] else text.length, atom, keys).text
+
+    /** [after] as the text, one undo step from [before]; the cursor stays where it was (within the text). */
+    private fun replaceModel(before: RichText, after: RichText) {
+        record(Snapshot(before, selection), typing = false)
+        model = after
+        if (after.text != before.text) {
+            val sel = TextRange(selection.start.coerceAtMost(after.text.length), selection.end.coerceAtMost(after.text.length))
+            textFieldState.edit { syncText(after.text, sel, forceSelection = true) }
+        }
+    }
+
+    /** Points the atom of attachment [old] at [new] (a redrawn drawing), keeping its width and caption, in a row too; undoable. */
+    fun replaceAttachment(old: String, new: String) {
+        val before = model
+        val i = before.paragraphs.indexOfFirst { rowRefs(it.atom)?.contains(old) == true }.takeIf { it >= 0 } ?: return
+        val atom = when (val held = before.paragraphs[i].atom) {
+            is Atom.Attachment -> held.copy(ref = new)
+            is Atom.AttachmentRow -> held.copy(refs = held.refs.map { if (it == old) new else it })
+            else -> return
+        }
+        record(Snapshot(before, selection), typing = false)
+        model = before.withParagraph(i, before.paragraphs[i].copy(atom = atom))
+    }
+
+    /** Takes the atom of attachment [ref] out of the text with its line (out of its row, if in one); undoable. */
     fun removeAttachment(ref: String) {
         val before = model
+        val held = before.paragraphs.indexOfFirst { (it.atom as? Atom.AttachmentRow)?.refs?.contains(ref) == true }
+        if (held >= 0) {
+            val left = (before.paragraphs[held].atom as Atom.AttachmentRow).refs - ref
+            val atom = left.singleOrNull()?.let { Atom.Attachment(it) } ?: Atom.AttachmentRow(left)
+            replaceModel(before, before.withParagraph(held, before.paragraphs[held].copy(atom = atom)))
+            return
+        }
         val i = before.paragraphs.indexOfFirst { (it.atom as? Atom.Attachment)?.ref == ref }.takeIf { it >= 0 } ?: return
         val start = before.paragraphStarts[i]
         val end = before.paragraphEnd(i)
@@ -303,6 +444,24 @@ class EditorState(initial: RichText, private val keys: BlockKeys = BlockKeys()) 
 
     /** Whether card [key] is still in the text. */
     fun hasCard(key: String): Boolean = cardIndex(key) != null
+
+    /** Addresses of cards asked to read their pages anew («Обновить»), until the app takes them ([takeReread]). */
+    private val reread = HashSet<String>()
+
+    /**
+     * «Обновить» (owner, 2026-10-30): card [key] is read again; what its page says now replaces what it said (a card read
+     * before a fix showed its address alone). Its words stay until the page answers. Undoable.
+     */
+    fun refreshCard(key: String) {
+        val (i, card) = card(key) ?: return
+        val before = model
+        commit(before, EditResult(before.withCard(i) { it.copy(fetched = null) } ?: return, selection.min, selection.max))
+        reread += card.href
+        selectedAtom = null
+    }
+
+    /** The addresses to read anew, once: the app forgets it has read them. */
+    fun takeReread(): Set<String> = reread.toSet().also { reread.clear() }
 
     /**
      * Card [key]'s address turned out to be a picture (ADR-045): the link in the text with picture [ref] under it, or the

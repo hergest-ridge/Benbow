@@ -64,6 +64,12 @@ internal actual fun MediaPlayer(file: File, mime: String, modifier: Modifier) {
     }
 }
 
+/** The desktop has no player of its own: a video opens outside the app, and in a post shows its picture and ▶. */
+internal actual val inlineVideos: Boolean = false
+
+@Composable
+internal actual fun InlineVideo(file: File, crop: Boolean, modifier: Modifier) = Unit
+
 internal fun desktopProbe(file: File): MediaProbe {
     val mime = refineMime(runCatching { Files.probeContentType(file.toPath()) }.getOrNull(), file.name)
     val kind = kindOf(mime)

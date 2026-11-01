@@ -80,7 +80,7 @@ internal fun BoardCard(
     }
     Column(
         modifier.fillMaxWidth().clip(CARD_SHAPE).background(color ?: boardCardColor())
-            .then(entryBackdrop(note.entry.id, note.entry.look, color ?: boardCardColor(), muted = true))
+            .then(entryBackdrop(note.entry.id, note.entry.look, color ?: boardCardColor(), muted = true, picture = note.entry.cover))
             .border(if (chosen) 2.dp else 1.dp, outline, CARD_SHAPE),
     ) {
         // Its words in the note's own font (ADR-047), as the open note shows them; light on a black note.

@@ -310,6 +310,18 @@ boardNotes:
 SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields, card, attachments FROM board_entry
 WHERE json_extract(fields, '$.deleted') IS NOT 'true' AND kind NOT IN ('comment', 'system', 'event', 'reminder');
 
+-- One's own templates (ADR-061): entries in the space 'template', oldest first, as the choice of templates lists them.
+templates:
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
+WHERE space = 'template' AND json_extract(fields, '$.deleted') IS NOT 'true' AND json_extract(fields, '$.purged') IS NOT 'true'
+ORDER BY created_at;
+
+-- Templates in the trash, the latest first (the trash screen's «Шаблоны»).
+templateTrash:
+SELECT id, day, created_at, title, preview, conflict_heads, media_count, cover, fields FROM entry
+WHERE space = 'template' AND json_extract(fields, '$.deleted') IS 'true' AND json_extract(fields, '$.purged') IS NOT 'true'
+ORDER BY updated_at DESC;
+
 -- Calendar (5.1) ---------------------------------------------------------------------------
 
 -- Бережно (ADR-031): entries put off until a day that has come, not answered yet; oldest first (the Home card).
@@ -384,7 +396,7 @@ SELECT * FROM attachment_ref ORDER BY entry_id, position, attachment_id;
 
 -- The media library (ADR-041): every attachment shown in an entry, the newest entries first, each with the entry it
 -- belongs to (a comment's own entry: its day, its place and what Бережно goes by). The trash keeps its own, comments on
--- an entry in the trash with it.
+-- an entry in the trash with it. A template's pictures (ADR-061) are copies of a note's: not listed twice.
 libraryItems:
 SELECT r.entry_id, r.attachment_id, r.sha256, r.kind, r.mime, r.size, r.name, r.width, r.height, r.duration_ms,
     r.captured_at, r.preview_sha256, r.caption, r.position, r.changed_at,
@@ -393,7 +405,7 @@ SELECT r.entry_id, r.attachment_id, r.sha256, r.kind, r.mime, r.size, r.name, r.
 FROM attachment_ref AS r
 JOIN entry AS e ON e.id = r.entry_id
 LEFT JOIN entry AS p ON p.id = e.parent_id
-WHERE r.present = 1 AND r.purged = 0 AND e.kind != 'system'
+WHERE r.present = 1 AND r.purged = 0 AND e.kind != 'system' AND coalesce(p.space, e.space) IS NOT 'template'
     AND json_extract(e.fields, '$.deleted') IS NOT 'true'
     AND (p.id IS NULL OR json_extract(p.fields, '$.deleted') IS NOT 'true')
 ORDER BY coalesce(p.day, e.day) DESC, coalesce(p.created_at, e.created_at) DESC, e.created_at, r.position, r.attachment_id;

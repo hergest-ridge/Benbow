@@ -22,7 +22,8 @@ class EntryExportTest {
         assertEquals("notes", EntryExport.folder(entry(Board.SPACE to Board.BOARD)))
         assertEquals("notes/archive", EntryExport.folder(entry(Board.SPACE to Board.BOARD, Board.ARCHIVED to "true")))
         assertEquals("2026/10", EntryExport.folder(entry(Board.ARCHIVED to "true")), "board fields wait while it is in the journal")
-        assertEquals(listOf("2026/10", "notes", "notes/archive"), EntryExport.folders(entry()))
+        assertEquals("templates", EntryExport.folder(entry(Board.SPACE to TemplateSpace.TEMPLATE)), "one's own template (ADR-061)")
+        assertEquals(listOf("2026/10", "notes", "notes/archive", "templates"), EntryExport.folders(entry()))
     }
 
     @Test

@@ -89,6 +89,7 @@ import app.benbow.app.resources.trash_oldest
 import app.benbow.app.resources.trash_purge
 import app.benbow.app.resources.trash_tag_item
 import app.benbow.app.resources.trash_tags
+import app.benbow.app.resources.trash_templates
 import app.benbow.app.resources.trash_today
 import app.benbow.app.resources.trash_tracker_item
 import app.benbow.app.resources.trash_trackers
@@ -104,6 +105,7 @@ import app.benbow.client.mediaInTrash
 import app.benbow.client.restoreCategory
 import app.benbow.client.restoreTag
 import app.benbow.client.takenOff
+import app.benbow.client.templateTrash
 import app.benbow.client.trashItems
 import app.benbow.client.trashedTags
 import app.benbow.core.api.AttachmentRef
@@ -153,6 +155,8 @@ internal fun TrashScreen(services: AppServices, nav: Navigator) {
     // Trackers (ADR-050) with their columns and marks; only where trackers show.
     val trackers by remember { services.trackers.trashedTrackers() }.collectAsStateWithLifecycle(emptyList())
     val tags by services.repo.trashedTags().collectAsStateWithLifecycle(emptyList())
+    // One's own templates (ADR-061): back from here, never among the journal's entries.
+    val templates by remember { services.repo.templateTrash() }.collectAsStateWithLifecycle(emptyList())
     val categories = LocalTags.current.trashedCategories
     var order by rememberSaveable { mutableStateOf(TrashOrder.Latest) }
     var opened by remember { mutableStateOf(setOf<String>()) }
@@ -244,7 +248,9 @@ internal fun TrashScreen(services: AppServices, nav: Navigator) {
         }
         val items = entries ?: return@Scaffold
         val listed = items.isNotEmpty() || notes.isNotEmpty() || off.isNotEmpty()
-        if (!listed && events.isEmpty() && calendars.isEmpty() && tags.isEmpty() && categories.isEmpty() && trackers.isEmpty()) {
+        val others =
+            events.isEmpty() && calendars.isEmpty() && tags.isEmpty() && categories.isEmpty() && trackers.isEmpty() && templates.isEmpty()
+        if (!listed && others) {
             Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(stringResource(Res.string.trash_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -416,6 +422,12 @@ internal fun TrashScreen(services: AppServices, nav: Navigator) {
             items(trackers, key = { "t" + it.id }) { tracker ->
                 TrashRow(stringResource(Res.string.trash_tracker_item, trackerTitle(tracker, stringResource(Res.string.untitled))), null) {
                     services.trackerWrites { restore(tracker.id) }
+                }
+            }
+            if (templates.isNotEmpty()) item(key = "templates") { TrashHeader(stringResource(Res.string.trash_templates)) }
+            items(templates, key = { "p" + it.id }) { template ->
+                TrashRow(template.name, template.preview.takeIf { it.isNotBlank() }) {
+                    services.scope.launch { services.repo.restore(template.id) }
                 }
             }
         }

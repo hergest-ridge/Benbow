@@ -20,19 +20,20 @@ object EntryExport {
 
     /**
      * "YYYY/MM" of the entry's day; a note on the board (ADR-040) has no date in its path: [NOTES], or [NOTES_ARCHIVE]
-     * while it is in the board's archive.
+     * while it is in the board's archive; nor has one's own template (ADR-061): [TEMPLATES].
      */
-    fun folder(entry: EntryState): String = when {
-        entry.fields[Board.SPACE]?.value != Board.BOARD -> dayFolder(entry)
-        entry.fields[Board.ARCHIVED]?.value == "true" -> NOTES_ARCHIVE
-        else -> NOTES
+    fun folder(entry: EntryState): String = when (entry.fields[Board.SPACE]?.value) {
+        Board.BOARD -> if (entry.fields[Board.ARCHIVED]?.value == "true") NOTES_ARCHIVE else NOTES
+        TemplateSpace.TEMPLATE -> TEMPLATES
+        else -> dayFolder(entry)
     }
 
     /** Every folder the entry's files may be in: after a move between them, the others' copies are removed. */
-    fun folders(entry: EntryState): List<String> = listOf(dayFolder(entry), NOTES, NOTES_ARCHIVE)
+    fun folders(entry: EntryState): List<String> = listOf(dayFolder(entry), NOTES, NOTES_ARCHIVE, TEMPLATES)
 
     const val NOTES = "notes"
     const val NOTES_ARCHIVE = "notes/archive"
+    const val TEMPLATES = "templates"
 
     private fun dayFolder(entry: EntryState) = entry.day.split("-").let { "${it.getOrElse(0) { "0000" }}/${it.getOrElse(1) { "00" }}" }
 
@@ -85,7 +86,7 @@ object EntryExport {
             })
                 .export(document)
         }
-        val inline = document?.blocks.orEmpty().filterIsInstance<AttachmentBlock>().mapTo(HashSet()) { it.ref }
+        val inline = document?.attachmentRefs().orEmpty().toHashSet()
         return frontMatter + "\n" + markdown + "\n" + attachments(entry, missing, inline, link)
     }
 

@@ -37,7 +37,9 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import app.benbow.app.resources.Res
 import app.benbow.app.resources.media_audio
@@ -275,6 +277,35 @@ internal actual fun MediaPlayer(file: File, mime: String, modifier: Modifier) {
     }
     DisposableEffect(player) { onDispose { player.release() } }
     AndroidView(factory = { PlayerView(it).apply { this.player = player } }, modifier = modifier.fillMaxSize())
+}
+
+internal actual val inlineVideos: Boolean = true
+
+@Composable
+internal actual fun InlineVideo(file: File, crop: Boolean, modifier: Modifier) {
+    val context = LocalContext.current
+    val player = remember(file) {
+        // Without sound, so it takes no audio focus: the app's player (ADR-035) plays on.
+        ExoPlayer.Builder(context).build().apply {
+            setMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
+            volume = 0f
+            repeatMode = Player.REPEAT_MODE_ALL
+            prepare()
+            playWhenReady = true
+        }
+    }
+    DisposableEffect(player) { onDispose { player.release() } }
+    AndroidView(
+        factory = {
+            PlayerView(it).apply {
+                this.player = player
+                useController = false
+                setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
+            }
+        },
+        update = { it.resizeMode = if (crop) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT },
+        modifier = modifier,
+    )
 }
 
 internal actual suspend fun coverJpeg(image: ByteArray, max: Int): ByteArray? = withContext(Dispatchers.Default) {

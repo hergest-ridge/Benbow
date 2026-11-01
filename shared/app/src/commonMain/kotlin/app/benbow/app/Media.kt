@@ -145,4 +145,14 @@ internal expect fun MediaPlayer(file: LocalFile, mime: String, modifier: Modifie
  * the desktop and the browser: Skia plays the frames ([MovingFrames]).
  */
 @Composable
-internal expect fun MovingPicture(file: LocalFile, modifier: Modifier, contentScale: ContentScale)
+internal expect fun MovingPicture(file: LocalFile, modifier: Modifier, contentScale: ContentScale, playing: Boolean = true)
+
+/** Whether a video plays inside a post here (a phone, the browser); the desktop opens videos outside the app. */
+internal expect val inlineVideos: Boolean
+
+/**
+ * A video playing in its post by itself (owner, 2026-10-30: «Играть само»): without sound, round and round, filling its
+ * frame when [crop], else all of it in sight.
+ */
+@Composable
+internal expect fun InlineVideo(file: LocalFile, crop: Boolean, modifier: Modifier)

@@ -1,5 +1,6 @@
 package app.benbow.ui.editor
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -68,6 +69,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextRange
@@ -82,6 +84,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.benbow.core.content.ROW_MAX
 import app.benbow.core.text.Atom
 import app.benbow.core.text.BlockStyle
 import app.benbow.core.text.ListKind
@@ -91,6 +94,7 @@ import app.benbow.core.text.RichText
 import app.benbow.core.text.linkAt
 import app.benbow.ui.theme.BenbowTheme
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
@@ -187,6 +191,8 @@ private fun BoxScope.EditorBody(state: EditorState, readOnly: Boolean, atoms: At
         )
     }
 
+    // Text pasted that the browser's Compose didn't hand to the field (a click left the page's focus on its canvas).
+    PasteFallback(focused && !readOnly) { state.replaceSelection(it) }
     EditorClipboardFix(recentlySelected = state::recentlyHadRangeSelection) {
         EditorImeBridge {
             BasicTextField(
@@ -316,9 +322,75 @@ private fun BoxScope.EditorBody(state: EditorState, readOnly: Boolean, atoms: At
     val current = layout
     val placed = remember { HashMap<String, Pair<Float, Float>>() }
     val host = remember(state, readOnly) { AtomHost(state, readOnly) }
+    // Where an attachment carried from the strip would go (owner, 2026-10-30): the paragraph boundary nearest the pointer;
+    // anywhere below the words, after them (a short note's page is mostly below them); above, only just above them.
+    state.dropLocator = if (readOnly || current == null) {
+        null
+    } else {
+        { window ->
+            val field = placedField?.takeIf { it.isAttached }
+            val local = field?.windowToLocal(window)
+            if (field == null || local == null || local.x !in -SLACK..field.size.width + SLACK || local.y < -SLACK) {
+                null
+            } else {
+                val model = state.model
+                (0..model.paragraphs.size).minByOrNull { abs(boundaryY(current, model, it) - local.y) }
+            }
+        }
+    }
+    // Beside a picture (or a row with room) in the text: the carried attachment joins it in a row (ADR-061), over the
+    // picture's outer third on either side.
+    state.rowLocator = if (readOnly || current == null) {
+        null
+    } else {
+        { window ->
+            val field = placedField?.takeIf { it.isAttached }
+            val local = field?.windowToLocal(window)
+            val w = field?.size?.width?.toFloat() ?: 0f
+            if (field == null || local == null || w <= 0f || local.x !in 0f..w) {
+                null
+            } else {
+                state.model.paragraphs.firstOrNull { p ->
+                    val spot = placed[p.key]
+                    val room = when (val atom = p.atom) {
+                        is Atom.Attachment -> atoms.selectable(atom)
+                        is Atom.AttachmentRow -> atom.refs.size < ROW_MAX
+                        else -> false
+                    }
+                    room && spot != null && local.y in spot.first..spot.second
+                }?.let { p ->
+                    when {
+                        local.x < w * ROW_SIDE -> EditorState.RowDrop(p.key, before = true)
+                        local.x > w * (1 - ROW_SIDE) -> EditorState.RowDrop(p.key, before = false)
+                        else -> null
+                    }
+                }
+            }
+        }
+    }
     if (current != null) {
         val model = state.model
         val fresh = current.matches(model)
+        state.rowDropAt?.let { drop -> placed[drop.key]?.let { drop to it } }?.let { (drop, spot) ->
+            // Its place in the row: a bar down the picture's side.
+            Box(
+                Modifier.offset {
+                    IntOffset(if (drop.before) 0 else (width - 4.dp).roundToPx(), spot.first.roundToInt())
+                }.width(4.dp).height(
+                    with(density) {
+                        (spot.second - spot.first).toDp()
+                    },
+                ).background(colors.primary, RoundedCornerShape(2.dp)),
+            )
+        }
+        state.dropAt?.takeIf { it <= model.paragraphs.size }?.let { at ->
+            // Its place: a line between the paragraphs, as thick as a finger can see.
+            val y = boundaryY(current, model, at)
+            Box(
+                Modifier.offset { IntOffset(0, (y - 2.dp.toPx()).roundToInt()) }.width(width).height(4.dp)
+                    .background(colors.primary, RoundedCornerShape(2.dp)),
+            )
+        }
         val selectedOutline = colors.primary
         CompositionLocalProvider(LocalAtomHost provides host) {
             model.paragraphs.forEachIndexed { i, paragraph ->
@@ -328,12 +400,12 @@ private fun BoxScope.EditorBody(state: EditorState, readOnly: Boolean, atoms: At
                     (current.getLineTop(line) to current.getLineBottom(line)).also { if (fresh) placed[paragraph.key] = it }
                 }
                 // The first Backspace selects a picture or a divider (ADR-038); a card draws its own outline.
-                val outlined = !readOnly && state.selectedAtom == paragraph.key && atom !is Atom.LinkCard
+                val outlined = !readOnly && state.selectedAtom == paragraph.key && atom !is Atom.LinkCard && atom !is Atom.AttachmentRow
                 key(paragraph.key) {
                     Box(
                         Modifier.offset {
                             IntOffset(0, spot.first.roundToInt())
-                        }.width(width).height(with(density) { (spot.second - spot.first).toDp() })
+                        }.width(width).height(with(density) { (spot.second - spot.first).toDp() }).testTag("atom:${paragraph.key}")
                             .then(if (outlined) Modifier.border(2.dp, selectedOutline, RoundedCornerShape(12.dp)) else Modifier),
                     ) { atoms.Content(atom, paragraph.key) }
                 }
@@ -342,9 +414,70 @@ private fun BoxScope.EditorBody(state: EditorState, readOnly: Boolean, atoms: At
         if (!readOnly && fresh && state.linkRequest == null) {
             val widthPx = with(density) { width.toPx() }
             val card = state.selectedAtom?.let { state.card(it) }
+            // A picture selected while writing (owner, 2026-10-30): open it, how it shows, out of the text.
+            val picture = state.selectedAtom?.let { key ->
+                model.paragraphs.firstOrNull { it.key == key }?.let { p ->
+                    (p.atom as? Atom.Attachment)?.takeIf(atoms::selectable)?.let {
+                        key to
+                            it
+                    }
+                }
+            }
+            // A picture chosen in a row (ADR-061): the row's bubble acts on it.
+            val row = state.selectedAtom?.let { key ->
+                model.paragraphs.firstOrNull { it.key == key }?.let { p -> (p.atom as? Atom.AttachmentRow)?.let { key to it } }
+            }
             val sel = state.selection
-            val span = if (card == null && focused && sel.collapsed && state.cursorPlaced) model.linkAt(sel.min) else null
+            val span = if (card == null && picture == null && row == null && focused && sel.collapsed &&
+                state.cursorPlaced
+            ) {
+                model.linkAt(sel.min)
+            } else {
+                null
+            }
             when {
+                picture != null -> {
+                    val (key, atom) = picture
+                    val spot = placed[key]
+                    if (spot != null) {
+                        BubbleAt(Rect(widthPx - 1f, spot.first, widthPx, spot.second), Modifier.matchParentSize()) {
+                            PictureBubble(
+                                onOpen = { atoms.openPicture(atom) },
+                                onSettings = {
+                                    state.selectedAtom = null
+                                    atoms.pictureSettings(atom)
+                                },
+                                onRemove = { state.removeAtom(key) },
+                                onRow = if (state.canJoinAbove(key, atoms::selectable)) {
+                                    { state.joinAbove(key, atoms::selectable) }
+                                } else {
+                                    null
+                                },
+                            )
+                        }
+                    }
+                }
+
+                row != null -> {
+                    val (key, atom) = row
+                    val part = state.selectedPart?.takeIf { it in atom.refs } ?: atom.refs.first()
+                    val spot = placed[key]
+                    if (spot != null) {
+                        BubbleAt(Rect(widthPx - 1f, spot.first, widthPx, spot.second), Modifier.matchParentSize()) {
+                            RowBubble(
+                                onOpen = { atoms.openPicture(Atom.Attachment(part)) },
+                                onSettings = {
+                                    state.selectedAtom = null
+                                    atoms.pictureSettings(Atom.Attachment(part))
+                                },
+                                onOut = { state.takeOutOfRow(key, part) },
+                                onSplit = { state.splitRow(key) },
+                                onRemove = { state.removeAtom(key) },
+                            )
+                        }
+                    }
+                }
+
                 card != null -> {
                     val (index, atom) = card
                     val key = model.paragraphs[index].key
@@ -356,6 +489,7 @@ private fun BoxScope.EditorBody(state: EditorState, readOnly: Boolean, atoms: At
                                 onOpen = { links.open(Mark.Link(atom.href)) },
                                 onLarge = { state.setCardLarge(key, it) },
                                 onToText = { state.cardToText(key) },
+                                onRefresh = { state.refreshCard(key) },
                                 onEdit = { state.requestCardEdit(key) },
                                 onRemove = { state.removeAtom(key) },
                             )
@@ -575,3 +709,16 @@ private fun listNumbers(model: RichText): IntArray {
     }
     return result
 }
+
+/** Where paragraph [index] starts down the text ([model]'s count: its end): a carried attachment's place. */
+private fun boundaryY(layout: TextLayoutResult, model: RichText, index: Int): Float = if (index >= model.paragraphs.size) {
+    layout.size.height.toFloat()
+} else {
+    layout.getLineTop(layout.getLineForOffset(model.paragraphStarts[index].coerceAtMost(layout.layoutInput.text.length)))
+}
+
+/** How far past the text a carried attachment still finds a place in it. */
+private const val SLACK = 48f
+
+/** How much of a picture's width, at either side, takes a carried attachment into a row with it. */
+private const val ROW_SIDE = 0.3f

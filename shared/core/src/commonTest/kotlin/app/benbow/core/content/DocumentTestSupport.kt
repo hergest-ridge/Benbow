@@ -37,7 +37,11 @@ internal fun randomDocument(rnd: Random): Document {
 
             9 -> blocks.add(DividerBlock(key, listOf(null, "dots").random(rnd)))
 
-            10 -> blocks.add(AttachmentBlock(key, "att-$i", listOf(null, 0.5, 0.3333).random(rnd), listOf(null, "фото").random(rnd)))
+            10 -> if (rnd.nextBoolean()) {
+                blocks.add(AttachmentBlock(key, "att-$i", listOf(null, 0.5, 0.3333).random(rnd), listOf(null, "фото").random(rnd)))
+            } else {
+                blocks.add(AttachmentRowBlock(key, List(rnd.nextInt(2, ROW_MAX + 1)) { "att-$i-$it" }))
+            }
 
             11 -> blocks.add(
                 LinkCardBlock(

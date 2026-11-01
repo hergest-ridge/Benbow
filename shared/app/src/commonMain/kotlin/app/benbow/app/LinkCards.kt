@@ -97,6 +97,21 @@ private fun pictureExtension(mime: String): String = when (mime) {
 private const val PICTURE_PREVIEW = 512
 private const val NAME_MAX = 80
 
+/**
+ * «Обновить карточку»: what its page says now in place of what it said, when the page named the link at all (else the
+ * card keeps its words); the description goes with the title, so a site that has none now (YouTube's ads) drops it.
+ */
+internal fun Atom.LinkCard.renewed(preview: LinkPreview?, day: String): Atom.LinkCard {
+    if (preview?.title == null) return copy(fetched = day)
+    return copy(
+        title = preview.title,
+        description = preview.description,
+        site = preview.site ?: site,
+        image = preview.image ?: image,
+        fetched = day,
+    )
+}
+
 /** The card with what its page said; anything the card already has (a title written by hand) stays. */
 internal fun Atom.LinkCard.filled(preview: LinkPreview?, day: String): Atom.LinkCard = copy(
     title = title ?: preview?.title,

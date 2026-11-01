@@ -44,6 +44,7 @@ import app.benbow.app.resources.more_shortcuts
 import app.benbow.app.resources.more_shortcuts_web
 import app.benbow.app.resources.more_tagline
 import app.benbow.app.resources.more_tags
+import app.benbow.app.resources.more_templates
 import app.benbow.app.resources.more_trackers
 import app.benbow.app.resources.more_trash
 import app.benbow.app.resources.palette_names
@@ -56,6 +57,7 @@ import app.benbow.app.resources.speech_title
 import app.benbow.app.resources.tab_search
 import app.benbow.app.resources.tab_trackers
 import app.benbow.app.resources.tags
+import app.benbow.app.resources.templates
 import app.benbow.app.resources.trash
 import app.benbow.client.SpeechModel
 import org.jetbrains.compose.resources.stringArrayResource
@@ -110,6 +112,9 @@ private fun MoreList(services: AppServices, nav: Navigator) {
             nav.open(Route.Reminders())
         }
         MoreItem(Icons.Label, stringResource(Res.string.tags), stringResource(Res.string.more_tags)) { nav.open(Route.Tags) }
+        MoreItem(Icons.Template, stringResource(Res.string.templates), stringResource(Res.string.more_templates)) {
+            nav.open(Route.Templates)
+        }
         MoreItem(Icons.Leaf, stringResource(Res.string.gentle), stringResource(Res.string.more_gentle)) { nav.open(Route.Gentle) }
         MoreItem(Icons.Delete, stringResource(Res.string.trash), stringResource(Res.string.more_trash)) { nav.open(Route.Trash) }
         MoreItem(Icons.Download, stringResource(Res.string.export), stringResource(Res.string.more_export)) { nav.open(Route.Export) }

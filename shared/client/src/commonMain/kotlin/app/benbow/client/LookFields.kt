@@ -1,5 +1,7 @@
 package app.benbow.client
 
+import app.benbow.core.media.MediaLook
+
 /**
  * The look of a note (ADR-047): one LWW field per layer, `look_<layer>`, each a token the app draws (paper, pattern,
  * light, motion, scrap and the font of its words; a picture comes later), so two devices changing different layers
@@ -35,3 +37,16 @@ fun JournalRepository.setLook(id: String, layers: Map<String, String?>) = db.tra
         if (layer in LookFields.LAYERS) setField(id, LookFields.PREFIX + layer, token?.takeIf(LookFields::isToken))
     }
 }
+
+/** How attachment [attachmentId] of entry [id] shows in its post (owner, 2026-10-30): its fit, focus or playing, each a field. */
+fun JournalRepository.setMediaFit(id: String, attachmentId: String, fit: MediaLook.Fit) =
+    MediaLook.fitField(attachmentId, fit).let { (field, value) -> setField(id, field, value) }
+
+fun JournalRepository.setMediaFocus(id: String, attachmentId: String, focus: MediaLook.Focus?) =
+    MediaLook.focusField(attachmentId, focus).let { (field, value) -> setField(id, field, value) }
+
+fun JournalRepository.setMediaPlay(id: String, attachmentId: String, play: Boolean?) =
+    MediaLook.playField(attachmentId, play).let { (field, value) -> setField(id, field, value) }
+
+fun JournalRepository.setMediaFrame(id: String, attachmentId: String, frame: String?) =
+    MediaLook.frameField(attachmentId, frame).let { (field, value) -> setField(id, field, value) }

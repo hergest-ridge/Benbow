@@ -121,6 +121,16 @@ object Templates {
         random,
     )
 
+    /** Placeholders kept as they are: a standard template copied into one's own, to be filled when used. */
+    val KEEP = TemplateContext("{{date}}", "{{weekday}}", "{{month}}", "{{prompt}}", "{{kindness}}")
+
+    /** Every placeholder [document]'s words have, filled in (one's own templates, ADR-061). */
+    fun fill(document: Document, context: TemplateContext): Document = document.copy(
+        blocks = document.blocks.map { block ->
+            if (block is TextBlock) block.copy(children = block.children.map { it.copy(text = fill(it.text, context)) }) else block
+        },
+    )
+
     private fun fill(text: String, c: TemplateContext) = text.replace(
         "{{date}}",
         c.date,

@@ -654,6 +654,7 @@ private fun FeedPost(
         if (curtained) emptyMap() else entry.look,
         tint ?: if (cards) colors.surfaceContainerLow else colors.background,
         muted = true,
+        picture = entry.cover,
     )
     val open = Modifier.hand().combinedClickable(onClick = { if (curtained) opened = true else onOpen() }, onLongClick = { picking = true })
     val shown = LocalOpenEntry.current == entry.id // open beside the feed (a wide window)
@@ -679,7 +680,7 @@ private fun FeedPost(
                 Revealing(curtained, entry) {
                     NightNote(entry.background) {
                         Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            if (item.media.isNotEmpty()) MediaCarousel(services.media, item.media, onOpenMedia)
+                            if (item.media.isNotEmpty()) PostCarousel(services, item, onOpenMedia)
                             PostBody(services, item, body, expanded, onExpand, onComments, queue, onReact)
                         }
                     }
@@ -690,7 +691,7 @@ private fun FeedPost(
                 Revealing(curtained, entry, Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
                     NightNote(entry.background) {
                         Column {
-                            if (item.media.isNotEmpty()) MediaCarousel(services.media, item.media, onOpenMedia, rounded = false)
+                            if (item.media.isNotEmpty()) PostCarousel(services, item, onOpenMedia, rounded = false)
                             Column(
                                 Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -736,6 +737,14 @@ private fun FeedPost(
                 services.postpone(entry.id, it.toString(), entry.until)
             }, onDismiss = { postponing = false })
         }
+    }
+}
+
+/** A post's pictures and videos as its carousel, each as its look says (owner, 2026-10-30). */
+@Composable
+private fun PostCarousel(services: AppServices, item: FeedItem, onOpenMedia: (AttachmentState) -> Unit, rounded: Boolean = true) {
+    CompositionLocalProvider(LocalMediaLooks provides item.mediaLooks) {
+        MediaCarousel(services.media, item.media, onOpenMedia, rounded = rounded)
     }
 }
 

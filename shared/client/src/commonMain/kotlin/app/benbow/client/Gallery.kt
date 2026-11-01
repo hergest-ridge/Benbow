@@ -1,7 +1,7 @@
 package app.benbow.client
 
-import app.benbow.core.content.AttachmentBlock
 import app.benbow.core.content.DocumentCodec
+import app.benbow.core.content.attachmentRefs
 import app.benbow.core.sync.AttachmentState
 
 /**
@@ -16,6 +16,5 @@ fun galleryOrder(attachments: Collection<AttachmentState>, body: String): List<A
     return inText + present.filter { it.meta.id !in placed }.sortedBy { it.position }
 }
 
-/** Ids of the attachments placed in the text, in order of appearance. */
-fun placedIn(body: String): List<String> =
-    runCatching { DocumentCodec.decode(body).blocks.filterIsInstance<AttachmentBlock>().map { it.ref } }.getOrDefault(emptyList())
+/** Ids of the attachments placed in the text, in order of appearance (a row's left to right). */
+fun placedIn(body: String): List<String> = runCatching { DocumentCodec.decode(body).attachmentRefs() }.getOrDefault(emptyList())

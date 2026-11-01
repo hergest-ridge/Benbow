@@ -1,5 +1,6 @@
 package app.benbow.app
 
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,8 +11,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.DropdownMenu
@@ -35,7 +38,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -80,6 +86,9 @@ internal fun QuickNoteBar(
     services: AppServices,
     onSend: (String) -> Unit,
     onNewEntry: (() -> Unit)? = null,
+    /** A long press (or a right click) on ✎: a new entry from a template, by its id (ADR-061); «Шаблоны…» opens them all. */
+    onTemplate: ((String) -> Unit)? = null,
+    onTemplates: (() -> Unit)? = null,
     hint: String? = null,
     /** Inside a thread (a wide window's post), not a bar at the foot: no backing of its own, no system insets. */
     inline: Boolean = false,
@@ -109,8 +118,21 @@ internal fun QuickNoteBar(
             DictationKey(services, dictation, Modifier.padding(start = 6.dp, bottom = 1.dp))
             if (text.isBlank()) {
                 if (onNewEntry != null) {
-                    IconButton(onNewEntry, Modifier.padding(bottom = 4.dp).hand()) {
-                        Icon(Icons.Edit, stringResource(Res.string.new_entry))
+                    var templates by remember { mutableStateOf(false) }
+                    Box(Modifier.padding(bottom = 4.dp)) {
+                        val label = stringResource(Res.string.new_entry)
+                        // An IconButton's size and ripple, with a long press and a right click for the templates.
+                        Box(
+                            Modifier.size(48.dp).clip(CircleShape).hand().combinedClickable(
+                                onClickLabel = label,
+                                onLongClick = onTemplate?.let { { templates = true } },
+                                onClick = onNewEntry,
+                            ).onSecondaryPress(enabled = onTemplate != null) { templates = true }.semantics { contentDescription = label },
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(Icons.Edit, null) }
+                        if (onTemplate != null) {
+                            TemplateMenu(services, templates, { templates = false }, onTemplate, onManage = { onTemplates?.invoke() })
+                        }
                     }
                 }
             } else {

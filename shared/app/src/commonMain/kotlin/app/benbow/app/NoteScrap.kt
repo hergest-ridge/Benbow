@@ -402,6 +402,22 @@ internal class Scrapbook(
 @Composable
 internal fun TapedPicture(path: String, style: String, seed: Int, base: Color, modifier: Modifier = Modifier) {
     val image = lookPhoto(path)
+    Box(modifier.scrapFrame(style, seed, base)) {
+        val ratio = image?.let { it.width.toFloat() / it.height } ?: 1.3f
+        if (image != null) {
+            Image(image, null, Modifier.fillMaxWidth().aspectRatio(ratio), contentScale = ContentScale.Crop)
+        } else {
+            Box(Modifier.fillMaxWidth().aspectRatio(ratio))
+        }
+    }
+}
+
+/**
+ * What holds a picture in a scrapbook ([style], as [TapedPicture]), around whatever this draws: a picture of the notes'
+ * looks, or an attachment in a note's text (owner, 2026-10-30). Over [base], the page it lies on.
+ */
+@Composable
+internal fun Modifier.scrapFrame(style: String, seed: Int, base: Color): Modifier {
     val dark = base.isDarkColor()
     val tokens = BenbowTheme.colors.tokens
     val turn = remember(seed, style) {
@@ -412,68 +428,59 @@ internal fun TapedPicture(path: String, style: String, seed: Int, base: Color, m
             else -> random.nextFloat() * 4f - 2f
         }
     }
-    Box(
-        modifier.rotate(turn).drawWithCache {
-            val px = 1.dp.toPx()
-            val random = Random(seed + 1)
-            val jags = Random(seed xor JAGS)
-            val tapes = when (style) {
-                "tape" -> listOf(
-                    random.tape(Offset(2 * px, 2 * px), -42f + random.nextFloat() * 8f, 50 * px, 16 * px, base, dark, tokens, px, jags),
-                    random.tape(
-                        Offset(
-                            size.width - 2 * px,
-                            2 * px,
-                        ),
-                        42f - random.nextFloat() * 8f, 50 * px, 16 * px, base, dark, tokens, px, jags,
+    return rotate(turn).drawWithCache {
+        val px = 1.dp.toPx()
+        val random = Random(seed + 1)
+        val jags = Random(seed xor JAGS)
+        val tapes = when (style) {
+            "tape" -> listOf(
+                random.tape(Offset(2 * px, 2 * px), -42f + random.nextFloat() * 8f, 50 * px, 16 * px, base, dark, tokens, px, jags),
+                random.tape(
+                    Offset(
+                        size.width - 2 * px,
+                        2 * px,
                     ),
-                )
+                    42f - random.nextFloat() * 8f, 50 * px, 16 * px, base, dark, tokens, px, jags,
+                ),
+            )
 
-                "strip", "polaroid" -> listOf(
-                    random.tape(
-                        Offset(size.width * (0.4f + random.nextFloat() * 0.2f), 0f),
-                        random.nextFloat() * 10f - 5f,
-                        64 * px,
-                        18 * px,
-                        base,
-                        dark,
-                        tokens,
-                        px,
-                        jags,
-                    ),
-                )
+            "strip", "polaroid" -> listOf(
+                random.tape(
+                    Offset(size.width * (0.4f + random.nextFloat() * 0.2f), 0f),
+                    random.nextFloat() * 10f - 5f,
+                    64 * px,
+                    18 * px,
+                    base,
+                    dark,
+                    tokens,
+                    px,
+                    jags,
+                ),
+            )
 
-                else -> emptyList()
-            }
-            val corners = if (style == "corners") photoCorners(size, px) else emptyList()
-            val pocket = if (dark) Color(0xFF15120F).copy(alpha = 0.92f) else Color(0xFF2B2622).copy(alpha = 0.9f)
-            onDrawWithContent {
-                // A soft shadow under the print, then the print, then what holds it.
-                for (i in 1..3) drawRect(Color.Black.copy(alpha = if (dark) 0.12f else 0.045f), Offset(0f, i * 0.9f * px), size)
-                drawContent()
-                corners.forEach {
-                    drawPath(it, pocket)
-                    drawPath(it, Color.White.copy(alpha = 0.16f), style = Stroke(0.8f * px))
-                }
-                tapes.forEach { drawTape(it, dark, 1f) }
-            }
-        }.then(
-            if (style == "polaroid") {
-                Modifier.background(
-                    if (dark) Color(0xFFDCD8D0) else Color(0xFFFDFCF8),
-                ).padding(start = 6.dp, end = 6.dp, top = 6.dp, bottom = 20.dp)
-            } else {
-                Modifier
-            },
-        ),
-    ) {
-        val ratio = image?.let { it.width.toFloat() / it.height } ?: 1.3f
-        if (image != null) {
-            Image(image, null, Modifier.fillMaxWidth().aspectRatio(ratio), contentScale = ContentScale.Crop)
-        } else {
-            Box(Modifier.fillMaxWidth().aspectRatio(ratio))
+            else -> emptyList()
         }
-    }
+        val corners = if (style == "corners") photoCorners(size, px) else emptyList()
+        val pocket = if (dark) Color(0xFF15120F).copy(alpha = 0.92f) else Color(0xFF2B2622).copy(alpha = 0.9f)
+        onDrawWithContent {
+            // A soft shadow under the print, then the print, then what holds it.
+            for (i in 1..3) drawRect(Color.Black.copy(alpha = if (dark) 0.12f else 0.045f), Offset(0f, i * 0.9f * px), size)
+            drawContent()
+            corners.forEach {
+                drawPath(it, pocket)
+                drawPath(it, Color.White.copy(alpha = 0.16f), style = Stroke(0.8f * px))
+            }
+            tapes.forEach { drawTape(it, dark, 1f) }
+        }
+    }.then(
+        if (style == "polaroid") {
+            Modifier.background(
+                if (dark) Color(0xFFDCD8D0) else Color(0xFFFDFCF8),
+            ).padding(start = 6.dp, end = 6.dp, top = 6.dp, bottom = 20.dp)
+        } else {
+            Modifier
+        },
+    )
 }
 
 /** A piece of washi tape: [outline] around its center with hand-torn ends, turned by [angle] degrees. */

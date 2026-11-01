@@ -18,7 +18,7 @@ fun Document.toPlainText(includeSpoilers: Boolean = true): String = blocks.joinT
         // The title (searchable, the words a preview shows) and the address (its site is searchable, a copy keeps it).
         is LinkCardBlock -> listOfNotNull(block.title?.replace('\n', ' '), block.href).joinToString(" ")
 
-        is DividerBlock, is UnknownBlock -> ""
+        is DividerBlock, is AttachmentRowBlock, is UnknownBlock -> ""
     }
 }
 
@@ -63,10 +63,18 @@ class MarkdownExporter(
 
     private fun blockMarkdown(block: Block, previous: Block?): String = when (block) {
         is TextBlock -> textBlock(block, previous)
+
         is CodeBlock -> calloutWrap(block.callout, previous, codeFence(block))
+
         is DividerBlock -> "---"
+
         is AttachmentBlock -> "![${escape(block.caption.orEmpty())}](${attachmentUrl(block.ref)})"
+
+        // A row (ADR-061) as its pictures on one line: side by side where a viewer lays images out inline.
+        is AttachmentRowBlock -> block.refs.joinToString(" ") { "![](${attachmentUrl(it)})" }
+
         is LinkCardBlock -> linkCard(block)
+
         is UnknownBlock -> if (rich()) "<!-- benbow:unknown ${block.raw.toString().replace("--", "\\u002d\\u002d")} -->" else ""
     }
 

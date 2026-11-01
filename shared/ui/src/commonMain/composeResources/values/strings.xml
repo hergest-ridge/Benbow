@@ -40,6 +40,14 @@
     <string name="picture_coming_gif">Загружаю гифку…</string>
     <string name="card_to_text">В текст</string>
     <string name="card_remove">Удалить</string>
+    <string name="card_refresh">Обновить карточку</string>
+    <string name="picture_open">Открыть</string>
+    <string name="picture_settings">Настроить</string>
+    <string name="picture_out_of_text">Убрать из текста</string>
+    <string name="picture_row">В ряд</string>
+    <string name="row_take_out">Вынуть из ряда</string>
+    <string name="row_split">Разделить ряд</string>
+    <string name="row_out_of_text">Убрать ряд из текста</string>
     <string name="home_greeting">Добро пожаловать в «Адмирал Бенбоу»</string>
     <string name="home_tagline">Тёплое место, откуда начинается каждая история.</string>
     <string name="editor_spike_title">Редактор · прототип</string>

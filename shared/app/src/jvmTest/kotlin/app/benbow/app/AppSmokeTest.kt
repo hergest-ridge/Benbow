@@ -1679,8 +1679,11 @@ class AppSmokeTest {
         val (first, _) = drawings()
         screenshot("56-editor-drawing")
 
-        // A tap opens it again; one more line and back: the text points at the new version, the old one leaves.
+        // A tap selects it (ADR-061), its bubble opens it again; one more line and back: the text points at the new
+        // version, the old one leaves.
         onNodeWithContentDescription("Рисунок").performClick()
+        waitUntilExactlyOneExists(hasText("Открыть") and hasClickAction(), 5_000)
+        onNode(hasText("Открыть") and hasClickAction()).performClick()
         waitUntilExactlyOneExists(hasContentDescription("Холст"), 5_000)
         drawLine(Offset(80f, 140f), Offset(6f, 6f))
         onNodeWithContentDescription("Назад").performClick()

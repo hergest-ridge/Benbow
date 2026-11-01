@@ -48,6 +48,24 @@ data class DividerBlock(override val key: String, val variant: String? = null) :
 
 data class AttachmentBlock(override val key: String, val ref: String, val width: Double? = null, val caption: String? = null) : Block
 
+/**
+ * Two or three attachments side by side, one height for all, each as wide as its own shape asks (ADR-061). [refs] are
+ * attachment ids, as an [AttachmentBlock]'s `ref`; a row never holds one alone or more than [ROW_MAX].
+ */
+data class AttachmentRowBlock(override val key: String, val refs: List<String>) : Block
+
+/** The most attachments a row holds. */
+const val ROW_MAX = 3
+
+/** The attachments placed in the text, in the order they stand there (a row's left to right). */
+fun Document.attachmentRefs(): List<String> = blocks.flatMap { block ->
+    when (block) {
+        is AttachmentBlock -> listOf(block.ref)
+        is AttachmentRowBlock -> block.refs
+        else -> emptyList()
+    }
+}
+
 /** A link as a card (ADR-038): what its page said when the link went in; [image] is a JPEG blob's SHA-256. */
 data class LinkCardBlock(
     override val key: String,

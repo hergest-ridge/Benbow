@@ -36,6 +36,7 @@ import app.benbow.core.text.Links
 import app.benbow.core.text.Mark
 import app.benbow.ui.resources.Res
 import app.benbow.ui.resources.card_large
+import app.benbow.ui.resources.card_refresh
 import app.benbow.ui.resources.card_remove
 import app.benbow.ui.resources.card_row
 import app.benbow.ui.resources.card_to_text
@@ -44,6 +45,13 @@ import app.benbow.ui.resources.link_edit
 import app.benbow.ui.resources.link_entry
 import app.benbow.ui.resources.link_open
 import app.benbow.ui.resources.link_unlink
+import app.benbow.ui.resources.picture_open
+import app.benbow.ui.resources.picture_out_of_text
+import app.benbow.ui.resources.picture_row
+import app.benbow.ui.resources.picture_settings
+import app.benbow.ui.resources.row_out_of_text
+import app.benbow.ui.resources.row_split
+import app.benbow.ui.resources.row_take_out
 import app.benbow.ui.sideScroll
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.roundToInt
@@ -120,13 +128,14 @@ internal fun LinkBubble(mark: Mark, onOpen: () -> Unit, onEdit: () -> Unit, onCo
     }
 }
 
-/** Over a selected card: open it, its look, down into the text, edit its address and title, remove it. */
+/** Over a selected card: open it, its look, down into the text, read its page anew, edit its address and title, remove it. */
 @Composable
 internal fun CardBubble(
     card: Atom.LinkCard,
     onOpen: () -> Unit,
     onLarge: (Boolean) -> Unit,
     onToText: () -> Unit,
+    onRefresh: () -> Unit,
     onEdit: () -> Unit,
     onRemove: () -> Unit,
 ) {
@@ -140,8 +149,33 @@ internal fun CardBubble(
             }
         }
         BubbleLabel(EditorIcons.ToText, stringResource(Res.string.card_to_text), onToText)
+        BubbleIcon(EditorIcons.Refresh, stringResource(Res.string.card_refresh), onRefresh)
         BubbleIcon(EditorIcons.Edit, stringResource(Res.string.link_edit), onEdit)
         BubbleIcon(EditorIcons.Delete, stringResource(Res.string.card_remove), onRemove)
+    }
+}
+
+/** Over a selected picture (owner, 2026-10-30): open it, how it shows in its post, out of the text (it stays an attachment). */
+@Composable
+internal fun PictureBubble(onOpen: () -> Unit, onSettings: () -> Unit, onRemove: () -> Unit, onRow: (() -> Unit)? = null) {
+    BubbleSurface(scroll = true) {
+        BubbleLabel(EditorIcons.OpenInNew, stringResource(Res.string.picture_open), onOpen)
+        BubbleLabel(EditorIcons.Tune, stringResource(Res.string.picture_settings), onSettings)
+        // Beside the picture above it (ADR-061).
+        onRow?.let { BubbleLabel(EditorIcons.Columns, stringResource(Res.string.picture_row), it) }
+        BubbleIcon(EditorIcons.Delete, stringResource(Res.string.picture_out_of_text), onRemove)
+    }
+}
+
+/** A picture chosen in a row (ADR-061): it opens, how it shows, out of the row; the row apart; the row out of the text. */
+@Composable
+internal fun RowBubble(onOpen: () -> Unit, onSettings: () -> Unit, onOut: () -> Unit, onSplit: () -> Unit, onRemove: () -> Unit) {
+    BubbleSurface(scroll = true) {
+        BubbleLabel(EditorIcons.OpenInNew, stringResource(Res.string.picture_open), onOpen)
+        BubbleLabel(EditorIcons.Tune, stringResource(Res.string.picture_settings), onSettings)
+        BubbleLabel(EditorIcons.Below, stringResource(Res.string.row_take_out), onOut)
+        BubbleLabel(EditorIcons.Split, stringResource(Res.string.row_split), onSplit)
+        BubbleIcon(EditorIcons.Delete, stringResource(Res.string.row_out_of_text), onRemove)
     }
 }
 

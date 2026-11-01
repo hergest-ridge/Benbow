@@ -119,6 +119,8 @@ internal class LookTarget(
     val fonts: Boolean = true,
     /** A tracker's own parts: its marks and its grid. */
     val sheet: SheetParts? = null,
+    /** The note's first picture, for a light from it (its tiles show what it gives). */
+    val picture: String? = null,
 ) {
     val base: Color @Composable get() = swatch(color) ?: page
 }
@@ -312,7 +314,15 @@ private fun LayerRow(target: LookTarget, part: LookSection, onOpen: (LookSection
         val shape = RoundedCornerShape(6.dp)
         Box(
             Modifier.size(44.dp, 30.dp).clip(shape).background(base)
-                .then(if (chosen != null) entryBackdrop(id, mapOf(layer.field to chosen), base, muted = false) else Modifier)
+                .then(
+                    if (chosen !=
+                        null
+                    ) {
+                        entryBackdrop(id, mapOf(layer.field to chosen), base, muted = false, picture = target.picture)
+                    } else {
+                        Modifier
+                    },
+                )
                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape),
         )
     }
@@ -369,7 +379,7 @@ private fun LayerGrid(target: LookTarget, part: LookSection) {
                 labels.getOrElse(i) { token },
                 token == chosenKind,
                 base,
-                entryBackdrop(id, mapOf(layer.field to drawn), base, muted = false),
+                entryBackdrop(id, mapOf(layer.field to drawn), base, muted = false, picture = target.picture),
             ) { onLook(mapOf(layer.field to token)) }
         }
     }

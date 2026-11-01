@@ -359,6 +359,36 @@ class NoteLooksTest {
         screenshot("look-beside-new-note")
     }
 
+    /** «Свет из вложений» (owner, 2026-10-30): a note's light in its picture's colors, counted from a small copy of it. */
+    @Test
+    fun aNotesLightComesFromItsPicture() = runDesktopComposeUiTest(width = 412, height = 860) {
+        val services = feedTestServices()
+        val entry = services.repo.createNote(services.today(), "Закат\nОранжевое небо над синим морем.")
+        val image = java.awt.image.BufferedImage(600, 400, java.awt.image.BufferedImage.TYPE_INT_RGB)
+        image.createGraphics().apply {
+            color = java.awt.Color(0xE8, 0x7A, 0x2A)
+            fillRect(0, 0, 600, 220)
+            color = java.awt.Color(0x1F, 0x5E, 0x9E)
+            fillRect(0, 220, 600, 180)
+            dispose()
+        }
+        val bytes = java.io.ByteArrayOutputStream().also { javax.imageio.ImageIO.write(image, "jpg", it) }.toByteArray()
+        runBlocking {
+            services.attach({ entry }, { bytes.inputStream() }) { MediaProbe("image/jpeg", "sky.jpg", "image", 600, 400) }.join()
+        }
+        val sha = runBlocking { services.repo.entry(entry).first()!!.attachments.first().meta.sha256 }
+        val colors = runBlocking { PictureLights.of(services.media, sha) }!!
+        assertTrue(colors.vibrant.isNotEmpty(), "a bright color to light it")
+        assertTrue(colors.palette.size >= 2, "the orange and the blue: ${colors.palette}")
+        services.repo.setLook(entry, mapOf("light" to "from:palette"))
+        setContent { BenbowApp(services) }
+        onAllNodesWithText("Лента")[0].click()
+        waitUntilAtLeastOneExists(hasText("Закат", substring = true), 5_000)
+        runBlocking { delay(500) }
+        waitForIdle()
+        screenshot("light-from-picture")
+    }
+
     /** The owner, 2026-10-30: from one photographed paper straight to another, the first one stayed. */
     @Test
     fun aPaperAfterAnotherIsTheNewOne() = runDesktopComposeUiTest {

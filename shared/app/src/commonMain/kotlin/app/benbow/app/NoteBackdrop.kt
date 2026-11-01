@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.ImageShader
 import androidx.compose.ui.graphics.Path
@@ -82,7 +83,7 @@ import kotlin.random.Random
 
 /** One source of light: where it falls from (degrees, 0 = from the right, 90 = from below), its tone, how strong (1-3). */
 @Immutable
-internal data class LookLight(val angle: Float, val tone: String, val strength: Int = 2)
+internal data class LookLight(val angle: Float, val tone: String, val strength: Int = 2, val color: Color? = null)
 
 /** Where a picture sits: in a corner, along the bottom edge, or scattered. */
 internal enum class ArtPlace { Corner, Edge, Scatter }
@@ -110,6 +111,10 @@ internal data class NoteLook(
     val scrap: String? = null,
     /** How many times «Перемешать» laid the scrapbook out anew. */
     val scrapShuffle: Int = 0,
+    /** Light from the note's pictures ([PictureLights]): how ("vibrant", "palette", "cover"); [pictureLook] makes it lights or [cover]. */
+    val lightFrom: String? = null,
+    /** A tiny copy of the note's picture, drawn large behind the words: a blur of it («Размытая обложка»). */
+    val cover: ImageBitmap? = null,
 )
 
 /** Nothing to draw over the note's color. */
@@ -218,6 +223,15 @@ internal fun noteBackdrop(
                     }
                 }
                 val frame = lightFrame?.invoke()
+                // The note's picture blurred behind the words: a tiny copy drawn large, as faint as the words allow.
+                look.cover?.let { cover ->
+                    drawImage(
+                        cover,
+                        dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
+                        alpha = note.budget(base, COVER_ALPHA * strength).coerceAtMost(COVER_ALPHA * strength),
+                        filterQuality = FilterQuality.Low,
+                    )
+                }
                 if (look.motion == "drift") drawDrift(frame?.phase ?: drift?.value ?: STILL, note, strength, frame)
                 drawLights(look.lights, note, strength, frame)
                 layers.paper(this, strength, shift)
@@ -470,7 +484,7 @@ internal fun DrawScope.drawLights(lights: List<LookLight>, note: NoteInk, streng
     lights.forEach { light ->
         val a = light.angle / 180f * PI.toFloat()
         val center = Offset(box.width / 2 + cos(a) * box.width * 0.6f, box.height / 2 + sin(a) * box.height * 0.6f) - at
-        val tone = note.tokens.mark(light.tone, note.dark) ?: note.main
+        val tone = light.color ?: note.tokens.mark(light.tone, note.dark) ?: note.main
         val glow = tone.copy(alpha = note.budget(tone, LIGHT_ALPHA[light.strength.coerceIn(1, 3) - 1] * strength, screened = note.dark))
         drawRect(
             Brush.radialGradient(listOf(glow, Color.Transparent), center = center, radius = unit * 0.85f),
@@ -615,3 +629,6 @@ private fun CacheDrawScope.tileBrush(vector: ImageVector, painter: VectorPainter
     }
     return ShaderBrush(ImageShader(bitmap, TileMode.Repeated, TileMode.Repeated))
 }
+
+/** How strongly a note's picture shows blurred behind its words, at most. */
+private const val COVER_ALPHA = 0.32f

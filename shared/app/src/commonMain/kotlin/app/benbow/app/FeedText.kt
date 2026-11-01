@@ -205,7 +205,7 @@ private fun blocksOf(rich: RichText): List<Block> {
         val atom = p.atom
         val callout = p.callout
         when {
-            atom is Atom.Attachment || atom is Atom.Unknown -> i++
+            atom is Atom.Attachment || atom is Atom.AttachmentRow || atom is Atom.Unknown -> i++
 
             callout != null || p.style == BlockStyle.Code || p.style == BlockStyle.Quote -> {
                 val group = (i..last).takeWhile { j ->

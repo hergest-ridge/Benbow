@@ -27,8 +27,10 @@ internal fun entryBackdrop(
     moving: Boolean = false,
     lightFrame: (() -> LightFrame?)? = null,
     paperScroll: PaperScroll? = null,
+    /** The entry's first picture (its visual's SHA-256), for a light from it ([PictureLights]). */
+    picture: String? = null,
 ): Modifier {
-    val drawn = remember(look) { NoteLooks.look(look) }
+    val drawn = pictureLook(remember(look) { NoteLooks.look(look) }, picture)
     return noteBackdrop(drawn, base, MaterialTheme.colorScheme.onSurface, id.hashCode(), muted, moving, lightFrame, paperScroll)
 }
 
@@ -56,7 +58,8 @@ internal object NoteLooks {
     private val scatters = mapOf("leaves" to listOf("leaf", "plant-2", "seedling", "clover"), "stars" to listOf("star", "sparkles", "moon"))
 
     val lights =
-        listOf("315 orange 2", "45 blue 2", "225 pink 2;45 blue 2", "200 yellow 2;330 pink 2;80 purple 1", "270 yellow 3", "135 purple 2")
+        listOf("315 orange 2", "45 blue 2", "225 pink 2;45 blue 2", "200 yellow 2;330 pink 2;80 purple 1", "270 yellow 3", "135 purple 2") +
+            PictureLights.kinds.map { PictureLights.PREFIX + it }
     val motions = listOf("drift")
     val scraps = listOf("tape", "scraps", "stamp", "stitch", "torn", "collage")
 
@@ -88,6 +91,8 @@ internal object NoteLooks {
             scatter = scatters[pattern].orEmpty(),
             tile = pattern?.takeIf(::isHero)?.removePrefix(HERO)?.takeIf { it in hero },
             lights = lightsOf(tokens[LookLayer.Light.field]),
+            lightFrom = tokens[LookLayer.Light.field]?.takeIf { it.startsWith(PictureLights.PREFIX) }?.removePrefix(PictureLights.PREFIX)
+                ?.takeIf { it in PictureLights.kinds },
             motion = tokens[LookLayer.Motion.field]?.takeIf { it in motions },
             scrap = scrap,
             scrapShuffle = shuffle,

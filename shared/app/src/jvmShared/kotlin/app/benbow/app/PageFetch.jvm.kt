@@ -1,5 +1,6 @@
 package app.benbow.app
 
+import app.benbow.core.text.HeadEnd
 import app.benbow.core.text.PageGet
 import app.benbow.core.text.PageReader
 import app.benbow.core.text.PageResponse
@@ -44,7 +45,8 @@ internal fun fetchPage(url: String, maxBytes: Int, accept: String): PageResponse
         connection.setRequestProperty("Accept", accept)
         connection.setRequestProperty("Accept-Language", "ru,en;q=0.8")
         val status = connection.responseCode
-        val body = (if (status >= 400) connection.errorStream else connection.inputStream)?.use { readAtMost(it, maxBytes) } ?: ByteArray(0)
+        val body = (if (status >= 400) connection.errorStream else connection.inputStream)
+            ?.use { readAtMost(it, maxBytes, PageReader.isPage(accept)) } ?: ByteArray(0)
         return PageResponse(status, connection.getHeaderField("Location"), connection.contentType, body)
     } finally {
         connection.disconnect()
@@ -55,13 +57,16 @@ internal fun fetchPage(url: String, maxBytes: Int, accept: String): PageResponse
 internal const val PREVIEW_AGENT = "Mozilla/5.0 (compatible; Benbow link preview; like TelegramBot and Twitterbot)"
 private const val TIMEOUT_MS = 5_000
 
-private fun readAtMost(input: InputStream, max: Int): ByteArray {
+/** At most [max] bytes; of a [page], no more than its head. */
+private fun readAtMost(input: InputStream, max: Int, page: Boolean): ByteArray {
     val out = java.io.ByteArrayOutputStream()
     val buffer = ByteArray(16 * 1024)
+    val head = if (page) HeadEnd() else null
     while (out.size() < max) {
         val n = input.read(buffer, 0, minOf(buffer.size, max - out.size()))
         if (n < 0) break
         out.write(buffer, 0, n)
+        if (head?.reached(buffer, n) == true) break
     }
     return out.toByteArray()
 }

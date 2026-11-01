@@ -97,6 +97,10 @@ class HtmlExporter(
         is AttachmentBlock -> "<figure><img src=\"${attr(attachmentUrl(block.ref))}\" alt=\"${attr(block.caption.orEmpty())}\">" +
             (block.caption?.let { "<figcaption>${escape(it)}</figcaption>" } ?: "") + "</figure>"
 
+        is AttachmentRowBlock ->
+            "<div class=\"row\">" +
+                block.refs.joinToString("") { "<figure><img src=\"${attr(attachmentUrl(it))}\" alt=\"\"></figure>" } + "</div>"
+
         is LinkCardBlock -> linkCard(block)
 
         is UnknownBlock -> "<!-- benbow:unknown ${block.raw.toString().replace("--", "\\u002d\\u002d")} -->"
@@ -193,6 +197,9 @@ mark { background: #fbe9a6; padding: 0 0.1em; }
 img { max-width: 100%; border-radius: 8px; }
 figure { margin: 0.8em 0; break-inside: avoid; }
 figcaption { font-size: 0.85em; color: #6b655d; }
+.row { display: flex; gap: 6px; margin: 0.8em 0; break-inside: avoid; }
+.row figure { margin: 0; flex: 1 1 0; min-width: 0; }
+.row img { display: block; width: 100%; height: 100%; object-fit: cover; }
 a { color: #2b6c99; }
 a.link-card { display: block; text-decoration: none; color: inherit; border: 1px solid #e5ded4; border-left: 3px solid #2b6c99; padding: 0.5em 0.8em; margin: 0.6em 0; break-inside: avoid; }
 a.link-card img { display: block; max-height: 12em; margin-bottom: 0.4em; }

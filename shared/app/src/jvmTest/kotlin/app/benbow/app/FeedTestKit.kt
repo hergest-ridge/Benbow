@@ -32,7 +32,10 @@ internal fun feedTestServices() = AppServices(
     mediaIn(java.nio.file.Files.createTempDirectory("benbow-media").toFile()),
     "desktop",
     "Test PC",
-)
+).also {
+    // Its start writes to the same in-memory connection (summaries, search): a test's own writes wait for it.
+    kotlinx.coroutines.runBlocking { it.started.join() }
+}
 
 /** [count] posts, two a day back from today, «Запись N» with the oldest as 0; each post's id to its number. */
 internal fun AppServices.seedPosts(count: Int): Map<String, Int> {

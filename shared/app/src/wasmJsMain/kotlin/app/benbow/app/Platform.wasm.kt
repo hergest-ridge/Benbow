@@ -119,6 +119,15 @@ internal actual fun MediaPlayer(file: LocalFile, mime: String, modifier: Modifie
     )
 }
 
+internal actual val inlineVideos: Boolean = true
+
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+internal actual fun InlineVideo(file: LocalFile, crop: Boolean, modifier: Modifier) {
+    val url = remember(file) { file.uri() }
+    WebElementView(factory = { inlineVideoElement(url, crop) }, modifier = modifier, onRelease = { pauseMedia(it) })
+}
+
 /** The browser's bar and the page under the app take the theme's page, and the next loading page (`theme.js`) the page, the accent and the mode. */
 @Composable
 internal actual fun ThemeOutside(scheme: ColorScheme, dark: Boolean) {

@@ -23,3 +23,12 @@ internal expect fun EditorClipboardFix(recentlySelected: () -> Boolean, content:
 
 /** Null where the platform clipboard is not wired yet (the default copy runs then). */
 internal expect fun plainTextClipEntry(text: String): ClipEntry?
+
+/**
+ * While [enabled] (a text field is focused), text pasted that no field took goes to [onText]. Only the browser needs it
+ * (owner, 2026-10-30: Ctrl+V sometimes pasted nothing): Compose web hears a field's pastes on the one element that was
+ * its input when it got focus, while a click that leaves the cursor where it was keeps the page's focus on the canvas,
+ * and Ctrl+V then pastes onto another element nobody listens to. Elsewhere it does nothing.
+ */
+@Composable
+expect fun PasteFallback(enabled: Boolean, onText: (String) -> Unit)

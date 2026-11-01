@@ -1,6 +1,7 @@
 package app.benbow.server.api
 
 import app.benbow.core.api.LinkPreviewInfo
+import app.benbow.core.text.HeadEnd
 import app.benbow.core.text.PageGet
 import app.benbow.core.text.PageRead
 import app.benbow.core.text.PageReader
@@ -119,7 +120,7 @@ internal class LinkPreviews(private val blobs: BlobStore?) {
                     .header("Accept-Language", "ru,en;q=0.8")
                     .build()
             client.newCall(request).execute().use { response ->
-                val body = response.body.byteStream().use { readAtMost(it, maxBytes) }
+                val body = response.body.byteStream().use { readAtMost(it, maxBytes, PageReader.isPage(accept)) }
                 return PageResponse(response.code, response.header("Location"), response.header("Content-Type"), body)
             }
         }
@@ -150,13 +151,16 @@ internal class LinkPreviews(private val blobs: BlobStore?) {
                 }
         }
 
-        private fun readAtMost(input: InputStream, max: Int): ByteArray {
+        /** At most [max] bytes; of a [page], no more than its head. */
+        private fun readAtMost(input: InputStream, max: Int, page: Boolean): ByteArray {
             val out = ByteArrayOutputStream()
             val buffer = ByteArray(16 * 1024)
+            val head = if (page) HeadEnd() else null
             while (out.size() < max) {
                 val n = input.read(buffer, 0, minOf(buffer.size, max - out.size()))
                 if (n < 0) break
                 out.write(buffer, 0, n)
+                if (head?.reached(buffer, n) == true) break
             }
             return out.toByteArray()
         }

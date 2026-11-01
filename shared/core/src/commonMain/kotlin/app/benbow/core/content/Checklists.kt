@@ -15,12 +15,14 @@ object Checklists {
     /** A title (or none), boxes, pictures: what the board's list editor shows. */
     fun isList(document: Document): Boolean = document.blocks.any(::isBox) &&
         document.blocks.withIndex().all { (i, block) ->
-            isBox(block) || block is AttachmentBlock || (i == 0 && block is TextBlock && block.listItem == null)
+            isBox(block) || block is AttachmentBlock || block is AttachmentRowBlock ||
+                (i == 0 && block is TextBlock && block.listItem == null)
         }
 
     /** Whether [toList] keeps everything: only words and pictures. */
     fun canBeList(document: Document): Boolean =
-        document.blocks.all { it is TextBlock || it is AttachmentBlock } && document.blocks.any { it is TextBlock }
+        document.blocks.all { it is TextBlock || it is AttachmentBlock || it is AttachmentRowBlock } &&
+            document.blocks.any { it is TextBlock }
 
     /**
      * Every line a box (Keep's «Показать флажки»): the first paragraph stays the title when more words follow it,
